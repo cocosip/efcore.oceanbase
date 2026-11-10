@@ -2,7 +2,9 @@ using System;
 using System.Data;
 using System.Data.Common;
 using System.Globalization;
+using System.Linq.Expressions;
 using System.Numerics;
+using System.Reflection;
 using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.EntityFrameworkCore.Storage.Json;
@@ -13,6 +15,7 @@ namespace OceanBase.EntityFrameworkCore.Storage
     internal sealed class OceanBaseDecimalTypeMapping : DecimalTypeMapping, IOceanBaseWriteValidation
     {
         private readonly OceanBaseCompatibilityMode _mode;
+        private readonly bool _queryResult;
 
         public OceanBaseDecimalTypeMapping(string storeType, int? precision, int? scale,
             int? size, bool fixedLength, OceanBaseCompatibilityMode mode)
@@ -24,10 +27,11 @@ namespace OceanBase.EntityFrameworkCore.Storage
         }
 
         private OceanBaseDecimalTypeMapping(RelationalTypeMappingParameters parameters, OceanBaseCompatibilityMode mode,
-            bool preserveBareDeclaration = false)
+            bool preserveBareDeclaration = false, bool queryResult = false)
             : base(ValidateParameters(parameters, mode, preserveBareDeclaration))
         {
             _mode = mode;
+            _queryResult = queryResult;
         }
 
         protected override RelationalTypeMapping Clone(RelationalTypeMappingParameters parameters)
@@ -41,8 +45,21 @@ namespace OceanBase.EntityFrameworkCore.Storage
 
             return new OceanBaseDecimalTypeMapping(parameters, _mode,
                 _mode == OceanBaseCompatibilityMode.Oracle && parameters.StoreType == StoreType
-                && parameters.Precision == Precision && parameters.Scale == Scale);
+                && parameters.Precision == Precision && parameters.Scale == Scale, _queryResult);
         }
+
+        internal OceanBaseDecimalTypeMapping AsQueryResult()
+            => _queryResult ? this : new OceanBaseDecimalTypeMapping(Parameters, _mode, preserveBareDeclaration: true, queryResult: true);
+
+        public override MethodInfo GetDataReaderMethod()
+            => _queryResult ? typeof(DbDataReader).GetMethod(nameof(DbDataReader.GetValue))! : base.GetDataReaderMethod();
+
+        public override Expression CustomizeDataReaderExpression(Expression expression)
+            => _queryResult ? Expression.Call(typeof(OceanBaseDecimalTypeMapping).GetMethod(nameof(ReadQueryValue))!, expression)
+                : base.CustomizeDataReaderExpression(expression);
+
+        public static decimal ReadQueryValue(object value)
+            => (decimal)OceanBaseNumericConversion.ConvertValue(value, typeof(decimal));
 
         protected override void ConfigureParameter(DbParameter parameter)
         {

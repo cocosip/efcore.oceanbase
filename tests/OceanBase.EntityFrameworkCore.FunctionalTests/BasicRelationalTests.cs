@@ -701,6 +701,124 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
         }
 
         [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false, true)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true, true)]
+        public async Task Transcendental_commands_preserve_current_parameters_native_numeric_reads_and_inverse_once(
+            OceanBaseCompatibilityMode mode, bool async, bool relationalNulls)
+        {
+            using var table = new DataTable();
+            foreach (var name in new[] { "Single", "Double", "Decimal", "Optional", "Nested", "Integral", "NullableCarrier" })
+                table.Columns.Add(name, typeof(object));
+            // Supplied rows exercise the real EF shaping pipeline; they do not calculate SQL functions.
+            table.Rows.Add(2d, 1E100d, 14d, DBNull.Value, 18f, 12d, new OceanBaseDecimal(14m));
+            table.Rows.Add(3f, new OceanBaseDecimal(BigInteger.One, -100), new OceanBaseDecimal(18m), 4f, 14d, new OceanBaseDecimal(14m), 18f);
+            var commands = new CommandCapture { Results = table };
+            await using var context = CreateContext(mode, commands, relationalNulls);
+            var single = float.Epsilon;
+            var wide = double.Epsilon;
+            var comparison = 1.23456789d;
+            var exponent = .5d;
+            var query = context.Set<TranscendentalRow>()
+                .Where(r => Math.Sqrt(r.Double + wide) > wide && Math.Exp(r.Double) > wide
+                    && Math.Log(r.Double) > wide && Math.Log(r.Double, exponent) > wide
+                    && Math.Log10(r.Double) > wide && Math.Pow(r.Double, -2d) > wide
+                    && MathF.Sqrt(r.Single + single) > single && MathF.Exp(r.Single) > single
+                    && MathF.Log(r.Single) > single && MathF.Log(r.Single, .5f) > single
+                    && MathF.Log10(r.Single) > single && MathF.Pow(r.Single, -2f) > single
+                    && Math.Pow(r.Decimal, r.Secondary) > comparison)
+                .OrderBy(r => Math.Log(r.Single, .5f))
+                .Select(r => new
+                {
+                    Single = MathF.Exp(r.Single), Double = Math.Exp(r.Double), Decimal = Math.Pow(r.Decimal, r.Secondary),
+                    Optional = (double?)Math.Log(r.Optional!.Value),
+                    Nested = Math.Pow(r.Decimal, Math.Pow(r.Integral, r.Double)),
+                    Integral = Math.Sqrt(r.Integral), NullableCarrier = Math.Log10(r.NullableCarrier)
+                });
+            for (var index = 0; index < 3; index++)
+            {
+                single = new[] { -float.Epsilon, float.MaxValue, MathF.BitIncrement(1f) }[index];
+                wide = new[] { -double.Epsilon, double.MaxValue, Math.BitIncrement(1d) }[index];
+                comparison = 1.23456789d + index;
+                exponent = new[] { .5d, Math.BitIncrement(1d), Math.BitDecrement(1d) }[index];
+                commands.Inputs.Clear();
+                var rows = async ? await query.ToListAsync() : query.ToList();
+                Assert.Equal(2, rows.Count);
+                Assert.Equal(2f, rows[0].Single); Assert.Equal(1E100d, rows[0].Double);
+                Assert.Equal(2d, rows[0].Decimal); Assert.Null(rows[0].Optional);
+                Assert.Equal(4d, rows[0].Nested); Assert.Equal(2d, rows[0].Integral);
+                Assert.Equal(2d, rows[0].NullableCarrier);
+                Assert.Equal(4d, rows[1].Decimal); Assert.Equal(4d, rows[1].Optional);
+                Assert.Equal(2d, rows[1].Nested); Assert.Equal(4d, rows[1].Integral);
+                Assert.Equal(4d, rows[1].NullableCarrier);
+                Assert.Contains(commands.Inputs, p => Equals(p.Value, single) && p.DbType == DbType.Single);
+                Assert.Contains(commands.Inputs, p => Equals(p.Value, wide) && p.DbType == DbType.Double);
+                Assert.Contains(commands.Inputs, p => Equals(p.Value, exponent) && p.DbType == DbType.Double);
+                Assert.Contains(commands.Inputs, p => Equals(p.Value, (decimal)comparison * 2m + 10m) && p.DbType == DbType.Decimal);
+                Assert.All(commands.Inputs.Where(p => p.DbType == DbType.Decimal), p =>
+                { Assert.Equal((byte)0, p.Precision); Assert.Null(p.DecimalScale); });
+                var sql = commands.Sql[^1];
+                foreach (var function in new[] { "SQRT(", "EXP(", "LN(", "POWER(" }) Assert.Contains(function, sql);
+                Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? "LOG10(" : "LOG(", sql);
+                Assert.Contains("WHERE", sql); Assert.Contains("ORDER BY", sql);
+                Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? " AS FLOAT)" : " AS BINARY_FLOAT)", sql);
+                Assert.DoesNotContain(" AS DECIMAL", sql); Assert.DoesNotContain(" AS NUMBER", sql);
+                Assert.DoesNotContain(" DIV ", sql);
+            }
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true)]
+        public async Task Transcendental_result_readers_keep_checked_decimal_single_and_integral_domains(OceanBaseCompatibilityMode mode, bool async)
+        {
+            using var table = new DataTable();
+            table.Columns.Add("Value", typeof(object));
+            var commands = new CommandCapture { Results = table };
+            await using var context = CreateContext(mode, commands);
+            var decimals = context.Set<TranscendentalRow>().Where(r => Math.Sqrt(r.Decimal) > 0).Select(r => Math.Exp(r.Decimal));
+            foreach (var value in new object[] { 14d, 14f, 14, 14m, new OceanBaseDecimal(14m), .1d, double.Epsilon })
+            {
+                table.Rows.Clear(); table.Rows.Add(value);
+                var expected = value is OceanBaseDecimal ? 2d : (double)((Convert.ToDecimal(value) - 10m) / 2m);
+                Assert.Equal(expected, async ? await decimals.SingleAsync() : decimals.Single());
+            }
+            foreach (var value in new object[] { double.NaN, double.PositiveInfinity, double.NegativeInfinity,
+                float.NaN, float.PositiveInfinity, float.NegativeInfinity, double.MaxValue,
+                new OceanBaseDecimal(BigInteger.One, -30), new OceanBaseDecimal(BigInteger.One, 29) })
+            {
+                table.Rows.Clear(); table.Rows.Add(value);
+                if (async) await Assert.ThrowsAsync<OverflowException>(() => decimals.ToListAsync());
+                else Assert.Throws<OverflowException>(() => decimals.ToList());
+            }
+            table.Rows.Clear(); table.Rows.Add(double.MaxValue);
+            var singles = context.Set<TranscendentalRow>().Where(r => MathF.Sqrt(r.Single) > 0).Select(r => MathF.Exp(r.Single));
+            if (async) await Assert.ThrowsAsync<OverflowException>(() => singles.ToListAsync());
+            else Assert.Throws<OverflowException>(() => singles.ToList());
+            var integers = context.Set<TranscendentalRow>().Where(r => Math.Sqrt(r.Integral) > 0).Select(r => Math.Exp(r.Integral));
+            foreach (var value in new object[] { 1.5d, 1.5f, new OceanBaseDecimal(1.5m) })
+            {
+                table.Rows.Clear(); table.Rows.Add(value);
+                if (async) await Assert.ThrowsAsync<InvalidCastException>(() => integers.ToListAsync());
+                else Assert.Throws<InvalidCastException>(() => integers.ToList());
+            }
+            table.Rows.Clear(); table.Rows.Add(new OceanBaseDecimal((decimal)long.MaxValue + 1));
+            if (async) await Assert.ThrowsAsync<OverflowException>(() => integers.ToListAsync());
+            else Assert.Throws<OverflowException>(() => integers.ToList());
+            table.Rows.Clear(); table.Rows.Add(14d);
+            var ordinary = context.Set<TranscendentalRow>().Select(r => r.Decimal);
+            if (async) await Assert.ThrowsAsync<InvalidCastException>(() => ordinary.ToListAsync());
+            else Assert.Throws<InvalidCastException>(() => ordinary.ToList());
+        }
+
+        [Theory]
         [InlineData(OceanBaseCompatibilityMode.MySql, false)]
         [InlineData(OceanBaseCompatibilityMode.MySql, true)]
         [InlineData(OceanBaseCompatibilityMode.Oracle, false)]
@@ -2328,6 +2446,14 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
                 modelBuilder.Entity<FloorCeilingRow>().Property(row => row.Cross).HasConversion<decimal>();
                 modelBuilder.Entity<FloorCeilingRow>().Property(row => row.Reverse).HasConversion<double>();
                 modelBuilder.Entity<FloorCeilingRow>().Property(row => row.Integral).HasConversion<long>();
+                modelBuilder.Entity<TranscendentalRow>().Property(row => row.Decimal)
+                    .HasConversion(v => (decimal)v * 2m + 10m, v => (double)((v - 10m) / 2m)).HasPrecision(5, 2);
+                modelBuilder.Entity<TranscendentalRow>().Property(row => row.NullableCarrier)
+                    .HasConversion(v => (decimal?)((decimal)v * 2m + 10m), v => (double)((v!.Value - 10m) / 2m));
+                modelBuilder.Entity<TranscendentalRow>().Property(row => row.Secondary)
+                    .HasConversion(v => (float)v + 3f, v => v - 3d);
+                modelBuilder.Entity<TranscendentalRow>().Property(row => row.Integral)
+                    .HasConversion(v => (long)v + 10L, v => v - 10d);
                 modelBuilder.Entity<Customer>().ToTable("Customers");
                 modelBuilder.Entity<Customer>().Property(customer => customer.Version).IsConcurrencyToken();
                 modelBuilder.Entity<KeyOnly>().ToTable("Keys");
@@ -2424,6 +2550,18 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
             public int? Optional { get; set; }
             public int Converted { get; set; }
             public decimal Fraction { get; set; }
+        }
+
+        private sealed class TranscendentalRow
+        {
+            public int Id { get; set; }
+            public float Single { get; set; }
+            public double Double { get; set; }
+            public double Decimal { get; set; }
+            public double? Optional { get; set; }
+            public double NullableCarrier { get; set; }
+            public double Secondary { get; set; }
+            public double Integral { get; set; }
         }
 
         private sealed class FloorCeilingRow

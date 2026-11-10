@@ -21,7 +21,33 @@ not later local commits or database integration. Earlier db676ff also passed in
 Run/job/step metadata is saved under artifacts/local-development/. The earlier log archive endpoint returned
 HTTP403 (repository admin rights); no new per-test count or resolved EF patch is inferred from job metadata.
 
-### Exact Floor/Ceiling checkpoint (2026-11-11)
+### Exact transcendental checkpoint (2026-11-11)
+
+All twelve Math/MathF Sqrt, Exp, Log (one/two arguments), Log10 and Pow identities now translate. MySQL
+Log(x,base) uses LN(x)/LN(base), including bases in (0,1); Oracle uses LOG(base,x), with a fresh integer ten
+for Log10. Each operand retains its own mapping/converter; primary x owns the result convention. Actual
+Single-provider results normalize the completed operation through neutral FLOAT/BINARY_FLOAT SQL casts.
+Decimal-provider function results use a result-only GetValue reader clone, preserving converters/facets and
+ordinary GetDecimal behavior elsewhere. Binary-to-decimal CLR conversion can round at materialization;
+it does not change SQL arithmetic/predicate precision. No finite input cap or SQL decimal narrowing is added.
+
+Focused65 unit/12 intercepted tests pass following54 missing-dispatch RED failures and a focused private-
+marker validation RED/GREEN correction. Final Debug/Release and isolated EF10.0.14 Release each pass
+**1416 tests** (1078 unit, 336 intercepted pipeline, two project consumers), zero failures/skips. The same
+baseline-built `10.0.0-checkpoint.transcendental-20261111` package passes both modes/patches with all twelve
+server predicates, dialect/Single normalization and prior checks. The preceding Floor/Ceiling package
+rejects Math.Sqrt in a predicate. Content/package-only graph and packed/baseline DLL identity pass;
+baseline assets stay EF10.0.0. Independent source review passes with no actionable findings.
+
+Latest package: `artifacts/checkpoint-transcendental-20261111/OceanBase.EntityFrameworkCore.10.0.0-checkpoint.transcendental-20261111.nupkg`.
+Evidence: `artifacts/local-development/batch3m/`. Supplied readers prove parameter/materialization paths,
+not function calculation. Native return metadata, domain NULL/warnings/errors, quotient precision, casts,
+overflow/underflow/subnormals and exact rounding remain live gates. External custom decimal mapping decoders
+outside the owning result-reader seam reject explicitly. Round, wider temporal/math/operators/aggregates/
+collections, model/write/transaction/schema work remain local gaps. The overall EF10 goal stays active;
+real DB and EF8/9 stay postponed.
+
+### Historical exact Floor/Ceiling checkpoint (2026-11-11)
 
 All eight Math/MathF/decimal Floor/Ceiling identities now translate. Oracle uses FLOOR/CEIL; MySQL uses
 TRUNCATE plus a guarded CASE, avoiding the documented BIGINT return path of native FLOOR/CEIL. Original
@@ -40,7 +66,8 @@ Evidence: `artifacts/local-development/batch3l/`. Supplied readers do not evalua
 TRUNCATE/comparison/arithmetic/CASE result typing, finite extremes/subnormals, decimal exactness, guarded-arm
 evaluation and actual Oracle results remain live gates. Stable expressions are the tested domain; arbitrary
 volatile DbFunctions have no CLR single-evaluation promise. Round/transcendental and wider query/model/write/
-transaction/schema work remain local gaps. The overall EF10 goal stays active; real DB and EF8/9 stay postponed.
+transaction/schema work were still local gaps there; the transcendental slice is now recorded above.
+The overall EF10 goal stays active; real DB and EF8/9 stay postponed.
 
 ### Originally empty inline integral roots checkpoint (2026-11-11)
 

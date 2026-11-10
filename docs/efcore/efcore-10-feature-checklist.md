@@ -66,22 +66,22 @@ An open row is not automatically waiting for a database. Track the remaining wor
 Development resumed at the user's request (2026-11-10) on efcore/10.0. See the
 [progress handoff](efcore-10-progress.md) for saved state, remaining work and the exact resume point.
 
-Snapshot: 2026-11-11, `efcore/10.0` exact Floor/Ceiling after 9287fab;
+Snapshot: 2026-11-11, `efcore/10.0` exact transcendental methods after 5daf78c;
 source/patch/package gates and independent source review pass.
 The same baseline-built package passes both tested EF patches. This is not a release result.
 
 `dotnet test OceanBase.EntityFrameworkCore.slnx --no-restore -m:1 -nr:false` produced:
 
-The expanded suite passed in Debug and Release (1339 tests per configuration), including the eight exact
-Floor/Ceiling methods, full finite input categories and converter-owned syntax/result checks.
+The expanded suite passed in Debug and Release (1416 tests per configuration), including all twelve exact
+transcendental methods, full finite input categories and independent converter/result-reader checks.
 
 | Layer | Passed | Failed | Evidence boundary |
 | --- | --- | --- | --- |
-| Unit | 1013 | 0 | Prior coverage plus 46 exact Floor/Ceiling, range/mapping/converter/nullable-carrier/NULL/precedence/boundary cases; live coverage incomplete. |
-| Command pipeline | 324 | 0 | Prior queries/writes plus 12 Floor/Ceiling current-binding/precision/nullable/converter/checked-reader cases, sync/async; transactions disabled. |
+| Unit | 1078 | 0 | Prior coverage plus 65 exact transcendental/SQL Single/independent converter/NULL/decimal-result-reader/clone/boundary cases; live coverage incomplete. |
+| Command pipeline | 336 | 0 | Prior queries/writes plus 12 transcendental current-binding/nullable/mixed-converter/native numeric decoder/checked-reader cases, sync/async; transactions disabled. |
 | Consumer | 2 | 0 | Both-mode provider detection through a project reference, not an isolated packed-package consumer. |
-| Packed consumer | Both modes | 0 | Same floor-ceiling-20261111 package passes EF10.0.0/10.0.14, all eight exact predicates with MySQL guarded TRUNCATE/CASE and Oracle FLOOR/CEIL plus prior checks; README included; no live execution. |
-| Later-patch Release suite | 1339 | 0 | Current source passes EF10.0.14 in isolated artifacts; baseline source assets stay EF10.0.0. |
+| Packed consumer | Both modes | 0 | Same transcendental-20261111 package passes EF10.0.0/10.0.14, all twelve exact predicates with native functions/Log quotient and SQL Single normalization plus prior checks; README included; no live execution. |
+| Later-patch Release suite | 1416 | 0 | Current source passes EF10.0.14 in isolated artifacts; baseline source assets stay EF10.0.0. |
 | Hosted Windows/Linux CI | Both jobs succeeded | 0 failed steps | Run 42865290840 at e41981e: restore, Release test, pack and content gate succeeded; later commits require their own hosted evidence. |
 | Live MySQL / Oracle | Not established | Not established | No live provider execution recorded for either mode. |
 | Relational specification | Not established | Not established | No specification test project yet. |
@@ -210,13 +210,16 @@ Existing evidence references used below identify partial coverage, not automatic
   57 captured/nonempty/originally-empty inline integral root, type/mapping/pruning/ordinal/cast/cache/boundary cases.
 - **UFC**: [FloorCeilingQueryTests](../../tests/OceanBase.EntityFrameworkCore.UnitTests/FloorCeilingQueryTests.cs),
   46 exact method/range/converter/NULL/precedence cases; preserves the earlier MathQueryTests contracts.
+- **UTR**: [TranscendentalQueryTests](../../tests/OceanBase.EntityFrameworkCore.UnitTests/TranscendentalQueryTests.cs),
+  65 exact method/Single normalization/independent converter/NULL/decimal result-reader/clone/boundary cases.
 - **FP**: [BasicRelationalTests](../../tests/OceanBase.EntityFrameworkCore.FunctionalTests/BasicRelationalTests.cs),
   intercepted execution only.
 - **CP**: [ProviderConfigurationTests](../../tests/OceanBase.EntityFrameworkCore.ConsumerTests/ProviderConfigurationTests.cs),
   project reference only.
 - **PC**: [Standalone package consumer](../../tests/OceanBase.EntityFrameworkCore.PackageConsumer/Program.cs),
   registration/native floating/explicit Guid/temporal/binary/integer and Boolean model/SQL/paging checks against the
-  latest floor-ceiling-20261111 local prerelease package, including eight exact rounding predicates and prior inline-empty roots/ordinal identity,
+  latest transcendental-20261111 local prerelease package, including twelve exact transcendental predicates,
+  neutral Single casts/Log quotient, eight rounding predicates and prior inline-empty roots/ordinal identity,
   changing captured roots/Oracle DUAL per arm, integral/text membership, collection-mode cache separation and prior checks;
   [commands and evidence](efcore-10-query-update-design.md#package-checkpoint-validation).
 
@@ -292,7 +295,7 @@ duplicates and mode-specific string semantics.
 | QRY-04 | GroupBy aggregates, Count/LongCount, Sum/Average/Min/Max handle empty and nullable inputs correctly. | Required | In progress | In progress | URS/FP cover grouped/ungrouped/predicate/HAVING/distinct/nullable Count/LongCount, fresh int/long mappings and supplied zero/no-row/wrapper/overflow reads. Sum/Average/Min/Max promotion and real aggregate execution remain open. |
 | QRY-05 | First/Single/default variants enforce cardinality; entity/scalar async materialization matches sync. | Required | In progress | In progress | FP ToList scalar only; entity/cardinality cases missing. |
 | QRY-06 | String translations have a supported-overload matrix: equality, Contains, StartsWith/EndsWith, length, substring, case and trim. | Required | In progress | In progress | Exact local equality/concat, unary/Length, search and both Substring arities have unit/FP coverage. Safe long origin/mapping/converter/null cases and computed Oracle NULL needles pass. Live collation/character/space/padding/LOB results and NCLOB capability remain open; native semantics/unsupported overloads are explicit. |
-| QRY-07 | Date/time members, numeric functions, conditional/coalesce expressions have a supported-overload matrix. | Required | In progress | In progress | Twelve ordinary temporal parts and 30 exact Abs/Sign/Truncate/Floor/Ceiling methods have local SQL/mapping/converter/null/range and intercepted read coverage. Floor/Ceiling use Oracle native functions and MySQL guarded TRUNCATE/CASE with fresh syntax constants; finite input categories stay unrestricted by the translator. Wider temporal/math surface and native result typing/range/calculation remain open. |
+| QRY-07 | Date/time members, numeric functions, conditional/coalesce expressions have a supported-overload matrix. | Required | In progress | In progress | Twelve ordinary temporal parts and 42 exact numeric methods have local SQL/mapping/converter/null/range and intercepted read coverage, including twelve Sqrt/Exp/Log/Log10/Pow identities. Primary result ownership, neutral Single casts and result-only decimal readers preserve converter boundaries; finite input categories stay unrestricted. Round/wider temporal/math surface and native result typing/range/calculation remain open. |
 | QRY-08 | Include/ThenInclude for reference/collection navigations, tracking/no-tracking and identity resolution preserve related entities. | Required | Planned | Planned | Missing; split queries are listed separately below. |
 | QRY-09 | Global query filters compose with parameterized predicates and can be disabled using supported EF APIs. | Required | Planned | Planned | Missing; named filters require EF10 review below. |
 | QRY-10 | FromSqlRaw/FromSqlInterpolated and ExecuteSqlRaw/ExecuteSqlInterpolated bind values; hostile parameter values cannot change SQL shape. | Required | Planned | Planned | Missing; raw SQL text remains caller-authored. |
@@ -330,13 +333,13 @@ commit/transaction behavior per mode.
 | ID | Requirement and acceptance criteria | Priority | MySQL | Oracle | Existing evidence / gap |
 | --- | --- | --- | --- | --- | --- |
 | PKG-01 | Build net10.0 assets against published OceanBaseConnector 0.2.0 with warnings as errors. | Required | Done | Done | Current solution test command builds assets; not a package-content assertion. |
-| PKG-02 | Packed nuspec uses OceanBase.EntityFrameworkCore and EF ranges [10.0.0,11.0.0). | Required | Done | Done | PackageConsumer/Verify-Package.ps1 passes current numeric-core nupkg identity/net10.0/README/ranges; prior negative probes reject as expected. Rerun on every release pack; runtime/live gates are separate. |
-| PKG-03 | Isolated packed consumer restores/executes provider API without project/local connector references. | Required | Done | Done | PC numeric-core-20261111 passes both modes on both selected patches, including numeric predicates and prior checks; package-only graph inspected; rerun after changes. |
-| PKG-04 | Minimum EF10 and selected later available EF10 patch restore/build/test without pinning consumer patch; EF11 cannot satisfy dependencies. | Required | Done | Done | Source Release suite 1083 passes at 10.0.14; same baseline-built numeric-core package passes EF10.0.0/10.0.14; nuspec ranges rechecked, prior range parser rejects 11.0.0; rerun after changes. |
+| PKG-02 | Packed nuspec uses OceanBase.EntityFrameworkCore and EF ranges [10.0.0,11.0.0). | Required | Done | Done | PackageConsumer/Verify-Package.ps1 passes current transcendental nupkg identity/net10.0/README/ranges; prior negative probes reject as expected. Rerun on every release pack; runtime/live gates are separate. |
+| PKG-03 | Isolated packed consumer restores/executes provider API without project/local connector references. | Required | Done | Done | PC transcendental-20261111 passes both modes on both selected patches, including all twelve transcendental predicates and prior checks; package-only graph inspected; rerun after changes. |
+| PKG-04 | Minimum EF10 and selected later available EF10 patch restore/build/test without pinning consumer patch; EF11 cannot satisfy dependencies. | Required | Done | Done | Source Release suite1416 passes at10.0.14; same baseline-built transcendental package passes EF10.0.0/10.0.14; nuspec ranges rechecked, prior range parser rejects11.0.0; rerun after changes. |
 | TST-01 | Selected EF relational specification classes pass; exclusions map to checklist IDs and limitations. | Required | Planned | Planned | Specification project/selection absent. |
 | TST-02 | Live core query/write/transaction/schema/scalar suites pass in at least one declared supported environment per mode. | Required | Planned | Planned | User will supply access later; User Secrets fixture and authorized schema/cleanup scope required; no live provider execution recorded. |
 | REL-01 | Support notes record server/connector/runtime/EF versions, tenant mode, direct/proxy endpoint, transport/options without credentials. | Required | Planned | Planned | Release evidence record missing. |
-| REL-02 | Tested efcore/10.0 development checkpoint is reviewed; packaging/release checks run on release revision. | Required | In progress | In progress | Development resumed directly on efcore/10.0 as requested; local Floor/Ceiling package validated; complete release gates remain open. |
+| REL-02 | Tested efcore/10.0 development checkpoint is reviewed; packaging/release checks run on release revision. | Required | In progress | In progress | Development resumed directly on efcore/10.0 as requested; local transcendental source reviewed and package validated; complete release gates remain open. |
 
 ## Visible deferred inventory
 

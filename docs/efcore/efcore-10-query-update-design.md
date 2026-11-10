@@ -204,7 +204,7 @@ Do not add an artificial int32/decimal/2^53/BIGINT input limit or convert approx
 Projected out-of-range results retain checked reading; server predicates and overflow timing need live
 evidence. Existing non-finite rejection remains; signed-zero bit preservation is not promised. Truncation
 removes fractions toward zero, without casting or rounding the input. Floor/Ceiling have the local contract
-below; Round/Log/Pow/Random and Min/Max remain separate contracts. Pinned EF v10.0.0 and OceanBase documentation revision
+below; Round/Random and Min/Max remain separate contracts. Pinned EF v10.0.0 and OceanBase documentation revision
 2a5ae3a23a51729d065cec716508eb26cb064106 are audited in the numeric-core local research artifact.
 
 ## Numeric Floor and Ceiling local contract
@@ -227,7 +227,38 @@ unwraps Nullable<T> only to construct a correctly boxed nonnull constant; origin
 intact. Focused46 unit/12 intercepted and full Debug/Release/isolated14 Release1339 pass. The same Floor/Ceiling
 package passes both patches/modes; independent source review passes with no actionable findings. Native TRUNCATE/CASE
 physical result types, full-range arithmetic and actual rounding/results still require server validation.
-Round and transcendental functions have separate contracts and remain unsupported in server predicates.
+Round remains a separate contract; the following section defines the transcendental slice.
+
+## Transcendental numeric local contract
+
+All twelve exact Math/MathF Sqrt, Exp, Log (one/two arguments), Log10 and Pow identities translate through
+the existing math service. Both modes use SQRT/EXP/LN/POWER. MySQL Log(x,base) uses LN(x)/LN(base), retaining
+valid bases in (0,1); Oracle uses LOG(base,x). Oracle Log10 uses a fresh converter-free integer ten, avoiding
+accidental binary promotion of NUMBER operands. Every input retains its independently validated numeric
+mapping/converter. Primary x owns the result convention, including mixed-carrier two-argument functions.
+
+Native functions remain nullable with all-false propagation, preserving domain-result null checks under
+both null semantics. No clamp, finite input cap, manufactured NaN/infinity or uniform domain-error policy
+is introduced. Stored-number semantics remain h(f(g(x))) for an arbitrary converter g/inverse h; SQL
+predicates do not promise the value after inverse conversion or CLR materialization rounding.
+
+Actual Single-provider results use a private shape-checked SQL marker to cast the completed native body to
+FLOAT (MySQL) or BINARY_FLOAT (Oracle), uniformly including Oracle SQRT. Normalize after the entire MySQL
+logarithm quotient, preserving native inner precision. Fixed targets avoid copying physical FLOAT facets
+or unsigned declarations into CAST. Model type and physical storage width do not replace provider-carrier
+selection. Double-provider results retain native precision; global CAST and user functions are unchanged.
+
+Connector0.2.0 GetDecimal cannot decode boxed native Single/Double results. Transcendental decimal-provider
+results therefore use an immutable opt-in decimal mapping clone with GetValue and checked numeric
+conversion, retaining converter/facets/parameter behavior through clones. Ordinary decimal properties keep
+GetDecimal. Binary-to-decimal materialization follows standard CLR rounding, tiny-value-to-zero and checked
+nonfinite/range failures; OceanBaseDecimal retains checked exact decimal representability. No SQL DECIMAL/
+NUMBER result cast is added. External custom decimal mapping decoders outside this owning opt-in seam
+explicitly reject. Integral-provider results retain checked fractional/range rejection without SQL narrowing.
+
+Local tests cover exact server predicates, order/HAVING, null/composition, independent converters, physical
+width profiles and supplied-reader conversion. Native function metadata/calculation, quotient precision,
+Single casts, domain NULL/warnings/errors, overflow/underflow and subnormal behavior remain live gates.
 
 ## Ordinary relational shapes and integral membership local contract
 
@@ -483,18 +514,32 @@ Run the read-only gate after packing, before the isolated consumer checks:
 
 ```powershell
 pwsh -NoProfile -File tests/OceanBase.EntityFrameworkCore.PackageConsumer/Verify-Package.ps1 `
-    -PackagePath artifacts/checkpoint-floor-ceiling-20261111/OceanBase.EntityFrameworkCore.10.0.0-checkpoint.floor-ceiling-20261111.nupkg `
-    -ExpectedVersion 10.0.0-checkpoint.floor-ceiling-20261111
+    -PackagePath artifacts/checkpoint-transcendental-20261111/OceanBase.EntityFrameworkCore.10.0.0-checkpoint.transcendental-20261111.nupkg `
+    -ExpectedVersion 10.0.0-checkpoint.transcendental-20261111
 ```
 
 The PowerShell 7 script uses .NET ZIP/XML APIs and checks ID/version, the net10.0 assembly and dependency group,
 exact expected dependency ranges, and a nonempty packaged README with matching metadata. It does not build,
-restore, execute provider queries or establish server/runtime compatibility. The current Floor/Ceiling package passes;
+restore, execute provider queries or establish server/runtime compatibility. The current transcendental package passes;
 wrong expected version, the old README-less alias package and the exact-patch README probe fail at their intended
 checks. The hosted e41981e package-content gate passed on Windows/Linux; the current package checks ran locally
 on Windows. Change the path/version for each new pack.
 
-### Current exact Floor/Ceiling checkpoint (2026-11-11)
+### Current exact transcendental checkpoint (2026-11-11)
+
+Full Debug/Release and isolated EF10.0.14 Release each pass1416 (1078 unit, 336 intercepted pipeline, two
+project consumers). Focused65 unit/12 intercepted pass after missing-dispatch and private-marker RED/GREEN
+regressions. The same baseline-built `10.0.0-checkpoint.transcendental-20261111` nupkg passes both modes at
+EF10.0.0/10.0.14 for all twelve server predicates, native function names, MySQL logarithm quotient, neutral
+Single result targets and all prior assertions. Previous Floor/Ceiling package rejects Math.Sqrt in WHERE.
+Content/package-only graph, unchanged baseline EF10.0.0 assets and packed/baseline DLL identity pass.
+Independent source review passes without findings. Native metadata/calculation, quotient/cast precision,
+domain errors/NULL, overflow/underflow and subnormals remain real-server gates. Round/wider local query/
+model/write/transaction/schema and current hosted/Linux execution remain open. Repeat the consumer commands
+below with `10.0.0-checkpoint.transcendental-20261111` and `artifacts/checkpoint-transcendental-20261111`.
+Evidence: `artifacts/local-development/batch3m/`.
+
+### Historical exact Floor/Ceiling checkpoint (2026-11-11)
 
 Full Debug/Release and isolated EF10.0.14 Release each pass1339 (1013 unit, 324 intercepted pipeline, two
 project consumers). Focused46 unit/12 intercepted pass after genuine missing-dispatch and nullable-syntax-
@@ -504,7 +549,8 @@ TRUNCATE/CASE with the correct adjustment and rejects unguarded native FLOOR/CEI
 correct FLOOR/CEIL name. All prior assertions remain. Previous inline-empty package rejects Math.Floor.
 Content/package-only graph pass; baseline assets stay10.0.0. Independent source review passes with no actionable findings.
 Native numeric result families, full-range/NULL/CASE calculation and volatile single evaluation remain
-unverified. Round/transcendental/wider query work and current hosted/Linux execution remain open.
+unverified. Round/transcendental/wider query work and current hosted/Linux execution were still open there;
+the subsequent transcendental checkpoint is recorded in the progress document.
 
 Repeat the commands below with `10.0.0-checkpoint.floor-ceiling-20261111` and
 `artifacts/checkpoint-floor-ceiling-20261111`. Evidence: `artifacts/local-development/batch3l/`.

@@ -108,6 +108,24 @@ namespace OceanBase.EntityFrameworkCore.Query
 
         protected override Expression VisitSqlFunction(SqlFunctionExpression sqlFunctionExpression)
         {
+            if (sqlFunctionExpression.Name == OceanBaseMathTranslator.SingleResultMarker)
+            {
+                var mapping = sqlFunctionExpression.TypeMapping;
+                var carrier = mapping?.Converter?.ProviderClrType ?? mapping?.ClrType;
+                if (sqlFunctionExpression is not { IsBuiltIn: true, Instance: null, Schema: null, Arguments.Count: 1,
+                        IsNullable: true, ArgumentsPropagateNullability: [false] }
+                    || mapping is null || mapping.Converter?.ConvertsNulls == true
+                    || sqlFunctionExpression.Type != mapping.ClrType
+                    || sqlFunctionExpression.Type != typeof(float) && sqlFunctionExpression.Type != typeof(double)
+                    || (Nullable.GetUnderlyingType(carrier!) ?? carrier) != typeof(float)
+                    || sqlFunctionExpression.Arguments[0].Type != typeof(double))
+                    throw new InvalidOperationException("Invalid internal Single result expression.");
+                Sql.Append("CAST(");
+                Visit(sqlFunctionExpression.Arguments[0]);
+                Sql.Append(_mode == OceanBaseCompatibilityMode.MySql ? " AS FLOAT)" : " AS BINARY_FLOAT)");
+                return sqlFunctionExpression;
+            }
+
             if (_mode == OceanBaseCompatibilityMode.Oracle
                 && sqlFunctionExpression.Name == OceanBaseTemporalMemberTranslator.ExtractMarker)
             {

@@ -265,6 +265,44 @@ namespace PackageConsumer
                         throw new Exception("Packed Floor/Ceiling lost its range-preserving dialect: " + roundingSql);
                 }
 
+                double logarithmBase = 0.5d;
+                float singleLogarithmBase = 0.5f;
+                foreach (var (numericQuery, operation, single) in new (IQueryable Query, string Operation, bool Single)[]
+                {
+                    (context.Set<Row>().Where(row => Math.Sqrt(row.DoubleValue) > 0d), "SQRT", false),
+                    (context.Set<Row>().Where(row => MathF.Sqrt(row.SingleValue) > 0f), "SQRT", true),
+                    (context.Set<Row>().Where(row => Math.Exp(row.DoubleValue) > 0d), "EXP", false),
+                    (context.Set<Row>().Where(row => MathF.Exp(row.SingleValue) > 0f), "EXP", true),
+                    (context.Set<Row>().Where(row => Math.Log(row.DoubleValue) > 0d), "LN", false),
+                    (context.Set<Row>().Where(row => MathF.Log(row.SingleValue) > 0f), "LN", true),
+                    (context.Set<Row>().Where(row => Math.Log(row.DoubleValue, logarithmBase) > 0d), "LOG_BASE", false),
+                    (context.Set<Row>().Where(row => MathF.Log(row.SingleValue, singleLogarithmBase) > 0f), "LOG_BASE", true),
+                    (context.Set<Row>().Where(row => Math.Log10(row.DoubleValue) > 0d), "LOG10", false),
+                    (context.Set<Row>().Where(row => MathF.Log10(row.SingleValue) > 0f), "LOG10", true),
+                    (context.Set<Row>().Where(row => Math.Pow(row.DoubleValue, 2d) > 0d), "POWER", false),
+                    (context.Set<Row>().Where(row => MathF.Pow(row.SingleValue, 2f) > 0f), "POWER", true)
+                })
+                {
+                    var numericSql = numericQuery.ToQueryString();
+                    var function = operation switch
+                    {
+                        "LOG_BASE" => mode == OceanBaseCompatibilityMode.MySql ? "LN(" : "LOG(",
+                        "LOG10" => mode == OceanBaseCompatibilityMode.MySql ? "LOG10(" : "LOG(",
+                        _ => operation + "("
+                    };
+                    if (!numericSql.Contains(function, StringComparison.Ordinal)
+                        || (mode == OceanBaseCompatibilityMode.MySql && operation == "LOG_BASE"
+                            && (!numericSql.Contains(" / ", StringComparison.Ordinal)
+                                || numericSql.Split("LN(", StringSplitOptions.None).Length - 1 != 2
+                                || numericSql.Contains("LOG(", StringComparison.Ordinal)))
+                        || (!single && (numericSql.Contains(" AS FLOAT)", StringComparison.Ordinal)
+                            || numericSql.Contains(" AS BINARY_FLOAT)", StringComparison.Ordinal)))
+                        || (single && (mode == OceanBaseCompatibilityMode.MySql || operation != "SQRT")
+                            && !numericSql.Contains(mode == OceanBaseCompatibilityMode.MySql
+                                ? " AS FLOAT)" : " AS BINARY_FLOAT)", StringComparison.Ordinal)))
+                        throw new Exception("Packed numeric function lost its dialect or Single normalization: " + numericSql);
+                }
+
                 var guidType = context.Model.FindEntityType(typeof(Row))!.FindProperty(nameof(Row.Token))!.GetColumnType();
                 if (guidType != (mode == OceanBaseCompatibilityMode.Oracle ? "RAW(16)" : "CHAR(36)"))
                 {
@@ -506,6 +544,7 @@ namespace PackageConsumer
             public byte[]? LargePayload { get; set; }
             public long Count { get; set; }
             public double Amplitude { get; set; }
+            public double DoubleValue { get; set; }
             public float SingleValue { get; set; }
             public float Wide { get; set; }
             public DateTime NarrowStamp { get; set; }

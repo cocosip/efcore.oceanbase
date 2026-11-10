@@ -1,11 +1,14 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
+using System.Linq.Expressions;
 using System.Reflection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Query;
 using Microsoft.EntityFrameworkCore.Query.SqlExpressions;
 using Microsoft.EntityFrameworkCore.Storage;
+using OceanBase.EntityFrameworkCore.Storage;
 
 namespace OceanBase.EntityFrameworkCore.Query
 {
@@ -14,6 +17,7 @@ namespace OceanBase.EntityFrameworkCore.Query
         IRelationalTypeMappingSource mappingSource,
         OceanBaseCompatibilityMode mode) : IMethodCallTranslator
     {
+        internal const string SingleResultMarker = "__oceanbase_internal_single_result";
         private static readonly Dictionary<MethodInfo, string> Functions = CreateFunctions();
 
         private static Dictionary<MethodInfo, string> CreateFunctions()
@@ -38,11 +42,21 @@ namespace OceanBase.EntityFrameworkCore.Query
                 Add(owner, "Floor", type, type, "FLOOR");
                 Add(owner, "Ceiling", type, type, "CEIL");
             }
+            foreach (var (owner, type) in new[] { (typeof(Math), typeof(double)), (typeof(MathF), typeof(float)) })
+            {
+                Add(owner, "Sqrt", type, type, "SQRT");
+                Add(owner, "Exp", type, type, "EXP");
+                Add(owner, "Log", type, type, "LN");
+                Add(owner, "Log", type, type, "LOG", arity: 2);
+                Add(owner, "Log10", type, type, "LOG10");
+                Add(owner, "Pow", type, type, "POWER", arity: 2);
+            }
             return functions;
 
-            void Add(Type owner, string name, Type input, Type output, string function)
+            void Add(Type owner, string name, Type input, Type output, string function, int arity = 1)
             {
-                var method = owner.GetMethod(name, BindingFlags.Public | BindingFlags.Static, [input])!;
+                var method = owner.GetMethod(name, BindingFlags.Public | BindingFlags.Static,
+                    arity == 1 ? [input] : [input, input])!;
                 if (method.ReturnType != output)
                     throw new InvalidOperationException($"Unexpected numeric signature: {method}.");
                 functions.Add(method, function);
@@ -52,31 +66,25 @@ namespace OceanBase.EntityFrameworkCore.Query
         public SqlExpression? Translate(SqlExpression? instance, MethodInfo method, IReadOnlyList<SqlExpression> arguments,
             IDiagnosticsLogger<DbLoggerCategory.Query> logger)
         {
-            if (instance is not null || !Functions.TryGetValue(method, out var function))
+            if (instance is not null || !Functions.TryGetValue(method, out var function)
+                || arguments.Count != method.GetParameters().Length)
                 return null;
 
-            var input = sqlExpressionFactory.ApplyDefaultTypeMapping(arguments[0]);
-            var mapping = input.TypeMapping;
-            if (mapping is null || mapping.Converter?.ConvertsNulls == true
-                || !IsNumeric(mapping.Converter?.ProviderClrType ?? mapping.ClrType))
-                return null;
-
-            try
+            var inputs = new SqlExpression[arguments.Count];
+            for (var index = 0; index < inputs.Length; index++)
             {
-                // Probe the owning numeric declaration validator without replacing the operand's converter.
-                var validated = mappingSource.FindMapping(mapping.Converter?.ProviderClrType ?? mapping.ClrType,
-                    storeTypeName: mapping.StoreType);
-                if (validated is null || !IsNumeric(validated.Converter?.ProviderClrType ?? validated.ClrType))
+                inputs[index] = sqlExpressionFactory.ApplyDefaultTypeMapping(arguments[index]);
+                if (!IsValidNumeric(inputs[index].TypeMapping))
                     return null;
             }
-            catch (ArgumentException)
-            {
-                return null;
-            }
+            var input = inputs[0];
+            var mapping = input.TypeMapping!;
 
             var intMapping = mappingSource.FindMapping(typeof(int))!;
             if (function != "SIGN" && mapping.ClrType != method.ReturnType)
                 return null;
+            if (function is "SQRT" or "EXP" or "LN" or "LOG" or "LOG10" or "POWER")
+                return TranslateTranscendental(function, method.ReturnType, inputs, mapping);
             var resultMapping = function == "SIGN" ? intMapping : mapping;
             if (mode == OceanBaseCompatibilityMode.MySql && function is "FLOOR" or "CEIL")
             {
@@ -97,6 +105,60 @@ namespace OceanBase.EntityFrameworkCore.Query
                     nullable: true, argumentsPropagateNullability: [false, false], method.ReturnType, resultMapping)
                 : sqlExpressionFactory.Function(function, [input], nullable: true,
                     argumentsPropagateNullability: [false], method.ReturnType, resultMapping);
+        }
+
+        private SqlExpression? TranslateTranscendental(string function, Type returnType, SqlExpression[] inputs,
+            RelationalTypeMapping mapping)
+        {
+            var carrier = Nullable.GetUnderlyingType(mapping.Converter?.ProviderClrType ?? mapping.ClrType)
+                ?? mapping.Converter?.ProviderClrType ?? mapping.ClrType;
+            if (carrier == typeof(decimal) && mapping is not OceanBaseDecimalTypeMapping)
+                return null;
+            var resultMapping = mapping is OceanBaseDecimalTypeMapping decimalMapping ? decimalMapping.AsQueryResult() : mapping;
+            var single = carrier == typeof(float);
+            var nativeType = single ? typeof(double) : returnType;
+            var nativeMapping = single ? mappingSource.FindMapping(typeof(double))! : resultMapping;
+            SqlExpression body;
+            if (function == "LOG" && mode == OceanBaseCompatibilityMode.MySql)
+            {
+                // Keep both logarithms at native precision until the completed quotient is normalized.
+                var doubleMapping = mappingSource.FindMapping(typeof(double))!;
+                var numerator = Native("LN", [inputs[0]], typeof(double), doubleMapping);
+                var denominator = Native("LN", [inputs[1]], typeof(double), doubleMapping);
+                body = new SqlBinaryExpression(ExpressionType.Divide, numerator, denominator, nativeType, nativeMapping);
+            }
+            else
+            {
+                var operands = function == "LOG" ? new[] { inputs[1], inputs[0] }
+                    : function == "LOG10" && mode == OceanBaseCompatibilityMode.Oracle
+                        ? [sqlExpressionFactory.Constant(10, mappingSource.FindMapping(typeof(int))), inputs[0]] : inputs;
+                body = Native(function == "LOG10" && mode == OceanBaseCompatibilityMode.Oracle ? "LOG" : function,
+                    operands, nativeType, nativeMapping);
+            }
+            // Uniform normalization also covers Oracle SQRT on physically wider Single declarations.
+            return single ? Native(SingleResultMarker, [body], returnType, resultMapping) : body;
+
+            SqlExpression Native(string name, SqlExpression[] operands, Type type, RelationalTypeMapping typeMapping)
+                => sqlExpressionFactory.Function(name, operands, nullable: true,
+                    argumentsPropagateNullability: operands.Select(_ => false), type, typeMapping);
+        }
+
+        private bool IsValidNumeric(RelationalTypeMapping? mapping)
+        {
+            if (mapping is null || mapping.Converter?.ConvertsNulls == true
+                || !IsNumeric(mapping.Converter?.ProviderClrType ?? mapping.ClrType))
+                return false;
+            try
+            {
+                // Probe the declaration owner without replacing the operand's converter or facets.
+                var validated = mappingSource.FindMapping(mapping.Converter?.ProviderClrType ?? mapping.ClrType,
+                    storeTypeName: mapping.StoreType);
+                return validated is not null && IsNumeric(validated.Converter?.ProviderClrType ?? validated.ClrType);
+            }
+            catch (ArgumentException)
+            {
+                return false;
+            }
         }
 
         private static bool IsNumeric(Type type)

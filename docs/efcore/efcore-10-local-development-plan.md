@@ -365,7 +365,37 @@ research define the eight exact methods, full finite ranges and converter/native
    Local implementation/source review complete: focused46 unit/12 intercepted, Debug/Release/isolated14
    Release1339 and same-package consumers pass both modes/patches. Round/transcendental functions remain separate.
 
+## Batch3m brief: exact transcendental numeric methods
+
+Implement all twelve exact Math/MathF Sqrt, Exp, Log (one/two arguments), Log10 and Pow identities using
+the existing numeric translator. Both modes use native SQRT/EXP/LN/POWER; two-argument Log uses MySQL
+LN(x)/LN(base) and Oracle LOG(base,x), and Oracle Log10 uses an independent raw provider ten. Preserve
+each operand mapping/converter; primary x owns the result. Native functions retain independent nullable
+metadata. No finite-domain clipping or fabricated CLR NaN/exception policy is introduced.
+
+Normalize actual Single-provider results in SQL after the complete operation with neutral FLOAT or
+BINARY_FLOAT casts; retain native double results. A result-only decimal mapping clone uses GetValue and
+checked numeric conversion because Connector0.2.0 GetDecimal rejects boxed native float/double values.
+The clone retains the converter/facets; ordinary decimal readers and write validation remain owners.
+Binary-to-decimal conversion may round at materialization and does not establish decimal SQL arithmetic.
+
+Cover exact dispatch, independent mixed converters, NULL semantics, cast/composition boundaries and
+sync/async supplied-reader materialization. Root owns package-only consumers on both selected EF patches.
+Native execution/typing/precision/domain errors remain live gates. Detailed brief/evidence:
+artifacts/local-development/batch3m/. Local source/patch/package gates and independent source review pass;
+broader local work remains open.
+
 ## Execution record
+
+- Batch3m local transcendental slice:54 expected missing-dispatch RED failures become65 focused unit and12
+  intercepted passes. Exact twelve Math/MathF identities preserve independent operands and x-owned result
+  converters; neutral Single SQL normalization follows the completed operation. Result-only decimal
+  GetValue clones retain ordinary decimal readers and clone/parameter behavior. A focused marker-shape
+  RED/GREEN correction precedes final full Debug/Release and isolated14 Release1416=1078+336+2, no skips.
+  Same baseline-built transcendental package passes both modes/patches; content, package-only graph and
+  DLL/baseline identity pass. Independent source spec/quality review passes without findings. Evidence:
+  artifacts/local-development/batch3m/. Native metadata/calculation/precision/domain errors remain live
+  gates. Round, wider queries/aggregates/model/write/transaction/schema work remains local; full goal active.
 
 - Baseline: 57fd44a, clean efcore/10.0. Prior verified suite: 563 (420 unit, 142 intercepted, one consumer).
 - Batch 1: local configuration/cache/helper scope complete; focused 66, full Debug/Release 606 each, independent
