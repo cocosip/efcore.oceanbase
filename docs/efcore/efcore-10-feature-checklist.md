@@ -64,7 +64,8 @@ The same suite also passed with `-c Release` (145 tests per configuration).
 | Unit | 108 | 0 | Options, connection cleanup, mapping/reader/converter hooks, literals and Oracle Boolean SQL; temporal/explicit-type coverage incomplete. |
 | Command pipeline | 36 | 0 | Intercepted before network execution; scalar query/input conversion and exact Oracle generated-number readback; transactions disabled. |
 | Consumer | 1 | 0 | Project reference, not an isolated packed-package consumer. |
-| Historical packed consumer | Both modes | 0 | Revision 2a02bc8; separate package restore/executable checks; current scalar checkpoint not packed yet. |
+| Packed consumer | Both modes | 0 | Revision 8664692; same baseline-compiled package executes with EF10.0.0 and EF10.0.14; no database execution. |
+| Later-patch Release suite | 145 | 0 | Source compiled/tested against EF10.0.14 in isolated artifacts; separate from baseline-package compatibility. |
 | Live MySQL / Oracle | Not established | Not established | No live provider execution recorded for either mode. |
 | Relational specification | Not established | Not established | No specification test project yet. |
 
@@ -105,7 +106,7 @@ Existing evidence references used below identify partial coverage, not automatic
 - **CP**: [ProviderConfigurationTests](../../tests/OceanBase.EntityFrameworkCore.ConsumerTests/ProviderConfigurationTests.cs),
   project reference only.
 - **PC**: [Standalone package consumer](../../tests/OceanBase.EntityFrameworkCore.PackageConsumer/Program.cs),
-  registration/model/paging smoke checks against the local prerelease package at implementation revision 2a02bc8;
+  registration/Guid model/Boolean SQL/paging checks against the local prerelease package at implementation revision 8664692;
   [commands and evidence](efcore-10-query-update-design.md#package-checkpoint-validation).
 
 `Missing` means tests and evidence still need to be added.
@@ -217,12 +218,12 @@ commit/transaction behavior per mode.
 | --- | --- | --- | --- | --- | --- |
 | PKG-01 | Build net10.0 assets against published OceanBaseConnector 0.2.0 with warnings as errors. | Required | Done | Done | Current solution test command builds assets; not a package-content assertion. |
 | PKG-02 | Packed nuspec uses OceanBase.EntityFrameworkCore and EF ranges [10.0.0,11.0.0). | Required | In progress | In progress | Checkpoint nuspec/asset assertions passed; repeatable release package-content gate still needed. |
-| PKG-03 | Isolated packed consumer restores/executes provider API without project/local connector references. | Required | Done | Done | PC Main passes registration/model/paging checks; restored from packed provider plus cached published dependencies. |
-| PKG-04 | Minimum EF10 and selected later available EF10 patch restore/build/test without pinning consumer patch; EF11 cannot satisfy dependencies. | Required | Planned | Planned | Patch-resolution/compatibility matrix missing; a range does not prove binary compatibility. |
+| PKG-03 | Isolated packed consumer restores/executes provider API without project/local connector references. | Required | Done | Done | PC Main passes Guid model/Boolean SQL/paging; default consumer has only provider reference, upgrade consumer explicitly requests EF patches. |
+| PKG-04 | Minimum EF10 and selected later available EF10 patch restore/build/test without pinning consumer patch; EF11 cannot satisfy dependencies. | Required | Done | Done | PC same baseline-compiled nupkg runs EF10.0.0/10.0.14; full source Release suite145 passes at10.0.14; inspected nuspec/NuGet parser rejects11.0.0; commands/results in linked package matrix. |
 | TST-01 | Selected EF relational specification classes pass; exclusions map to checklist IDs and limitations. | Required | Planned | Planned | Specification project/selection absent. |
 | TST-02 | Live core query/write/transaction/schema/scalar suites pass in at least one declared supported environment per mode. | Required | Planned | Planned | No live provider execution recorded. |
 | REL-01 | Support notes record server/connector/runtime/EF versions, tenant mode, direct/proxy endpoint, transport/options without credentials. | Required | Planned | Planned | Release evidence record missing. |
-| REL-02 | Validated dev checkpoint merges to efcore/10.0; packaging/release checks run on release revision. | Required | In progress | In progress | 2a02bc8 synchronized and locally packed on efcore/10.0; complete release gates remain open. |
+| REL-02 | Validated dev checkpoint merges to efcore/10.0; packaging/release checks run on release revision. | Required | In progress | In progress | 8664692 synchronized and locally packed on efcore/10.0; complete release gates remain open. |
 
 ## Visible deferred inventory
 

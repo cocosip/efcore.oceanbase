@@ -10,4 +10,8 @@
   <ItemGroup>
     <PackageReference Include="OceanBase.EntityFrameworkCore" Version="$(OceanBaseProviderVersion)" />
   </ItemGroup>
+  <ItemGroup Condition="'$(OceanBaseConsumerEfCoreVersion)' != ''">
+    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="$(OceanBaseConsumerEfCoreVersion)" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="$(OceanBaseConsumerEfCoreVersion)" />
+  </ItemGroup>
 </Project>

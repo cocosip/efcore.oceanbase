@@ -23,7 +23,7 @@ update MySQL and Oracle statuses independently. Generated SQL and intercepted te
 
 | Task | Checklist IDs | Remaining acceptance work |
 | --- | --- | --- |
-| 1: Package boundary | PKG-01 through PKG-04 | Isolated packed consumer passed at 2a02bc8; repeatable package-content gate and EF10 patch-resolution matrix remain. |
+| 1: Package boundary | PKG-01 through PKG-04 | Packed8664692 consumer passes EF10.0.0/10.0.14; full source Release suite passes both patches; release package-content gate remains. |
 | 2: Configuration | CFG-01 through CFG-04 | Negative cases, both-mode service graph and actual cache behavior. |
 | 3: Connection and mappings | CON-01 through CON-05, SQL-01/02, MOD-01 through MOD-03, MAP-01 through MAP-07 | Closed-connection cleanup/facets/scalar reader hooks have tests; opened ownership, temporal/explicit-type contracts and live round trips remain. |
 | 4: Runtime and schema | DIA-01/02, QRY-01 through QRY-11, UPD-01 through UPD-05, TXN-01 through TXN-03, SCH-01 through SCH-03 | Live query/write/transaction evidence and schema implementation; incomplete. |

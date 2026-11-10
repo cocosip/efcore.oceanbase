@@ -116,37 +116,81 @@ Still required for Task 4 and release:
 
 ## Package checkpoint validation
 
-Implementation revision `2a02bc8` was fast-forwarded from dev into efcore/10.0 after Debug and Release each passed
-95 tests (72 unit, 22 intercepted pipeline and one project-reference consumer). A local prerelease package was
-built on efcore/10.0; nothing was tagged, pushed or published.
+Implementation revision `8664692` was fast-forwarded from dev into efcore/10.0 after Debug and Release each passed
+145 tests (108 unit, 36 intercepted pipeline and one project-reference consumer). A local prerelease package was
+built on efcore/10.0; nothing was tagged, pushed or published. The earlier `2a02bc8` package/95-test checkpoint
+remains historical evidence; use the current revision below with the expanded consumer fixture.
 
-The package `OceanBase.EntityFrameworkCore.10.0.0-checkpoint.2a02bc8.nupkg` contains net10.0 assets and its nuspec
+The package `OceanBase.EntityFrameworkCore.10.0.0-checkpoint.8664692.nupkg` contains net10.0 assets and its nuspec
 declares `[10.0.0,11.0.0)` for both EF Core and EF Core Relational. These were checked by opening the ZIP/nuspec
 and asserting the dependency IDs, ranges and assembly path. The packaging tool reported a missing package README;
 package presentation remains release preparation work.
 
 The standalone [package consumer](../../tests/OceanBase.EntityFrameworkCore.PackageConsumer/Program.cs) references
-only the packed provider, with no ProjectReference or direct connector/EF dependencies. Its executable asserts
-registration, model construction and mode-specific paged query generation in both modes. It deliberately does
+only the packed provider by default, with no ProjectReference or direct connector/EF dependencies. Its executable asserts
+registration, Guid storage, Boolean projection and mode-specific paged query generation in both modes. It deliberately does
 not connect to a database. It stays outside the normal solution because it requires an already-built local
 provider package. Central versions are disabled only in this isolated fixture so repository EF references cannot
-mask package dependency errors.
+mask package dependency errors. Setting `OceanBaseConsumerEfCoreVersion` adds explicit EF Core and Relational
+references to simulate a consumer requesting a later patch; it does not rebuild or reference provider source.
+
+| Validation | EF Core / Relational | Result and evidence boundary |
+| --- | --- | --- |
+| Provider build and Debug/Release suites | 10.0.0 | 145 passed per configuration; unit/intercepted/project consumer only. |
+| Default standalone consumer | 10.0.0 | Both modes pass; provider package built against 10.0.0. |
+| Consumer explicitly upgrades EF packages | 10.0.14 | Both modes pass with the same provider nupkg/assembly; runtime reports EF 10.0.14.0. |
+| Source build and full Release suite | 10.0.14 | 145 passed; isolated central-version override and artifact paths, not the baseline-compiled package. |
+| Package range boundary | [10.0.0,11.0.0) | Nuspec inspected; NuGet.Versioning parser accepts 10.0.0/10.0.14 and rejects 11.0.0. No EF11 runtime test claimed. |
+
+Both `project.assets.json` and the consumer's loaded EF assembly version were inspected. These checks establish
+the selected patch pair at this source revision; they do not prove every intermediate/future patch or any live
+server behavior. Re-run the matrix after provider changes before release.
 
 To repeat the checkpoint consumer verification from the repository root in PowerShell:
 
 ```powershell
-$providerVersion = '10.0.0-checkpoint.2a02bc8'
+$providerVersion = '10.0.0-checkpoint.8664692'
 $consumerProject = 'tests/OceanBase.EntityFrameworkCore.PackageConsumer/OceanBase.EntityFrameworkCore.PackageConsumer.csproj'
-$packageFeed = Join-Path (Get-Location) 'artifacts/checkpoint-2a02bc8'
+$packageFeed = Join-Path (Get-Location) 'artifacts/checkpoint-8664692'
 $consumerPackages = Join-Path $packageFeed 'consumer-packages'
 dotnet restore $consumerProject "-p:OceanBaseProviderVersion=$providerVersion" `
     --source $packageFeed --source (Join-Path $env:USERPROFILE '.nuget/packages') `
     --packages $consumerPackages --force-evaluate --disable-parallel
 dotnet run --project $consumerProject -c Release --no-restore `
     "-p:OceanBaseProviderVersion=$providerVersion" -m:1 -nr:false
+
+# Consumer patch upgrade: reuse the same provider package, with explicit EF references.
+dotnet restore $consumerProject "-p:OceanBaseProviderVersion=$providerVersion" `
+    -p:OceanBaseConsumerEfCoreVersion=10.0.14 --source $packageFeed `
+    --source (Join-Path $env:USERPROFILE '.nuget/packages') --packages $consumerPackages `
+    --force-evaluate --disable-parallel
+dotnet run --project $consumerProject -c Release --no-restore `
+    "-p:OceanBaseProviderVersion=$providerVersion" -p:OceanBaseConsumerEfCoreVersion=10.0.14 -m:1 -nr:false
 ```
 
 The validation used the local package feed and existing cached dependency packages as feeds, with a separate
-consumer package directory. It proves package restore/consumption, not remote NuGet availability or compatibility
-with later EF10 patches. For another revision, first pack a unique local prerelease version on efcore/10.0 and
-update the version/feed values. Full Task 5 acceptance still requires specification and patch-compatibility tests.
+consumer package directory. It proves package restore/consumption, not remote NuGet availability. For another
+revision, first pack a unique local prerelease version on efcore/10.0 and update the version/feed values.
+
+To compile/test provider source against the selected later patch without changing repository package ranges:
+
+```powershell
+$patchDirectory = Join-Path (Get-Location) 'artifacts/compatibility-10.0.14'
+New-Item -ItemType Directory -Path $patchDirectory -Force | Out-Null
+[xml]$central = Get-Content Directory.Packages.props -Raw
+foreach ($node in $central.Project.ItemGroup.PackageVersion) {
+    if ($node.Include -in @('Microsoft.EntityFrameworkCore', 'Microsoft.EntityFrameworkCore.Relational')) {
+        $node.Version = '[10.0.14]'
+    }
+}
+$patchProps = Join-Path $patchDirectory 'Directory.Packages.props'
+$central.Save($patchProps)
+$patchArtifacts = Join-Path $patchDirectory 'build'
+dotnet test OceanBase.EntityFrameworkCore.slnx -c Release --artifacts-path $patchArtifacts `
+    "-p:DirectoryPackagesPropsPath=$patchProps" "-p:RestorePackagesPath=$consumerPackages" `
+    "-p:RestoreSources=$(Join-Path $env:USERPROFILE '.nuget/packages')" -m:1 -nr:false
+```
+
+The EF11 exclusion is a package-resolution boundary, not a tested EF11 adaptation. Each branch must rebuild and
+review its own EF-major contract. Full Task 5 acceptance still requires specification tests, live evidence,
+release-revision package gates and support records.
