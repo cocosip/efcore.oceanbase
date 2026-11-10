@@ -12,6 +12,9 @@ semantics are identical; mode-specific SQL and mappings stay explicit.
 
 **Spec:** docs/efcore/efcore-10-design.md and docs/efcore/efcore-10-technical-baseline.md
 
+**Acceptance checklist:** docs/efcore/efcore-10-feature-checklist.md. A task is complete only when the affected
+checklist rows, implementation, tests and package impact are updated together.
+
 ## Global Constraints
 
 - The release branch is efcore/10.0 and is merged from dev after tests pass.
@@ -119,23 +122,23 @@ Expected: PASS, with no warnings and distinct cache keys for MySQL and Oracle.
 - Consumes: Task 2 options and OceanBaseConnector DbConnection, DbCommand and DbParameter APIs.
 - Produces: Mode-aware relational connection, identifier/parameter generation and mappings for common scalar CLR types.
 
-- [ ] Step 1: Write mode-specific helper and mapping tests.
+- [x] Step 1: Write mode-specific helper and mapping tests.
 
 Assert MySQL and Oracle identifier delimiters, parameter names, null handling, numeric/text/binary/date-time/decimal
 mapping metadata and provider parameter creation.
 
-- [ ] Step 2: Run focused tests to verify failure.
+- [x] Step 2: Run focused tests to verify failure.
 
 Run: dotnet test tests/OceanBase.EntityFrameworkCore.UnitTests/OceanBase.EntityFrameworkCore.UnitTests.csproj
 
 Expected: FAIL because the relational services are missing.
 
-- [ ] Step 3: Implement the relational connection, SQL helper and mappings.
+- [x] Step 3: Implement the relational connection, SQL helper and mappings.
 
 Use the exact EF10 service contracts and lifetimes. Delegate opening, commands, parameters and transactions to
 OceanBaseConnector. Keep mode-specific quoting and parameter rules in explicit branches.
 
-- [ ] Step 4: Run focused tests and build.
+- [x] Step 4: Run focused tests and build.
 
 Expected: PASS with both mode mapping suites and no direct protocol code in the provider.
 

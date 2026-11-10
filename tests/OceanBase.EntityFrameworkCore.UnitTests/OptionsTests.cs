@@ -71,6 +71,37 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             Assert.True(provider.IsConfigured(options));
         }
 
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql, "ExpectedMode=MySql")]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, "ExpectedMode=Oracle")]
+        public void Relational_connection_uses_connector_and_mode(
+            OceanBaseCompatibilityMode mode,
+            string expectedMode)
+        {
+            using var context = new TestContext(CreateOptions(mode));
+
+            var connection = context.GetService<IRelationalConnection>().DbConnection;
+
+            Assert.Equal("OceanBaseConnector.OceanBaseConnection", connection.GetType().FullName);
+            Assert.Contains(expectedMode, connection.ConnectionString);
+        }
+
+        [Fact]
+        public void Relational_connection_rejects_a_conflicting_connector_mode()
+        {
+            using var context = new TestContext(
+                new DbContextOptionsBuilder<TestContext>()
+                    .UseOceanBase(
+                        "Server=localhost;Database=test;ExpectedMode=Oracle",
+                        OceanBaseCompatibilityMode.MySql)
+                    .Options);
+
+            var exception = Assert.Throws<InvalidOperationException>(
+                () => context.GetService<IRelationalConnection>().DbConnection);
+
+            Assert.Contains("does not match", exception.Message);
+        }
+
         private static DbContextOptions<TestContext> CreateOptions(OceanBaseCompatibilityMode mode)
             => new DbContextOptionsBuilder<TestContext>()
                 .UseOceanBase("Server=localhost;Database=test", mode)

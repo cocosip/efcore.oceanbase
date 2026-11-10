@@ -7,13 +7,22 @@ namespace OceanBase.EntityFrameworkCore.Internal
     {
         private readonly OceanBaseCompatibilityMode _compatibilityMode;
 
+        internal OceanBaseModelCacheKeyFactory(
+            ModelCacheKeyFactoryDependencies dependencies,
+            OceanBaseCompatibilityMode compatibilityMode)
+            : base(dependencies)
+        {
+            _compatibilityMode = compatibilityMode;
+        }
+
         public OceanBaseModelCacheKeyFactory(
             ModelCacheKeyFactoryDependencies dependencies,
             IDbContextOptions options)
-            : base(dependencies)
+            : this(
+                dependencies,
+                options.FindExtension<OceanBaseOptionsExtension>()?.CompatibilityMode
+                    ?? OceanBaseCompatibilityMode.MySql)
         {
-            _compatibilityMode = options.FindExtension<OceanBaseOptionsExtension>()?.CompatibilityMode
-                ?? OceanBaseCompatibilityMode.MySql;
         }
 
         public override object Create(DbContext context, bool designTime)

@@ -4,7 +4,11 @@ using System.Data.Common;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Storage;
+using Microsoft.EntityFrameworkCore.Update;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using OceanBase.EntityFrameworkCore.Storage;
+using OceanBase.EntityFrameworkCore.Update;
 
 namespace OceanBase.EntityFrameworkCore.Internal
 {
@@ -84,8 +88,23 @@ namespace OceanBase.EntityFrameworkCore.Internal
             new EntityFrameworkRelationalServicesBuilder(services)
                 .TryAdd<LoggingDefinitions, OceanBaseLoggingDefinitions>()
                 .TryAdd<IDatabaseProvider, DatabaseProvider<OceanBaseOptionsExtension>>()
-                .TryAdd<IModelCacheKeyFactory, OceanBaseModelCacheKeyFactory>()
+                .TryAdd<IRelationalConnection, OceanBaseRelationalConnection>()
+                .TryAdd<IModificationCommandBatchFactory, OceanBaseModificationCommandBatchFactory>()
                 .TryAddCoreServices();
+
+            services.TryAddSingleton<ISqlGenerationHelper>(serviceProvider =>
+                new OceanBaseSqlGenerationHelper(
+                    serviceProvider.GetRequiredService<RelationalSqlGenerationHelperDependencies>(),
+                    CompatibilityMode));
+            services.TryAddSingleton<IRelationalTypeMappingSource>(serviceProvider =>
+                new OceanBaseTypeMappingSource(
+                    serviceProvider.GetRequiredService<TypeMappingSourceDependencies>(),
+                    serviceProvider.GetRequiredService<RelationalTypeMappingSourceDependencies>(),
+                    CompatibilityMode));
+            services.TryAddSingleton<IModelCacheKeyFactory>(serviceProvider =>
+                new OceanBaseModelCacheKeyFactory(
+                    serviceProvider.GetRequiredService<ModelCacheKeyFactoryDependencies>(),
+                    CompatibilityMode));
         }
     }
 }
