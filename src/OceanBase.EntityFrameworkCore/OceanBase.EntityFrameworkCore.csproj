@@ -11,4 +11,7 @@
     <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" />
     <PackageReference Include="OceanBaseConnector" />
   </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="OceanBase.EntityFrameworkCore.UnitTests" />
+  </ItemGroup>
 </Project>

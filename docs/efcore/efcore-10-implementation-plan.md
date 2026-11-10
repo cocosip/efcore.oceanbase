@@ -16,7 +16,7 @@ semantics are identical; mode-specific SQL and mappings stay explicit.
 
 - The release branch is efcore/10.0 and is merged from dev after tests pass.
 - The package ID is OceanBase.EntityFrameworkCore and the package line is 10.x.
-- EF Core and EF Core Relational dependencies remain in the 10.x range.
+- EF Core and EF Core Relational dependencies use the NuGet range [10.0.0, 11.0.0).
 - MySQL and Oracle compatibility mode is explicit and participates in the model-cache key.
 - Connector protocol, pooling, TLS, authentication and connection-string parsing remain in OceanBaseConnector.
 - Migrations, reverse engineering, JSON/LOB/OBJECT/REF CURSOR mappings and bulk APIs are deferred.

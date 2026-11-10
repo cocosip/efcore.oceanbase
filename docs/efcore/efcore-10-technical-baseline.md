@@ -10,13 +10,13 @@ smaller than a complete EF Core feature catalog.
 
 - Development branch: dev.
 - Release branch: efcore/10.0.
-- EF dependency range: Microsoft.EntityFrameworkCore and Microsoft.EntityFrameworkCore.Relational 10.x only.
+- EF dependency range: Microsoft.EntityFrameworkCore and Microsoft.EntityFrameworkCore.Relational [10.0.0, 11.0.0).
 - Initial provider asset: the runtime target required by EF Core 10.
 - ADO.NET dependency: the public OceanBaseConnector package APIs.
 - Public package: OceanBase.EntityFrameworkCore 10.x.
 
-EF Core 10 requires .NET 10 to build and run. The first consumer test must use the exact SDK, runtime, EF Core
-patch version, provider package and connector package recorded by the build.
+EF Core 10 requires .NET 10 to build and run. Restore resolves the highest available EF Core 10 patch inside the
+range; the first consumer test records the resolved SDK, runtime, EF Core patch, provider package and connector.
 
 ## Provider entry points
 

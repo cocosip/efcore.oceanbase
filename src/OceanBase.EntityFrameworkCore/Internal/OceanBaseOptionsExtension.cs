@@ -1,0 +1,91 @@
+using System;
+using System.Collections.Generic;
+using System.Data.Common;
+using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Storage;
+using Microsoft.Extensions.DependencyInjection;
+
+namespace OceanBase.EntityFrameworkCore.Internal
+{
+    internal sealed class OceanBaseOptionsExtension : RelationalOptionsExtension
+    {
+        private sealed class ExtensionInfo : RelationalExtensionInfo
+        {
+            private OceanBaseOptionsExtension OceanBaseExtension => (OceanBaseOptionsExtension)base.Extension;
+
+            public ExtensionInfo(IDbContextOptionsExtension extension)
+                : base(extension)
+            {
+            }
+
+            public override string LogFragment => $"CompatibilityMode={OceanBaseExtension.CompatibilityMode} ";
+
+            public override int GetServiceProviderHashCode()
+                => OceanBaseExtension.CompatibilityMode.GetHashCode();
+
+            public override bool ShouldUseSameServiceProvider(DbContextOptionsExtensionInfo other)
+                => other is ExtensionInfo extensionInfo
+                    && OceanBaseExtension.CompatibilityMode == extensionInfo.OceanBaseExtension.CompatibilityMode;
+
+            public override void PopulateDebugInfo(IDictionary<string, string> debugInfo)
+                => debugInfo["OceanBase.EntityFrameworkCore:CompatibilityMode"]
+                    = OceanBaseExtension.CompatibilityMode.ToString();
+        }
+
+        private DbContextOptionsExtensionInfo? _info;
+
+        public OceanBaseOptionsExtension()
+        {
+        }
+
+        internal OceanBaseOptionsExtension(OceanBaseOptionsExtension copyFrom)
+            : base(copyFrom)
+        {
+            CompatibilityMode = copyFrom.CompatibilityMode;
+        }
+
+        public OceanBaseCompatibilityMode CompatibilityMode { get; private set; }
+
+        public override DbContextOptionsExtensionInfo Info
+            => _info ??= new ExtensionInfo(this);
+
+        public OceanBaseOptionsExtension WithCompatibilityMode(OceanBaseCompatibilityMode mode)
+        {
+            if (mode is not OceanBaseCompatibilityMode.MySql and not OceanBaseCompatibilityMode.Oracle)
+            {
+                throw new ArgumentOutOfRangeException(nameof(mode));
+            }
+
+            var clone = new OceanBaseOptionsExtension(this)
+            {
+                CompatibilityMode = mode
+            };
+            return clone;
+        }
+
+        public override OceanBaseOptionsExtension WithConnectionString(string? connectionString)
+            => new OceanBaseOptionsExtension((OceanBaseOptionsExtension)base.WithConnectionString(connectionString))
+            {
+                CompatibilityMode = CompatibilityMode
+            };
+
+        public override OceanBaseOptionsExtension WithConnection(DbConnection? connection)
+            => new OceanBaseOptionsExtension((OceanBaseOptionsExtension)base.WithConnection(connection))
+            {
+                CompatibilityMode = CompatibilityMode
+            };
+
+        protected override RelationalOptionsExtension Clone()
+            => new OceanBaseOptionsExtension(this);
+
+        public override void ApplyServices(IServiceCollection services)
+        {
+            new EntityFrameworkRelationalServicesBuilder(services)
+                .TryAdd<LoggingDefinitions, OceanBaseLoggingDefinitions>()
+                .TryAdd<IDatabaseProvider, DatabaseProvider<OceanBaseOptionsExtension>>()
+                .TryAdd<IModelCacheKeyFactory, OceanBaseModelCacheKeyFactory>()
+                .TryAddCoreServices();
+        }
+    }
+}

@@ -36,7 +36,8 @@ EF Core version.
 ## Dependencies
 
 - Use central package management for package versions.
-- The provider package must have a bounded dependency on the matching EF Core major version.
+- The provider package must use a bounded dependency range for the matching EF Core major version, such as
+  [10.0.0, 11.0.0), instead of forcing one patch version on consumer applications.
 - Reference the published OceanBaseConnector package for consumer-facing builds. A local project reference is
   allowed only for coordinated development and must be covered by a package-consumer test.
 - Do not add a dependency for a small helper that the BCL or an existing project already provides.
