@@ -69,6 +69,7 @@ The expanded suite passed in Debug and Release (882 tests per configuration).
 | Consumer | 2 | 0 | Both-mode provider detection through a project reference, not an isolated packed-package consumer. |
 | Packed consumer | Both modes | 0 | Same wide-decimal-20261111 package passes EF10.0.0/10.0.14, including direct Single midpoint/wide Double reads and prior checks; README included; no live execution. |
 | Later-patch Release suite | 882 | 0 | Current source compiled/tested against EF10.0.14 in isolated artifacts. |
+| Hosted Windows/Linux CI | Both jobs succeeded | 0 failed steps | Run 42854480450 at db676ff: restore, Release test, pack and content gate succeeded; this predates the current wide-decimal commit. |
 | Live MySQL / Oracle | Not established | Not established | No live provider execution recorded for either mode. |
 | Relational specification | Not established | Not established | No specification test project yet. |
 

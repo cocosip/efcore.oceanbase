@@ -33,8 +33,10 @@ Existing working files may retain their prior endings until rewritten or checked
 normalizes text when staging. Use an LF-capable editor. Do not discard local changes to refresh line endings.
 
 The GitHub Actions CI workflow runs the Release solution tests and package-content gate on both Windows and
-Linux using PowerShell 7. It does not connect to databases or publish packages. The matrix is configuration until
-an actual remote run succeeds; local Windows checks do not establish Linux or hosted-runner compatibility.
+Linux using PowerShell 7. It does not connect to databases or publish packages. Both jobs and all four gates
+passed for db676ff in [run 42854480450](https://github.com/cocosip/efcore.oceanbase/actions/runs/42854480450).
+That evidence applies to that commit; subsequent changes need their own run. Local Windows checks alone do
+not establish Linux or hosted-runner compatibility.
 
 ### C# conventions
 

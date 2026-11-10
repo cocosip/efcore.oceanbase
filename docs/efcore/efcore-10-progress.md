@@ -11,6 +11,14 @@ each small group. Real database integration/tests and EF8/EF9 adaptation are exp
 [local development plan](efcore-10-local-development-plan.md) tracks the full remaining inventory, including
 an audit of locally feasible deferred families. Finishing one batch does not finish the overall goal.
 
+### Hosted Windows/Linux CI evidence (2026-11-11)
+
+Read-only GitHub inspection confirms [run 42854480450](https://github.com/cocosip/efcore.oceanbase/actions/runs/42854480450)
+for db676ff succeeded on ubuntu-latest and windows-latest: restore, Release tests, pack and package-content
+verification each succeeded. This establishes hosted execution for the unary-function checkpoint, not later
+local commits or database integration. Run/job/step metadata is saved under artifacts/local-development/;
+the log archive endpoint returned HTTP403 (repository admin rights), so no new per-test count is inferred.
+
 ### Wide exact decimal to floating checkpoint (2026-11-11)
 
 Batch 2d fixes the confirmed shared normalization overflow: OceanBaseDecimal values parse directly as Single
@@ -39,7 +47,8 @@ Focused tests pass 24 unit and eight intercepted cases after missing-translation
 Debug/Release and isolated EF10.0.14 Release each pass **833 tests** (647 unit, 184 intercepted pipeline, two
 consumers). Independent review passed. The same baseline-built `10.0.0-checkpoint.unary-20261111` package passes
 both modes at EF10.0.0/10.0.14; the preceding arithmetic package fails the unary predicate. Package-content and
-package-only graph checks pass. No live database, Linux or hosted CI run occurred.
+package-only graph checks pass. At this local checkpoint, no live database, Linux or hosted CI run was
+recorded; the subsequent db676ff hosted evidence is recorded above.
 
 Historical package: `artifacts/checkpoint-unary-20261111/OceanBase.EntityFrameworkCore.10.0.0-checkpoint.unary-20261111.nupkg`.
 Evidence: `artifacts/local-development/batch3c/`. Native casing/space/character semantics do not promise exact CLR
@@ -82,8 +91,9 @@ Historical concat package: `artifacts/checkpoint-concat-20261110/OceanBase.Entit
 Evidence: `artifacts/local-development/batch3a/`. Next local query work includes integer division/remainder,
 string search/member functions and the wider checklist. The provider remains incomplete.
 
-Windows/Linux CI now has restore, Release tests, pack and package-content checks (`5feef06`); YAML and independent
-review pass. Hosted runs/Linux execution remain unverified. No push, publication or database execution occurred.
+Windows/Linux CI adds restore, Release tests, pack and package-content checks (`5feef06`); YAML and independent
+review passed. The later db676ff hosted run is recorded above. No push, publication or database execution
+was performed as part of this inspection.
 
 ### Configuration/cache/SQL boundary checkpoint
 
