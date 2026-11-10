@@ -1,0 +1,215 @@
+# EF Core 10 Provider Implementation Plan
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (- [ ]) syntax for tracking.
+
+**Goal:** Build the first tested OceanBase EF Core provider for EF Core 10 with explicit MySQL and Oracle compatibility modes.
+
+**Architecture:** Keep dev and efcore/10.0 aligned, with efcore/10.0 used for packaging. The provider consumes the
+public OceanBaseConnector ADO.NET API. Mode-independent EF services are shared only when generated SQL and result
+semantics are identical; mode-specific SQL and mappings stay explicit.
+
+**Tech Stack:** C#, .NET 10, EF Core 10, EF Core Relational, OceanBaseConnector, xUnit, relational specification tests.
+
+**Spec:** docs/efcore/efcore-10-design.md and docs/efcore/efcore-10-technical-baseline.md
+
+## Global Constraints
+
+- The release branch is efcore/10.0 and is merged from dev after tests pass.
+- The package ID is OceanBase.EntityFrameworkCore and the package line is 10.x.
+- EF Core and EF Core Relational dependencies remain in the 10.x range.
+- MySQL and Oracle compatibility mode is explicit and participates in the model-cache key.
+- Connector protocol, pooling, TLS, authentication and connection-string parsing remain in OceanBaseConnector.
+- Migrations, reverse engineering, JSON/LOB/OBJECT/REF CURSOR mappings and bulk APIs are deferred.
+- All public behavior must be tested locally; live database evidence is reported separately.
+- Commit each completed task with a Gitmoji Conventional Commit before starting the next task.
+
+## Review Focus
+
+- A model built for MySQL must never be reused for Oracle; Task 2 tests the mode-aware model cache key.
+- Identifier quoting and parameter prefixes must match each tenant mode; Task 3 tests both SQL dialects.
+- Generated keys must not assume SQL Server OUTPUT; Task 4 tests the connector-compatible key path.
+- Sync and async commands must use the same mode-specific SQL; Task 4 tests both execution paths.
+- A packed provider must resolve only EF Core 10 dependencies; Task 5 tests the package consumer.
+
+### Task 1: Create the EF10 solution and package boundary
+
+**Files:**
+- Create: OceanBase.EntityFrameworkCore.slnx
+- Create: Directory.Build.props
+- Create: Directory.Packages.props
+- Create: src/OceanBase.EntityFrameworkCore/OceanBase.EntityFrameworkCore.csproj
+- Create: tests/OceanBase.EntityFrameworkCore.UnitTests/OceanBase.EntityFrameworkCore.UnitTests.csproj
+- Create: tests/OceanBase.EntityFrameworkCore.ConsumerTests/OceanBase.EntityFrameworkCore.ConsumerTests.csproj
+
+**Interfaces:**
+- Consumes: EF Core 10 and the public OceanBaseConnector package or coordinated project reference.
+- Produces: A net10.0 provider assembly with package ID OceanBase.EntityFrameworkCore and central package versions.
+
+- [ ] Step 1: Write the failing package-consumer smoke test.
+
+Create a consumer test that references only the packed provider and connector packages, configures a DbContext with
+UseOceanBase, and asserts that the provider invariant is OceanBase.EntityFrameworkCore.
+
+- [ ] Step 2: Run the smoke test to verify the project boundary is missing.
+
+Run: dotnet test tests/OceanBase.EntityFrameworkCore.ConsumerTests/OceanBase.EntityFrameworkCore.ConsumerTests.csproj
+
+Expected: FAIL because the provider project and UseOceanBase API do not exist.
+
+- [ ] Step 3: Create the solution, central package files and provider project.
+
+Target net10.0, enable nullable, disable implicit usings, treat warnings as errors, reference EF Core 10 and
+EF Core Relational 10, and reference OceanBaseConnector through its public package boundary. Add the unit and
+consumer test projects to the solution.
+
+- [ ] Step 4: Run restore and build.
+
+Run: dotnet build OceanBase.EntityFrameworkCore.slnx
+
+Expected: PASS with the provider and test projects restored against EF Core 10.
+
+### Task 2: Add options, mode selection and model-cache identity
+
+**Files:**
+- Create: src/OceanBase.EntityFrameworkCore/OceanBaseCompatibilityMode.cs
+- Create: src/OceanBase.EntityFrameworkCore/OceanBaseDbContextOptionsBuilderExtensions.cs
+- Create: src/OceanBase.EntityFrameworkCore/Internal/OceanBaseOptionsExtension.cs
+- Create: src/OceanBase.EntityFrameworkCore/Internal/OceanBaseModelCacheKeyFactory.cs
+- Create: tests/OceanBase.EntityFrameworkCore.UnitTests/OptionsTests.cs
+- Modify: src/OceanBase.EntityFrameworkCore/OceanBase.EntityFrameworkCore.csproj
+
+**Interfaces:**
+- Produces: UseOceanBase(string, OceanBaseCompatibilityMode), UseOceanBase(DbConnection, OceanBaseCompatibilityMode),
+  OceanBaseCompatibilityMode, and an IsOceanBase provider check.
+
+- [ ] Step 1: Write tests for both modes and model-cache separation.
+
+Assert that MySql and Oracle options retain their mode, both UseOceanBase overloads register the provider, and two
+contexts that differ only by mode produce different model-cache keys.
+
+- [ ] Step 2: Run the focused tests to verify failure.
+
+Run: dotnet test tests/OceanBase.EntityFrameworkCore.UnitTests/OceanBase.EntityFrameworkCore.UnitTests.csproj --filter FullyQualifiedName~OptionsTests
+
+Expected: FAIL because the options extension and mode types are missing.
+
+- [ ] Step 3: Implement the EF10 options extension and model-cache key.
+
+Implement the exact EF10 interfaces verified from the 10.x assemblies. Apply provider services through
+IDbContextOptionsExtension and include the explicit mode in the cache key.
+
+- [ ] Step 4: Run the focused tests.
+
+Expected: PASS, with no warnings and distinct cache keys for MySQL and Oracle.
+
+### Task 3: Implement relational connection, SQL helper and scalar mappings
+
+**Files:**
+- Create: src/OceanBase.EntityFrameworkCore/Storage/OceanBaseRelationalConnection.cs
+- Create: src/OceanBase.EntityFrameworkCore/Storage/OceanBaseSqlGenerationHelper.cs
+- Create: src/OceanBase.EntityFrameworkCore/Storage/OceanBaseTypeMappingSource.cs
+- Create: src/OceanBase.EntityFrameworkCore/Storage/OceanBaseTypeMappings.cs
+- Create: tests/OceanBase.EntityFrameworkCore.UnitTests/SqlGenerationHelperTests.cs
+- Create: tests/OceanBase.EntityFrameworkCore.UnitTests/TypeMappingTests.cs
+
+**Interfaces:**
+- Consumes: Task 2 options and OceanBaseConnector DbConnection, DbCommand and DbParameter APIs.
+- Produces: Mode-aware relational connection, identifier/parameter generation and mappings for common scalar CLR types.
+
+- [ ] Step 1: Write mode-specific helper and mapping tests.
+
+Assert MySQL and Oracle identifier delimiters, parameter names, null handling, numeric/text/binary/date-time/decimal
+mapping metadata and provider parameter creation.
+
+- [ ] Step 2: Run focused tests to verify failure.
+
+Run: dotnet test tests/OceanBase.EntityFrameworkCore.UnitTests/OceanBase.EntityFrameworkCore.UnitTests.csproj
+
+Expected: FAIL because the relational services are missing.
+
+- [ ] Step 3: Implement the relational connection, SQL helper and mappings.
+
+Use the exact EF10 service contracts and lifetimes. Delegate opening, commands, parameters and transactions to
+OceanBaseConnector. Keep mode-specific quoting and parameter rules in explicit branches.
+
+- [ ] Step 4: Run focused tests and build.
+
+Expected: PASS with both mode mapping suites and no direct protocol code in the provider.
+
+### Task 4: Implement query and update SQL for the first vertical slice
+
+**Files:**
+- Create: src/OceanBase.EntityFrameworkCore/Query/OceanBaseQuerySqlGenerator.cs
+- Create: src/OceanBase.EntityFrameworkCore/Query/OceanBaseQuerySqlGeneratorFactory.cs
+- Create: src/OceanBase.EntityFrameworkCore/Update/OceanBaseUpdateSqlGenerator.cs
+- Create: src/OceanBase.EntityFrameworkCore/Update/OceanBaseModificationCommandBatchFactory.cs
+- Create: src/OceanBase.EntityFrameworkCore/Storage/OceanBaseDatabaseCreator.cs
+- Create: tests/OceanBase.EntityFrameworkCore.UnitTests/SqlGeneratorTests.cs
+- Create: tests/OceanBase.EntityFrameworkCore.FunctionalTests/BasicRelationalTests.cs
+- Create: tests/OceanBase.EntityFrameworkCore.FunctionalTests/OceanBase.EntityFrameworkCore.FunctionalTests.csproj
+
+**Interfaces:**
+- Consumes: Tasks 2 and 3 services.
+- Produces: Basic SELECT, predicate, projection, join, paging, INSERT, UPDATE and DELETE execution with generated
+  key handling for both modes.
+
+- [ ] Step 1: Write SQL and functional tests.
+
+Assert generated SQL for both modes and execute a small model covering model creation, scalar query, generated-key
+insert, update, delete, transaction rollback, synchronous execution and asynchronous execution.
+
+- [ ] Step 2: Run tests to verify failure.
+
+Run: dotnet test tests/OceanBase.EntityFrameworkCore.FunctionalTests/OceanBase.EntityFrameworkCore.FunctionalTests.csproj
+
+Expected: FAIL because query/update services and relational database creation are missing.
+
+- [ ] Step 3: Implement the minimal EF10 query/update pipeline.
+
+Register only the services needed by the tested feature profile. Use connector-compatible generated-key retrieval;
+do not copy SQL Server OUTPUT behavior. Keep paging and key-generation differences mode-specific.
+
+- [ ] Step 4: Run unit and available live tests.
+
+Run: dotnet test OceanBase.EntityFrameworkCore.slnx
+
+Expected: PASS for local tests. Live results are recorded by mode and environment; unavailable infrastructure is
+reported as unverified.
+
+### Task 5: Add specification tests, package consumer validation and release packaging
+
+**Files:**
+- Create: tests/OceanBase.EntityFrameworkCore.SpecificationTests/OceanBase.EntityFrameworkCore.SpecificationTests.csproj
+- Create: tests/OceanBase.EntityFrameworkCore.SpecificationTests/OceanBaseSpecificationTestFixture.cs
+- Create: tests/OceanBase.EntityFrameworkCore.SpecificationTests/SelectedRelationalSpecificationTests.cs
+- Modify: OceanBase.EntityFrameworkCore.slnx
+- Modify: src/OceanBase.EntityFrameworkCore/OceanBase.EntityFrameworkCore.csproj
+
+**Interfaces:**
+- Consumes: The EF10 provider and selected Microsoft.EntityFrameworkCore.Relational.Specification.Tests fixtures.
+- Produces: A packed OceanBase.EntityFrameworkCore 10.x package and consumer evidence that only EF Core 10 is resolved.
+
+- [ ] Step 1: Select and wire specification-test bases.
+
+Start with relational query, update, transaction and model tests that match the first feature profile. Record each
+selected class and intentional exclusion in the EF10 design documentation.
+
+- [ ] Step 2: Run selected specification tests.
+
+Run: dotnet test tests/OceanBase.EntityFrameworkCore.SpecificationTests/OceanBase.EntityFrameworkCore.SpecificationTests.csproj
+
+Expected: Passing tests for the selected profile, with unsupported cases explicitly excluded and documented.
+
+- [ ] Step 3: Pack and test the package.
+
+Run: dotnet pack src/OceanBase.EntityFrameworkCore/OceanBase.EntityFrameworkCore.csproj -c Release
+then run the package-consumer project against the produced package.
+
+Expected: The package contains net10.0 assets, has a bounded EF Core 10 dependency, and consumer restore does not
+select EF Core 8 or EF Core 9 provider dependencies.
+
+- [ ] Step 4: Merge and tag the release branch.
+
+Run: git switch efcore/10.0, merge the validated dev commit, run the release checks, and create the 10.x tag.
+
+Expected: efcore/10.0 contains the same tested provider as dev and is the only branch used for the first package.
