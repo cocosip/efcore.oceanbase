@@ -19,6 +19,24 @@ verification each succeeded. This establishes hosted execution for the unary-fun
 local commits or database integration. Run/job/step metadata is saved under artifacts/local-development/;
 the log archive endpoint returned HTTP403 (repository admin rights), so no new per-test count is inferred.
 
+### Substring checkpoint (2026-11-11)
+
+Exact Substring(int) and Substring(int,int) now use native SUBSTRING/SUBSTR with long-result origin
+adjustment. int.MaxValue safely becomes positive 2147483648. Dynamic bindings and receiver result mapping,
+including fixed/national/LOB/converter metadata, are preserved. Function NULL tests remain observable;
+the carried Oracle computed-needle NULL search regression is also covered.
+
+Focused checks pass 12 unit and eight intercepted cases. Debug/Release and isolated EF10.0.14 Release each
+pass **934 tests** (724 unit, 208 intercepted pipeline, two consumers). Independent spec/quality review passed.
+The same baseline-built `10.0.0-checkpoint.substring-20261111` package passes both modes on EF10.0.0/10.0.14,
+including both arities and the maximum-start boundary; the previous search package fails the new translation.
+Package-content and package-only graph checks pass.
+
+Latest package: `artifacts/checkpoint-substring-20261111/OceanBase.EntityFrameworkCore.10.0.0-checkpoint.substring-20261111.nupkg`.
+Evidence: `artifacts/local-development/batch3e/`. Native range/character/padding/LOB results, including the
+unverified NCLOB extension, remain server gates. Hosted CI above applies only to db676ff. Next is ordinary
+temporal members and wider numeric/query work; the overall EF10 goal remains active.
+
 ### String search checkpoint (2026-11-11)
 
 Exact Contains(string), StartsWith(string) and EndsWith(string) now translate with INSTR and native suffix
@@ -33,10 +51,10 @@ The same baseline-built `10.0.0-checkpoint.search-20261111` package passes both 
 including search syntax and repeated captured nonempty/empty/null values. The preceding wide-decimal package
 fails the new method translations. Package-content and package-only graph checks pass.
 
-Latest package: `artifacts/checkpoint-search-20261111/OceanBase.EntityFrameworkCore.10.0.0-checkpoint.search-20261111.nupkg`.
+Historical package: `artifacts/checkpoint-search-20261111/OceanBase.EntityFrameworkCore.10.0.0-checkpoint.search-20261111.nupkg`.
 Evidence: `artifacts/local-development/batch3d/`. Native collation/padding/character/LOB results remain live
 gates; exact CLR ordinal/culture/null-exception behavior is not promised. Hosted evidence above applies only
-to db676ff. Next is Substring and wider query work; the overall goal remains active.
+to db676ff. The Substring follow-up is recorded above; wider query work and the overall goal remain active.
 
 ### Wide exact decimal to floating checkpoint (2026-11-11)
 
@@ -71,8 +89,8 @@ recorded; the subsequent db676ff hosted evidence is recorded above.
 
 Historical package: `artifacts/checkpoint-unary-20261111/OceanBase.EntityFrameworkCore.10.0.0-checkpoint.unary-20261111.nupkg`.
 Evidence: `artifacts/local-development/batch3c/`. Native casing/space/character semantics do not promise exact CLR
-culture/Unicode-whitespace/UTF-16 behavior. Wide-decimal and search follow-ups are recorded above; Substring
-and wider query work remain open. The goal remains active.
+culture/Unicode-whitespace/UTF-16 behavior. Wide-decimal, search and Substring follow-ups are recorded above;
+wider query work remains open. The goal remains active.
 
 ### Integer division/remainder checkpoint
 

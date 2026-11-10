@@ -32,6 +32,8 @@ namespace OceanBase.EntityFrameworkCore.Query
             [typeof(string).GetMethod(nameof(string.StartsWith), [typeof(string)])!] = StartsWithSearch,
             [typeof(string).GetMethod(nameof(string.EndsWith), [typeof(string)])!] = EndsWithSearch
         };
+        private static readonly MethodInfo SubstringStart = typeof(string).GetMethod(nameof(string.Substring), [typeof(int)])!;
+        private static readonly MethodInfo SubstringStartLength = typeof(string).GetMethod(nameof(string.Substring), [typeof(int), typeof(int)])!;
         internal const string OracleSearchMarker = "__oceanbase_internal_string_search";
 
         public SqlExpression? Translate(SqlExpression? instance, MethodInfo method, IReadOnlyList<SqlExpression> arguments,
@@ -39,13 +41,29 @@ namespace OceanBase.EntityFrameworkCore.Query
         {
             var isSearch = SearchMethods.TryGetValue(method, out var search);
             var isFunction = Functions.TryGetValue(method, out var function);
-            if (instance is null || !isSearch && !isFunction)
+            var isSubstring = method == SubstringStart || method == SubstringStartLength;
+            if (instance is null || !isSearch && !isFunction && !isSubstring)
                 return null;
 
             instance = sqlExpressionFactory.ApplyDefaultTypeMapping(instance);
             var mapping = instance.TypeMapping!;
             if (mapping.Converter?.ProviderClrType is { } providerType && providerType != typeof(string))
                 return null;
+
+            if (isSubstring)
+            {
+                var start = sqlExpressionFactory.ApplyDefaultTypeMapping(arguments[0]);
+                var longMapping = mappingSource.FindMapping(typeof(long))!;
+                var position = start is SqlConstantExpression { Value: int value } && start.TypeMapping?.Converter is null
+                    ? sqlExpressionFactory.Constant((long)value + 1L, longMapping)
+                    : sqlExpressionFactory.Add(start, sqlExpressionFactory.Constant(1L, longMapping), longMapping);
+                var args = method == SubstringStart
+                    ? new[] { instance, position }
+                    : [instance, position, sqlExpressionFactory.ApplyDefaultTypeMapping(arguments[1])];
+                return sqlExpressionFactory.Function(mode == OceanBaseCompatibilityMode.MySql ? "SUBSTRING" : "SUBSTR",
+                    args, nullable: true, argumentsPropagateNullability: method == SubstringStart
+                        ? [false, false] : [false, false, false], typeof(string), mapping);
+            }
 
             if (isSearch)
             {

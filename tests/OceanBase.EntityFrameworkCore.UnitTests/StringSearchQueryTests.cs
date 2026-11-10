@@ -219,6 +219,27 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
         private static int NativeInstr(string source, string needle) => throw new NotSupportedException();
 
         [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public void Oracle_computed_null_needle_keeps_total_search_policy(bool relationalNulls)
+        {
+            using var context = CreateContext(OceanBaseCompatibilityMode.Oracle, relationalNulls);
+            IQueryable[] queries =
+            [
+                context.Rows.Where(row => row.Required.Contains(row.Id > 0 ? (string)null! : row.Needle!)),
+                context.Rows.Where(row => !row.Required.StartsWith((row.Id > 0 ? (string)null! : row.Needle!) ?? (string)null!)),
+                context.Rows.Select(row => row.Required.EndsWith(row.Id > 0 ? (string)null! : row.Needle!)).Distinct()
+            ];
+            foreach (var query in queries)
+            {
+                var sql = query.ToQueryString();
+                Assert.Contains("CASE", sql);
+                Assert.Contains(" IS NOT NULL", sql);
+                Assert.DoesNotContain("__oceanbase_internal", sql);
+            }
+        }
+
+        [Theory]
         [InlineData(OceanBaseCompatibilityMode.MySql)]
         [InlineData(OceanBaseCompatibilityMode.Oracle)]
         public void Unrelated_unmapped_instance_method_returns_no_translation(OceanBaseCompatibilityMode mode)

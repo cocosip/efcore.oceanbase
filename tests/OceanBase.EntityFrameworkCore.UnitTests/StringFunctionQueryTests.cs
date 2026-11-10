@@ -125,7 +125,6 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
                 context.Rows.Where(row => row.Required.Trim(new[] { ' ' }) == "x"),
                 context.Rows.Where(row => row.Required.TrimStart(' ') == "x"),
                 context.Rows.Where(row => row.Required.TrimEnd(new[] { ' ' }) == "x"),
-                context.Rows.Where(row => row.Required.Substring(1) == "x"),
                 context.Rows.Where(row => ToLower(row.Required) == "x"),
                 context.Rows.Where(row => new Impostor(row.Required).Length > 0)
             ];

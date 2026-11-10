@@ -224,6 +224,26 @@ and FunctionalTests/BasicRelationalTests.cs. The planned search contract in quer
    Debug/Release, independent review, patch/package gates, docs and scoped commit. Server collation/padding/
    substring results remain live gates; exact CLR exception/ordinal semantics are not promised.
 
+## Batch 3e brief: Substring and index adjustment
+
+**Files:** Query/OceanBaseStringTranslator.cs; UnitTests/StringSubstringQueryTests.cs;
+FunctionalTests/BasicRelationalTests.cs, plus obsolete substring rejection assertions only if present.
+Follow the planned Substring contract in query/update design; retain the current converter convention.
+
+1. RED exact Substring(int) and Substring(int,int) through mapped predicates/projections in both modes/null
+   settings. Cover constants/captures/columns, starts 0/-1/-2/int.MinValue/int.MaxValue, lengths -1/0/MaxValue,
+   nullable results, CASE/coalesce/concat/unary/search composition and unsupported signatures/nontext mappings.
+2. Use long-result origin adjustment before any constant evaluation. Assert Type/mapping and positive
+   2147483648 at the maximum; preserve raw captured/column mapping. No new cast rendering or generic visitor.
+3. Native range/character semantics apply uniformly. Preserve receiver result mapping/converter and positive
+   upper-bound Size across fixed/national/LOB families, including lowercase declarations. NCLOB native behavior
+   is an unverified extension, not established capability. Preserve independent function NULL production.
+4. Add sync/async intercepted parameter/result-conversion cases in both modes. Carry the Batch 3d review minor:
+   directly cover Oracle computed CASE/COALESCE needle collapsing to NULL, positive/NOT/projected searches.
+5. Focused RED/GREEN, full Debug/Release, independent code/docs review, selected-patch/same-package gates
+   and scoped commit. Server contents, invalid-range outcomes, characters, padding/LOB and hosted execution
+   for new source remain distinct acceptance gates. No live work or EF8/9 adaptation.
+
 ## Execution record
 
 - Baseline: 57fd44a, clean efcore/10.0. Prior verified suite: 563 (420 unit, 142 intercepted, one consumer).
@@ -304,6 +324,16 @@ and FunctionalTests/BasicRelationalTests.cs. The planned search contract in quer
 - Batch 3d minor (deferred to 3e): add a direct Oracle computed-needle CASE/COALESCE-to-NULL regression.
   Nullable column needles and composed sources already pass; independent review approved with this
   non-blocking coverage suggestion. Carry it into the next string-composition slice and final audit.
+- Batch 3d committed as e41981e after code/docs approval; current local source/package checks pass 914.
+  Batch 3e starts next using the documented native substring/index/result-mapping contract. No push.
+- Batch 3e local Substring scope complete: exact two arities use safe long origin adjustment and preserve
+  result family/converter metadata. Genuine translation RED 8/10; final focused 12 unit (including two carried
+  computed Oracle NULL needle cases) and eight intercepted pass. Debug/Release and isolated EF10.0.14 Release
+  pass 934 (724+208+2). Independent spec/quality review passed. Same baseline-built substring-20261111 package
+  passes both modes on EF10.0.0/10.0.14, including both arities/positive max-start; preceding search package
+  fails missing Substring. Content gate and package-only graph pass. Evidence: artifacts/local-development/batch3e/.
+  Batch 3d computed-needle review minor is closed. Native NCLOB/range/character/padding/LOB and current hosted
+  gates remain open. Next is Batch 3f ordinary temporal parts; the complete local EF10 goal remains active.
 - Remaining Batch 2 scalar work and Batches 3–10 pending. The overall goal remains active.
 - Batch 8 package README slice: use the provider project's README as package-owned documentation and declare
   PackageReadmeFile. Verify archive metadata/content with no-build packing of an already verified isolated

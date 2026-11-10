@@ -117,6 +117,20 @@ namespace PackageConsumer
                     }
                 }
 
+                var substringSql = context.Set<Row>().Where(row => row.Name.Substring(1, 2) == "pk")
+                    .Select(row => row.Name.Substring(1)).ToQueryString();
+                var substringFunction = mode == OceanBaseCompatibilityMode.MySql ? "SUBSTRING(" : "SUBSTR(";
+                if (!substringSql.Contains(substringFunction, StringComparison.Ordinal))
+                {
+                    throw new Exception("Packed provider did not translate both Substring overloads.");
+                }
+                var maxStartSql = context.Set<Row>().Where(row => row.Name.Substring(int.MaxValue) == "x").ToQueryString();
+                if (!maxStartSql.Contains("2147483648", StringComparison.Ordinal)
+                    && !maxStartSql.Contains("2147483647 + 1", StringComparison.Ordinal))
+                {
+                    throw new Exception("Substring origin adjustment overflowed before SQL generation.");
+                }
+
                 var guidType = context.Model.FindEntityType(typeof(Row))!.FindProperty(nameof(Row.Token))!.GetColumnType();
                 if (guidType != (mode == OceanBaseCompatibilityMode.Oracle ? "RAW(16)" : "CHAR(36)"))
                 {

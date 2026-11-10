@@ -137,6 +137,27 @@ Test positive/negated/projected conditions, nullable receivers, CASE/coalesce/co
 changing empty/null/nonempty captures and both null-semantics settings. Exact char/StringComparison/culture
 overloads remain outside this slice and fail as predicates; allowed client projection evaluation remains.
 
+## Substring contract
+
+The QRY-06 Substring slice covers exact Substring(int) and Substring(int,int), using MySQL SUBSTRING or Oracle
+SUBSTR. Starts are zero-based at the CLR boundary and adjusted by one with a long-result SQL Add and long
+constant, or a safely folded long constant. int.MaxValue must produce positive 2147483648; do not overflow
+Int32 first or introduce an unverified MySQL CAST AS BIGINT. Captured/column arguments retain their bindings
+and converters. Overflow already present inside a caller's own integer expression is outside this adjustment.
+
+This is native database-character/range behavior for constants, captures and columns alike, including negative
+starts and zero/negative/excessive lengths. It does not promise CLR range/null exceptions, UTF-16 indexing or
+grapheme preservation. Oracle empty scalar results are NULL; length-zero/beyond-end and LOB locator results
+remain native server acceptance cases. Do not invent a deterministic NULL CASE for undocumented outcomes.
+
+Retain receiver result-mapping metadata: fixed/national/LOB family, declared positive Size and configured
+converter. This describes transport/conversion, not verified server padding or wire type. Native slicing acts
+on stored provider text followed by the configured result conversion; arbitrary converter/model-space
+equivalence is not promised. Do not infer result Size from the requested length or narrow a LOB to bounded
+text. NCLOB translation is an explicitly unverified extension because the pinned SUBSTR input list omits it.
+String-to-binary converter predicates remain unsupported. Conservative nullable function metadata preserves
+result null tests even for required sources. Existing plugin/DbFunction/mode and Oracle parameter rules remain.
+
 ## Arithmetic division and remainder local contract
 
 The QRY-01 arithmetic slice renders integer division using MySQL `DIV` and Oracle one-argument
@@ -254,17 +275,28 @@ Run the read-only gate after packing, before the isolated consumer checks:
 
 ```powershell
 pwsh -NoProfile -File tests/OceanBase.EntityFrameworkCore.PackageConsumer/Verify-Package.ps1 `
-    -PackagePath artifacts/checkpoint-search-20261111/OceanBase.EntityFrameworkCore.10.0.0-checkpoint.search-20261111.nupkg `
-    -ExpectedVersion 10.0.0-checkpoint.search-20261111
+    -PackagePath artifacts/checkpoint-substring-20261111/OceanBase.EntityFrameworkCore.10.0.0-checkpoint.substring-20261111.nupkg `
+    -ExpectedVersion 10.0.0-checkpoint.substring-20261111
 ```
 
 The PowerShell 7 script uses .NET ZIP/XML APIs and checks ID/version, the net10.0 assembly and dependency group,
 exact expected dependency ranges, and a nonempty packaged README with matching metadata. It does not build,
-restore, execute provider queries or establish server/runtime compatibility. The current search package passes;
+restore, execute provider queries or establish server/runtime compatibility. The current substring package passes;
 wrong expected version, the old README-less alias package and the exact-patch README probe fail at their intended
 checks. These runs were on Windows; Linux execution remains unverified. Change the path/version for each new pack.
 
-### Current string-search checkpoint (2026-11-11)
+### Current Substring checkpoint (2026-11-11)
+
+Debug/Release and isolated EF10.0.14 Release pass 934 tests (724 unit, 208 intercepted pipeline, two project
+consumers). Independent spec/quality review passed. The same baseline-built `10.0.0-checkpoint.substring-20261111`
+package passes both modes on EF10.0.0/10.0.14, including both arities and positive 2147483648 origin adjustment.
+The previous search package fails the new method translation. Package-content and package-only graph checks pass.
+
+Repeat the commands below with `10.0.0-checkpoint.substring-20261111` and `artifacts/checkpoint-substring-20261111`.
+Evidence: `artifacts/local-development/batch3e/`. This establishes no server slicing/range/padding/LOB/NCLOB
+outcome or hosted execution for the current source. Native conversion/character boundaries remain as above.
+
+### Historical string-search checkpoint (2026-11-11)
 
 Debug/Release and isolated EF10.0.14 Release pass 914 tests (712 unit, 200 intercepted pipeline, two project
 consumers). Independent spec/quality review passed. The same baseline-built `10.0.0-checkpoint.search-20261111`

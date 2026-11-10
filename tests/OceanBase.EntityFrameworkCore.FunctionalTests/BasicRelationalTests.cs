@@ -26,6 +26,72 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
         [InlineData(OceanBaseCompatibilityMode.Oracle, true, false)]
         [InlineData(OceanBaseCompatibilityMode.Oracle, false, true)]
         [InlineData(OceanBaseCompatibilityMode.Oracle, true, true)]
+        public async Task Substring_commands_bind_dynamic_arguments_and_convert_synthetic_results(
+            OceanBaseCompatibilityMode mode, bool async, bool relationalNulls)
+        {
+            using var table = new DataTable();
+            table.Columns.Add("Part", typeof(string));
+            table.Columns.Add("Converted", typeof(string));
+            table.Columns.Add("IsNull", typeof(bool));
+            table.Rows.Add("native", "stored!", true);
+            table.Rows.Add(DBNull.Value, DBNull.Value, false);
+            var commands = new CommandCapture { Results = table };
+            await using var context = CreateContext(mode, commands, relationalNulls);
+            var start = 0;
+            var length = 1;
+            var expected = "model";
+            var query = context.Set<ShortTextRow>()
+                .Where(row => row.Converted.Substring(start, length) == expected)
+                .Select(row => new
+                {
+                    Part = row.Caption!.Substring(start, length),
+                    Converted = row.Converted.Substring(start),
+                    IsNull = row.Caption!.Substring(row.Start, row.Length) == null
+                });
+            foreach (var (nextStart, nextLength) in new[] { (0, 1), (-2, -1), (int.MaxValue, int.MaxValue) })
+            {
+                start = nextStart;
+                length = nextLength;
+                commands.Values.Clear();
+                commands.StringInputs.Clear();
+                var rows = async ? await query.ToListAsync() : query.ToList();
+                Assert.Equal("native", rows[0].Part);
+                Assert.Equal("stored", rows[0].Converted);
+                Assert.True(rows[0].IsNull);
+                Assert.Null(rows[1].Part);
+                Assert.Null(rows[1].Converted);
+                Assert.False(rows[1].IsNull);
+                Assert.Contains(commands.Values, value => Equals(value, start));
+                Assert.Contains(commands.Values, value => Equals(value, length));
+                Assert.Contains(commands.StringInputs, parameter => Equals(parameter.Value, "model!"));
+                Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? "SUBSTRING(" : "SUBSTR(", commands.Sql[^1]);
+                Assert.Contains(" + 1", commands.Sql[^1]);
+                Assert.Contains(" IS NULL", commands.Sql[^1]);
+            }
+
+            table.Rows.Clear();
+            table.Columns.Clear();
+            table.Columns.Add("Value", typeof(string));
+            table.Rows.Add("海");
+            var national = "海洋";
+            commands.StringInputs.Clear();
+            var nationalQuery = context.Set<SubstringNationalRow>()
+                .Where(row => row.Value.Substring(start, length) == national)
+                .Select(row => row.Value.Substring(start));
+            Assert.Equal("海", Assert.Single(async ? await nationalQuery.ToListAsync() : nationalQuery.ToList()));
+            Assert.Contains(commands.StringInputs, parameter => Equals(parameter.Value, national)
+                && parameter.OceanBaseDbType == (mode == OceanBaseCompatibilityMode.Oracle ? OceanBaseDbType.NChar : (OceanBaseDbType?)null));
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false, true)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true, true)]
         public async Task String_search_commands_bind_captured_needles_and_read_synthetic_booleans(
             OceanBaseCompatibilityMode mode, bool async, bool relationalNulls)
         {
@@ -1430,6 +1496,8 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
                 modelBuilder.Entity<ShortTextRow>().Property(entity => entity.Caption).HasMaxLength(2);
                 modelBuilder.Entity<ShortTextRow>().Property(entity => entity.Converted)
                     .HasConversion(value => value + "!", value => value.Substring(0, value.Length - 1)).HasMaxLength(4);
+                modelBuilder.Entity<SubstringNationalRow>().Property(entity => entity.Value)
+                    .IsUnicode().IsFixedLength().HasMaxLength(8);
             }
         }
 
@@ -1448,7 +1516,15 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
         {
             public string Code { get; set; } = string.Empty;
             public string? Caption { get; set; }
+            public int Start { get; set; }
+            public int Length { get; set; }
             public string Converted { get; set; } = string.Empty;
+        }
+
+        private sealed class SubstringNationalRow
+        {
+            public int Id { get; set; }
+            public string Value { get; set; } = "";
         }
 
         private sealed class TextParameterRow
