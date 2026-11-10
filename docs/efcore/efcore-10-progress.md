@@ -21,6 +21,27 @@ not later local commits or database integration. Earlier db676ff also passed in
 Run/job/step metadata is saved under artifacts/local-development/. The earlier log archive endpoint returned
 HTTP403 (repository admin rights); no new per-test count or resolved EF patch is inferred from job metadata.
 
+### Exact Floor/Ceiling checkpoint (2026-11-11)
+
+All eight Math/MathF/decimal Floor/Ceiling identities now translate. Oracle uses FLOOR/CEIL; MySQL uses
+TRUNCATE plus a guarded CASE, avoiding the documented BIGINT return path of native FLOOR/CEIL. Original
+input/result mappings and converters remain owners. Precision zero and provider-carrier one have fresh
+converter-free mappings; nullable carrier declarations unwrap only for the nonnull syntax constant.
+The translator adds no numeric input bound, clamp or precision cast. Native calculation remains unverified.
+
+Focused coverage passes 46 unit and 12 intercepted cases. Full Debug/Release and isolated EF10.0.14
+Release each pass **1339 tests** (1013 unit, 324 intercepted pipeline, two project consumers). The same
+baseline-built `10.0.0-checkpoint.floor-ceiling-20261111` package passes both modes/patches for all eight
+server predicates and their dialect shapes plus prior checks. Previous inline-empty package rejects the
+new Floor predicate. Content/package-only graph pass; baseline assets stay EF10.0.0. Independent source review passes with no actionable findings.
+
+Latest package: `artifacts/checkpoint-floor-ceiling-20261111/OceanBase.EntityFrameworkCore.10.0.0-checkpoint.floor-ceiling-20261111.nupkg`.
+Evidence: `artifacts/local-development/batch3l/`. Supplied readers do not evaluate numeric SQL. Native
+TRUNCATE/comparison/arithmetic/CASE result typing, finite extremes/subnormals, decimal exactness, guarded-arm
+evaluation and actual Oracle results remain live gates. Stable expressions are the tested domain; arbitrary
+volatile DbFunctions have no CLR single-evaluation promise. Round/transcendental and wider query/model/write/
+transaction/schema work remain local gaps. The overall EF10 goal stays active; real DB and EF8/9 stay postponed.
+
 ### Originally empty inline integral roots checkpoint (2026-11-11)
 
 Originally empty inline int/int? Count/Any/Select/join and nested roots retain their original element type
@@ -36,12 +57,12 @@ The same baseline-built `10.0.0-checkpoint.inline-empty-20261111` package passes
 original inline-empty Count/nullable Any/nested join and the sole-ordinal regression, plus preceding checks.
 Content/package-only graph pass; baseline assets stay EF10.0.0. Independent source review passes with no actionable findings.
 
-Latest package: `artifacts/checkpoint-inline-empty-20261111/OceanBase.EntityFrameworkCore.10.0.0-checkpoint.inline-empty-20261111.nupkg`.
+Historical package: `artifacts/checkpoint-inline-empty-20261111/OceanBase.EntityFrameworkCore.10.0.0-checkpoint.inline-empty-20261111.nupkg`.
 Evidence: `artifacts/local-development/batch3k/`. The narrow SetTables internal-API dependency is covered by
 the selected patch checks; precompiled annotation quoting and current hosted/Linux execution remain unverified.
 General text/other root carriers, broader converted projections and wider query/model/write/schema work
-remain local gaps. Native execution/results/typing/order/limits still need both real modes. Next planned
-numeric slice is Floor/Ceiling; the overall EF10 goal stays active.
+remain local gaps. Native execution/results/typing/order/limits still need both real modes. Its next planned
+numeric slice was Floor/Ceiling, now recorded above. The overall EF10 goal stays active.
 
 ### Captured integral roots and nonempty inline roots checkpoint (2026-11-11)
 

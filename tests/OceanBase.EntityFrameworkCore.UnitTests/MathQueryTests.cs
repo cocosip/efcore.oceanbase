@@ -350,8 +350,6 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             MethodInfo[] unsupported =
             [
                 typeof(Math).GetMethod("Round", [typeof(decimal)])!,
-                typeof(Math).GetMethod("Floor", [typeof(decimal)])!,
-                typeof(Math).GetMethod("Ceiling", [typeof(decimal)])!,
                 typeof(Math).GetMethod("Pow", [typeof(double), typeof(double)])!,
                 typeof(float).GetMethod("Abs", [typeof(float)])!,
                 typeof(double).GetMethod("Sign", [typeof(double)])!,

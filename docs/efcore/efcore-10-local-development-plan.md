@@ -353,8 +353,8 @@ The inline-empty local contract in query/update design and local metadata resear
 
 ## Batch3l brief: exact Floor/Ceiling translations
 
-**Files:** existing OceanBaseMathTranslator.cs, new FloorCeilingQueryTests.cs and intercepted
-BasicRelationalTests.cs cases. The planned numeric contract in query/update design and numeric-next
+**Files:** existing OceanBaseMathTranslator.cs, new FloorCeilingQueryTests.cs, the two now-supported
+MathQueryTests negative-list entries and intercepted BasicRelationalTests.cs cases. The numeric local contract in query/update design and numeric-next
 research define the eight exact methods, full finite ranges and converter/native-result boundaries.
 
 1. RED exact methods in real EF queries; add Oracle FLOOR/CEIL and MySQL TRUNCATE plus guarded CASE
@@ -362,7 +362,8 @@ research define the eight exact methods, full finite ranges and converter/native
 2. Verify null settings, stable nested expressions, finite/subnormal/decimal extremes, same/cross-carrier
    converters and checked readers. Keep volatile single-evaluation and native result behavior explicit.
 3. Focused/full checks, independent review, isolated patch/same-package gates and scoped local commit.
-   Round/transcendental functions remain separate. Planned, not dispatched yet.
+   Local implementation/source review complete: focused46 unit/12 intercepted, Debug/Release/isolated14
+   Release1339 and same-package consumers pass both modes/patches. Round/transcendental functions remain separate.
 
 ## Execution record
 
@@ -557,6 +558,18 @@ research define the eight exact methods, full finite ranges and converter/native
   Same inline-empty-20261111 package/content/graph consumers pass both modes/patches; baseline assets stay10.0.0.
   Independent source review passes with no actionable findings. QRY-03 remains partial; SetTables internal API and precompiled
   annotation quoting/native execution have explicit evidence limits. Next planned numeric slice is Batch3l.
+- Batch3k committed as9287fab after source/docs/consumer approvals and doc-only stale-status fix round1.
+  All11 intended files including new factories staged/whitespace checked. Clean efcore/10.0 ahead7; no push.
+- Batch3l RED44fail/two pass confirms missing exact dispatch. Extend existing translator by20 lines for eight
+  Floor/Ceiling identities: Oracle FLOOR/CEIL, MySQL guarded TRUNCATE/CASE with independent raw syntax constants.
+  Nullable numeric carrier self-review adds RED1fail/one pass, then unwraps only fresh one's boxed carrier;
+  original mapping/converter/declared nullable ProviderClrType remain intact. No ordinary numeric input cap.
+- Batch3l focused46 unit/12 intercepted, full Debug/Release and isolated14 Release1339=1013+324+2 pass with
+  zero failures/skips. Same baseline-built floor-ceiling package passes both modes/patches, content and
+  package-only graph; baseline assets stay10.0.0. Independent source review passes with no actionable finding.
+  Native TRUNCATE/comparison/arithmetic/CASE typing, finite/subnormal/decimal calculation and volatile
+  single evaluation remain explicit live/semantic limits. Wider math/temporal/aggregate/collection and later
+  model/write/transaction/schema inventory remain locally developable; overall goal active.
 - Line-ending recheck: git ls-files --eol reports no CRLF/mixed index text. Existing working CRLF files remain
   safe under the repository attributes; do not reset local edits or change global core.autocrlf to refresh them.
 - Remaining Batch 2 scalar work and Batches 3–10 pending. The overall goal remains active.

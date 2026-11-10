@@ -203,13 +203,13 @@ finite integer/decimal/float/double ranges, including signed minima and floating
 Do not add an artificial int32/decimal/2^53/BIGINT input limit or convert approximate inputs through decimal.
 Projected out-of-range results retain checked reading; server predicates and overflow timing need live
 evidence. Existing non-finite rejection remains; signed-zero bit preservation is not promised. Truncation
-removes fractions toward zero, without casting or rounding the input. Floor/Ceiling/Round/Log/Pow/Random
-and Min/Max remain separate contracts. Pinned EF v10.0.0 and OceanBase documentation revision
+removes fractions toward zero, without casting or rounding the input. Floor/Ceiling have the local contract
+below; Round/Log/Pow/Random and Min/Max remain separate contracts. Pinned EF v10.0.0 and OceanBase documentation revision
 2a5ae3a23a51729d065cec716508eb26cb064106 are audited in the numeric-core local research artifact.
 
-## Planned numeric Floor and Ceiling contract
+## Numeric Floor and Ceiling local contract
 
-The next numeric slice covers eight exact identities: Math.Floor(double/decimal), MathF.Floor(float),
+The local numeric slice covers eight exact identities: Math.Floor(double/decimal), MathF.Floor(float),
 decimal.Floor(decimal), and their Ceiling counterparts. Reuse the existing math translator, strict numeric
 carrier/declaration validation, input converters and compatible result decoders. Oracle uses FLOOR/CEIL.
 The pinned MySQL pages document a BIGINT result, so use t=TRUNCATE(x,0) and a CASE selecting t-1 for x<t
@@ -221,10 +221,13 @@ stored-value semantics; do not treat a model one under an offset converter as na
 independent function null tests and native output/error behavior. Stable expressions are the tested domain;
 repeated SQL occurrences do not promise CLR single evaluation for volatile DbFunction compositions.
 
-Real EF and intercepted reader tests must verify both modes, exact identities, mapping/converter ownership,
-changed captures, null settings, finite extremes/subnormals and decimal boundaries. Native TRUNCATE/CASE
+Real EF and intercepted reader tests verify both modes, exact identities, mapping/converter ownership,
+changed captures, null settings, finite extremes/subnormals and decimal boundaries. Fresh one's carrier
+unwraps Nullable<T> only to construct a correctly boxed nonnull constant; original converter metadata stays
+intact. Focused46 unit/12 intercepted and full Debug/Release/isolated14 Release1339 pass. The same Floor/Ceiling
+package passes both patches/modes; independent source review passes with no actionable findings. Native TRUNCATE/CASE
 physical result types, full-range arithmetic and actual rounding/results still require server validation.
-This is planned local work; Round and transcendental functions have separate contracts and are not enabled.
+Round and transcendental functions have separate contracts and remain unsupported in server predicates.
 
 ## Ordinary relational shapes and integral membership local contract
 
@@ -480,18 +483,33 @@ Run the read-only gate after packing, before the isolated consumer checks:
 
 ```powershell
 pwsh -NoProfile -File tests/OceanBase.EntityFrameworkCore.PackageConsumer/Verify-Package.ps1 `
-    -PackagePath artifacts/checkpoint-inline-empty-20261111/OceanBase.EntityFrameworkCore.10.0.0-checkpoint.inline-empty-20261111.nupkg `
-    -ExpectedVersion 10.0.0-checkpoint.inline-empty-20261111
+    -PackagePath artifacts/checkpoint-floor-ceiling-20261111/OceanBase.EntityFrameworkCore.10.0.0-checkpoint.floor-ceiling-20261111.nupkg `
+    -ExpectedVersion 10.0.0-checkpoint.floor-ceiling-20261111
 ```
 
 The PowerShell 7 script uses .NET ZIP/XML APIs and checks ID/version, the net10.0 assembly and dependency group,
 exact expected dependency ranges, and a nonempty packaged README with matching metadata. It does not build,
-restore, execute provider queries or establish server/runtime compatibility. The current inline-empty package passes;
+restore, execute provider queries or establish server/runtime compatibility. The current Floor/Ceiling package passes;
 wrong expected version, the old README-less alias package and the exact-patch README probe fail at their intended
 checks. The hosted e41981e package-content gate passed on Windows/Linux; the current package checks ran locally
 on Windows. Change the path/version for each new pack.
 
-### Current originally empty inline integral roots checkpoint (2026-11-11)
+### Current exact Floor/Ceiling checkpoint (2026-11-11)
+
+Full Debug/Release and isolated EF10.0.14 Release each pass1339 (1013 unit, 324 intercepted pipeline, two
+project consumers). Focused46 unit/12 intercepted pass after genuine missing-dispatch and nullable-syntax-
+carrier RED regressions. The same baseline-built `10.0.0-checkpoint.floor-ceiling-20261111` nupkg passes
+both modes at EF10.0.0/10.0.14 for all eight exact Floor/Ceiling predicates. MySQL requires guarded
+TRUNCATE/CASE with the correct adjustment and rejects unguarded native FLOOR/CEIL; Oracle requires the
+correct FLOOR/CEIL name. All prior assertions remain. Previous inline-empty package rejects Math.Floor.
+Content/package-only graph pass; baseline assets stay10.0.0. Independent source review passes with no actionable findings.
+Native numeric result families, full-range/NULL/CASE calculation and volatile single evaluation remain
+unverified. Round/transcendental/wider query work and current hosted/Linux execution remain open.
+
+Repeat the commands below with `10.0.0-checkpoint.floor-ceiling-20261111` and
+`artifacts/checkpoint-floor-ceiling-20261111`. Evidence: `artifacts/local-development/batch3l/`.
+
+### Historical originally empty inline integral roots checkpoint (2026-11-11)
 
 Full Debug/Release and isolated EF10.0.14 Release each pass1281 (967 unit, 312 intercepted pipeline, two
 project consumers). A later test-only newline assertion portability edit reruns the covering eight cases;

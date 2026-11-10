@@ -242,6 +242,29 @@ namespace PackageConsumer
                     || !emptyOrdinalSql.Contains("WHERE 1 = 0", StringComparison.Ordinal))
                     throw new Exception("Packed inline-empty root lost its retained ordinal identity: " + emptyOrdinalSql);
 
+                foreach (var (roundingQuery, floor) in new (IQueryable Query, bool Floor)[]
+                {
+                    (context.Set<Row>().Where(row => Math.Floor(row.Amplitude) > 0d), true),
+                    (context.Set<Row>().Where(row => Math.Floor(row.Amount) > 0m), true),
+                    (context.Set<Row>().Where(row => MathF.Floor(row.SingleValue) > 0f), true),
+                    (context.Set<Row>().Where(row => decimal.Floor(row.Amount) > 0m), true),
+                    (context.Set<Row>().Where(row => Math.Ceiling(row.Amplitude) > 0d), false),
+                    (context.Set<Row>().Where(row => Math.Ceiling(row.Amount) > 0m), false),
+                    (context.Set<Row>().Where(row => MathF.Ceiling(row.SingleValue) > 0f), false),
+                    (context.Set<Row>().Where(row => decimal.Ceiling(row.Amount) > 0m), false)
+                })
+                {
+                    var roundingSql = roundingQuery.ToQueryString();
+                    if (mode == OceanBaseCompatibilityMode.MySql
+                        ? !roundingSql.Contains("CASE", StringComparison.Ordinal)
+                            || !roundingSql.Contains("TRUNCATE(", StringComparison.Ordinal)
+                            || !roundingSql.Contains(floor ? " - " : " + ", StringComparison.Ordinal)
+                            || roundingSql.Contains("FLOOR(", StringComparison.Ordinal)
+                            || roundingSql.Contains("CEIL(", StringComparison.Ordinal)
+                        : !roundingSql.Contains(floor ? "FLOOR(" : "CEIL(", StringComparison.Ordinal))
+                        throw new Exception("Packed Floor/Ceiling lost its range-preserving dialect: " + roundingSql);
+                }
+
                 var guidType = context.Model.FindEntityType(typeof(Row))!.FindProperty(nameof(Row.Token))!.GetColumnType();
                 if (guidType != (mode == OceanBaseCompatibilityMode.Oracle ? "RAW(16)" : "CHAR(36)"))
                 {
@@ -483,6 +506,7 @@ namespace PackageConsumer
             public byte[]? LargePayload { get; set; }
             public long Count { get; set; }
             public double Amplitude { get; set; }
+            public float SingleValue { get; set; }
             public float Wide { get; set; }
             public DateTime NarrowStamp { get; set; }
             public DateTime LegacyStamp { get; set; }

@@ -591,6 +591,160 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
         [InlineData(OceanBaseCompatibilityMode.Oracle, true, false)]
         [InlineData(OceanBaseCompatibilityMode.Oracle, false, true)]
         [InlineData(OceanBaseCompatibilityMode.Oracle, true, true)]
+        public async Task Floor_ceiling_commands_keep_current_bindings_and_supplied_typed_nullable_results(
+            OceanBaseCompatibilityMode mode, bool async, bool relationalNulls)
+        {
+            using var table = new DataTable();
+            foreach (var name in new[] { "DoubleFloor", "DecimalFloor", "SingleFloor", "StaticFloor", "DoubleCeiling",
+                "DecimalCeiling", "SingleCeiling", "StaticCeiling", "Optional", "Cross", "Reverse", "Integral" })
+                table.Columns.Add(name, typeof(object));
+            // Supplied rows establish bindings and shaping, not server CASE calculation or predicate membership.
+            table.Rows.Add(new OceanBaseDecimal(BigInteger.One, -300), decimal.MinValue, new OceanBaseDecimal(BigInteger.One, -38),
+                6m, 1E100d, decimal.MaxValue, 1E30f, 8m, DBNull.Value, 12m, 14d, new OceanBaseDecimal(16m));
+            table.Rows.Add(-1E100d, -1m, -1E30f, 8m, 1E100d, 1m, 1E30f, 6m, 3m, 18m, 20d, new OceanBaseDecimal(22m));
+            var commands = new CommandCapture { Results = table };
+            await using var context = CreateContext(mode, commands, relationalNulls);
+            var single = float.MinValue;
+            var wide = double.MinValue;
+            var fraction = decimal.MinValue;
+            var transformed = 1.23456789m;
+            var cross = 1E28d;
+            var reverse = -1.23456789m;
+            var integral = 23m;
+            var query = context.Set<FloorCeilingRow>()
+                .Where(row => Math.Floor(row.Double + wide) == wide && Math.Ceiling(row.Double) == wide
+                    && Math.Floor(row.Decimal + fraction) == fraction && Math.Ceiling(row.Decimal) == fraction
+                    && MathF.Floor(row.Single + single) == single && MathF.Ceiling(row.Single) == single
+                    && decimal.Floor(row.Transformed) == transformed && decimal.Ceiling(row.Transformed) == transformed
+                    && Math.Floor(row.Cross) == cross && Math.Ceiling(row.Reverse) == reverse
+                    && Math.Ceiling(row.Integral) == integral)
+                .OrderBy(row => Math.Floor(row.Decimal))
+                .Select(row => new
+                {
+                    DoubleFloor = Math.Floor(row.Double), DecimalFloor = Math.Floor(row.Decimal),
+                    SingleFloor = MathF.Floor(row.Single), StaticFloor = decimal.Floor(row.Transformed),
+                    DoubleCeiling = Math.Ceiling(row.Double), DecimalCeiling = Math.Ceiling(row.Decimal),
+                    SingleCeiling = MathF.Ceiling(row.Single), StaticCeiling = decimal.Ceiling(row.Transformed),
+                    Optional = (decimal?)Math.Floor(row.Optional!.Value), Cross = Math.Floor(row.Cross),
+                    Reverse = Math.Ceiling(row.Reverse), Integral = Math.Ceiling(row.Integral)
+                });
+            float[] singles = [float.MinValue, float.MaxValue, -float.Epsilon, float.Epsilon, -0f,
+                MathF.BitDecrement(-1f), MathF.BitIncrement(1f), -1.75f];
+            double[] doubles = [double.MinValue, double.MaxValue, -double.Epsilon, double.Epsilon, -0d,
+                Math.BitDecrement(-1d), Math.BitIncrement(1d), 1E100d];
+            decimal[] decimals = [decimal.MinValue, decimal.MaxValue, -0.0000000000000000000000000001m,
+                0.0000000000000000000000000001m, 0m, -7922816251426433759354395033.5m,
+                7922816251426433759354395033.5m, -12345.6789m];
+            for (var index = 0; index < singles.Length; index++)
+            {
+                single = singles[index];
+                wide = doubles[index];
+                fraction = decimals[index];
+                transformed = 1.23456789m + index;
+                cross = 1E28d - index * 1E25d;
+                reverse = -1.23456789m - index;
+                integral = 23m + index;
+                commands.Inputs.Clear();
+                var rows = async ? await query.ToListAsync() : query.ToList();
+                Assert.Equal(2, rows.Count);
+                Assert.Equal(1E300d, rows[0].DoubleFloor);
+                Assert.Equal(decimal.MinValue, rows[0].DecimalFloor);
+                Assert.Equal(1E38f, rows[0].SingleFloor);
+                Assert.Equal(2m, rows[0].StaticFloor);
+                Assert.Equal(1E100d, rows[0].DoubleCeiling);
+                Assert.Equal(decimal.MaxValue, rows[0].DecimalCeiling);
+                Assert.Equal(1E30f, rows[0].SingleCeiling);
+                Assert.Equal(1m, rows[0].StaticCeiling);
+                Assert.Null(rows[0].Optional);
+                Assert.Equal(3m, rows[1].Optional);
+                Assert.Equal(12d, rows[0].Cross);
+                Assert.Equal(14m, rows[0].Reverse);
+                Assert.Equal(16m, rows[0].Integral);
+                Assert.Contains(commands.Inputs, parameter => Equals(parameter.Value, single) && parameter.DbType == DbType.Single);
+                Assert.Contains(commands.Inputs, parameter => Equals(parameter.Value, wide) && parameter.DbType == DbType.Double);
+                Assert.All(commands.Inputs.Where(parameter => parameter.DbType == DbType.Single), parameter =>
+                    Assert.Equal(BitConverter.SingleToInt32Bits(single), BitConverter.SingleToInt32Bits((float)parameter.Value!)));
+                Assert.All(commands.Inputs.Where(parameter => parameter.ParameterName.Contains("wide", StringComparison.Ordinal)), parameter =>
+                    Assert.Equal(BitConverter.DoubleToInt64Bits(wide), BitConverter.DoubleToInt64Bits((double)parameter.Value!)));
+                Assert.Contains(commands.Inputs, parameter => Equals(parameter.Value, transformed * -2m + 10m) && parameter.DbType == DbType.Decimal);
+                Assert.Contains(commands.Inputs, parameter => Equals(parameter.Value, (decimal)cross) && parameter.DbType == DbType.Decimal);
+                Assert.Contains(commands.Inputs, parameter => Equals(parameter.Value, (double)reverse) && parameter.DbType == DbType.Double);
+                Assert.Contains(commands.Inputs, parameter => Equals(parameter.Value, (long)integral) && parameter.DbType == DbType.Int64);
+                var operand = Assert.Single(commands.Inputs, parameter => Equals(parameter.Value, fraction));
+                Assert.Equal(decimal.GetBits(fraction), decimal.GetBits((decimal)operand.Value!));
+                Assert.Equal(DbType.Decimal, operand.DbType);
+                Assert.All(commands.Inputs.Where(parameter => parameter.DbType == DbType.Decimal), parameter =>
+                {
+                    Assert.Equal((byte)0, parameter.Precision);
+                    Assert.Null(parameter.DecimalScale);
+                });
+                var sql = commands.Sql[^1];
+                Assert.Contains("WHERE", sql);
+                Assert.Contains("ORDER BY", sql);
+                Assert.DoesNotContain("CAST(", sql);
+                if (mode == OceanBaseCompatibilityMode.MySql)
+                {
+                    Assert.Contains("CASE", sql);
+                    Assert.Contains(" < TRUNCATE(", sql);
+                    Assert.Contains(" > TRUNCATE(", sql);
+                    Assert.Contains(" - 1", sql);
+                    Assert.Contains(" + 1", sql);
+                    Assert.DoesNotContain("FLOOR(", sql);
+                    Assert.DoesNotContain("CEIL(", sql);
+                }
+                else
+                {
+                    Assert.Contains("FLOOR(", sql);
+                    Assert.Contains("CEIL(", sql);
+                }
+            }
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true)]
+        public async Task Floor_ceiling_results_keep_checked_float_double_and_converter_reads(OceanBaseCompatibilityMode mode, bool async)
+        {
+            using var table = new DataTable();
+            table.Columns.Add("Value", typeof(object));
+            table.Rows.Add(double.MaxValue);
+            var commands = new CommandCapture { Results = table };
+            await using var context = CreateContext(mode, commands);
+            var single = context.Set<FloorCeilingRow>().Where(row => MathF.Floor(row.Single) >= 0f).Select(row => MathF.Ceiling(row.Single));
+            if (async) await Assert.ThrowsAsync<OverflowException>(() => single.ToListAsync());
+            else Assert.Throws<OverflowException>(() => single.ToList());
+            table.Rows.Clear();
+            table.Rows.Add(new OceanBaseDecimal(BigInteger.One, -309));
+            var wide = context.Set<FloorCeilingRow>().Where(row => Math.Floor(row.Double) >= 0d).Select(row => Math.Ceiling(row.Double));
+            if (async) await Assert.ThrowsAsync<OverflowException>(() => wide.ToListAsync());
+            else Assert.Throws<OverflowException>(() => wide.ToList());
+            table.Rows.Clear();
+            table.Rows.Add(double.MaxValue);
+            var converted = context.Set<FloorCeilingRow>().Where(row => Math.Ceiling(row.Reverse) >= 0m).Select(row => Math.Floor(row.Reverse));
+            if (async) await Assert.ThrowsAsync<OverflowException>(() => converted.ToListAsync());
+            else Assert.Throws<OverflowException>(() => converted.ToList());
+            table.Rows.Clear();
+            table.Rows.Add(new OceanBaseDecimal((decimal)long.MaxValue + 1));
+            var integral = context.Set<FloorCeilingRow>().Select(row => Math.Ceiling(row.Integral));
+            if (async) await Assert.ThrowsAsync<OverflowException>(() => integral.ToListAsync());
+            else Assert.Throws<OverflowException>(() => integral.ToList());
+            table.Rows.Clear();
+            table.Rows.Add(new OceanBaseDecimal(1.5m));
+            if (async) await Assert.ThrowsAsync<InvalidCastException>(() => integral.ToListAsync());
+            else Assert.Throws<InvalidCastException>(() => integral.ToList());
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false, true)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true, true)]
         public async Task Math_commands_preserve_numeric_parameters_converters_and_synthetic_nullable_reads(
             OceanBaseCompatibilityMode mode, bool async, bool relationalNulls)
         {
@@ -2168,6 +2322,12 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
                 modelBuilder.Entity<MathRow>().Property(row => row.Transformed)
                     .HasConversion(value => value * -2m, value => value / -2m).HasPrecision(5, 2);
                 modelBuilder.Entity<MathRow>().Property(row => row.Decimal).HasPrecision(5, 2);
+                modelBuilder.Entity<FloorCeilingRow>().Property(row => row.Decimal).HasPrecision(5, 2);
+                modelBuilder.Entity<FloorCeilingRow>().Property(row => row.Transformed)
+                    .HasConversion(value => value * -2m + 10m, value => (value - 10m) / -2m).HasPrecision(5, 2);
+                modelBuilder.Entity<FloorCeilingRow>().Property(row => row.Cross).HasConversion<decimal>();
+                modelBuilder.Entity<FloorCeilingRow>().Property(row => row.Reverse).HasConversion<double>();
+                modelBuilder.Entity<FloorCeilingRow>().Property(row => row.Integral).HasConversion<long>();
                 modelBuilder.Entity<Customer>().ToTable("Customers");
                 modelBuilder.Entity<Customer>().Property(customer => customer.Version).IsConcurrencyToken();
                 modelBuilder.Entity<KeyOnly>().ToTable("Keys");
@@ -2264,6 +2424,19 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
             public int? Optional { get; set; }
             public int Converted { get; set; }
             public decimal Fraction { get; set; }
+        }
+
+        private sealed class FloorCeilingRow
+        {
+            public int Id { get; set; }
+            public float Single { get; set; }
+            public double Double { get; set; }
+            public decimal Decimal { get; set; }
+            public decimal? Optional { get; set; }
+            public decimal Transformed { get; set; }
+            public double Cross { get; set; }
+            public decimal Reverse { get; set; }
+            public decimal Integral { get; set; }
         }
 
         private sealed class MathRow

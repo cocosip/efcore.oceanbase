@@ -32,6 +32,12 @@ namespace OceanBase.EntityFrameworkCore.Query
             Add(typeof(Math), nameof(Math.Truncate), typeof(decimal), typeof(decimal), "TRUNC");
             Add(typeof(MathF), nameof(MathF.Truncate), typeof(float), typeof(float), "TRUNC");
             Add(typeof(decimal), nameof(decimal.Truncate), typeof(decimal), typeof(decimal), "TRUNC");
+            foreach (var (owner, type) in new[] { (typeof(Math), typeof(double)), (typeof(Math), typeof(decimal)),
+                (typeof(MathF), typeof(float)), (typeof(decimal), typeof(decimal)) })
+            {
+                Add(owner, "Floor", type, type, "FLOOR");
+                Add(owner, "Ceiling", type, type, "CEIL");
+            }
             return functions;
 
             void Add(Type owner, string name, Type input, Type output, string function)
@@ -72,6 +78,20 @@ namespace OceanBase.EntityFrameworkCore.Query
             if (function != "SIGN" && mapping.ClrType != method.ReturnType)
                 return null;
             var resultMapping = function == "SIGN" ? intMapping : mapping;
+            if (mode == OceanBaseCompatibilityMode.MySql && function is "FLOOR" or "CEIL")
+            {
+                var truncated = sqlExpressionFactory.Function("TRUNCATE", [input, sqlExpressionFactory.Constant(0, intMapping)],
+                    nullable: true, argumentsPropagateNullability: [false, false], method.ReturnType, resultMapping);
+                var carrier = mapping.Converter?.ProviderClrType ?? mapping.ClrType;
+                carrier = Nullable.GetUnderlyingType(carrier) ?? carrier;
+                // Syntax one belongs to stored numeric space, independently of the model converter and write facets.
+                var one = sqlExpressionFactory.Constant(Convert.ChangeType(1, carrier), mappingSource.FindMapping(carrier));
+                var floor = function == "FLOOR";
+                return sqlExpressionFactory.Case(
+                    [new CaseWhenClause(floor ? sqlExpressionFactory.LessThan(input, truncated) : sqlExpressionFactory.GreaterThan(input, truncated),
+                        floor ? sqlExpressionFactory.Subtract(truncated, one, resultMapping) : sqlExpressionFactory.Add(truncated, one, resultMapping))],
+                    truncated);
+            }
             return function == "TRUNC" && mode == OceanBaseCompatibilityMode.MySql
                 ? sqlExpressionFactory.Function("TRUNCATE", [input, sqlExpressionFactory.Constant(0, intMapping)],
                     nullable: true, argumentsPropagateNullability: [false, false], method.ReturnType, resultMapping)
