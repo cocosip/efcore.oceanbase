@@ -26,7 +26,7 @@ namespace OceanBase.EntityFrameworkCore.Query
             var prototypes = empty ? valuesExpression.FindAnnotation(OceanBaseCollectionParameterExpandingVisitor.EmptyColumnsAnnotation)
                 ?.Value as IReadOnlyList<SqlExpression> : null;
             if (empty && (prototypes is null || prototypes.Count != valuesExpression.ColumnNames.Count))
-                throw new NotSupportedException("An empty inline collection root has no retained element mapping; only captured empty integral roots are supported.");
+                throw new NotSupportedException("An empty collection root requires retained integral element mapping metadata.");
             for (var row = 0; row < (empty ? 1 : rows.Count); row++)
             {
                 if (row > 0) Sql.AppendLine().Append("UNION ALL ");

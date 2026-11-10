@@ -21,6 +21,28 @@ not later local commits or database integration. Earlier db676ff also passed in
 Run/job/step metadata is saved under artifacts/local-development/. The earlier log archive endpoint returned
 HTTP403 (repository admin rights); no new per-test count or resolved EF patch is inferred from job metadata.
 
+### Originally empty inline integral roots checkpoint (2026-11-11)
+
+Originally empty inline int/int? Count/Any/Select/join and nested roots retain their original element type
+through delegated query translation, inferred mappings and pruning. Immutable typed NULL prototypes render
+genuinely zero-row bodies. A demonstrated EF pruning defect renames a sole retained ordinal to Value while
+ORDER BY still references _ord; a bounded correction restores that name only on these annotated empty roots.
+Captured/nonempty roots and general pruning remain inherited. Conflicting inferred mappings still reject.
+
+Focused coverage passes 57 unit and eight intercepted cases. Full Debug/Release and isolated EF10.0.14
+Release each pass **1281 tests** (967 unit, 312 intercepted pipeline, two project consumers). After full
+suites, a test-only newline assertion portability edit passes the focused eight cases; production is unchanged.
+The same baseline-built `10.0.0-checkpoint.inline-empty-20261111` package passes both modes/patches for
+original inline-empty Count/nullable Any/nested join and the sole-ordinal regression, plus preceding checks.
+Content/package-only graph pass; baseline assets stay EF10.0.0. Independent source review passes with no actionable findings.
+
+Latest package: `artifacts/checkpoint-inline-empty-20261111/OceanBase.EntityFrameworkCore.10.0.0-checkpoint.inline-empty-20261111.nupkg`.
+Evidence: `artifacts/local-development/batch3k/`. The narrow SetTables internal-API dependency is covered by
+the selected patch checks; precompiled annotation quoting and current hosted/Linux execution remain unverified.
+General text/other root carriers, broader converted projections and wider query/model/write/schema work
+remain local gaps. Native execution/results/typing/order/limits still need both real modes. Next planned
+numeric slice is Floor/Ceiling; the overall EF10 goal stays active.
+
 ### Captured integral roots and nonempty inline roots checkpoint (2026-11-11)
 
 General captured int/int? arrays/lists now expand before EF's concrete IntTypeMapping cast in both modes,
@@ -37,7 +59,7 @@ Independent source and scoped test re-review pass. The same baseline-built
 roots, empty relations and Oracle DUAL per arm. Previous text-membership package fails the parameter-root cast.
 Content/package-only graph pass; baseline assets remain EF10.0.0.
 
-Latest package: `artifacts/checkpoint-integral-roots-20261111/OceanBase.EntityFrameworkCore.10.0.0-checkpoint.integral-roots-20261111.nupkg`.
+Historical package: `artifacts/checkpoint-integral-roots-20261111/OceanBase.EntityFrameworkCore.10.0.0-checkpoint.integral-roots-20261111.nupkg`.
 Evidence: `artifacts/local-development/batch3j/`. Native UNION typing/results/order/limits remain unverified.
 Earlier conflicting inferred mapping still excludes some converted Join Value projections; native joins and
 consistently inferred converted membership/property reads pass locally. Next is originally empty inline

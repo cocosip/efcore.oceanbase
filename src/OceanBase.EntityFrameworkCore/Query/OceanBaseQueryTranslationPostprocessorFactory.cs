@@ -1,0 +1,112 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Linq.Expressions;
+using Microsoft.EntityFrameworkCore.Query;
+using Microsoft.EntityFrameworkCore.Query.SqlExpressions;
+using Microsoft.EntityFrameworkCore.Storage;
+
+namespace OceanBase.EntityFrameworkCore.Query
+{
+    internal sealed class OceanBaseQueryTranslationPostprocessorFactory(
+        QueryTranslationPostprocessorDependencies dependencies,
+        RelationalQueryTranslationPostprocessorDependencies relationalDependencies) : IQueryTranslationPostprocessorFactory
+    {
+        public QueryTranslationPostprocessor Create(QueryCompilationContext queryCompilationContext)
+            => new Postprocessor(dependencies, relationalDependencies, (RelationalQueryCompilationContext)queryCompilationContext);
+
+        private sealed class Postprocessor(QueryTranslationPostprocessorDependencies dependencies,
+            RelationalQueryTranslationPostprocessorDependencies relationalDependencies,
+            RelationalQueryCompilationContext queryCompilationContext)
+            : RelationalQueryTranslationPostprocessor(dependencies, relationalDependencies, queryCompilationContext)
+        {
+            private readonly Dictionary<string, (Type ElementType, IReadOnlyDictionary<string, SqlExpression> Columns)> _emptyColumns = [];
+
+            protected override Expression ProcessTypeMappings(Expression expression)
+            {
+                var mapped = base.ProcessTypeMappings(expression);
+                var metadata = new MetadataVisitor();
+                metadata.Visit(mapped);
+                foreach (var values in metadata.EmptyRoots)
+                {
+                    var elementType = (Type)values.FindAnnotation(
+                        OceanBaseQueryableMethodTranslatingExpressionVisitorFactory.EmptyElementTypeAnnotation)!.Value!;
+                    if ((Nullable.GetUnderlyingType(elementType) ?? elementType) != typeof(int))
+                        throw new NotSupportedException("Empty inline collection roots currently require int/int? elements.");
+                    var mapping = metadata.Mappings.GetValueOrDefault((values.Alias, "Value"))
+                        ?? RelationalDependencies.TypeMappingSource.FindMapping(elementType);
+                    if (mapping is null || !OceanBaseCollectionParameterExpandingVisitor.IsSupportedIntegral(mapping))
+                        throw new NotSupportedException("Empty inline collection roots require signed int or long storage carriers.");
+                    var ordinal = RelationalDependencies.TypeMappingSource.FindMapping(typeof(int))!;
+                    _emptyColumns.Add(values.Alias, (elementType, new Dictionary<string, SqlExpression>
+                    {
+                        ["_ord"] = RelationalDependencies.SqlExpressionFactory.Constant(null, typeof(int), ordinal),
+                        ["Value"] = RelationalDependencies.SqlExpressionFactory.Constant(null, elementType, mapping)
+                    }));
+                }
+                return mapped;
+            }
+
+            protected override Expression Prune(Expression query)
+            {
+                var pruned = base.Prune(query);
+                if (_emptyColumns.Count == 0) return pruned;
+                var remaining = new MetadataVisitor();
+                remaining.Visit(pruned);
+                // EF's pruning reconstructs VALUES without annotations; match the surviving column identities.
+                return new EmptyColumnsVisitor(_emptyColumns, remaining.Mappings.Keys.ToHashSet()).Visit(pruned);
+            }
+        }
+
+        private abstract class QueryVisitor : ExpressionVisitor
+        {
+            protected override Expression VisitExtension(Expression node)
+                => node is ShapedQueryExpression shaped
+                    ? shaped.UpdateQueryExpression(Visit(shaped.QueryExpression)) : base.VisitExtension(node);
+        }
+
+        private sealed class MetadataVisitor : QueryVisitor
+        {
+            public List<ValuesExpression> EmptyRoots { get; } = [];
+            public Dictionary<(string Alias, string Name), RelationalTypeMapping> Mappings { get; } = [];
+
+            protected override Expression VisitExtension(Expression node)
+            {
+                if (node is ValuesExpression { RowValues.Count: 0 } values
+                    && values.FindAnnotation(OceanBaseQueryableMethodTranslatingExpressionVisitorFactory.EmptyElementTypeAnnotation) is not null)
+                    EmptyRoots.Add(values);
+                if (node is ColumnExpression { TypeMapping: { } mapping } column)
+                    Mappings[(column.TableAlias, column.Name)] = mapping;
+                return base.VisitExtension(node);
+            }
+        }
+
+        private sealed class EmptyColumnsVisitor(
+            Dictionary<string, (Type ElementType, IReadOnlyDictionary<string, SqlExpression> Columns)> emptyColumns,
+            HashSet<(string Alias, string Name)> references) : QueryVisitor
+        {
+            protected override Expression VisitExtension(Expression node)
+            {
+                if (node is ValuesExpression { RowValues.Count: 0 } values
+                    && emptyColumns.TryGetValue(values.Alias, out var metadata))
+                {
+                    if (references.Contains((values.Alias, "_ord")) && !values.ColumnNames.Contains("_ord"))
+                    {
+                        if (!values.ColumnNames.SequenceEqual(new[] { "Value" }) || references.Contains((values.Alias, "Value")))
+                            throw new NotSupportedException("Cannot recover the retained empty inline collection ordinal column.");
+                        // EF10 misnames the retained prefix when only the trailing Value column is pruned.
+                        var corrected = new ValuesExpression(values.Alias, values.RowValues, new[] { "_ord" });
+                        foreach (var annotation in values.GetAnnotations())
+                            corrected = (ValuesExpression)corrected.AddAnnotation(annotation.Name, annotation.Value);
+                        values = corrected;
+                    }
+                    return values.AddAnnotation(OceanBaseQueryableMethodTranslatingExpressionVisitorFactory.EmptyElementTypeAnnotation,
+                            metadata.ElementType)
+                        .AddAnnotation(OceanBaseCollectionParameterExpandingVisitor.EmptyColumnsAnnotation,
+                            Array.AsReadOnly(values.ColumnNames.Select(name => metadata.Columns[name]).ToArray()));
+                }
+                return base.VisitExtension(node);
+            }
+        }
+    }
+}

@@ -207,6 +207,25 @@ removes fractions toward zero, without casting or rounding the input. Floor/Ceil
 and Min/Max remain separate contracts. Pinned EF v10.0.0 and OceanBase documentation revision
 2a5ae3a23a51729d065cec716508eb26cb064106 are audited in the numeric-core local research artifact.
 
+## Planned numeric Floor and Ceiling contract
+
+The next numeric slice covers eight exact identities: Math.Floor(double/decimal), MathF.Floor(float),
+decimal.Floor(decimal), and their Ceiling counterparts. Reuse the existing math translator, strict numeric
+carrier/declaration validation, input converters and compatible result decoders. Oracle uses FLOOR/CEIL.
+The pinned MySQL pages document a BIGINT result, so use t=TRUNCATE(x,0) and a CASE selecting t-1 for x<t
+(Floor), or t+1 for x>t (Ceiling), otherwise t. Put adjustment only in the taken branch; preserve the full
+existing finite input domain without a BIGINT/decimal detour, clipping or a small physical write CAST.
+
+Precision zero and provider-carrier one require fresh converter-free mappings. Keep source mappings and
+stored-value semantics; do not treat a model one under an offset converter as native one. Retain NULL,
+independent function null tests and native output/error behavior. Stable expressions are the tested domain;
+repeated SQL occurrences do not promise CLR single evaluation for volatile DbFunction compositions.
+
+Real EF and intercepted reader tests must verify both modes, exact identities, mapping/converter ownership,
+changed captures, null settings, finite extremes/subnormals and decimal boundaries. Native TRUNCATE/CASE
+physical result types, full-range arithmetic and actual rounding/results still require server validation.
+This is planned local work; Round and transcendental functions have separate contracts and are not enabled.
+
 ## Ordinary relational shapes and integral membership local contract
 
 The local QRY-03/04 slice characterizes inherited inner/recognized left equijoins, composite numeric keys,
@@ -304,9 +323,10 @@ Do not broaden unrelated explicit CAST behavior or replace the provider's checke
 
 Default/MultipleParameters and Constant retain their parameter/literal policies; composed Parameter roots
 and explicit EF.Parameter remain unsupported without a separate translator. Originally empty inline roots
-need compile-time metadata beyond this runtime slice; general text/other carrier roots need their own typing
-contracts. These remain local follow-up work. Native UNION coercion/results/order and server limits require
-later database validation.
+use compile-time metadata beyond this runtime slice; see the implemented
+[inline-empty integral contract](#originally-empty-inline-integral-roots-local-contract).
+General text/other carrier roots still need their own typing contracts and remain local follow-up work.
+Native UNION coercion/results/order and server limits require later database validation.
 
 The slice passes 40 unit and 16 intercepted cases; full Debug/Release and isolated EF10.0.14 Release pass
 1256 tests. Independent source review and the subsequent nested-CAST test re-review pass. The test-only
@@ -315,23 +335,33 @@ The same integral-roots package passes both patches/modes. An AsQueryable captur
 correlated Enumerable.Where reaches the parameter root and reproduces the original IntTypeMapping cast.
 Recorded SQL trees distinguish those cases. Supplied reader rows do not establish actual SQL results.
 
-## Planned originally empty inline integral roots
+## Originally empty inline integral roots local contract
 
-The next collection slice addresses originally empty inline int/int? Count/Any/Select/join and nested
+The local collection slice covers originally empty inline int/int? Count/Any/Select/join and nested
 subqueries. Preserve the original element type before projection/pruning can discard Value; never infer it
 from Count's int result or a first row that does not exist. Retain contextual inference and conflict rejection.
 Use ordinary int mapping only without contextual mapping. Other empty families remain explicit boundaries.
 
-If the demonstrated metadata gap requires it, derive the relational queryable visitor and postprocessor
-through their existing factories. Delegate inherited translation and postprocessing; preserve the derived
+Derived relational queryable visitor and postprocessor factories address the demonstrated metadata gap.
+Delegate inherited translation and postprocessing; preserve the derived
 visitor in subqueries using its copy constructor. Track empty-root metadata per compilation, retain it
 through mapping/projection, and reattach it after base pruning before alias rewriting. Do not copy the whole
 Process pipeline or add global mutable state. Reuse immutable typed NULL prototypes and legal integer
 targets for genuinely zero-row bodies; normal outer DefaultIfEmpty/left-join behavior stays with EF.
 
-Real EF Count-only/nested/alias/ordinal cases and intercepted sync/async readers must verify the compilation
-and shaping seams. Direct renderer tests alone cannot prove type preservation. This is planned local work;
-native execution and general text/other families are separate gates, and no implementation is claimed here.
+The EF10.0.0 public-query reproduction retaining only an empty root's ordinal exposes an inherited pruning
+defect: the body declares Value while ORDER BY still references _ord. Correct only these annotated empty
+inline roots after base pruning, using original table metadata and actual surviving column references.
+Restore the retained original column identity before attaching prototypes; do not replace general pruning,
+rewrite nonempty row cells or guess the element type from a column name. This requires local regression
+coverage in both modes, independently of later server validation.
+
+Real EF Count-only/nested/alias/ordinal cases and intercepted sync/async readers verify the compilation
+and shaping seams. Focused57 unit/eight intercepted and full Debug/Release/isolated14 Release1281 pass.
+The same inline-empty package passes both patches/modes; independent source review passes with no actionable findings. A narrowly
+suppressed SetTables internal-API call retains early type metadata; selected patch checks do not establish
+future patch compatibility or precompiled annotation quoting. Native execution and general text/other
+families remain separate gates; typed zero-row SQL and supplied readers do not prove actual server results.
 
 ## Arithmetic division and remainder local contract
 
@@ -450,18 +480,33 @@ Run the read-only gate after packing, before the isolated consumer checks:
 
 ```powershell
 pwsh -NoProfile -File tests/OceanBase.EntityFrameworkCore.PackageConsumer/Verify-Package.ps1 `
-    -PackagePath artifacts/checkpoint-integral-roots-20261111/OceanBase.EntityFrameworkCore.10.0.0-checkpoint.integral-roots-20261111.nupkg `
-    -ExpectedVersion 10.0.0-checkpoint.integral-roots-20261111
+    -PackagePath artifacts/checkpoint-inline-empty-20261111/OceanBase.EntityFrameworkCore.10.0.0-checkpoint.inline-empty-20261111.nupkg `
+    -ExpectedVersion 10.0.0-checkpoint.inline-empty-20261111
 ```
 
 The PowerShell 7 script uses .NET ZIP/XML APIs and checks ID/version, the net10.0 assembly and dependency group,
 exact expected dependency ranges, and a nonempty packaged README with matching metadata. It does not build,
-restore, execute provider queries or establish server/runtime compatibility. The current integral-roots package passes;
+restore, execute provider queries or establish server/runtime compatibility. The current inline-empty package passes;
 wrong expected version, the old README-less alias package and the exact-patch README probe fail at their intended
 checks. The hosted e41981e package-content gate passed on Windows/Linux; the current package checks ran locally
 on Windows. Change the path/version for each new pack.
 
-### Current captured integral roots checkpoint (2026-11-11)
+### Current originally empty inline integral roots checkpoint (2026-11-11)
+
+Full Debug/Release and isolated EF10.0.14 Release each pass1281 (967 unit, 312 intercepted pipeline, two
+project consumers). A later test-only newline assertion portability edit reruns the covering eight cases;
+production code stays unchanged. The same baseline-built `10.0.0-checkpoint.inline-empty-20261111` nupkg
+passes both modes at EF10.0.0/10.0.14 for original inline-empty Count/nullable Any/nested join, sole-ordinal
+declaration/order/zero-row SQL and all previous checks. Previous integral-roots package fails the new
+inline-empty Count with missing retained mapping. Content/package-only graph pass; baseline assets stay10.0.0.
+Independent source review passes with no actionable findings. Native results/typing/order/limits, precompiled annotation quoting
+and current hosted/Linux execution remain unverified. General text/other root families and broader converter
+projections stay local follow-ups; QRY-03 is partial.
+
+Repeat the commands below with `10.0.0-checkpoint.inline-empty-20261111` and
+`artifacts/checkpoint-inline-empty-20261111`. Evidence: `artifacts/local-development/batch3k/`.
+
+### Historical captured integral roots checkpoint (2026-11-11)
 
 Full Debug/Release and isolated EF10.0.14 Release pass 1256 tests (950 unit, 304 intercepted pipeline,
 two project consumers). Independent source/scoped test reviews pass; the two nested-CAST cases pass in

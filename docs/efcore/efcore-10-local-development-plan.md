@@ -338,7 +338,7 @@ The planned captured-root contract in query/update design defines this bounded f
 **Files:** derived relational queryable-visitor/postprocessor factories only if the demonstrated metadata
 gap requires them; minimal options registration and existing VALUES annotation/generator integration;
 CollectionRootQueryTests.cs and FunctionalTests/BasicRelationalTests.cs.
-The planned inline-empty contract in query/update design and local metadata research define this slice.
+The inline-empty local contract in query/update design and local metadata research define this slice.
 
 1. Record the existing real EF empty-inline Count/Any/Select/join failures, then retain original int/int?
    type/mapping before projection/pruning. Preserve contextual inference and its conflict rejection.
@@ -347,7 +347,22 @@ The planned inline-empty contract in query/update design and local metadata rese
 3. Reuse legal typed zero-row rendering; verify nested/alias/ordinal/converted/unsupported-family boundaries
    with real EF and sync/async supplied readers. Keep current captured/nonempty/membership regressions.
 4. Focused/full tests, independent review, isolated patch/same-package gates and scoped commit. General
-   text/other families and native database results remain separate. Planned, not dispatched yet.
+   text/other families and native database results remain separate. Local implementation and source review
+   complete: focused57 unit/eight intercepted, Debug/Release/isolated14 Release1281 and same-package
+   consumers on both patches/modes pass. Source/docs/consumer reviews pass; native and wider feature gates remain open.
+
+## Batch3l brief: exact Floor/Ceiling translations
+
+**Files:** existing OceanBaseMathTranslator.cs, new FloorCeilingQueryTests.cs and intercepted
+BasicRelationalTests.cs cases. The planned numeric contract in query/update design and numeric-next
+research define the eight exact methods, full finite ranges and converter/native-result boundaries.
+
+1. RED exact methods in real EF queries; add Oracle FLOOR/CEIL and MySQL TRUNCATE plus guarded CASE
+   without BIGINT narrowing. Reuse validation; retain original mappings and fresh syntax constants.
+2. Verify null settings, stable nested expressions, finite/subnormal/decimal extremes, same/cross-carrier
+   converters and checked readers. Keep volatile single-evaluation and native result behavior explicit.
+3. Focused/full checks, independent review, isolated patch/same-package gates and scoped local commit.
+   Round/transcendental functions remain separate. Planned, not dispatched yet.
 
 ## Execution record
 
@@ -530,6 +545,18 @@ The planned inline-empty contract in query/update design and local metadata rese
 - Batch3j local slice source/patch/package gates pass1256; same integral-roots-20261111 package passes both
   modes/patches and content/package-only graph, baseline assets stay10.0.0. QRY-03 stays partial. Native UNION
   coercion/cardinality/order/limits and current hosted execution remain open. Next is planned Batch3k.
+- Batch3j committed as cccdd04 after source/test/docs/consumer approvals. Consumer-only fix round2 requires
+  exact UNION separator counts in both modes; unchanged package reruns pass both patches, provider/package
+  hashes unchanged. Clean efcore/10.0 ahead6, no push/publication. Continue originally empty inline roots.
+- Batch3k RED12 confirms missing inline-empty metadata; delegated inline/subquery visitor and postprocessor
+  retain original CLR type, contextual mapping/converter and immutable prototypes. A real ordinal-only empty
+  ElementAt expression reproduces EF pruning's body-Value/ORDER-BY-_ord mismatch (RED2). Ruling: repair only
+  our annotated zero-row roots using actual surviving references/original identity; retain general pruning.
+- Batch3k focused57 unit/eight intercepted pass. Full Debug/Release and isolated14 Release each1281=967+312+2,
+  zero failures/skips; one later newline assertion portability edit reruns only the covering eight cases.
+  Same inline-empty-20261111 package/content/graph consumers pass both modes/patches; baseline assets stay10.0.0.
+  Independent source review passes with no actionable findings. QRY-03 remains partial; SetTables internal API and precompiled
+  annotation quoting/native execution have explicit evidence limits. Next planned numeric slice is Batch3l.
 - Line-ending recheck: git ls-files --eol reports no CRLF/mixed index text. Existing working CRLF files remain
   safe under the repository attributes; do not reset local edits or change global core.autocrlf to refresh them.
 - Remaining Batch 2 scalar work and Batches 3–10 pending. The overall goal remains active.

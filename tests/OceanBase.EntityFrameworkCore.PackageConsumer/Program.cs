@@ -218,6 +218,30 @@ namespace PackageConsumer
                         throw new Exception("Oracle collection SELECT arms do not each have FROM DUAL.");
                 }
 
+                foreach (var emptyRoot in new IQueryable[]
+                {
+                    context.Set<Row>().Select(row => new int[] { }.Count(value => value > row.Id)),
+                    context.Set<Row>().Select(row => new int?[] { }.Any(value => value > row.Id)),
+                    context.Set<Row>().SelectMany(row => new int[] { }.Where(value => value > row.Id)
+                        .Join(context.Set<Row>(), value => value, item => item.Id, (value, item) => value))
+                })
+                {
+                    var emptySql = emptyRoot.ToQueryString();
+                    if (emptySql.Contains("UNION ALL VALUES", StringComparison.Ordinal)
+                        || (!emptySql.Contains("WHERE 1 = 0", StringComparison.Ordinal)
+                            && !emptySql.Contains("WHERE 0", StringComparison.Ordinal)))
+                        throw new Exception("Packed inline-empty integral root lost its zero-row relation: " + emptySql);
+                }
+
+                var emptyOrdinalSql = context.Set<Row>().Select(row => new int[] { }
+                    .Select(value => row.Id + 1).ElementAt(row.Id)).ToQueryString();
+                var ordinalDeclaration = mode == OceanBaseCompatibilityMode.MySql
+                    ? "CAST(NULL AS SIGNED) AS `_ord`" : "CAST(NULL AS NUMBER) \"_ord\"";
+                if (!emptyOrdinalSql.Contains(ordinalDeclaration, StringComparison.Ordinal)
+                    || !emptyOrdinalSql.Contains("ORDER BY", StringComparison.Ordinal)
+                    || !emptyOrdinalSql.Contains("WHERE 1 = 0", StringComparison.Ordinal))
+                    throw new Exception("Packed inline-empty root lost its retained ordinal identity: " + emptyOrdinalSql);
+
                 var guidType = context.Model.FindEntityType(typeof(Row))!.FindProperty(nameof(Row.Token))!.GetColumnType();
                 if (guidType != (mode == OceanBaseCompatibilityMode.Oracle ? "RAW(16)" : "CHAR(36)"))
                 {

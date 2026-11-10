@@ -131,7 +131,7 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
         [Theory]
         [InlineData(OceanBaseCompatibilityMode.MySql)]
         [InlineData(OceanBaseCompatibilityMode.Oracle)]
-        public void Parameter_mode_explicit_parameter_and_originally_empty_inline_roots_remain_boundaries(OceanBaseCompatibilityMode mode)
+        public void Parameter_mode_explicit_parameter_and_conflicting_mappings_remain_boundaries(OceanBaseCompatibilityMode mode)
         {
             using var context = CreateContext(mode);
             int[] values = [1, 2];
@@ -142,25 +142,155 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
                 .Where(value => value > row.Id).Contains(row.Id)).ToQueryString());
             Assert.Contains("Conflicting type mappings", Assert.Throws<InvalidOperationException>(() => context.Rows
                 .Join(values, row => row.Converted, value => value, (row, value) => value).ToQueryString()).Message);
+            values = null!;
+            // A null source evaluated by ordinary LINQ fails before it can become a translated parameter root.
+            var error = Assert.Throws<InvalidOperationException>(() => context.Rows.Where(row => values.AsQueryable()
+                .Where(value => value > row.Id).Contains(row.Id)).ToQueryString());
+            Assert.IsType<ArgumentNullException>(error.InnerException);
+        }
+
+        [Theory]
+        [MemberData(nameof(Modes))]
+        public void Originally_empty_inline_integral_roots_keep_zero_rows_in_subqueries_and_joins(
+            OceanBaseCompatibilityMode mode, bool relationalNulls, ParameterTranslationMode? translation)
+        {
+            using var context = CreateContext(mode, relationalNulls, translation);
             foreach (var query in new IQueryable[]
             {
                 context.Rows.Select(row => new int[] { }.Count(value => value > row.Id)),
                 context.Rows.Select(row => new int[] { }.Any(value => value > row.Id)),
                 context.Rows.SelectMany(row => new int[] { }.Where(value => value > row.Id)),
                 context.Rows.SelectMany(row => new int[] { }.Where(value => value > row.Id)
-                    .Join(context.Rows, value => value, item => item.Id, (value, item) => value))
+                    .Join(context.Rows, value => value, item => item.Id, (value, item) => value)),
+                context.Rows.Select(row => new int?[] { }.Count(value => row.Id > 0)),
+                context.Rows.Select(row => new int?[] { }.Any(value => value > row.Optional)),
+                context.Rows.SelectMany(row => new int?[] { }.Where(value => value != row.Optional).Select(value => value)),
+                context.Rows.Join(new int?[] { }, row => row.Optional, value => value, (row, value) => value),
+                context.Rows.Where(row => context.Rows.Any(other => new int[] { }.Any(value => value > other.Id + row.Id))),
+                context.Rows.Select(row => new int[] { }.ElementAt(row.Id)),
+                context.Rows.Select(row => new int[] { }.Select(value => row.Id + 1).ElementAt(row.Id)),
+                context.Rows.SelectMany(row => new int[] { }.Select(value => row.Id)),
+                context.Rows.SelectMany(row => new int?[] { }.Where(value => value > row.Id).DefaultIfEmpty()),
+                context.Rows.Select(row => new int[] { }.Where(value => value > row.Converted).Count()),
+                context.Rows.Select(row => new { First = new int[] { }.Count(value => value > row.Id),
+                    Second = new int?[] { }.Any(value => value > row.Optional) })
             })
-                {
-                string sql = "";
-                var inlineError = Record.Exception(() => sql = query.ToQueryString());
-                Assert.True(inlineError is NotSupportedException, query.Expression + "\n" + sql);
+            {
+                var sql = query.ToQueryString();
+                Assert.True(sql.Contains("WHERE 1 = 0", StringComparison.Ordinal), query.Expression + "\n" + sql);
+                Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? "CAST(NULL AS SIGNED)" : "CAST(NULL AS NUMBER)", sql);
+                Assert.DoesNotContain("UNION ALL VALUES", sql);
+                if (mode == OceanBaseCompatibilityMode.Oracle) Assert.Contains("FROM DUAL", sql);
             }
+        }
 
-            values = null!;
-            // A null source evaluated by ordinary LINQ fails before it can become a translated parameter root.
-            var error = Assert.Throws<InvalidOperationException>(() => context.Rows.Where(row => values.AsQueryable()
-                .Where(value => value > row.Id).Contains(row.Id)).ToQueryString());
-            Assert.IsType<ArgumentNullException>(error.InnerException);
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle)]
+        public void Originally_empty_inline_count_does_not_guess_other_element_types_from_its_int_result(OceanBaseCompatibilityMode mode)
+        {
+            using var context = CreateContext(mode);
+            foreach (var query in new IQueryable[]
+            {
+                context.Rows.Select(row => new string[] { }.Count(value => row.Id > 0)),
+                context.Rows.Select(row => new long[] { }.Count(value => row.Id > 0)),
+                context.Rows.Select(row => new decimal[] { }.Count(value => row.Id > 0)),
+                context.Rows.Select(row => new byte[] { }.Count(value => row.Id > 0))
+            })
+                Assert.Contains("int/int?", Assert.Throws<NotSupportedException>(() => query.ToQueryString()).Message);
+            Assert.Contains("Conflicting type mappings", Assert.Throws<InvalidOperationException>(() => context.Rows
+                .Join(new int[] { }, row => row.Converted, value => value, (row, value) => value).ToQueryString()).Message);
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle)]
+        public void Originally_empty_inline_metadata_keeps_original_types_contextual_mapping_and_pruned_column_identities(
+            OceanBaseCompatibilityMode mode)
+        {
+            using var context = CreateContext(mode);
+            var integer = context.GetService<IRelationalTypeMappingSource>().FindMapping(typeof(int));
+            var converted = context.Model.FindEntityType(typeof(Row))!.FindProperty(nameof(Row.Converted))!.GetTypeMapping();
+            var cases = new (IQueryable Query, Type Type, CoreTypeMapping Mapping, string[] Columns)[]
+            {
+                (context.Rows.Select(row => new int?[] { }.Count(value => row.Id > 0)), typeof(int?), integer!, ["Value"]),
+                (context.Rows.Select(row => new int[] { }.ElementAt(row.Id)), typeof(int), integer!, ["_ord", "Value"]),
+                (context.Rows.Select(row => new int[] { }.Select(value => row.Id + 1).ElementAt(row.Id)), typeof(int), integer!, ["_ord"]),
+                (context.Rows.Select(row => new int[] { }.Count(value => value > row.Converted)), typeof(int), converted, ["Value"])
+            };
+            foreach (var item in cases)
+            {
+                var compilation = context.GetService<IQueryCompilationContextFactory>().Create(false);
+                var preprocessed = context.GetService<IQueryTranslationPreprocessorFactory>().Create(compilation).Process(item.Query.Expression);
+                var translated = context.GetService<IQueryableMethodTranslatingExpressionVisitorFactory>().Create(compilation).Translate(preprocessed);
+                var before = new ValuesCollector();
+                before.Visit(translated);
+                var early = Assert.Single(before.Values);
+                Assert.Same(item.Type, early.FindAnnotation(OceanBaseQueryableMethodTranslatingExpressionVisitorFactory.EmptyElementTypeAnnotation)!.Value);
+                Assert.Equal(new[] { "_ord", "Value" }, early.ColumnNames);
+                var postprocessed = context.GetService<IQueryTranslationPostprocessorFactory>().Create(compilation).Process(translated);
+                var after = new ValuesCollector();
+                after.Visit(postprocessed);
+                var remaining = Assert.Single(after.Values);
+                Assert.Empty(remaining.RowValues!);
+                Assert.True(item.Columns.SequenceEqual(remaining.ColumnNames), string.Join(",", remaining.ColumnNames) + "\n" + item.Query.ToQueryString());
+                var prototypes = Assert.IsAssignableFrom<IReadOnlyList<SqlExpression>>(remaining.FindAnnotation(
+                    OceanBaseCollectionParameterExpandingVisitor.EmptyColumnsAnnotation)!.Value);
+                Assert.Same(item.Type, remaining.FindAnnotation(OceanBaseQueryableMethodTranslatingExpressionVisitorFactory.EmptyElementTypeAnnotation)!.Value);
+                Assert.Same(Nullable.GetUnderlyingType(item.Type) ?? item.Type, prototypes[^1].Type);
+                Assert.Same(item.Mapping, prototypes[^1].TypeMapping);
+                if (prototypes.Count == 2) Assert.Same(integer, prototypes[0].TypeMapping);
+                Assert.Throws<NotSupportedException>(() => ((IList<SqlExpression>)prototypes)[0] = prototypes[0]);
+                var renamed = remaining.WithAlias("collision");
+                Assert.Same(prototypes, renamed.FindAnnotation(OceanBaseCollectionParameterExpandingVisitor.EmptyColumnsAnnotation)!.Value);
+            }
+        }
+
+        private sealed class ValuesCollector : ExpressionVisitor
+        {
+            public List<ValuesExpression> Values { get; } = [];
+            protected override Expression VisitExtension(Expression node)
+            {
+                if (node is ValuesExpression values) Values.Add(values);
+                return node is ShapedQueryExpression shaped ? Visit(shaped.QueryExpression) : base.VisitExtension(node);
+            }
+        }
+
+        [Fact]
+        public void Inline_empty_services_are_scoped_and_modes_do_not_share_compilation_metadata()
+        {
+            using var first = CreateContext(OceanBaseCompatibilityMode.MySql);
+            using var second = CreateContext(OceanBaseCompatibilityMode.MySql);
+            using var oracle = CreateContext(OceanBaseCompatibilityMode.Oracle);
+            Assert.IsType<OceanBaseQueryableMethodTranslatingExpressionVisitorFactory>(first.GetService<IQueryableMethodTranslatingExpressionVisitorFactory>());
+            Assert.IsType<OceanBaseQueryTranslationPostprocessorFactory>(first.GetService<IQueryTranslationPostprocessorFactory>());
+            Assert.Same(first.GetService<IQueryableMethodTranslatingExpressionVisitorFactory>(), first.GetService<IQueryableMethodTranslatingExpressionVisitorFactory>());
+            Assert.NotSame(first.GetService<IQueryableMethodTranslatingExpressionVisitorFactory>(), second.GetService<IQueryableMethodTranslatingExpressionVisitorFactory>());
+            Assert.NotSame(first.GetService<IQueryTranslationPostprocessorFactory>(), second.GetService<IQueryTranslationPostprocessorFactory>());
+            foreach (var context in new[] { first, oracle, second, oracle })
+            {
+                var query = context.Rows.Select(row => new
+                {
+                    Count = new int[] { }.Count(value => value > row.Converted),
+                    Any = new int?[] { }.Any(value => value > row.Id)
+                });
+                var compilation = context.GetService<IQueryCompilationContextFactory>().Create(false);
+                var normalized = context.GetService<IQueryTranslationPreprocessorFactory>().Create(compilation).Process(query.Expression);
+                var translated = context.GetService<IQueryableMethodTranslatingExpressionVisitorFactory>().Create(compilation).Translate(normalized);
+                var processed = context.GetService<IQueryTranslationPostprocessorFactory>().Create(compilation).Process(translated);
+                var collector = new ValuesCollector();
+                collector.Visit(processed);
+                Assert.Equal(2, collector.Values.Count);
+                Assert.Equal(2, collector.Values.Select(value => value.Alias).Distinct().Count());
+                Assert.Equal(new[] { typeof(int), typeof(int?) }, collector.Values.Select(value =>
+                    value.FindAnnotation(OceanBaseQueryableMethodTranslatingExpressionVisitorFactory.EmptyElementTypeAnnotation)!.Value));
+                var mappings = collector.Values.Select(value => ((IReadOnlyList<SqlExpression>)value.FindAnnotation(
+                    OceanBaseCollectionParameterExpandingVisitor.EmptyColumnsAnnotation)!.Value!)[0].TypeMapping).ToArray();
+                Assert.Same(context.Model.FindEntityType(typeof(Row))!.FindProperty(nameof(Row.Converted))!.GetTypeMapping(), mappings[0]);
+                Assert.Same(context.Model.FindEntityType(typeof(Row))!.FindProperty(nameof(Row.Id))!.GetTypeMapping(), mappings[1]);
+                var sql = query.ToQueryString();
+                Assert.Contains(context == oracle ? "CAST(NULL AS NUMBER)" : "CAST(NULL AS SIGNED)", sql);
+            }
         }
 
         [Theory]
