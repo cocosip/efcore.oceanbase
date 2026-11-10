@@ -55,20 +55,20 @@ so that an undocumented feature is not accidentally advertised.
 Development resumed at the user's request (2026-11-10) on efcore/10.0. See the
 [progress handoff](efcore-10-progress.md) for saved state, remaining work and the exact resume point.
 
-Snapshot: 2026-11-10, `efcore/10.0` text declaration/write slice, continuing from 20a2f18.
+Snapshot: 2026-11-10, `efcore/10.0` local configuration/cache/helper batch following 57fd44a.
 The same baseline-built package passes both tested EF patches. This is not a release result.
 
 `dotnet test OceanBase.EntityFrameworkCore.slnx --no-restore -m:1 -nr:false` produced:
 
-The expanded suite passed in Debug and Release (563 tests per configuration).
+The expanded suite passed in Debug and Release (606 tests per configuration).
 
 | Layer | Passed | Failed | Evidence boundary |
 | --- | --- | --- | --- |
-| Unit | 420 | 0 | Prior mapping coverage plus text declarations/facet/property/clone validation, Unicode and converted character bounds; full explicit-type/live coverage incomplete. |
+| Unit | 462 | 0 | Prior mapping coverage plus options negative cases, real cache reuse/separation, design-time models and identifier/schema helper boundaries; live coverage incomplete. |
 | Command pipeline | 142 | 0 | Prior intercepted coverage plus text query/materialization, converted write rejection and original-value predicates; transactions disabled. |
-| Consumer | 1 | 0 | Project reference, not an isolated packed-package consumer. |
+| Consumer | 2 | 0 | Both-mode provider detection through a project reference, not an isolated packed-package consumer. |
 | Packed consumer | Both modes | 0 | Same text-20261110 package passes EF10.0.0/10.0.14, including invalid declaration/UTF-16 rejection and lossless national text query binding; no live execution. |
-| Later-patch Release suite | 563 | 0 | Current text source compiled/tested against EF10.0.14 in isolated artifacts; separate from baseline-package compatibility. |
+| Later-patch Release suite | 563 | 0 | Text checkpoint 57fd44a compiled/tested against EF10.0.14 in isolated artifacts; newly added configuration cases not rerun at that patch yet. |
 | Live MySQL / Oracle | Not established | Not established | No live provider execution recorded for either mode. |
 | Relational specification | Not established | Not established | No specification test project yet. |
 
@@ -197,9 +197,9 @@ Existing evidence references used below identify partial coverage, not automatic
 
 | ID | Requirement and acceptance criteria | Priority | MySQL | Oracle | Existing evidence / gap |
 | --- | --- | --- | --- | --- | --- |
-| CFG-01 | Both UseOceanBase overloads preserve options; invalid mode/null/invalid connection inputs fail clearly in both modes. | Required | In progress | In progress | UO tests overloads in different modes; negative coverage missing. |
-| CFG-02 | Database.IsOceanBase() and invariant identify this provider through EF's real service graph. | Required | Done | Planned | CP UseOceanBase_registers_the_provider; Oracle case missing. |
-| CFG-03 | Model/service-provider caches separate modes and design-time/runtime models; compatible options reuse services. | Required | In progress | In progress | UO Model_cache_key_includes_compatibility_mode; actual cache reuse/separation tests missing. |
+| CFG-01 | Both UseOceanBase overloads preserve options; invalid mode/null/invalid connection inputs fail clearly in both modes. | Required | Done | Done | UO both-mode typed/untyped positive cases, Null_builders/Null_connections/Invalid_modes/Invalid_connection_strings and delayed null-string assignment pass in Debug/Release; facade APIs stay open under CFG-04. |
+| CFG-02 | Database.IsOceanBase() and invariant identify this provider through EF's real service graph. | Required | Done | Done | CP UseOceanBase_registers_the_provider passes both modes in Debug/Release; UO confirms invariant and null facade guard. |
+| CFG-03 | Model/service-provider caches separate modes and design-time/runtime models; compatible options reuse services. | Required | Done | Done | UO Compatible_contexts_reuse_models_and_singleton_services_but_not_connections and Actual_model_and_singleton_service_caches_never_cross_modes cover real EF graph/model reuse, design-time identities and per-mode mappings/quoting. |
 | CFG-04 | Required relational services resolve with EF10 lifetimes; normal DatabaseFacade APIs have no missing services. | Required | In progress | In progress | UO/FP exercise part of graph; database creator absent. |
 | CON-01 | Create OceanBaseConnection through public OceanBaseConnector 0.2.0 APIs and supply ExpectedMode. | Required | Done | Done | UO Relational_connection_uses_connector_and_mode. |
 | CON-02 | Reject configured/detected mode conflicts before execution for supplied/created connections; cleanup remains safe after rejection. | Required | In progress | In progress | UO mutation/replacement/cleanup regressions pass; opened/detected-mode execution missing. |
@@ -255,7 +255,7 @@ duplicates and mode-specific string semantics.
 
 | ID | Requirement and acceptance criteria | Priority | MySQL | Oracle | Existing evidence / gap |
 | --- | --- | --- | --- | --- | --- |
-| SQL-01 | Escape identifiers, schema qualification and embedded delimiters; Oracle table aliases omit AS and table-free SELECT uses DUAL. | Required | In progress | In progress | UH reserved name/UQ aliases; embedded delimiters/schema cases missing. |
+| SQL-01 | Escape identifiers, schema qualification and embedded delimiters; Oracle table aliases omit AS and table-free SELECT uses DUAL. | Required | In progress | In progress | UH now covers embedded delimiters, schema/Unicode/empty-name escaping and all builder overloads; UQ aliases pass; table-free/live SQL evidence still incomplete. |
 | SQL-02 | Parameter names/placeholders follow each dialect. | Required | Done | Done | UH Generates_mode_specific_identifiers_and_parameters. |
 | QRY-01 | SELECT/projection, arithmetic/comparison/Boolean predicates and null semantics bind values and materialize nullable/non-null results. | Required | In progress | In progress | UQ Oracle Boolean predicates/CASE/EXISTS/LIKE/nullable NOT and FP scalar conversions pass; FP integer arithmetic/CASE/large comparand and binary comparison regressions pass; full null/operator/live results missing. |
 | QRY-02 | OrderBy/ThenBy, Distinct, Skip/Take and offset-only queries return correct results, including deterministic paging/empty pages. | Required | In progress | In progress | UQ SQL shape only; live ordering/string/paging missing. |

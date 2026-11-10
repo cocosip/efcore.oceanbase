@@ -1,10 +1,31 @@
 # EF Core 10 Development Progress
 
-## Resumed text checkpoint: 2026-11-10
+## Active local development: 2026-11-10
 
 Development resumed at the user's request on efcore/10.0, now the active EF10 development and packaging branch.
 The provider is not release-ready. The [feature checklist](efcore-10-feature-checklist.md) remains the
 acceptance authority; this document records the handoff rather than defining a different completion target.
+
+The current user goal is to finish all locally developable EF10 functionality, with tested/reviewed commits after
+each small group. Real database integration/tests and EF8/EF9 adaptation are explicitly postponed. The
+[local development plan](efcore-10-local-development-plan.md) tracks the full remaining inventory, including
+an audit of locally feasible deferred families. Finishing one batch does not finish the overall goal.
+
+### Configuration/cache/SQL boundary checkpoint
+
+Both generic/untyped configuration overloads now have both-mode positive/negative coverage. Tests verify actual
+EF model/singleton reuse for compatible options, mode separation, design-time/runtime identities, safe option
+debug information, identifier/schema escaping and StringBuilder parity. Consumer provider detection covers both
+modes. No production fix was needed in this batch; the existing contracts passed the added characterization tests.
+
+Full Debug and Release each pass **606 tests** (462 unit, 142 intercepted pipeline, two consumers), up from 563.
+Focused options/helper coverage passes 66 tests. The standard DatabaseFacade.GetDbConnection/SetConnectionString
+paths exposed the still-missing IRelationalDatabaseCreator service; these are explicitly open CFG-04/SCH-01 work.
+Underlying IRelationalConnection delayed string assignment is covered; this does not claim those facade APIs work.
+No live connection was made. The previous EF10.0.14/package results below remain scoped to the text checkpoint.
+
+Git line endings are now governed by `.gitattributes` (a2bbe5f): automatic text uses LF, batch scripts CRLF.
+Attribute checks and normalization under core.autocrlf=true/false/input passed; existing index blobs were already LF.
 
 The preceding implementation checkpoint was `d46ae9d`, with package evidence in `062bb84` and a paused handoff
 in `20a2f18`. This text slice continues from `20a2f18` on efcore/10.0; dev retains that preceding checkpoint.
@@ -29,13 +50,13 @@ Recent mapping checkpoints include:
 | Temporal | Five CLR temporal types, mode-specific transports and exact conversions; query precision is independent of physical column precision. |
 | Decimal (`3365ad9`) | Full supported declarations, direct/property facet conflicts, exact coefficient/scale write checks and converter-preserving clones. Query inputs retain value-inferred precision/scale; output-only parameters retain column facets. |
 | National text (`d46ae9d`) | Oracle NCHAR/NVARCHAR2 select native connector parameter types. Input Size widens for longer query operands; output/null metadata retains declared Size. Enum-to-string and national Guid conversions have intercepted query/read/write coverage. |
-| Text declarations and writes (current slice) | Complete mode-specific declaration parsing, length/fixed/Unicode/numeric facet conflicts, property and clone validation, LOB key/index rejection, converted DML character bounds and malformed UTF-16 rejection. Queries/original predicates remain independent of column length. |
+| Text declarations and writes (`57fd44a`) | Complete mode-specific declaration parsing, length/fixed/Unicode/numeric facet conflicts, property and clone validation, LOB key/index rejection, converted DML character bounds and malformed UTF-16 rejection. Queries/original predicates remain independent of column length. |
 
 Physical write validation applies to converted current DML values, independently of query operands and original
 values used only in predicates. These implementations are partial acceptance evidence for their checklist rows;
 they do not establish complete scalar, query or server support.
 
-## Verification recorded for the resumed slice
+## Historical verification for the text slice (57fd44a)
 
 | Check | Result | Evidence boundary |
 | --- | --- | --- |

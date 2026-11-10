@@ -1,10 +1,12 @@
 using System;
+using System.Collections.Generic;
 using System.Data.Common;
 using System.Diagnostics.CodeAnalysis;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.EntityFrameworkCore.Storage;
 using OceanBase.EntityFrameworkCore.Internal;
 using Xunit;
@@ -13,35 +15,197 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
 {
     public sealed class OptionsTests
     {
-        [Fact]
-        public void UseOceanBase_with_connection_string_preserves_mode_and_connection_string()
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true)]
+        public void UseOceanBase_with_connection_string_preserves_mode_and_connection_string(
+            OceanBaseCompatibilityMode mode, bool typed)
         {
-            var options = new DbContextOptionsBuilder<TestContext>()
-                .UseOceanBase("Server=localhost;Database=test", OceanBaseCompatibilityMode.Oracle)
-                .Options;
+            var builder = new DbContextOptionsBuilder<TestContext>();
+            var result = typed ? builder.UseOceanBase("Server=localhost;Database=test", mode)
+                : ((DbContextOptionsBuilder)builder).UseOceanBase("Server=localhost;Database=test", mode);
+            var extension = builder.Options.FindExtension<OceanBaseOptionsExtension>();
 
-            var extension = options.FindExtension<OceanBaseOptionsExtension>();
-
+            Assert.Same(builder, result);
             Assert.NotNull(extension);
-            Assert.Equal(OceanBaseCompatibilityMode.Oracle, extension!.CompatibilityMode);
+            Assert.Equal(mode, extension!.CompatibilityMode);
             Assert.Equal("Server=localhost;Database=test", extension.ConnectionString);
         }
 
-        [Fact]
-        public void UseOceanBase_with_existing_connection_preserves_connection_and_mode()
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true)]
+        public void UseOceanBase_with_existing_connection_preserves_connection_and_mode(
+            OceanBaseCompatibilityMode mode, bool typed)
         {
             using var connection = new StubDbConnection();
-            var options = new DbContextOptionsBuilder<TestContext>()
-                .UseOceanBase(connection, OceanBaseCompatibilityMode.MySql)
-                .Options;
+            var builder = new DbContextOptionsBuilder<TestContext>();
+            var result = typed ? builder.UseOceanBase(connection, mode)
+                : ((DbContextOptionsBuilder)builder).UseOceanBase(connection, mode);
+            var extension = builder.Options.FindExtension<OceanBaseOptionsExtension>();
 
-            var extension = options.FindExtension<OceanBaseOptionsExtension>();
-
+            Assert.Same(builder, result);
             Assert.NotNull(extension);
             Assert.Same(connection, extension!.Connection);
             Assert.False(extension.IsConnectionOwned);
-            Assert.Equal(OceanBaseCompatibilityMode.MySql, extension.CompatibilityMode);
+            Assert.Equal(mode, extension.CompatibilityMode);
         }
+
+        [Theory]
+        [InlineData(false, false)]
+        [InlineData(false, true)]
+        [InlineData(true, false)]
+        [InlineData(true, true)]
+        public void Null_builders_reject_for_each_overload(bool typed, bool suppliedConnection)
+        {
+            DbContextOptionsBuilder builder = null!;
+            DbContextOptionsBuilder<TestContext> typedBuilder = null!;
+            using var connection = new StubDbConnection();
+            var exception = Assert.Throws<ArgumentNullException>(() => typed
+                ? suppliedConnection ? typedBuilder.UseOceanBase(connection, OceanBaseCompatibilityMode.MySql)
+                    : typedBuilder.UseOceanBase("Server=localhost", OceanBaseCompatibilityMode.MySql)
+                : suppliedConnection ? builder.UseOceanBase(connection, OceanBaseCompatibilityMode.MySql)
+                    : builder.UseOceanBase("Server=localhost", OceanBaseCompatibilityMode.MySql));
+            Assert.Equal("optionsBuilder", exception.ParamName);
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true)]
+        public void Null_connections_reject_for_each_overload(OceanBaseCompatibilityMode mode, bool typed)
+        {
+            var builder = new DbContextOptionsBuilder<TestContext>();
+            var exception = Assert.Throws<ArgumentNullException>(() => typed
+                ? builder.UseOceanBase((DbConnection)null!, mode)
+                : ((DbContextOptionsBuilder)builder).UseOceanBase((DbConnection)null!, mode));
+            Assert.Equal("connection", exception.ParamName);
+            Assert.Null(builder.Options.FindExtension<OceanBaseOptionsExtension>());
+        }
+
+        [Theory]
+        [InlineData(false, false)]
+        [InlineData(false, true)]
+        [InlineData(true, false)]
+        [InlineData(true, true)]
+        public void Invalid_modes_reject_without_changing_existing_options(bool typed, bool suppliedConnection)
+        {
+            var builder = new DbContextOptionsBuilder<TestContext>().UseOceanBase("Server=localhost", OceanBaseCompatibilityMode.Oracle);
+            var previous = builder.Options.FindExtension<OceanBaseOptionsExtension>();
+            using var connection = new StubDbConnection();
+            foreach (var mode in new[] { (OceanBaseCompatibilityMode)(-1), (OceanBaseCompatibilityMode)99 })
+            {
+                Assert.Throws<ArgumentOutOfRangeException>(() => typed
+                    ? suppliedConnection ? builder.UseOceanBase(connection, mode) : builder.UseOceanBase("Server=other", mode)
+                    : suppliedConnection ? ((DbContextOptionsBuilder)builder).UseOceanBase(connection, mode)
+                        : ((DbContextOptionsBuilder)builder).UseOceanBase("Server=other", mode));
+                Assert.Same(previous, builder.Options.FindExtension<OceanBaseOptionsExtension>());
+            }
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true)]
+        public async Task Null_connection_string_allows_model_configuration_and_later_assignment(
+            OceanBaseCompatibilityMode mode, bool async)
+        {
+            using var context = new TestContext(new DbContextOptionsBuilder<TestContext>().UseOceanBase((string?)null, mode).Options);
+            Assert.True(context.Database.IsOceanBase());
+            Assert.NotNull(context.Model);
+            var relational = context.GetService<IRelationalConnection>();
+            Assert.Null(relational.ConnectionString);
+            ArgumentException exception;
+            if (async)
+            {
+                exception = await Assert.ThrowsAsync<ArgumentException>(() => relational.OpenAsync(CancellationToken.None));
+            }
+            else
+            {
+                exception = Assert.Throws<ArgumentException>(() => relational.Open());
+            }
+
+            Assert.Contains("Server", exception.Message);
+            relational.ConnectionString = "Server=localhost;Database=later";
+            var connection = relational.DbConnection;
+            Assert.Equal(System.Data.ConnectionState.Closed, connection.State);
+            Assert.Equal("later", connection.Database);
+            Assert.Equal(mode, context.GetService<IDbContextOptions>().FindExtension<OceanBaseOptionsExtension>()!.CompatibilityMode);
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql, "not-a-connection-string")]
+        [InlineData(OceanBaseCompatibilityMode.MySql, "UnsupportedOceanBaseSetting=value")]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, "not-a-connection-string")]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, "UnsupportedOceanBaseSetting=value")]
+        public void Invalid_connection_strings_reject_before_allocating_a_connection(OceanBaseCompatibilityMode mode, string connectionString)
+        {
+            using var context = new TestContext(new DbContextOptionsBuilder<TestContext>().UseOceanBase(connectionString, mode).Options);
+            Assert.ThrowsAny<ArgumentException>(() => context.GetService<IRelationalConnection>().DbConnection);
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle)]
+        public void Compatible_contexts_reuse_models_and_singleton_services_but_not_connections(OceanBaseCompatibilityMode mode)
+        {
+            using var first = CreateCacheContext(mode, "first");
+            using var second = CreateCacheContext(mode, "second");
+            Assert.Same(first.Model, second.Model);
+            Assert.Same(first.GetService<IRelationalTypeMappingSource>(), second.GetService<IRelationalTypeMappingSource>());
+            Assert.Same(first.GetService<ISqlGenerationHelper>(), second.GetService<ISqlGenerationHelper>());
+            Assert.Same(first.GetService<IModelCacheKeyFactory>(), second.GetService<IModelCacheKeyFactory>());
+            Assert.NotSame(first.GetService<IRelationalConnection>(), second.GetService<IRelationalConnection>());
+            Assert.Equal("first", first.GetService<IRelationalConnection>().DbConnection.Database);
+            Assert.Equal("second", second.GetService<IRelationalConnection>().DbConnection.Database);
+            var factory = first.GetService<IModelCacheKeyFactory>();
+            Assert.Equal(factory.Create(first, false), factory.Create(second, false));
+            Assert.NotEqual(factory.Create(first, false), factory.Create(first, true));
+            Assert.Same(first.GetService<IDesignTimeModel>().Model, second.GetService<IDesignTimeModel>().Model);
+            Assert.NotSame(first.Model, first.GetService<IDesignTimeModel>().Model);
+        }
+
+        [Fact]
+        public void Actual_model_and_singleton_service_caches_never_cross_modes()
+        {
+            using var mysql = CreateCacheContext(OceanBaseCompatibilityMode.MySql, "mysql");
+            using var oracle = CreateCacheContext(OceanBaseCompatibilityMode.Oracle, "oracle");
+            Assert.NotSame(mysql.Model, oracle.Model);
+            Assert.NotSame(mysql.GetService<IRelationalTypeMappingSource>(), oracle.GetService<IRelationalTypeMappingSource>());
+            Assert.NotSame(mysql.GetService<ISqlGenerationHelper>(), oracle.GetService<ISqlGenerationHelper>());
+            Assert.NotEqual(mysql.GetService<IModelCacheKeyFactory>().Create(mysql, false),
+                oracle.GetService<IModelCacheKeyFactory>().Create(oracle, false));
+            Assert.Equal("INT", mysql.Model.FindEntityType(typeof(CacheRow))!.FindProperty(nameof(CacheRow.Id))!.GetColumnType());
+            Assert.Equal("NUMBER(10)", oracle.Model.FindEntityType(typeof(CacheRow))!.FindProperty(nameof(CacheRow.Id))!.GetColumnType());
+            Assert.Equal("`row`", mysql.GetService<ISqlGenerationHelper>().DelimitIdentifier("row"));
+            Assert.Equal("\"row\"", oracle.GetService<ISqlGenerationHelper>().DelimitIdentifier("row"));
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle)]
+        public void Provider_option_debug_information_does_not_expose_connection_details(OceanBaseCompatibilityMode mode)
+        {
+            var options = new DbContextOptionsBuilder<TestContext>()
+                .UseOceanBase("Server=private-host;User ID=private-user;Password=private-password;Database=private-db", mode).Options;
+            var info = options.FindExtension<OceanBaseOptionsExtension>()!.Info;
+            var debug = new Dictionary<string, string>();
+            info.PopulateDebugInfo(debug);
+            Assert.Equal($"CompatibilityMode={mode} ", info.LogFragment);
+            Assert.Equal(mode.ToString(), Assert.Single(debug).Value);
+            Assert.DoesNotContain("private-", info.LogFragment);
+        }
+
+        [Fact]
+        public void Null_database_facade_rejects_provider_detection()
+            => Assert.Equal("databaseFacade", Assert.Throws<ArgumentNullException>(() =>
+                OceanBaseDatabaseFacadeExtensions.IsOceanBase(null!)).ParamName);
 
         [Fact]
         public void Model_cache_key_includes_compatibility_mode()
@@ -228,6 +392,19 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             => new DbContextOptionsBuilder<TestContext>()
                 .UseOceanBase("Server=localhost;Database=test", mode)
                 .Options;
+
+        private static CacheContext CreateCacheContext(OceanBaseCompatibilityMode mode, string database)
+            => new(new DbContextOptionsBuilder<CacheContext>().UseOceanBase($"Server=localhost;Database={database}", mode).Options);
+
+        private sealed class CacheContext(DbContextOptions<CacheContext> options) : DbContext(options)
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder) => modelBuilder.Entity<CacheRow>();
+        }
+
+        private sealed class CacheRow
+        {
+            public int Id { get; set; }
+        }
 
         private sealed class TestContext : DbContext
         {

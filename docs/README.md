@@ -20,6 +20,7 @@ deferred features. The implementation plan follows those requirements; it does n
 | [EF Core 10 technical baseline](efcore/efcore-10-technical-baseline.md) | Exact provider contracts and first-slice verification gates. |
 | [EF Core 10 feature checklist](efcore/efcore-10-feature-checklist.md) | Release feature boundary, statuses and definition of complete. |
 | [EF Core 10 implementation plan](efcore/efcore-10-implementation-plan.md) | Development tasks mapped to checklist IDs and remaining acceptance work. |
+| [EF Core 10 local development plan](efcore/efcore-10-local-development-plan.md) | Active end-to-end local implementation ledger; live database and EF8/EF9 work postponed. |
 | [EF Core 10 query and update pipeline](efcore/efcore-10-query-update-design.md) | EF10 service contracts, generated-value paths and command-test evidence limits. |
 | [EF Core references](efcore/official-references.md) | Official Microsoft documentation to read before implementing each version. |
 
