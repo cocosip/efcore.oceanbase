@@ -15,6 +15,10 @@ mode contract and the tested relational behavior of earlier branches.
 
 ## Expected implementation boundary
 
+The release acceptance boundary is maintained in [the EF Core 10 feature checklist](efcore-10-feature-checklist.md).
+That checklist is the source of truth for feature status and completion evidence; this document explains the design
+constraints behind the boundary.
+
 The port preserves provider registration, explicit compatibility mode, model-cache identity, scalar mappings,
 basic relational queries, updates, generated keys and transactions. EF10 features such as new query operators,
 seeding or migration behavior require individual design notes and tests before being advertised.

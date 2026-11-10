@@ -14,6 +14,7 @@ OceanBase Entity Framework Core provider built on top of OceanBaseConnector.
 | [EF Core 9 design](efcore/efcore-9-design.md) | EF Core 9 porting boundary and feature review checklist. |
 | [EF Core 10 design](efcore/efcore-10-design.md) | EF Core 10 porting boundary and feature review checklist. |
 | [EF Core 10 technical baseline](efcore/efcore-10-technical-baseline.md) | Exact provider contracts and first-slice verification gates. |
+| [EF Core 10 feature checklist](efcore/efcore-10-feature-checklist.md) | Release feature boundary, statuses and definition of complete. |
 | [EF Core references](efcore/official-references.md) | Official Microsoft documentation to read before implementing each version. |
 
 The version documents describe intended support. They are not evidence of implementation or live OceanBase
