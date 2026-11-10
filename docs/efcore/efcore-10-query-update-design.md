@@ -127,13 +127,13 @@ Still required for Task 4 and release:
 
 ## Package checkpoint validation
 
-Implementation revision `c84ad9d` was fast-forwarded from dev into efcore/10.0 after Debug and Release each passed
-432 tests (329 unit, 102 intercepted pipeline and one project-reference consumer). A local prerelease package was
+Implementation revision `f645608` was fast-forwarded from dev into efcore/10.0 after Debug and Release each passed
+450 tests (339 unit, 110 intercepted pipeline and one project-reference consumer). A local prerelease package was
 built on efcore/10.0; nothing was tagged, pushed or published. The earlier `2a02bc8`/95-test, `8664692`/145-test,
-`188c25d`/195-test, `fbb33ea`/257-test, `3ab2345`/317-test and `9c78329`/366-test packages
+`188c25d`/195-test, `fbb33ea`/257-test, `3ab2345`/317-test, `9c78329`/366-test and `c84ad9d`/432-test packages
 remain historical evidence; use the current revision below with the expanded consumer fixture.
 
-The package `OceanBase.EntityFrameworkCore.10.0.0-checkpoint.c84ad9d.nupkg` contains net10.0 assets and its nuspec
+The package `OceanBase.EntityFrameworkCore.10.0.0-checkpoint.f645608.nupkg` contains net10.0 assets and its nuspec
 declares `[10.0.0,11.0.0)` for both EF Core and EF Core Relational. These were checked by opening the ZIP/nuspec
 and asserting the dependency IDs, ranges and assembly path. The packaging tool reported a missing package README;
 package presentation remains release preparation work.
@@ -141,9 +141,10 @@ package presentation remains release preparation work.
 The standalone [package consumer](../../tests/OceanBase.EntityFrameworkCore.PackageConsumer/Program.cs) references
 only the packed provider by default, with no ProjectReference or direct connector/EF dependencies. Its executable asserts
 registration, Guid, five-type temporal, bounded/unbounded binary and explicit integer/Boolean/Guid/native floating storage, Boolean
-projection and mode-specific paged query generation in both modes. The expanded native floating assertions failed
-against the preceding Guid package before passing with this revision; native floating declarations and literals
-now match the configured storage and query transport. Captured Guid operands retain their text/binary representation. It deliberately does
+projection and mode-specific paged query generation in both modes. The expanded temporal query consumer failed
+against the preceding floating package before passing with this revision; comparands retain fractional precision
+and Oracle interval day capacity independently of their columns. Native floating literals and captured Guid
+operands retain their tested representations. It deliberately does
 not connect to a database. It stays outside the normal solution because it requires an already-built local
 provider package. Central versions are disabled only in this isolated fixture so repository EF references cannot
 mask package dependency errors. Setting `OceanBaseConsumerEfCoreVersion` adds explicit EF Core and Relational
@@ -151,10 +152,10 @@ references to simulate a consumer requesting a later patch; it does not rebuild 
 
 | Validation | EF Core / Relational | Result and evidence boundary |
 | --- | --- | --- |
-| Provider build and Debug/Release suites | 10.0.0 | 432 passed per configuration; unit/intercepted/project consumer only. |
+| Provider build and Debug/Release suites | 10.0.0 | 450 passed per configuration; unit/intercepted/project consumer only. |
 | Default standalone consumer | 10.0.0 | Both modes pass; provider package built against 10.0.0. |
 | Consumer explicitly upgrades EF packages | 10.0.14 | Both modes pass with the same provider nupkg/assembly; runtime reports EF 10.0.14.0. |
-| Source build and full Release suite | 10.0.14 | 432 passed; isolated central-version override and artifact paths, not the baseline-compiled package. |
+| Source build and full Release suite | 10.0.14 | 450 passed; isolated central-version override and artifact paths, not the baseline-compiled package. |
 | Package range boundary | [10.0.0,11.0.0) | Nuspec inspected; NuGet.Versioning parser accepts 10.0.0/10.0.14 and rejects 11.0.0. No EF11 runtime test claimed. |
 
 Both `project.assets.json` and the consumer's loaded EF assembly version were inspected. These checks establish
@@ -164,9 +165,9 @@ server behavior. Re-run the matrix after provider changes before release.
 To repeat the checkpoint consumer verification from the repository root in PowerShell:
 
 ```powershell
-$providerVersion = '10.0.0-checkpoint.c84ad9d'
+$providerVersion = '10.0.0-checkpoint.f645608'
 $consumerProject = 'tests/OceanBase.EntityFrameworkCore.PackageConsumer/OceanBase.EntityFrameworkCore.PackageConsumer.csproj'
-$packageFeed = Join-Path (Get-Location) 'artifacts/checkpoint-c84ad9d'
+$packageFeed = Join-Path (Get-Location) 'artifacts/checkpoint-f645608'
 $consumerPackages = Join-Path $packageFeed 'consumer-packages'
 dotnet restore $consumerProject "-p:OceanBaseProviderVersion=$providerVersion" `
     --source $packageFeed --source (Join-Path $env:USERPROFILE '.nuget/packages') `
