@@ -41,6 +41,7 @@ The same suite also passed with `-c Release` after the generated-key review fix 
 | Unit | 72 | 0 | Options, connection rejection/cleanup, string/decimal facets and generated SQL; incomplete scalar coverage. |
 | Command pipeline | 22 | 0 | Commands intercepted before network execution; transactions disabled; unsupported MySQL keys reject before DML. |
 | Consumer | 1 | 0 | Project reference, not an isolated packed-package consumer. |
+| Packed consumer | Both modes | 0 | Separate package restore and executable checks; no ProjectReference or network/database execution. |
 | Live MySQL / Oracle | Not established | Not established | No live provider execution recorded for either mode. |
 | Relational specification | Not established | Not established | No specification test project yet. |
 
@@ -62,6 +63,9 @@ Existing evidence references used below identify partial coverage, not automatic
   intercepted execution only.
 - **CP**: [ProviderConfigurationTests](../../tests/OceanBase.EntityFrameworkCore.ConsumerTests/ProviderConfigurationTests.cs),
   project reference only.
+- **PC**: [Standalone package consumer](../../tests/OceanBase.EntityFrameworkCore.PackageConsumer/Program.cs),
+  registration/model/paging smoke checks against the local prerelease package at implementation revision 2a02bc8;
+  [commands and evidence](efcore-10-query-update-design.md#package-checkpoint-validation).
 
 `Missing` means tests and evidence still need to be added.
 
@@ -154,13 +158,13 @@ commit/transaction behavior per mode.
 | ID | Requirement and acceptance criteria | Priority | MySQL | Oracle | Existing evidence / gap |
 | --- | --- | --- | --- | --- | --- |
 | PKG-01 | Build net10.0 assets against published OceanBaseConnector 0.2.0 with warnings as errors. | Required | Done | Done | Current solution test command builds assets; not a package-content assertion. |
-| PKG-02 | Packed nuspec uses OceanBase.EntityFrameworkCore and EF ranges [10.0.0,11.0.0). | Required | In progress | In progress | Project metadata exists; packed-content assertions missing. |
-| PKG-03 | Isolated packed consumer restores/executes provider API without project/local connector references. | Required | Planned | Planned | CP uses ProjectReference, not this gate. |
+| PKG-02 | Packed nuspec uses OceanBase.EntityFrameworkCore and EF ranges [10.0.0,11.0.0). | Required | In progress | In progress | Checkpoint nuspec/asset assertions passed; repeatable release package-content gate still needed. |
+| PKG-03 | Isolated packed consumer restores/executes provider API without project/local connector references. | Required | Done | Done | PC Main passes registration/model/paging checks; restored from packed provider plus cached published dependencies. |
 | PKG-04 | Minimum EF10 and selected later available EF10 patch restore/build/test without pinning consumer patch; EF11 cannot satisfy dependencies. | Required | Planned | Planned | Patch-resolution/compatibility matrix missing; a range does not prove binary compatibility. |
 | TST-01 | Selected EF relational specification classes pass; exclusions map to checklist IDs and limitations. | Required | Planned | Planned | Specification project/selection absent. |
 | TST-02 | Live core query/write/transaction/schema/scalar suites pass in at least one declared supported environment per mode. | Required | Planned | Planned | No live provider execution recorded. |
 | REL-01 | Support notes record server/connector/runtime/EF versions, tenant mode, direct/proxy endpoint, transport/options without credentials. | Required | Planned | Planned | Release evidence record missing. |
-| REL-02 | Validated dev checkpoint merges to efcore/10.0; packaging/release checks run on release revision. | Required | Planned | Planned | Tested development checkpoint; release evidence incomplete. |
+| REL-02 | Validated dev checkpoint merges to efcore/10.0; packaging/release checks run on release revision. | Required | In progress | In progress | 2a02bc8 synchronized and locally packed on efcore/10.0; complete release gates remain open. |
 
 ## Visible deferred inventory
 

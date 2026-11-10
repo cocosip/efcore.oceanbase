@@ -112,4 +112,41 @@ Still required for Task 4 and release:
 - Complete string, decimal, temporal, Boolean, binary and Guid mappings before advertising broad query support.
 - Run real transaction commit/rollback and caller-owned transaction tests, including failure after DML/readback.
 - Run the two-mode live functional matrix and record connector/server versions and transport settings.
-- Extend specification tests and validate the packed NuGet consumer in Task 5.
+- Extend specification tests, expand the packed consumer beyond smoke checks and validate EF10 patch compatibility.
+
+## Package checkpoint validation
+
+Implementation revision `2a02bc8` was fast-forwarded from dev into efcore/10.0 after Debug and Release each passed
+95 tests (72 unit, 22 intercepted pipeline and one project-reference consumer). A local prerelease package was
+built on efcore/10.0; nothing was tagged, pushed or published.
+
+The package `OceanBase.EntityFrameworkCore.10.0.0-checkpoint.2a02bc8.nupkg` contains net10.0 assets and its nuspec
+declares `[10.0.0,11.0.0)` for both EF Core and EF Core Relational. These were checked by opening the ZIP/nuspec
+and asserting the dependency IDs, ranges and assembly path. The packaging tool reported a missing package README;
+package presentation remains release preparation work.
+
+The standalone [package consumer](../../tests/OceanBase.EntityFrameworkCore.PackageConsumer/Program.cs) references
+only the packed provider, with no ProjectReference or direct connector/EF dependencies. Its executable asserts
+registration, model construction and mode-specific paged query generation in both modes. It deliberately does
+not connect to a database. It stays outside the normal solution because it requires an already-built local
+provider package. Central versions are disabled only in this isolated fixture so repository EF references cannot
+mask package dependency errors.
+
+To repeat the checkpoint consumer verification from the repository root in PowerShell:
+
+```powershell
+$providerVersion = '10.0.0-checkpoint.2a02bc8'
+$consumerProject = 'tests/OceanBase.EntityFrameworkCore.PackageConsumer/OceanBase.EntityFrameworkCore.PackageConsumer.csproj'
+$packageFeed = Join-Path (Get-Location) 'artifacts/checkpoint-2a02bc8'
+$consumerPackages = Join-Path $packageFeed 'consumer-packages'
+dotnet restore $consumerProject "-p:OceanBaseProviderVersion=$providerVersion" `
+    --source $packageFeed --source (Join-Path $env:USERPROFILE '.nuget/packages') `
+    --packages $consumerPackages --force-evaluate --disable-parallel
+dotnet run --project $consumerProject -c Release --no-restore `
+    "-p:OceanBaseProviderVersion=$providerVersion" -m:1 -nr:false
+```
+
+The validation used the local package feed and existing cached dependency packages as feeds, with a separate
+consumer package directory. It proves package restore/consumption, not remote NuGet availability or compatibility
+with later EF10 patches. For another revision, first pack a unique local prerelease version on efcore/10.0 and
+update the version/feed values. Full Task 5 acceptance still requires specification and patch-compatibility tests.
