@@ -26,6 +26,62 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
         [InlineData(OceanBaseCompatibilityMode.Oracle, true, false)]
         [InlineData(OceanBaseCompatibilityMode.Oracle, false, true)]
         [InlineData(OceanBaseCompatibilityMode.Oracle, true, true)]
+        public async Task String_search_commands_bind_captured_needles_and_read_synthetic_booleans(
+            OceanBaseCompatibilityMode mode, bool async, bool relationalNulls)
+        {
+            using var table = new DataTable();
+            table.Columns.Add("Match", typeof(bool));
+            table.Columns.Add("Negated", typeof(bool));
+            table.Rows.Add(true, false);
+            var commands = new CommandCapture { Results = table };
+            await using var context = CreateContext(mode, commands, relationalNulls);
+            string? needle = "海'_%\\";
+            var query = context.Set<ShortTextRow>()
+                .Where(row => row.Caption!.Contains(needle!) && row.Caption!.StartsWith(needle!)
+                    && !row.Converted.EndsWith(needle!))
+                .Select(row => new { Match = row.Caption!.EndsWith(row.Code),
+                    Negated = !row.Caption!.Contains(row.Code) });
+            foreach (var value in new string?[] { needle, "", null, "repeat", "", null, "海'_%\\" })
+            {
+                needle = value;
+                commands.StringInputs.Clear();
+                commands.Values.Clear();
+                var row = Assert.Single(async ? await query.ToListAsync() : query.ToList());
+                Assert.True(row.Match);
+                Assert.False(row.Negated);
+                var sql = commands.Sql[^1];
+                Assert.DoesNotContain("__oceanbase_internal", sql);
+                Assert.Contains("CASE", sql);
+                Assert.Contains("IS NOT NULL", sql);
+                if (value is { Length: > 0 })
+                {
+                    Assert.Contains("INSTR(", sql);
+                    Assert.Contains(mode == OceanBaseCompatibilityMode.Oracle ? "SUBSTR(" : "RIGHT(", sql);
+                    Assert.Contains(commands.StringInputs, parameter => Equals(parameter.Value, value));
+                    Assert.Contains(commands.StringInputs, parameter => Equals(parameter.Value, value + "!"));
+                }
+                else if (value is "")
+                {
+                    Assert.Contains(commands.StringInputs, parameter => Equals(parameter.Value, "!"));
+                    if (mode == OceanBaseCompatibilityMode.MySql)
+                        Assert.Contains(commands.StringInputs, parameter => Equals(parameter.Value, ""));
+                }
+                else if (mode == OceanBaseCompatibilityMode.Oracle)
+                    Assert.Empty(commands.StringInputs);
+                else
+                    Assert.All(commands.Values, bound => Assert.Equal(DBNull.Value, bound));
+            }
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false, true)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true, true)]
         public async Task Unary_string_commands_bind_inputs_and_read_synthetic_function_results(
             OceanBaseCompatibilityMode mode, bool async, bool relationalNulls)
         {

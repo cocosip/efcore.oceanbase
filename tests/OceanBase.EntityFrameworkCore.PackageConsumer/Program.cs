@@ -92,6 +92,31 @@ namespace PackageConsumer
                     }
                 }
 
+                var searchSql = context.Set<Row>().Where(row => row.Name.Contains(suffix)
+                    && row.Name.StartsWith(suffix) && row.Name.EndsWith(suffix)).ToQueryString();
+                if (!searchSql.Contains("INSTR(", StringComparison.Ordinal)
+                    || !searchSql.Contains(mode == OceanBaseCompatibilityMode.MySql ? "RIGHT(" : "SUBSTR(", StringComparison.Ordinal)
+                    || searchSql.Contains(" LIKE ", StringComparison.Ordinal))
+                {
+                    throw new Exception("Packed provider did not translate literal-data string search.");
+                }
+                string? searchNeedle = "needle";
+                var searchQuery = context.Set<Row>().Where(row => row.SearchText!.EndsWith(searchNeedle!));
+                foreach (var value in new string?[] { "needle", "", null, "again", "", null })
+                {
+                    searchNeedle = value;
+                    var searchCommand = searchQuery.ToQueryString();
+                    var expected = value is null ? (mode == OceanBaseCompatibilityMode.MySql ? "WHERE 0" : "WHERE 0 = 1")
+                        : value.Length == 0 ? "IS NOT NULL"
+                        : mode == OceanBaseCompatibilityMode.MySql ? "RIGHT(" : "SUBSTR(";
+                    if (!searchCommand.Contains(expected, StringComparison.Ordinal)
+                        || mode == OceanBaseCompatibilityMode.Oracle && string.IsNullOrEmpty(value)
+                            && searchCommand.Contains("SUBSTR(", StringComparison.Ordinal))
+                    {
+                        throw new Exception("String search reused stale empty/null/nonempty parameter SQL.");
+                    }
+                }
+
                 var guidType = context.Model.FindEntityType(typeof(Row))!.FindProperty(nameof(Row.Token))!.GetColumnType();
                 if (guidType != (mode == OceanBaseCompatibilityMode.Oracle ? "RAW(16)" : "CHAR(36)"))
                 {
@@ -303,6 +328,7 @@ namespace PackageConsumer
         {
             public int Id { get; set; }
             public string Name { get; set; } = string.Empty;
+            public string? SearchText { get; set; }
             public bool Enabled { get; set; }
             public Guid Token { get; set; }
             public Guid ExplicitToken { get; set; }

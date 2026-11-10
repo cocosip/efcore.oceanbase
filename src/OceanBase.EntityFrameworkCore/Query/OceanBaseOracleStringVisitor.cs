@@ -16,6 +16,21 @@ namespace OceanBase.EntityFrameworkCore.Query
                     // Oracle concat may return NULL, but does not propagate a single NULL operand.
                     return factory.Function("CONCAT", [(SqlExpression)Visit(binary.Left), (SqlExpression)Visit(binary.Right)],
                         nullable: true, argumentsPropagateNullability: [false, false], typeof(string), binary.TypeMapping);
+                case SqlFunctionExpression { IsBuiltIn: true, Name: OceanBaseStringTranslator.OracleSearchMarker,
+                    Arguments: { Count: 3 } args, Type: var type }
+                    when type == typeof(bool) && args[2] is SqlConstantExpression { Value: int }:
+                    var source = (SqlExpression)Visit(args[0]);
+                    var needle = args[1];
+                    object? value = needle switch
+                    {
+                        SqlConstantExpression constant => ProviderValue(constant, constant.Value),
+                        SqlParameterExpression parameter => ProviderValue(parameter, parameters.GetAndDisableCaching()[parameter.Name]),
+                        _ => null
+                    };
+                    if (needle is SqlConstantExpression or SqlParameterExpression && value is null or "")
+                        return factory.ApplyDefaultTypeMapping(value is "" ? factory.IsNotNull(source) : factory.Constant(false));
+                    return factory.ApplyDefaultTypeMapping(OceanBaseStringTranslator.BuildSearch(factory, OceanBaseCompatibilityMode.Oracle,
+                        (int)((SqlConstantExpression)args[2]).Value!, source, (SqlExpression)Visit(needle), false));
                 case SqlConstantExpression constant when IsProviderString(constant):
                     return Normalize(constant, constant.Value);
                 case SqlParameterExpression parameter when IsProviderString(parameter):
@@ -31,6 +46,13 @@ namespace OceanBase.EntityFrameworkCore.Query
 
         private SqlExpression Normalize(SqlExpression expression, object? value)
         {
+            return ProviderValue(expression, value) is null or ""
+                ? factory.Constant(null, expression.Type, expression.TypeMapping)
+                : expression;
+        }
+
+        private static object? ProviderValue(SqlExpression expression, object? value)
+        {
             var converter = expression.TypeMapping?.Converter;
             if (converter?.ConvertsNulls == true)
             {
@@ -44,9 +66,7 @@ namespace OceanBase.EntityFrameworkCore.Query
                 value = Enum.ToObject(modelType, value);
             }
 
-            return (converter is null ? value : converter.ConvertToProvider(value)) is null or ""
-                ? factory.Constant(null, expression.Type, expression.TypeMapping)
-                : expression;
+            return converter is null ? value : converter.ConvertToProvider(value);
         }
     }
 }

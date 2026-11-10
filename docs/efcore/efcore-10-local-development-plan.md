@@ -212,8 +212,11 @@ and FunctionalTests/BasicRelationalTests.cs. The planned search contract in quer
    empty/null, long/repeated needles, negatives, bool projections and default/relational nulls.
 2. Reuse existing translator services and fixed SQL function names. MySQL dynamic empty branch uses character
    length. Oracle known constant/captured empty must become source IS NOT NULL before normalization erases
-   its identity; null remains native NULL. Expand any private marker before base nullability, preserving normal
-   DbFunction behavior and raw caller values. Column/computed needles retain documented native NULL semantics.
+   its identity; a null needle produces false. Expand any private marker before base nullability, preserving normal
+   DbFunction behavior and raw caller values. Oracle column/computed empty needles already collapsed to NULL
+   produce false. Guard source/needle and return a total Boolean for all three operations: NULL input is false,
+   NOT is true, under both null settings. Bound nullable suffix equality with guards/CASE so EF both-NULL
+   compensation cannot invent a suffix match; too-long Oracle suffix NULL also yields false.
 3. Test changing one cached query between nonempty/empty/null, composition with concat/unary functions/CASE/
    COALESCE, both-mode context isolation and unsupported char/comparison overloads. No LIKE escaping helper,
    user-derived SQL fragments or general pipeline replacement. Retain conservative function nullability.
@@ -284,6 +287,23 @@ and FunctionalTests/BasicRelationalTests.cs. The planned search contract in quer
   EF10.0.0/10.0.14; previous unary package fails the new Single midpoint smoke. Content gate and package-only
   graph pass. Evidence: artifacts/local-development/batch2d/. No new storage/live/platform claim.
   Next is Batch 3d search; the overall goal remains active.
+- Batch 2d committed as 3bb365a after code/docs approval and one docs example correction; no push.
+- Ruling: Batch 3d searches return a total Boolean, false for NULL receiver/provider needle and true when
+  negated, in both null settings. Known empty is receiver IS NOT NULL; Oracle stored/computed empty has
+  already become NULL. Explicit guards/CASE prevent nullable suffix equality compensation from matching
+  NULLs. This follows common query predicate handling without promising CLR exceptions; changing the policy
+  later would change observable query results and require regression updates.
+- Batch 3d local search scope complete: exact string Contains/StartsWith/EndsWith use native functions and
+  guarded total Booleans; Oracle provider-empty captures resolve before normalization. Initial translation
+  RED 2/2 plus converted-empty and unrelated-method NRE regressions became 24 focused query and eight
+  intercepted passes. Debug/Release and isolated EF10.0.14 Release pass 914 (712+200+2). Independent code
+  review passed. Same baseline-built search-20261111 package passes both modes on EF10.0.0/10.0.14;
+  previous wide-decimal package fails the new method translations. Content and package-only graph pass.
+  Evidence: artifacts/local-development/batch3d/. Server search/collation/padding/character/LOB and current
+  hosted execution remain unverified. Next is Batch 3e Substring; the full goal remains active.
+- Batch 3d minor (deferred to 3e): add a direct Oracle computed-needle CASE/COALESCE-to-NULL regression.
+  Nullable column needles and composed sources already pass; independent review approved with this
+  non-blocking coverage suggestion. Carry it into the next string-composition slice and final audit.
 - Remaining Batch 2 scalar work and Batches 3–10 pending. The overall goal remains active.
 - Batch 8 package README slice: use the provider project's README as package-owned documentation and declare
   PackageReadmeFile. Verify archive metadata/content with no-build packing of an already verified isolated
@@ -296,9 +316,13 @@ and FunctionalTests/BasicRelationalTests.cs. The planned search contract in quer
   README metadata/nonempty content and exactly the three expected dependency ranges. Verify a valid current
   package plus wrong-version, missing-README and exact-patch probes fail for the intended reason. This read-only
   gate neither builds nor executes a provider or changes the independent source/consumer/live gates.
-  Current numeric package passes; wrong-version, old missing-README and exact-patch probes fail at their intended
+  At introduction, the numeric package passed; wrong-version, old missing-README and exact-patch probes failed at their intended
   checks on Windows PowerShell 7. Independent spec/quality review passed; Linux execution unverified.
 - Cross-platform CI follow-up: add a Windows/Linux GitHub Actions matrix for restore, Release tests, pack and
   the existing package-content gate, using PowerShell 7 on both hosts. It performs no database access or
   publication. YAML parsing/structure and independent spec/quality review pass; committed as 5feef06.
   Hosted execution and Linux runtime remain unverified until an actual workflow run succeeds.
+- Hosted CI follow-up (read-only): run 42854480450 at db676ff has successful ubuntu-latest/windows-latest jobs
+  and successful restore/test/pack/content steps. Run/job metadata saved in artifacts/local-development/ci-db676ff.json;
+  log-archive download was denied HTTP403 (admin rights), so no fresh per-test count is asserted. This evidence
+  applies to db676ff only. No push or workflow dispatch was performed.

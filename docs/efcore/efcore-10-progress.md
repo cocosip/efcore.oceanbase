@@ -19,6 +19,25 @@ verification each succeeded. This establishes hosted execution for the unary-fun
 local commits or database integration. Run/job/step metadata is saved under artifacts/local-development/;
 the log archive endpoint returned HTTP403 (repository admin rights), so no new per-test count is inferred.
 
+### String search checkpoint (2026-11-11)
+
+Exact Contains(string), StartsWith(string) and EndsWith(string) now translate with INSTR and native suffix
+extraction. Guards and CASE produce a total Boolean: NULL input is false and NOT is true in both null
+settings. Known empty needles match a non-null receiver; Oracle inspects converted constants/captures before
+empty-to-NULL normalization. Raw bindings and native DbFunctions are preserved; command-SQL caching stays
+conservative. Converted-empty literals and unrelated unmapped methods have regression coverage.
+
+Focused tests pass 24 query cases and eight intercepted cases. Debug/Release and isolated EF10.0.14 Release
+each pass **914 tests** (712 unit, 200 intercepted pipeline, two consumers). Independent spec/quality review passed.
+The same baseline-built `10.0.0-checkpoint.search-20261111` package passes both modes on EF10.0.0/10.0.14,
+including search syntax and repeated captured nonempty/empty/null values. The preceding wide-decimal package
+fails the new method translations. Package-content and package-only graph checks pass.
+
+Latest package: `artifacts/checkpoint-search-20261111/OceanBase.EntityFrameworkCore.10.0.0-checkpoint.search-20261111.nupkg`.
+Evidence: `artifacts/local-development/batch3d/`. Native collation/padding/character/LOB results remain live
+gates; exact CLR ordinal/culture/null-exception behavior is not promised. Hosted evidence above applies only
+to db676ff. Next is Substring and wider query work; the overall goal remains active.
+
 ### Wide exact decimal to floating checkpoint (2026-11-11)
 
 Batch 2d fixes the confirmed shared normalization overflow: OceanBaseDecimal values parse directly as Single
@@ -31,10 +50,10 @@ passed. The same baseline-built `10.0.0-checkpoint.wide-decimal-20261111` packag
 EF10.0.0/10.0.14, including exact Single midpoint bits 0x3f800001 and a wide Double read. The previous unary
 package fails the new reader smoke. Package content and package-only graph checks pass.
 
-Latest package: `artifacts/checkpoint-wide-decimal-20261111/OceanBase.EntityFrameworkCore.10.0.0-checkpoint.wide-decimal-20261111.nupkg`.
+Historical package: `artifacts/checkpoint-wide-decimal-20261111/OceanBase.EntityFrameworkCore.10.0.0-checkpoint.wide-decimal-20261111.nupkg`.
 Evidence: `artifacts/local-development/batch2d/`. This proves normalization of synthetic wrapper values;
-no new NUMBER-backed storage, live database, Linux or hosted CI acceptance is claimed. Next is Batch 3d search;
-the full EF10 goal remains active.
+no new NUMBER-backed storage, live database, Linux or hosted CI acceptance is claimed for this checkpoint.
+The later search slice is recorded above; the full EF10 goal remains active.
 
 ### Unary string functions/character-length checkpoint (2026-11-11)
 
@@ -52,8 +71,8 @@ recorded; the subsequent db676ff hosted evidence is recorded above.
 
 Historical package: `artifacts/checkpoint-unary-20261111/OceanBase.EntityFrameworkCore.10.0.0-checkpoint.unary-20261111.nupkg`.
 Evidence: `artifacts/local-development/batch3c/`. Native casing/space/character semantics do not promise exact CLR
-culture/Unicode-whitespace/UTF-16 behavior. The wide-decimal follow-up is recorded above; search and wider
-query work remain open. The goal remains active.
+culture/Unicode-whitespace/UTF-16 behavior. Wide-decimal and search follow-ups are recorded above; Substring
+and wider query work remain open. The goal remains active.
 
 ### Integer division/remainder checkpoint
 
@@ -176,9 +195,9 @@ The isolated README probe uses exact EF10.0.14 override dependencies and is only
 dependency-range and consumer compatibility evidence comes from the full-source checkpoints above. Independent review passed.
 
 The package consumer now owns `Verify-Package.ps1`, a read-only PowerShell 7 content gate reusable in local/CI
-commands. Current numeric package identity/net10.0/README/ranges pass; wrong-version, missing-README and exact-patch
+commands. At its introduction, numeric package identity/net10.0/README/ranges passed; wrong-version, missing-README and exact-patch
 probes reject as intended. This verifies the artifact structure, separately from compilation, consumers or live
-server tests. Windows execution is verified; no Linux/CI execution is claimed.
+server tests. Those initial checks ran on Windows; subsequent hosted evidence is recorded above.
 
 Git line endings are now governed by `.gitattributes` (a2bbe5f): automatic text uses LF, batch scripts CRLF.
 Attribute checks and normalization under core.autocrlf=true/false/input passed; existing index blobs were already LF.

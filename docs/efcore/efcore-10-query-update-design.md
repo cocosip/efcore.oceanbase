@@ -110,25 +110,29 @@ search and substring are outside this slice and need negative predicate tests. T
 rules remain unchanged. Custom value converters do not establish arbitrary CLR method equivalence; preserve
 ordinary mapping/parameter behavior and test connected converter cases rather than stripping conversions.
 
-## Planned string search contract
+## String search contract
 
-A later QRY-06 slice will cover exact instance Contains(string), StartsWith(string) and EndsWith(string).
+The QRY-06 search slice covers exact instance Contains(string), StartsWith(string) and EndsWith(string).
 Search uses database comparison rules and treats `%`, `_`, quotes and backslashes as ordinary characters;
 use INSTR for contains/prefix and native suffix extraction/equality for ends-with, with no LIKE pattern
 interpolation. MySQL suffix uses RIGHT(source, CHAR_LENGTH(needle)); Oracle uses SUBSTR(source, -LENGTH(needle)).
 The pinned function documentation and padding/character limitations are in the string-function research.
 
-An empty constant/captured needle is true for a non-null receiver; a null receiver/needle follows relational
-NULL handling, without a CLR null-argument exception guarantee. MySQL can test CHAR_LENGTH(needle)=0 in SQL.
+An empty constant/captured needle is true for a non-null receiver. Every search returns a non-null Boolean:
+a NULL receiver or provider needle returns false, and negating that search returns true, under both null-semantics
+settings. This query policy does not promise CLR null-argument exceptions. MySQL tests CHAR_LENGTH(needle)=0 in SQL.
 For Oracle, inspect a constant/captured needle's provider representation before generic empty-string
-normalization: a known empty needle becomes a receiver IS NOT NULL expression, while null remains SQL NULL.
+normalization: a known empty needle becomes receiver IS NOT NULL, while a known null needle produces false.
 Reuse the existing conservative parameter-cache disabling, preserve raw parameter values and distinguish these
 cases on each execution. A narrowly scoped internal search marker expanded before EF nullability processing
 is acceptable if required; never change the semantics of user-mapped native INSTR/SUBSTR functions.
 
 Oracle column/computed needles follow native storage semantics: an empty result already collapsed to NULL
-cannot be distinguished from SQL NULL. Document this boundary; do not guess original CLR emptiness. Search
+cannot be distinguished from SQL NULL and produces false. Do not guess original CLR emptiness. Native function
 nullability must remain conservative, including suffix extraction that may return NULL for non-null inputs.
+Guard receiver/needle and bound the final result with CASE WHEN guarded-match THEN true ELSE false, or an
+equivalent total expression. Ordinary nullable suffix equality alone is unsafe: EF compensation can match
+two NULL operands. A NULL suffix from a too-long Oracle needle must not become a successful suffix match.
 Test positive/negated/projected conditions, nullable receivers, CASE/coalesce/concat composition, long needles,
 changing empty/null/nonempty captures and both null-semantics settings. Exact char/StringComparison/culture
 overloads remain outside this slice and fail as predicates; allowed client projection evaluation remains.
@@ -250,17 +254,29 @@ Run the read-only gate after packing, before the isolated consumer checks:
 
 ```powershell
 pwsh -NoProfile -File tests/OceanBase.EntityFrameworkCore.PackageConsumer/Verify-Package.ps1 `
-    -PackagePath artifacts/checkpoint-wide-decimal-20261111/OceanBase.EntityFrameworkCore.10.0.0-checkpoint.wide-decimal-20261111.nupkg `
-    -ExpectedVersion 10.0.0-checkpoint.wide-decimal-20261111
+    -PackagePath artifacts/checkpoint-search-20261111/OceanBase.EntityFrameworkCore.10.0.0-checkpoint.search-20261111.nupkg `
+    -ExpectedVersion 10.0.0-checkpoint.search-20261111
 ```
 
 The PowerShell 7 script uses .NET ZIP/XML APIs and checks ID/version, the net10.0 assembly and dependency group,
 exact expected dependency ranges, and a nonempty packaged README with matching metadata. It does not build,
-restore, execute provider queries or establish server/runtime compatibility. The current wide-decimal package passes;
+restore, execute provider queries or establish server/runtime compatibility. The current search package passes;
 wrong expected version, the old README-less alias package and the exact-patch README probe fail at their intended
 checks. These runs were on Windows; Linux execution remains unverified. Change the path/version for each new pack.
 
-### Current wide-decimal floating checkpoint (2026-11-11)
+### Current string-search checkpoint (2026-11-11)
+
+Debug/Release and isolated EF10.0.14 Release pass 914 tests (712 unit, 200 intercepted pipeline, two project
+consumers). Independent spec/quality review passed. The same baseline-built `10.0.0-checkpoint.search-20261111`
+package passes both modes on EF10.0.0/10.0.14, including search syntax and changing nonempty/empty/null
+captures. The previous wide-decimal package fails the new method translations. Package-content and
+package-only dependency checks pass.
+
+Repeat the commands below with `10.0.0-checkpoint.search-20261111` and `artifacts/checkpoint-search-20261111`.
+Evidence: `artifacts/local-development/batch3d/`. These checks do not execute server searches or hosted CI
+for the current source; native collation/padding/character/LOB behavior retains the stated live gates.
+
+### Historical wide-decimal floating checkpoint (2026-11-11)
 
 Debug/Release and isolated EF10.0.14 Release pass 882 tests (688 unit, 192 intercepted pipeline, two project
 consumers). Independent spec/quality review passed. The same baseline-built
@@ -278,7 +294,8 @@ Debug/Release and isolated EF10.0.14 Release pass 833 tests (647 unit, 184 inter
 consumers). Independent spec/quality review passed. The same baseline-built `10.0.0-checkpoint.unary-20261111`
 package passes both modes at EF10.0.0/10.0.14, including native LOWER/UPPER/TRIM/LTRIM/RTRIM and character length.
 The previous arithmetic package fails the new function predicate. The package-content gate and package-only
-graph checks pass. No server function, cross-platform or hosted CI run was performed.
+graph checks pass. A later read-only check confirms Windows/Linux hosted CI gates passed for db676ff in
+[run 42854480450](https://github.com/cocosip/efcore.oceanbase/actions/runs/42854480450); no server function was executed.
 
 Repeat the commands below with `10.0.0-checkpoint.unary-20261111` and `artifacts/checkpoint-unary-20261111`.
 Evidence: `artifacts/local-development/batch3c/`. Native casing, SQL-space trim, database-character units,

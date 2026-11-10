@@ -55,21 +55,21 @@ so that an undocumented feature is not accidentally advertised.
 Development resumed at the user's request (2026-11-10) on efcore/10.0. See the
 [progress handoff](efcore-10-progress.md) for saved state, remaining work and the exact resume point.
 
-Snapshot: 2026-11-11, `efcore/10.0` wide-decimal floating follow-up after db676ff.
+Snapshot: 2026-11-11, `efcore/10.0` string-search slice after 46408c4; independent spec/quality review passed.
 The same baseline-built package passes both tested EF patches. This is not a release result.
 
 `dotnet test OceanBase.EntityFrameworkCore.slnx --no-restore -m:1 -nr:false` produced:
 
-The expanded suite passed in Debug and Release (882 tests per configuration).
+The expanded suite passed in Debug and Release (914 tests per configuration).
 
 | Layer | Passed | Failed | Evidence boundary |
 | --- | --- | --- | --- |
-| Unit | 688 | 0 | Prior coverage plus wide exact decimal normalization to Single/Double, direct midpoint rounding, range/scale/culture/converter cases; live coverage incomplete. |
-| Command pipeline | 192 | 0 | Prior queries/writes plus synthetic wide exact decimal floating reads/generated outputs in both modes, sync/async; transactions disabled. |
+| Unit | 712 | 0 | Prior coverage plus 24 search translation/null/NOT/projection/converted-empty/dispatch cases; live coverage incomplete. |
+| Command pipeline | 200 | 0 | Prior queries/writes plus eight intercepted search binding/Boolean reads in both modes/null settings, sync/async; transactions disabled. |
 | Consumer | 2 | 0 | Both-mode provider detection through a project reference, not an isolated packed-package consumer. |
-| Packed consumer | Both modes | 0 | Same wide-decimal-20261111 package passes EF10.0.0/10.0.14, including direct Single midpoint/wide Double reads and prior checks; README included; no live execution. |
-| Later-patch Release suite | 882 | 0 | Current source compiled/tested against EF10.0.14 in isolated artifacts. |
-| Hosted Windows/Linux CI | Both jobs succeeded | 0 failed steps | Run 42854480450 at db676ff: restore, Release test, pack and content gate succeeded; this predates the current wide-decimal commit. |
+| Packed consumer | Both modes | 0 | Same search-20261111 package passes EF10.0.0/10.0.14, including all three search methods, changing captures and prior checks; README included; no live execution. |
+| Later-patch Release suite | 914 | 0 | Current source compiled/tested against EF10.0.14 in isolated artifacts. |
+| Hosted Windows/Linux CI | Both jobs succeeded | 0 failed steps | Run 42854480450 at db676ff: restore, Release test, pack and content gate succeeded; this predates the wide-decimal and current search slices. |
 | Live MySQL / Oracle | Not established | Not established | No live provider execution recorded for either mode. |
 | Relational specification | Not established | Not established | No specification test project yet. |
 
@@ -132,7 +132,7 @@ Batch 2d closes the reproduced OceanBaseDecimal-to-Single/Double normalization g
 and tiny values parse directly at target precision instead of overflowing exact CLR decimal first. Forty-one
 unit and eight intercepted cases cover range/scale/culture, direct Single midpoint rounding, converter readers
 and generated outputs. Exact integer/decimal and native non-finite paths remain intact. The previous unary
-package fails the new smoke; the current package passes both selected patches. No new store mapping is implied.
+package fails the new smoke; the wide-decimal package passes both selected patches. No new store mapping is implied.
 
 Temporal query transport is independent of physical write precision. Ten new UTQ cases initially failed; input
 parameters, input-output values and literals now retain transport precision and Oracle interval leading width,
@@ -195,7 +195,7 @@ Existing evidence references used below identify partial coverage, not automatic
   project reference only.
 - **PC**: [Standalone package consumer](../../tests/OceanBase.EntityFrameworkCore.PackageConsumer/Program.cs),
   registration/native floating/explicit Guid/temporal/binary/integer and Boolean model/SQL/paging checks against the
-  latest wide-decimal-20261111 local prerelease package, including direct floating normalization and prior checks;
+  latest search-20261111 local prerelease package, including string search and prior checks;
   [commands and evidence](efcore-10-query-update-design.md#package-checkpoint-validation).
 
 `Missing` means tests and evidence still need to be added.
@@ -269,7 +269,7 @@ duplicates and mode-specific string semantics.
 | QRY-03 | Inner/left joins, correlated subqueries, Any/All and scalar/collection Contains have verified results or explicit exclusions. | Required | In progress | In progress | UQ simple join only; collection/null/empty cases missing. |
 | QRY-04 | GroupBy aggregates, Count/LongCount, Sum/Average/Min/Max handle empty and nullable inputs correctly. | Required | In progress | In progress | UQ grouped Count shape only. |
 | QRY-05 | First/Single/default variants enforce cardinality; entity/scalar async materialization matches sync. | Required | In progress | In progress | FP ToList scalar only; entity/cardinality cases missing. |
-| QRY-06 | String translations have a supported-overload matrix: equality, Contains, StartsWith/EndsWith, length, substring, case and trim. | Required | In progress | In progress | StringQueryTests cover concat/equality; StringFunctionQueryTests adds 24 unary method/Length/service/mapping cases and eight FP cases. Search/substring and live casing/character/space/LOB results remain open; native database semantics are explicit. |
+| QRY-06 | String translations have a supported-overload matrix: equality, Contains, StartsWith/EndsWith, length, substring, case and trim. | Required | In progress | In progress | StringQueryTests cover concat/equality; StringFunctionQueryTests covers unary/Length, StringSearchQueryTests adds 24 exact search/null/converted-empty/dispatch cases and eight FP cases. Substring and live collation/character/space/LOB results remain open; native database semantics are explicit. |
 | QRY-07 | Date/time members, numeric functions, conditional/coalesce expressions have a supported-overload matrix. | Required | Planned | Planned | Missing; include precision, nulls and unsupported overloads. |
 | QRY-08 | Include/ThenInclude for reference/collection navigations, tracking/no-tracking and identity resolution preserve related entities. | Required | Planned | Planned | Missing; split queries are listed separately below. |
 | QRY-09 | Global query filters compose with parameterized predicates and can be disabled using supported EF APIs. | Required | Planned | Planned | Missing; named filters require EF10 review below. |
@@ -308,9 +308,9 @@ commit/transaction behavior per mode.
 | ID | Requirement and acceptance criteria | Priority | MySQL | Oracle | Existing evidence / gap |
 | --- | --- | --- | --- | --- | --- |
 | PKG-01 | Build net10.0 assets against published OceanBaseConnector 0.2.0 with warnings as errors. | Required | Done | Done | Current solution test command builds assets; not a package-content assertion. |
-| PKG-02 | Packed nuspec uses OceanBase.EntityFrameworkCore and EF ranges [10.0.0,11.0.0). | Required | Done | Done | PackageConsumer/Verify-Package.ps1 passes current wide-decimal nupkg identity/net10.0/README/ranges; prior negative probes reject as expected. Rerun on every release pack; runtime/live gates are separate. |
-| PKG-03 | Isolated packed consumer restores/executes provider API without project/local connector references. | Required | Done | Done | PC wide-decimal-20261111 passes both modes on both selected patches, including direct Single midpoint/wide Double reads and prior checks; package-only graph inspected; rerun after changes. |
-| PKG-04 | Minimum EF10 and selected later available EF10 patch restore/build/test without pinning consumer patch; EF11 cannot satisfy dependencies. | Required | Done | Done | Source Release suite 882 passes at 10.0.14; same baseline-built wide-decimal package passes EF10.0.0/10.0.14; nuspec ranges rechecked, prior range parser rejects 11.0.0; rerun after changes. |
+| PKG-02 | Packed nuspec uses OceanBase.EntityFrameworkCore and EF ranges [10.0.0,11.0.0). | Required | Done | Done | PackageConsumer/Verify-Package.ps1 passes current search nupkg identity/net10.0/README/ranges; prior negative probes reject as expected. Rerun on every release pack; runtime/live gates are separate. |
+| PKG-03 | Isolated packed consumer restores/executes provider API without project/local connector references. | Required | Done | Done | PC search-20261111 passes both modes on both selected patches, including native search/changing captured values and prior checks; package-only graph inspected; rerun after changes. |
+| PKG-04 | Minimum EF10 and selected later available EF10 patch restore/build/test without pinning consumer patch; EF11 cannot satisfy dependencies. | Required | Done | Done | Source Release suite 914 passes at 10.0.14; same baseline-built search package passes EF10.0.0/10.0.14; nuspec ranges rechecked, prior range parser rejects 11.0.0; rerun after changes. |
 | TST-01 | Selected EF relational specification classes pass; exclusions map to checklist IDs and limitations. | Required | Planned | Planned | Specification project/selection absent. |
 | TST-02 | Live core query/write/transaction/schema/scalar suites pass in at least one declared supported environment per mode. | Required | Planned | Planned | User will supply access later; User Secrets fixture and authorized schema/cleanup scope required; no live provider execution recorded. |
 | REL-01 | Support notes record server/connector/runtime/EF versions, tenant mode, direct/proxy endpoint, transport/options without credentials. | Required | Planned | Planned | Release evidence record missing. |
