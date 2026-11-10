@@ -23,8 +23,9 @@ namespace OceanBase.EntityFrameworkCore.Storage
         {
         }
 
-        private OceanBaseDecimalTypeMapping(RelationalTypeMappingParameters parameters, OceanBaseCompatibilityMode mode)
-            : base(ValidateParameters(parameters, mode))
+        private OceanBaseDecimalTypeMapping(RelationalTypeMappingParameters parameters, OceanBaseCompatibilityMode mode,
+            bool preserveBareDeclaration = false)
+            : base(ValidateParameters(parameters, mode, preserveBareDeclaration))
         {
             _mode = mode;
         }
@@ -38,7 +39,9 @@ namespace OceanBase.EntityFrameworkCore.Storage
                     + (StoreType.EndsWith("UNSIGNED", StringComparison.OrdinalIgnoreCase) ? " UNSIGNED" : string.Empty), parameters.Size);
             }
 
-            return new OceanBaseDecimalTypeMapping(parameters, _mode);
+            return new OceanBaseDecimalTypeMapping(parameters, _mode,
+                _mode == OceanBaseCompatibilityMode.Oracle && parameters.StoreType == StoreType
+                && parameters.Precision == Precision && parameters.Scale == Scale);
         }
 
         protected override void ConfigureParameter(DbParameter parameter)
@@ -88,7 +91,7 @@ namespace OceanBase.EntityFrameworkCore.Storage
         }
 
         private static RelationalTypeMappingParameters ValidateParameters(RelationalTypeMappingParameters parameters,
-            OceanBaseCompatibilityMode mode)
+            OceanBaseCompatibilityMode mode, bool preserveBareDeclaration)
         {
             if (parameters.Size is not null || parameters.FixedLength)
             {
@@ -128,13 +131,16 @@ namespace OceanBase.EntityFrameworkCore.Storage
             {
                 precision ??= oracle ? 38 : 65;
                 scale ??= 0;
-                storeType = string.Create(CultureInfo.InvariantCulture,
-                    $"{match.Groups["type"].Value}({precision},{scale})")
-                    + (match.Groups["unsigned"].Success ? " UNSIGNED" : string.Empty);
+                if (!preserveBareDeclaration)
+                {
+                    storeType = string.Create(CultureInfo.InvariantCulture,
+                        $"{match.Groups["type"].Value}({precision},{scale})")
+                        + (match.Groups["unsigned"].Success ? " UNSIGNED" : string.Empty);
+                }
             }
-            else if (!oracle)
+            else if (!oracle || !match.Groups["type"].Value.Equals("NUMBER", StringComparison.OrdinalIgnoreCase))
             {
-                precision = 10;
+                precision = oracle ? 38 : 10;
                 scale = 0;
             }
 

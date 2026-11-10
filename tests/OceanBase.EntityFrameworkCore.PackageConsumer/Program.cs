@@ -1,4 +1,5 @@
 using System;
+using System.Data;
 using System.Linq;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
@@ -126,6 +127,37 @@ namespace PackageConsumer
                 }
 
                 var source = context.GetService<IRelationalTypeMappingSource>();
+                if (mode == OceanBaseCompatibilityMode.Oracle)
+                {
+                    foreach (var declaration in new[] { "DECIMAL", "NUMERIC" })
+                    {
+                        foreach (var type in new[] { typeof(decimal), typeof(int), typeof(bool) })
+                        {
+                            var aliasMapping = source.FindMapping(type, declaration)!;
+                            if (aliasMapping.Precision != 38 || aliasMapping.Scale != 0)
+                            {
+                                throw new Exception("Oracle fixed-point alias defaults were not preserved.");
+                            }
+                        }
+
+                        var alias = source.FindMapping(typeof(decimal), declaration)!;
+                        var input = (OceanBaseParameter)alias.CreateParameter(command, "aliasInput", 1.25m);
+                        var output = (OceanBaseParameter)alias.CreateParameter(command, "aliasOutput", null,
+                            direction: ParameterDirection.Output);
+                        if (!Equals(input.Value, 1.25m) || input.Precision != 0 || input.DecimalScale is not null
+                            || output.Precision != 38 || output.DecimalScale != 0)
+                        {
+                            throw new Exception("Oracle fixed-point aliases changed query inputs or lost output facets.");
+                        }
+                    }
+
+                    var number = source.FindMapping(typeof(decimal), "NUMBER")!;
+                    if (number.Precision is not null || number.Scale is not null)
+                    {
+                        throw new Exception("Unqualified Oracle NUMBER lost value inference.");
+                    }
+                }
+
                 foreach (var declaration in mode == OceanBaseCompatibilityMode.Oracle
                     ? new[] { "NVARCHAR2(4) trailing", "NCLOB(4)", "VARCHAR2" }
                     : new[] { "VARCHAR(4) trailing", "TEXT(4)", "VARCHAR" })

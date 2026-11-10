@@ -136,7 +136,20 @@ Still required for Task 4 and release:
 
 ## Package checkpoint validation
 
-### Current text checkpoint (2026-11-10)
+### Current fixed-point alias checkpoint (2026-11-10)
+
+After the configuration/cache coverage and Oracle bare DECIMAL/NUMERIC fix, Debug/Release on EF10.0.0 and isolated
+Release on EF10.0.14 each pass 627 tests (475 unit, 150 intercepted pipeline, two project consumers).
+The same baseline-built `10.0.0-checkpoint.alias-20261110` nupkg passes both-mode consumers on both selected
+patches. Expanded checks verify decimal/integer/Boolean alias defaults, lossless query inputs, output facets and
+bare NUMBER independence; the old text package fails the alias regression. Package ID/version, net10.0 asset,
+connector 0.2.0, bounded EF ranges and the package-only consumer graph were inspected. Independent review passed.
+
+Repeat the commands below with `10.0.0-checkpoint.alias-20261110` and `artifacts/checkpoint-alias-20261110` as
+version/feed. Do not overwrite the historical text package. Logs are under `artifacts/local-development/batch2a/`.
+The package README, broader release gates and all live database acceptance remain open.
+
+### Historical text checkpoint (2026-11-10)
 
 Development resumed directly on efcore/10.0 from 20a2f18. The text declaration/write slice passes 563 tests
 (420 unit, 142 intercepted pipeline, one project consumer) in Debug/Release on EF10.0.0 and in isolated Release

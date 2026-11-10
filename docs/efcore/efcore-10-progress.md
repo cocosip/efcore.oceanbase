@@ -24,6 +24,25 @@ paths exposed the still-missing IRelationalDatabaseCreator service; these are ex
 Underlying IRelationalConnection delayed string assignment is covered; this does not claim those facade APIs work.
 No live connection was made. The previous EF10.0.14/package results below remain scoped to the text checkpoint.
 
+### Oracle fixed-point alias checkpoint
+
+Bare Oracle DECIMAL/NUMERIC now expose precision 38 and scale zero, retaining their trimmed declarations through
+converter-only clones. Configured facets and changed-precision clones produce explicit declarations with the
+same alias. Integer/Boolean/enum mappings share these defaults. Converted current decimal writes reject
+fractional loss before execution; query/InputOutput inputs remain value-inferred, and bare NUMBER is unchanged.
+
+Debug/Release on EF10.0.0 and isolated Release on EF10.0.14 each pass **627 tests** (475 unit, 150 intercepted
+pipeline, two project consumers). Focused tests progressed from 10/97 unit and 6/8 pipeline failures to all passing.
+Independent review passed. The same baseline-built `10.0.0-checkpoint.alias-20261110` local package passes
+both-mode consumers on EF10.0.0 and EF10.0.14, including alias metadata/input/output and NUMBER independence.
+The new consumer fails against the preceding text package, confirming the regression check. Nuspec identity,
+net10.0 assembly, dependency ranges and package-only consumer graph were inspected. The package still lacks a
+README; no publication or live database execution occurred.
+
+Latest package: `artifacts/checkpoint-alias-20261110/OceanBase.EntityFrameworkCore.10.0.0-checkpoint.alias-20261110.nupkg`.
+The historical text package below does not include this change. Remaining local scalar work includes temporal
+facet/clone consistency and exact integer normalization for unexpected floating reader values; see the local plan.
+
 Git line endings are now governed by `.gitattributes` (a2bbe5f): automatic text uses LF, batch scripts CRLF.
 Attribute checks and normalization under core.autocrlf=true/false/input passed; existing index blobs were already LF.
 
@@ -68,7 +87,7 @@ they do not establish complete scalar, query or server support.
 | Package contents and dependency graph | Correct ID/version, net10.0 assembly, connector 0.2.0 and both EF ranges | Nuspec/ZIP and package-only consumer assets inspected. |
 | Independent review | No blocking finding in declaration/facet/clone/converter/Unicode/national-binding and DML-versus-predicate paths | Read-only review; live server behavior remains unverified. |
 
-The latest local package is
+The historical text local package is
 `artifacts/checkpoint-text-20261110/OceanBase.EntityFrameworkCore.10.0.0-checkpoint.text-20261110.nupkg`.
 It is an ignored local build artifact, not a published release. Package creation still reports a missing package
 README. The [query/update design](efcore-10-query-update-design.md#package-checkpoint-validation) records
@@ -83,7 +102,7 @@ Tasks 3, 4 and 5 remain incomplete. Required open work includes:
 
 - Remaining text declarations/profile extensions, server empty-string/NULL and padding behavior, character-set
   byte limits (including BYTE declarations and TEXT tiers), index byte capacity and ordinary string/LOB round trips.
-- Unqualified Oracle decimal alias defaults, remaining numeric/temporal/binary edge cases and live scalar evidence.
+- Remaining numeric/temporal/binary edge cases and live scalar evidence; Oracle decimal alias defaults now have local coverage.
 - Composite/relationship/owned/shadow model coverage, generated/default/computed/schema validation and the wider
   query/update acceptance inventory.
 - Opened connection ownership and lifecycle, in-flight cancellation, diagnostics/redaction and connector failure paths.
@@ -103,7 +122,7 @@ mapping limits are a profile, not a comprehensive OceanBase type-support claim.
 Continue in this order:
 
 1. Recheck efcore/10.0/worktree state and read the checklist plus this handoff.
-2. Finish remaining local scalar gaps, including unqualified Oracle decimal aliases, before broadening query claims.
+2. Finish remaining local scalar gaps, starting with temporal facet/clone consistency, before broadening query claims.
 3. Define per-mode text/byte/session acceptance fixtures when live access is supplied. Cover empty/NULL,
    supplementary characters, trailing spaces, byte capacity and ordinary LOB values; preserve query transport.
 4. Finish opened-connection ownership, diagnostics and cancellation, followed by the wider query/update/transaction

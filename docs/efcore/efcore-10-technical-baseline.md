@@ -126,6 +126,13 @@ and Oracle NUMBER. Server rounding is deliberately rejected for tracked writes t
 - MySQL DECIMAL/NUMERIC support `(p)`, `(p,s)` and optional UNSIGNED; bare declarations default to (10,0).
   Defaults without explicit storage remain DECIMAL(65,30). Oracle NUMBER supports `(p)` and `(p,s)`; bare NUMBER
   retains value inference. Explicit DECIMAL/NUMERIC precision declarations use the same fixed-point constraints.
+- Oracle bare DECIMAL/NUMERIC are fixed-point aliases with default precision 38 and scale zero; they must not
+  inherit bare NUMBER's unconstrained scale. Configured facets on a bare alias produce an explicit declaration.
+  The same precision metadata applies to integer/Boolean mappings that explicitly select these aliases.
+  Input/InputOutput query parameters retain value inference; converted actual writes reject fractional loss.
+  Clones retain fixed-point defaults and converters; bare NUMBER remains unqualified/value-inferred.
+  Reference: [Oracle ANSI data-type mapping](https://docs.oracle.com/en/database/oracle/oracle-database/19/sqlrf/Data-Types.html).
+  This is the compatibility contract for locally generated metadata/validation, not live OceanBase alias evidence.
 - Full declarations must parse; unsupported suffixes, cross-mode types, conflicting property facets and size or
   fixed-length facets reject. Changing clone precision/scale updates its declaration while preserving converters.
 - Query inputs, InputOutput inputs and literals retain every CLR decimal digit even for narrow column mappings.
@@ -366,6 +373,13 @@ unqualified store defaults (MySQL DATETIME/TIME: 0; Oracle TIMESTAMP/INTERVAL se
 Conflicting explicit/configured precision and unsupported temporal declarations fail clearly. Timezone-less
 DateTime values with Local/UTC Kind reject consistently. Oracle nanoseconds not exactly representable in a CLR
 value fail on reading.
+
+Temporal mappings reject size and fixed-length=true facets through direct resolution, model properties and
+clones; these text/binary facets must not be silently discarded. Clones validate the complete store declaration
+against the current mode and transport representation, including declared fractional/leading precision. A clone
+must reject incompatible declarations or facet conflicts rather than retaining stale DbType/converter metadata.
+Changing precision through WithPrecisionAndScale continues to regenerate a compatible declaration. Existing
+converter composition, output facets and the wider query-input precision contract below must remain intact.
 
 Column precision and interval leading precision constrain values actually written by SaveChanges, after value
 conversion, using the same IsWrite validation contract as numeric/binary mappings. They must not constrain query

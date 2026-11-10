@@ -120,6 +120,57 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             Assert.ThrowsAny<ArgumentException>(() => clone.WithPrecisionAndScale(5, 1));
         }
 
+        [Theory]
+        [InlineData(" decimal ")]
+        [InlineData("NUMERIC")]
+        public void Oracle_fixed_point_aliases_keep_integer_boolean_and_enum_default_metadata(string storeType)
+        {
+            using var context = CreateContext(OceanBaseCompatibilityMode.Oracle);
+            var source = context.GetService<IRelationalTypeMappingSource>();
+            var integer = source.FindMapping(typeof(int), storeType)!;
+            var boolean = source.FindMapping(typeof(bool), storeType)!;
+            var converted = (RelationalTypeMapping)integer.WithComposedConverter(new EnumToNumberConverter<DayOfWeek, int>());
+            using var command = new OceanBaseCommand();
+            foreach (var mapping in new[] { integer, boolean, converted })
+            {
+                Assert.Equal(storeType.Trim(), mapping.StoreType);
+                Assert.Equal(38, mapping.Precision);
+                Assert.Equal(0, mapping.Scale);
+                var output = mapping.CreateParameter(command, "output", null, direction: ParameterDirection.Output);
+                Assert.Equal((byte)38, output.Precision);
+                Assert.Equal((byte)0, output.Scale);
+                Assert.Equal(DBNull.Value, mapping.CreateParameter(command, "null", null, nullable: true).Value);
+            }
+
+            Assert.Equal(int.MaxValue, integer.CreateParameter(command, "value", int.MaxValue).Value);
+            Assert.Equal(1m, boolean.CreateParameter(command, "value", true).Value);
+            Assert.Equal(0m, boolean.CreateParameter(command, "value", false).Value);
+            Assert.Equal(5, converted.CreateParameter(command, "value", DayOfWeek.Friday).Value);
+            var clone = converted.WithPrecisionAndScale(2, 0);
+            Assert.Equal(storeType.Trim() + "(2,0)", clone.StoreType);
+            Assert.Equal(5, clone.CreateParameter(command, "value", DayOfWeek.Friday).Value);
+            Assert.Throws<ArgumentOutOfRangeException>(() => ((IOceanBaseWriteValidation)clone).ValidateWriteValue((DayOfWeek)100));
+        }
+
+        [Theory]
+        [InlineData("DECIMAL")]
+        [InlineData("NUMERIC")]
+        public void Oracle_fixed_point_alias_precision_overrides_defaults_and_clones_keep_alias(string storeType)
+        {
+            using var context = CreateContext(OceanBaseCompatibilityMode.Oracle);
+            var source = context.GetService<IRelationalTypeMappingSource>();
+            var mapping = source.FindMapping(typeof(int), storeType, precision: 3)!;
+            Assert.Equal(storeType + "(3,0)", mapping.StoreType);
+            Assert.Equal(3, mapping.Precision);
+            ((IOceanBaseWriteValidation)mapping).ValidateWriteValue(999);
+            Assert.Throws<ArgumentOutOfRangeException>(() => ((IOceanBaseWriteValidation)mapping).ValidateWriteValue(1000));
+            var clone = mapping.WithPrecisionAndScale(5, 0);
+            Assert.Equal(storeType + "(5,0)", clone.StoreType);
+            ((IOceanBaseWriteValidation)clone).ValidateWriteValue(1000);
+            using var command = new OceanBaseCommand();
+            Assert.Equal((byte)5, clone.CreateParameter(command, "output", null, direction: ParameterDirection.Output).Precision);
+        }
+
         [Fact]
         public void Mysql_display_width_does_not_become_storage_capacity_or_ef_precision()
         {

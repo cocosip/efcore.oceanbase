@@ -64,6 +64,44 @@ identify the provider in both modes. Do not claim full CFG-04 until database cre
 - SQL null/cardinality/string/temporal semantics must not inherit SQL Server-only syntax.
 - Local transaction/schema doubles prove client control flow, not connector or server execution.
 
+## Batch 2a brief: Oracle fixed-point aliases
+
+**Files:** Storage/OceanBaseDecimalTypeMapping.cs, Storage/OceanBaseIntegerTypeMapping.cs;
+UnitTests/DecimalMappingTests.cs and ExplicitIntegerMappingTests.cs; FunctionalTests/BasicRelationalTests.cs.
+The updated decimal contract in the technical baseline is authoritative.
+
+1. RED: Oracle bare DECIMAL and NUMERIC expose precision 38, scale zero, preserve trimmed declarations,
+   output metadata and composed converters/clones; reject fractional current decimal writes. Bare NUMBER
+   still accepts fractional decimals and leaves precision/scale unspecified. Query/InputOutput inputs through
+   fixed aliases retain value inference even when fractional. Configured precision/scale regenerate explicit SQL.
+   Integer mappings using bare DECIMAL/NUMERIC expose precision 38, zero scale, while configured precision
+   overrides the alias default by generating an explicit declaration. Test bool/enum converter paths as applicable.
+2. Implement the smallest shared default-selection fixes; no transport fork, aliases outside existing scope,
+   CLR floating-point expansion or dependency changes in this sub-batch.
+3. Add intercepted EF sync/async query/write tests for decimal aliases, including converted current values,
+   pre-command rounding rejection, lossless query operands and unqualified NUMBER independence.
+4. Run focused RED/GREEN and full Debug/Release; independent review and commit with progress/evidence.
+   Later selected-patch/package verification must run after the production change before closing package evidence.
+
+## Batch 2b brief: temporal facet and clone validation
+
+**Files:** Storage/OceanBaseTypeMappingSource.cs, Storage/OceanBaseTemporalTypeMapping.cs;
+UnitTests/TemporalMappingTests.cs and TemporalQueryMappingTests.cs as needed. Preserve existing query/write
+transport and converters; no new temporal types, server ranges or dependencies.
+
+1. RED: both modes and all five temporal CLR types reject size and fixed-length=true facets through direct
+   resolution and model properties. Clones reject incompatible/cross-mode store declarations, suffixes,
+   precision conflicts and size/fixed facets rather than producing mismatched SQL/DbType/converter metadata.
+   Include a converter-composed mapping and Oracle DATE/interval/zoned representations in clone boundaries.
+   Distinguish EF's parsed declaration Size from actual length configuration; property GetMaxLength must reject
+   even when it equals parsed precision. Limit clone declarations to the current transport family, so DATE,
+   unzoned/zoned timestamps and intervals cannot retain stale DbType or converter semantics after a family change.
+2. Add the smallest validation consistent with the existing temporal declaration parser. Keep legal unchanged
+   clones, converter composition and precision changes working; generated declaration, Precision and output
+   Scale/leading metadata must agree. Retain wide Input/InputOutput query precision after precision reduction.
+3. Focused RED/GREEN, full Debug/Release and independent review. Record actual failing checks and exact counts,
+   update MAP-05/06/07 evidence and commit. Live temporal/session/calendar acceptance remains open.
+
 ## Execution record
 
 - Baseline: 57fd44a, clean efcore/10.0. Prior verified suite: 563 (420 unit, 142 intercepted, one consumer).
@@ -72,4 +110,11 @@ identify the provider in both modes. Do not claim full CFG-04 until database cre
   failed because IRelationalDatabaseCreator is missing (10 initial failures); move these regressions to Batch 7
   under CFG-04/SCH-01. IRelationalConnection tests prove only the lower-level delayed-assignment contract.
 - Environment follow-up: a2bbe5f adds repository-owned LF/CRLF rules; attributes/normalization and review passed.
-- Batches 2–10: pending. The overall goal remains active.
+- Batch 2a: local Oracle fixed-point alias scope complete. Unit RED 10/97 failures and pipeline RED 6/8 failures
+  became 97/97 and 8/8 passes. Full Debug/Release and isolated EF10.0.14 Release each pass 627 (475+150+2).
+  Independent review passed; the same alias-20261110 nupkg passes both modes on EF10.0.0/10.0.14, with package
+  identity/assets/ranges and package-only graph inspected. Expanded consumer fails against the old text package.
+  Evidence: artifacts/local-development/batch2a/. No server connection or release publication.
+- Batch 2b preflight passed: distinguish EF parsed Size from actual length facets, check properties separately,
+  and restrict declaration clones to their existing transport family. Implementation/tests pending.
+- Remaining Batch 2 scalar work and Batches 3–10 pending. The overall goal remains active.

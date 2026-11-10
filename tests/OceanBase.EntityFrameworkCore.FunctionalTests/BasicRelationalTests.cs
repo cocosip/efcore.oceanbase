@@ -184,6 +184,72 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
         }
 
         [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public async Task Oracle_fixed_point_alias_queries_are_lossless_and_NUMBER_writes_remain_fractional(bool async)
+        {
+            using var table = new DataTable();
+            table.Columns.Add("Decimal", typeof(decimal));
+            table.Columns.Add("Numeric", typeof(decimal));
+            table.Columns.Add("Converted", typeof(decimal));
+            table.Columns.Add("Unqualified", typeof(decimal));
+            table.Rows.Add(12m, -3m, 4m, 0.125m);
+            var commands = new CommandCapture { Results = table };
+            await using var context = CreateContext(OceanBaseCompatibilityMode.Oracle, commands);
+            var upper = decimal.MaxValue / 10;
+            var lower = -upper;
+            var fractional = 0.125m;
+            var query = context.Set<FixedPointAliasRow>().Where(row => row.Decimal < upper && row.Numeric > lower
+                    && row.Converted > fractional && row.Unqualified == fractional)
+                .Select(row => new { row.Decimal, row.Numeric, row.Converted, row.Unqualified });
+            var result = Assert.Single(async ? await query.ToListAsync() : query.ToList());
+            Assert.Equal(12m, result.Decimal);
+            Assert.Equal(-3m, result.Numeric);
+            Assert.Equal(2m, result.Converted);
+            Assert.Equal(0.125m, result.Unqualified);
+            Assert.Equal(4, commands.DecimalInputs.Count);
+            foreach (var value in new[] { upper, lower, 0.25m, fractional })
+            {
+                Assert.Contains(commands.DecimalInputs, parameter => Equals(parameter.Value, value));
+            }
+
+            context.Add(new FixedPointAliasRow { Id = 1, Decimal = decimal.MaxValue, Numeric = decimal.MinValue,
+                Converted = 0.5m, Unqualified = 0.125m });
+            Assert.Equal(1, async ? await context.SaveChangesAsync() : context.SaveChanges());
+            foreach (var value in new[] { decimal.MaxValue, decimal.MinValue, 1m, 0.125m })
+            {
+                Assert.Contains(value, commands.Values);
+            }
+
+            Assert.All(commands.DecimalInputs, parameter =>
+            {
+                Assert.Equal((byte)0, parameter.Precision);
+                Assert.Null(parameter.DecimalScale);
+            });
+        }
+
+        [Theory]
+        [InlineData(false, 0)]
+        [InlineData(false, 1)]
+        [InlineData(false, 2)]
+        [InlineData(true, 0)]
+        [InlineData(true, 1)]
+        [InlineData(true, 2)]
+        public async Task Oracle_fixed_point_alias_fractional_current_writes_reject_before_commands(bool async, int invalid)
+        {
+            var commands = new CommandCapture();
+            await using var context = CreateContext(OceanBaseCompatibilityMode.Oracle, commands);
+            context.Add(new FixedPointAliasRow { Id = 1, Decimal = invalid == 0 ? 0.1m : 1m,
+                Numeric = invalid == 1 ? 0.1m : 1m, Converted = invalid == 2 ? 0.25m : 0.5m,
+                Unqualified = 0.125m });
+            var exception = async ? await Assert.ThrowsAsync<DbUpdateException>(() => context.SaveChangesAsync())
+                : Assert.Throws<DbUpdateException>(() => context.SaveChanges());
+            Assert.IsType<ArgumentException>(exception.InnerException);
+            Assert.Empty(commands.Sql);
+            Assert.Empty(commands.Values);
+        }
+
+        [Theory]
         [InlineData(OceanBaseCompatibilityMode.MySql, false)]
         [InlineData(OceanBaseCompatibilityMode.MySql, true)]
         [InlineData(OceanBaseCompatibilityMode.Oracle, false)]
@@ -933,6 +999,13 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
                 modelBuilder.Entity<DecimalRow>().Property(entity => entity.Converted)
                     .HasConversion(value => value * 2m, value => value / 2m).HasPrecision(5, 2);
                 modelBuilder.Entity<DecimalRow>().Property(entity => entity.Optional).HasPrecision(5, 2);
+                modelBuilder.Entity<FixedPointAliasRow>().Property(entity => entity.Id).ValueGeneratedNever();
+                modelBuilder.Entity<FixedPointAliasRow>().Property(entity => entity.Decimal).HasColumnType("DECIMAL");
+                modelBuilder.Entity<FixedPointAliasRow>().Property(entity => entity.Numeric).HasColumnType("NUMERIC");
+                modelBuilder.Entity<FixedPointAliasRow>().Property(entity => entity.Converted)
+                    .HasConversion(value => value * 2m, value => value / 2m).HasColumnType("DECIMAL");
+                modelBuilder.Entity<FixedPointAliasRow>().Property(entity => entity.Unqualified)
+                    .HasColumnType(oracle ? "NUMBER" : "DECIMAL(65,30)");
                 modelBuilder.Entity<TextParameterRow>().Property(entity => entity.Id).ValueGeneratedNever();
                 modelBuilder.Entity<TextParameterRow>().Property(entity => entity.Caption).HasMaxLength(4);
                 modelBuilder.Entity<TextParameterRow>().Property(entity => entity.Fixed).IsFixedLength().HasMaxLength(4);
@@ -970,6 +1043,15 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
             public decimal Value { get; set; }
             public decimal Converted { get; set; }
             public decimal? Optional { get; set; }
+        }
+
+        private sealed class FixedPointAliasRow
+        {
+            public int Id { get; set; }
+            public decimal Decimal { get; set; }
+            public decimal Numeric { get; set; }
+            public decimal Converted { get; set; }
+            public decimal Unqualified { get; set; }
         }
 
         private sealed class NarrowTemporalRow

@@ -23,8 +23,9 @@ namespace OceanBase.EntityFrameworkCore.Storage
         {
         }
 
-        private OceanBaseIntegerTypeMapping(RelationalTypeMappingParameters parameters, OceanBaseCompatibilityMode mode)
-            : base(ValidateParameters(parameters, mode))
+        private OceanBaseIntegerTypeMapping(RelationalTypeMappingParameters parameters, OceanBaseCompatibilityMode mode,
+            bool preserveBareDeclaration = false)
+            : base(ValidateParameters(parameters, mode, preserveBareDeclaration))
         {
             _mode = mode;
             (_minimum, _maximum) = GetRange(StoreType, Precision, mode);
@@ -35,10 +36,12 @@ namespace OceanBase.EntityFrameworkCore.Storage
             if (_mode == OceanBaseCompatibilityMode.Oracle && parameters.Precision != Precision
                 && parameters.StoreType == StoreType)
             {
-                parameters = parameters.WithStoreTypeAndSize("NUMBER", null);
+                var alias = Regex.Match(StoreType, @"\A(?:DECIMAL|NUMERIC)\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+                parameters = parameters.WithStoreTypeAndSize(alias.Success ? alias.Value : "NUMBER", null);
             }
 
-            return new OceanBaseIntegerTypeMapping<T>(parameters, _mode);
+            return new OceanBaseIntegerTypeMapping<T>(parameters, _mode,
+                parameters.StoreType == StoreType && parameters.Precision == Precision && parameters.Scale == Scale);
         }
 
         public override MethodInfo GetDataReaderMethod()
@@ -78,7 +81,7 @@ namespace OceanBase.EntityFrameworkCore.Storage
                 RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
         private static RelationalTypeMappingParameters ValidateParameters(RelationalTypeMappingParameters parameters,
-            OceanBaseCompatibilityMode mode)
+            OceanBaseCompatibilityMode mode, bool preserveBareDeclaration)
         {
             var storeType = parameters.StoreType.Trim();
             if (parameters.FixedLength) throw new ArgumentException("Integer mappings do not support fixed-length facets.");
@@ -114,7 +117,8 @@ namespace OceanBase.EntityFrameworkCore.Storage
                     @"\A(?<type>NUMBER|DECIMAL|NUMERIC|INT|INTEGER|SMALLINT)(?:\s*\(\s*(?<precision>\d+)(?:\s*,\s*(?<scale>[+-]?\d+))?\s*\))?\z",
                     RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
                 if (!match.Success) throw new ArgumentException("The Oracle integer store declaration is not supported.");
-                var alias = match.Groups["type"].Value.ToUpperInvariant() is "INT" or "INTEGER" or "SMALLINT";
+                var type = match.Groups["type"].Value.ToUpperInvariant();
+                var alias = type is "INT" or "INTEGER" or "SMALLINT";
                 int? declaredPrecision = null;
                 int? declaredScale = null;
                 if (match.Groups["precision"].Success)
@@ -137,7 +141,7 @@ namespace OceanBase.EntityFrameworkCore.Storage
                     declaredScale = places;
                 }
 
-                precision = declaredPrecision ?? (alias ? 38 : parameters.Precision);
+                precision = declaredPrecision ?? (alias ? 38 : parameters.Precision ?? (type is "DECIMAL" or "NUMERIC" ? 38 : null));
                 scale = 0;
                 if (parameters.Precision is < 1 or > 38 || parameters.Scale is not null and not 0
                     || parameters.Precision is not null && precision != parameters.Precision
@@ -147,7 +151,7 @@ namespace OceanBase.EntityFrameworkCore.Storage
                     throw new ArgumentException("The Oracle integer declaration conflicts with its configured facets.");
                 }
 
-                if (declaredPrecision is null && !alias && precision is not null)
+                if (declaredPrecision is null && !alias && parameters.Precision is not null && !preserveBareDeclaration)
                 {
                     storeType = $"{match.Groups["type"].Value}({precision},0)";
                 }
