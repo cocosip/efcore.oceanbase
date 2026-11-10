@@ -430,7 +430,20 @@ both modes, ties, directed modes, 0 and 28 digits, invalid/runtime arguments and
 Floating point overloads and runtime argument semantics remain separate local work.
 Batch brief and local evidence: `artifacts/local-development/batch3p/`.
 
+## Batch3q brief: binary floating Round
+
+Add the four exact Round signatures on each of Math (Double), MathF (Single), Double and Single.
+Use matching binary mappings, constant rule/digit validation, .NET scaling limits and integral guards,
+with neutral Single casts at binary precision boundaries. Preserve the original result reader and
+converter. See `artifacts/local-development/batch3q/` for decompiled runtime reference and local
+evidence. Runtime arguments and actual engine calculation remain separate acceptance work.
+
 ## Execution record
+
+- Batch3q adds 16 floating Round signatures with constant syntax arguments, precision guards and
+  Single normalization. Debug, Release and isolated EF Core 10.0.14 each pass 1780 tests. The same
+  `floating-round-20261111` package passes both modes and both tested EF patches. Runtime digits and
+  rules remain local work; native precision, casts and computation remain live gates.
 
 - Batch3p translates eight exact decimal Round overloads, supports five constant rules and digits
   0..28, and keeps input mappings and checked decimal result shaping. Debug, Release and isolated

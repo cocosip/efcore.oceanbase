@@ -985,6 +985,57 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
 
         [Theory]
         [InlineData(OceanBaseCompatibilityMode.MySql, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true)]
+        public async Task Binary_round_commands_bind_current_values_and_read_original_mappings(
+            OceanBaseCompatibilityMode mode, bool async)
+        {
+            using var table = new DataTable();
+            table.Columns.Add("Double", typeof(object));
+            table.Columns.Add("Scaled", typeof(object));
+            table.Columns.Add("Single", typeof(object));
+            table.Columns.Add("Optional", typeof(object));
+            table.Rows.Add(12d, 15d, 8d, DBNull.Value);
+            table.Rows.Add(16d, 17d, 14d, 3d);
+            var commands = new CommandCapture { Results = table };
+            await using var context = CreateContext(mode, commands);
+            var comparison = 0d;
+            var query = context.Set<BinaryRoundRow>()
+                .Where(row => Math.Round(row.Double) > comparison)
+                .OrderBy(row => double.Round(row.Double, 1, MidpointRounding.ToPositiveInfinity))
+                .Select(row => new
+                {
+                    Double = Math.Round(row.Double),
+                    Scaled = double.Round(row.Double, 2, MidpointRounding.ToZero),
+                    Single = float.Round(row.Single, 2, MidpointRounding.AwayFromZero),
+                    Optional = (float?)MathF.Round(row.Optional!.Value, MidpointRounding.ToNegativeInfinity)
+                });
+            foreach (var value in new[] { 1.25d, 2.75d })
+            {
+                comparison = value;
+                commands.Inputs.Clear();
+                var rows = async ? await query.ToListAsync() : query.ToList();
+                Assert.Equal(2, rows.Count);
+                Assert.Equal(2d, rows[0].Double);
+                Assert.Equal(5d, rows[0].Scaled);
+                Assert.Equal(-2f, rows[0].Single);
+                Assert.Null(rows[0].Optional);
+                Assert.Equal(6d, rows[1].Double);
+                Assert.Equal(7d, rows[1].Scaled);
+                Assert.Equal(4f, rows[1].Single);
+                Assert.Equal(3f, rows[1].Optional);
+                Assert.Contains(commands.Inputs, p => Equals(p.Value, comparison + 10d) && p.DbType == DbType.Double);
+                var sql = commands.Sql[^1];
+                Assert.Contains("ORDER BY", sql);
+                Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? "TRUNCATE(" : "TRUNC(", sql);
+                Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? " AS FLOAT)" : " AS BINARY_FLOAT)", sql);
+                Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? " * 1E0" : " * 1D", sql);
+            }
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false)]
         [InlineData(OceanBaseCompatibilityMode.Oracle, true)]
         public async Task Decimal_round_commands_bind_current_values_and_read_checked_nullable_results(
             OceanBaseCompatibilityMode mode, bool async)
@@ -2707,6 +2758,10 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
                 modelBuilder.Entity<MathRow>().Property(row => row.Transformed)
                     .HasConversion(value => value * -2m, value => value / -2m).HasPrecision(5, 2);
                 modelBuilder.Entity<MathRow>().Property(row => row.Decimal).HasPrecision(5, 2);
+                modelBuilder.Entity<BinaryRoundRow>().Property(row => row.Double)
+                    .HasConversion(value => value + 10d, value => value - 10d).HasColumnType(oracle ? "BINARY_FLOAT" : "FLOAT");
+                modelBuilder.Entity<BinaryRoundRow>().Property(row => row.Single)
+                    .HasConversion(value => value + 10f, value => value - 10f).HasColumnType(oracle ? "BINARY_DOUBLE" : "DOUBLE");
                 modelBuilder.Entity<FloorCeilingRow>().Property(row => row.Decimal).HasPrecision(5, 2);
                 modelBuilder.Entity<FloorCeilingRow>().Property(row => row.Transformed)
                     .HasConversion(value => value * -2m + 10m, value => (value - 10m) / -2m).HasPrecision(5, 2);
@@ -2830,6 +2885,14 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
             public int? Optional { get; set; }
             public int Converted { get; set; }
             public decimal Fraction { get; set; }
+        }
+
+        private sealed class BinaryRoundRow
+        {
+            public int Id { get; set; }
+            public double Double { get; set; }
+            public float Single { get; set; }
+            public float? Optional { get; set; }
         }
 
         private sealed class TranscendentalRow

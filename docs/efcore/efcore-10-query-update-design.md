@@ -301,6 +301,25 @@ must leave NULL unchanged; rounding is then applied to the stored decimal.
 The local contract covers translation, binding and supplied reader values. Native decimal operator
 precision, return metadata, NULL and numeric boundary results still need both modes of OceanBase.
 
+## Binary floating Round local contract
+
+`Math.Round` and `double.Round` accept constant digits 0 through 15; `MathF.Round` and
+`float.Round` accept 0 through 6. Each has four signatures, defaults to zero digits and
+`ToEven`, and accepts all five constant rules. Runtime and invalid arguments fail server
+translation. SQL operates on stored binary values; the result keeps its input's reader and
+inverse converter. Translation requires a valid provider binary mapping with a matching carrier
+and a converter that does not convert NULL.
+
+Use binary powers of ten to scale and unscale positive digit counts. Large inputs bypass scaling
+at the .NET thresholds (10^16 for Double, 10^8 for Single); scaled values with no fractional
+bits bypass integral rounding at 2^52 and 2^23 respectively. Single uses fixed binary casts to
+normalize the input, intermediate operations that round to Single and the final result.
+The SQL does not rely on either compatibility mode's default midpoint rule.
+
+Actual engine precision, cast and branch evaluation, subnormals, signed zero, NULL handling and
+result metadata still require real-server tests. Multiple references to the same SQL operand do
+not establish single evaluation for volatile values.
+
 ## Numeric aggregates local contract
 
 The numeric aggregate service adds exact Sum/Average selector and scalar identities for int/long/float/
@@ -589,18 +608,26 @@ Run the read-only gate after packing, before the isolated consumer checks:
 
 ```powershell
 pwsh -NoProfile -File tests/OceanBase.EntityFrameworkCore.PackageConsumer/Verify-Package.ps1 `
-    -PackagePath artifacts/checkpoint-decimal-round-20261111/OceanBase.EntityFrameworkCore.10.0.0-checkpoint.decimal-round-20261111.nupkg `
-    -ExpectedVersion 10.0.0-checkpoint.decimal-round-20261111
+    -PackagePath artifacts/checkpoint-floating-round-20261111/OceanBase.EntityFrameworkCore.10.0.0-checkpoint.floating-round-20261111.nupkg `
+    -ExpectedVersion 10.0.0-checkpoint.floating-round-20261111
 ```
 
 The PowerShell 7 script uses .NET ZIP/XML APIs and checks ID/version, the net10.0 assembly and dependency group,
 exact expected dependency ranges, and a nonempty packaged README with matching metadata. It does not build,
-restore, execute provider queries or establish server/runtime compatibility. The current aggregates package passes;
+restore, execute provider queries or establish server/runtime compatibility. The current floating Round package passes;
 wrong expected version, the old README-less alias package and the exact-patch README probe fail at their intended
 checks. The hosted e41981e package-content gate passed on Windows/Linux; the current package checks ran locally
 on Windows. Change the path/version for each new pack.
 
-### Current decimal Round checkpoint (2026-11-11)
+### Current floating Round checkpoint (2026-11-11)
+
+Debug, Release and isolated EF Core 10.0.14 Release each pass 1780 tests (1414 unit, 364 intercepted,
+two project consumers). The same `10.0.0-checkpoint.floating-round-20261111` package passes both modes
+on EF Core 10.0.0 and 10.0.14. Its consumer checks both Double limits, ties-to-even and the
+wide Single path with neutral casts. Package contents, package-only graph, baseline assembly and
+baseline asset identity pass. Server precision and runtime syntax arguments remain open.
+
+### Historical decimal Round checkpoint (2026-11-11)
 
 Debug, Release and isolated EF Core 10.0.14 Release each pass 1768 tests (1406 unit, 360 intercepted,
 two project consumers). The same `10.0.0-checkpoint.decimal-round-20261111` package passes both modes

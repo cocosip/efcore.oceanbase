@@ -21,7 +21,23 @@ not later local commits or database integration. Earlier db676ff also passed in
 Run/job/step metadata is saved under artifacts/local-development/. The earlier log archive endpoint returned
 HTTP403 (repository admin rights); no new per-test count or resolved EF patch is inferred from job metadata.
 
-### Decimal Round checkpoint (2026-11-11)
+### Floating Round checkpoint (2026-11-11)
+
+The 16 binary Round signatures on Math, MathF, Double and Single translate with all five constant
+rounding rules and constant digits 0..15 for Double or 0..6 for Single. SQL preserves the original
+result mapping, guards scaling and integral rounding, and normalizes Single at its precision boundaries.
+The eight decimal Round signatures retain their existing behavior.
+
+Debug, Release and isolated EF Core 10.0.14 Release each passed **1780 tests** (1414 unit, 364
+intercepted, two project consumers), with zero failures or skips. The same `floating-round-20261111`
+package passed both modes on EF Core 10.0.0 and 10.0.14, including package content and identity checks.
+
+Latest package: `artifacts/checkpoint-floating-round-20261111/OceanBase.EntityFrameworkCore.10.0.0-checkpoint.floating-round-20261111.nupkg`.
+Evidence: `artifacts/local-development/batch3q/`. Runtime digits and rules remain local work. Actual
+arithmetic, cast precision, NULL and result metadata still need server tests. Live database testing and
+EF Core 8/9 remain postponed.
+
+### Historical decimal Round checkpoint (2026-11-11)
 
 Eight exact `Math.Round` and `decimal.Round` overloads now translate with constant digits from 0
 through 28 and all five midpoint rules. The provider emits explicit decimal operations for both modes,
@@ -34,7 +50,7 @@ both modes on EF Core 10.0.0 and 10.0.14. The previous package fails the new Rou
 contents, dependency graph, assembly identity and unchanged baseline assets were checked. Independent
 source review passed.
 
-Latest package: `artifacts/checkpoint-decimal-round-20261111/OceanBase.EntityFrameworkCore.10.0.0-checkpoint.decimal-round-20261111.nupkg`.
+Package: `artifacts/checkpoint-decimal-round-20261111/OceanBase.EntityFrameworkCore.10.0.0-checkpoint.decimal-round-20261111.nupkg`.
 Evidence: `artifacts/local-development/batch3p/`. The local checks establish SQL translation, binding
 and shaping; native decimal precision, result metadata and computation remain live gates.
 EF Core 10 local work remains active. Live database testing and EF Core 8/9 remain postponed.

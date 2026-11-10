@@ -376,6 +376,20 @@ namespace PackageConsumer
                     || roundZero.Contains("CASE", StringComparison.Ordinal))
                     throw new Exception("Packed decimal Round lost direct truncation toward zero: " + roundZero);
 
+                var roundDouble = context.Set<Row>().Where(row => Math.Round(row.DoubleValue, 15) > 0d).ToQueryString();
+                var roundSingle = context.Set<Row>().Where(row =>
+                    MathF.Round(row.Wide, 6, MidpointRounding.AwayFromZero) > 0f).ToQueryString();
+                if (!roundDouble.Contains(truncate, StringComparison.Ordinal) || !roundDouble.Contains(" OR ", StringComparison.Ordinal)
+                    || !roundDouble.Contains("4503599627370496", StringComparison.Ordinal)
+                    || !roundDouble.Contains("10000000000000000", StringComparison.Ordinal))
+                    throw new Exception("Packed Double Round lost the guards or even midpoint check: " + roundDouble);
+                var singleCast = mode == OceanBaseCompatibilityMode.MySql ? " AS FLOAT)" : " AS BINARY_FLOAT)";
+                if (!roundSingle.Contains(truncate, StringComparison.Ordinal)
+                    || roundSingle.Split(singleCast, StringSplitOptions.None).Length < 4
+                    || !roundSingle.Contains("8388608", StringComparison.Ordinal)
+                    || !roundSingle.Contains("100000000", StringComparison.Ordinal))
+                    throw new Exception("Packed Single Round lost the guards or Single precision casts: " + roundSingle);
+
                 var guidType = context.Model.FindEntityType(typeof(Row))!.FindProperty(nameof(Row.Token))!.GetColumnType();
                 if (guidType != (mode == OceanBaseCompatibilityMode.Oracle ? "RAW(16)" : "CHAR(36)"))
                 {

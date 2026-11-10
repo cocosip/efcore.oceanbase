@@ -125,6 +125,136 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
         [Theory]
         [InlineData(OceanBaseCompatibilityMode.MySql)]
         [InlineData(OceanBaseCompatibilityMode.Oracle)]
+        public void Binary_round_translates_in_real_predicates(OceanBaseCompatibilityMode mode)
+        {
+            using var context = CreateContext(mode);
+            var sql = context.Rows.Where(row => Math.Round(row.Double, 15) > 0d
+                && float.Round(row.Single, 6, MidpointRounding.AwayFromZero) > 0f).ToQueryString();
+            Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? "TRUNCATE(" : "TRUNC(", sql);
+            Assert.DoesNotContain("ROUND(", sql);
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle)]
+        public void Binary_round_dispatches_every_exact_signature(OceanBaseCompatibilityMode mode)
+        {
+            using var context = CreateContext(mode);
+            var provider = context.GetService<IMethodCallTranslatorProvider>();
+            var factory = context.GetService<ISqlExpressionFactory>();
+            var logger = context.GetService<IDiagnosticsLogger<DbLoggerCategory.Query>>();
+            var row = Expression.Parameter(typeof(Row), "row");
+            foreach (var (owner, type, property) in new[] { (typeof(Math), typeof(double), nameof(Row.Double)),
+                (typeof(double), typeof(double), nameof(Row.Double)), (typeof(MathF), typeof(float), nameof(Row.Single)),
+                (typeof(float), typeof(float), nameof(Row.Single)) })
+            {
+                var operand = Expression.Property(row, property);
+                var mapping = context.Model.FindEntityType(typeof(Row))!.FindProperty(property)!.GetRelationalTypeMapping();
+                var zero = Activator.CreateInstance(type)!;
+                foreach (Expression[] suffix in new Expression[][] { [], [Expression.Constant(2)],
+                    [Expression.Constant(MidpointRounding.ToZero)],
+                    [Expression.Constant(2), Expression.Constant(MidpointRounding.AwayFromZero)] })
+                {
+                    var method = owner.GetMethod("Round", new[] { type }.Concat(suffix.Select(arg => arg.Type)).ToArray())!;
+                    var call = Expression.Call(method, new Expression[] { operand }.Concat(suffix));
+                    var predicate = Expression.Lambda<Func<Row, bool>>(Expression.GreaterThan(call, Expression.Constant(zero)), row);
+                    var sql = context.Rows.Where(predicate).ToQueryString();
+                    Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? "TRUNCATE(" : "TRUNC(", sql);
+                    var arguments = new[] { factory.Constant(zero, mapping) }.Concat(suffix.Cast<ConstantExpression>()
+                        .Select(arg => factory.Constant(arg.Value!))).ToArray();
+                    Assert.Same(mapping, provider.Translate(context.Model, null, method, arguments, logger)!.TypeMapping);
+                }
+            }
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle)]
+        public void Binary_round_guards_scaling_and_integral_work_and_normalizes_wide_single(OceanBaseCompatibilityMode mode)
+        {
+            using var context = CreateContext(mode);
+            var oracle = mode == OceanBaseCompatibilityMode.Oracle;
+            var even = context.Rows.Select(row => Math.Round(row.Double, 2)).ToQueryString();
+            Assert.Contains(oracle ? "10000000000000000D" : "10000000000000000E0", even);
+            Assert.Contains(oracle ? "4503599627370496D" : "4503599627370496E0", even);
+            Assert.Contains(oracle ? " >= 4503599627370496D" : " >= 4503599627370496E0", even);
+            Assert.Contains(oracle ? " / 100D" : " / 100E0", even);
+            Assert.Contains(oracle ? "MOD(" : " % ", even);
+            Assert.Contains(oracle ? "0.5D" : "0.5E0", even);
+            var away = context.Rows.Select(row => MathF.Round(row.WideSingle, 2, MidpointRounding.AwayFromZero)).ToQueryString();
+            var cast = oracle ? " AS BINARY_FLOAT)" : " AS FLOAT)";
+            var column = oracle ? "\"WideSingle\"" : "`WideSingle`";
+            Assert.Contains(column + cast, away);
+            Assert.Contains((oracle ? " * 100F" : " * 100E0") + cast, away);
+            Assert.Contains(oracle ? "0.49999997F" : "0.4999999701976776E0", away);
+            Assert.Contains(oracle ? "8388608F" : "8388608E0", away);
+            Assert.Contains(oracle ? "100000000F" : "100000000E0", away);
+            Assert.DoesNotContain(" AS BINARY_DOUBLE)", away);
+            Assert.DoesNotContain(" AS DOUBLE)", away);
+
+            var integral = context.Rows.Select(row => new
+            {
+                Zero = Math.Round(row.Double, MidpointRounding.ToZero),
+                Up = Math.Round(row.Double, MidpointRounding.ToPositiveInfinity),
+                Down = MathF.Round(row.Single, MidpointRounding.ToNegativeInfinity)
+            }).ToQueryString();
+            Assert.Contains(oracle ? " + 1D" : " + 1E0", integral);
+            Assert.Contains(oracle ? " - 1F" : " - 1E0", integral);
+            Assert.DoesNotContain("100000000", integral);
+            foreach (var sql in new[] { even, away, integral })
+            {
+                Assert.DoesNotContain("ROUND(", sql);
+                Assert.DoesNotContain("FLOOR(", sql);
+                Assert.DoesNotContain("CEIL(", sql);
+                Assert.DoesNotContain(" AS DECIMAL", sql);
+                Assert.DoesNotContain(" AS NUMBER", sql);
+            }
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle)]
+        public void Binary_round_rejects_runtime_syntax_invalid_values_and_mappings(OceanBaseCompatibilityMode mode)
+        {
+            using var context = CreateContext(mode);
+            var digits = 2;
+            var rule = MidpointRounding.ToEven;
+            Expression<Func<Row, bool>>[] unsupported =
+            [
+                row => Math.Round(row.Double, digits) > 0d,
+                row => double.Round(row.Double, rule) > 0d,
+                row => Math.Round(row.Double, -1) > 0d,
+                row => MathF.Round(row.Single, 7) > 0f,
+                row => float.Round(row.Single, (MidpointRounding)5) > 0f
+            ];
+            foreach (var predicate in unsupported)
+                Assert.Throws<InvalidOperationException>(() => context.Rows.Where(predicate).ToQueryString());
+            Assert.DoesNotContain("TRUNC", context.Rows.Select(row => MathF.Round(row.Single, digits, rule)).ToQueryString());
+
+            var factory = context.GetService<ISqlExpressionFactory>();
+            var source = context.GetService<IRelationalTypeMappingSource>();
+            var provider = context.GetService<IMethodCallTranslatorProvider>();
+            var logger = context.GetService<IDiagnosticsLogger<DbLoggerCategory.Query>>();
+            var method = typeof(double).GetMethod(nameof(double.Round), [typeof(double)])!;
+            var mapping = source.FindMapping(typeof(double))!;
+#pragma warning disable EF1001
+            var nullConverter = new ValueConverter<double, double>(value => value, value => value, convertsNulls: true);
+#pragma warning restore EF1001
+            RelationalTypeMapping[] invalid =
+            [
+                new TestMapping(typeof(double), mapping.StoreType),
+                (RelationalTypeMapping)source.FindMapping(typeof(float))!.WithComposedConverter(
+                    new ValueConverter<double, float>(value => (float)value, value => value)),
+                (RelationalTypeMapping)mapping.WithComposedConverter(nullConverter)
+            ];
+            foreach (var invalidMapping in invalid)
+                Assert.Null(provider.Translate(context.Model, null, method, [factory.Constant(1d, invalidMapping)], logger));
+            Assert.Null(provider.Translate(context.Model, null, method, [factory.Constant(1f)], logger));
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle)]
         public void Decimal_round_translates_exact_signatures(OceanBaseCompatibilityMode mode)
         {
             using var context = CreateContext(mode);
@@ -183,7 +313,7 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
                 row => Math.Round(row.Decimal, (MidpointRounding)5) > 0m,
                 row => decimal.Round(row.Decimal, digits) > 0m,
                 row => Math.Round(row.Decimal, rule) > 0m,
-                row => Math.Round(row.Double) > 0d
+                row => Math.Round(row.Double, 16) > 0d
             ];
             foreach (var predicate in unsupported)
                 Assert.Throws<InvalidOperationException>(() => context.Rows.Where(predicate).ToQueryString());
@@ -524,14 +654,15 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             var builder = new DbContextOptionsBuilder<TestContext>().UseOceanBase("Server=localhost;Database=test", mode);
             ((IDbContextOptionsBuilderInfrastructure)builder).AddOrUpdateExtension(
                 builder.Options.Extensions.OfType<RelationalOptionsExtension>().Single().WithUseRelationalNulls(relationalNulls));
-            return new TestContext(builder.Options);
+            return new TestContext(builder.Options, mode == OceanBaseCompatibilityMode.MySql ? "DOUBLE" : "BINARY_DOUBLE");
         }
 
-        private sealed class TestContext(DbContextOptions<TestContext> options) : DbContext(options)
+        private sealed class TestContext(DbContextOptions<TestContext> options, string wideSingleStoreType) : DbContext(options)
         {
             public DbSet<Row> Rows => Set<Row>();
             protected override void OnModelCreating(ModelBuilder modelBuilder)
             {
+                modelBuilder.Entity<Row>().Property(row => row.WideSingle).HasColumnType(wideSingleStoreType);
                 modelBuilder.Entity<Row>().Property(row => row.Converted).HasConversion<long>();
                 modelBuilder.Entity<Row>().Property(row => row.Transformed).HasConversion(value => value * -2m, value => value / -2m).HasPrecision(5, 2);
                 modelBuilder.Entity<Row>().Property(row => row.Text).HasConversion<string>();
@@ -546,6 +677,7 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             public int Int32 { get; set; }
             public long Int64 { get; set; }
             public float Single { get; set; }
+            public float WideSingle { get; set; }
             public double Double { get; set; }
             public decimal Decimal { get; set; }
             public int? Optional { get; set; }

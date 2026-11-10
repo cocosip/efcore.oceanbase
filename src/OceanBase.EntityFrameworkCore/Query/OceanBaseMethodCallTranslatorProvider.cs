@@ -9,6 +9,6 @@ namespace OceanBase.EntityFrameworkCore.Query
             => AddTranslators([
                 new OceanBaseStringTranslator(dependencies.SqlExpressionFactory, dependencies.RelationalTypeMappingSource, mode),
                 new OceanBaseMathTranslator(dependencies.SqlExpressionFactory, dependencies.RelationalTypeMappingSource, mode),
-                new OceanBaseDecimalRoundTranslator(dependencies.SqlExpressionFactory, dependencies.RelationalTypeMappingSource, mode)]);
+                new OceanBaseRoundTranslator(dependencies.SqlExpressionFactory, dependencies.RelationalTypeMappingSource, mode)]);
     }
 }
