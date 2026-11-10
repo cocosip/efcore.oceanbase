@@ -43,6 +43,16 @@ Latest package: `artifacts/checkpoint-alias-20261110/OceanBase.EntityFrameworkCo
 The historical text package below does not include this change. Remaining local scalar work includes temporal
 facet/clone consistency and exact integer normalization for unexpected floating reader values; see the local plan.
 
+### Package README preparation
+
+The provider project now owns a package README describing configuration and development/evidence limits.
+PackageReadmeFile metadata and packed README content were verified using no-build packaging of the already
+verified isolated alias assembly; its SHA-256 matches the package assembly. The missing-README pack message is
+resolved for future packs. This metadata/documentation check does not replace source or consumer verification
+after later provider changes. The preceding alias/text packages remain immutable historical artifacts.
+The isolated README probe uses exact EF10.0.14 override dependencies and is only a packaging check; bounded
+dependency-range and consumer compatibility evidence remains the alias package above. Independent review passed.
+
 Git line endings are now governed by `.gitattributes` (a2bbe5f): automatic text uses LF, batch scripts CRLF.
 Attribute checks and normalization under core.autocrlf=true/false/input passed; existing index blobs were already LF.
 

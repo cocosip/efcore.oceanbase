@@ -118,3 +118,9 @@ transport and converters; no new temporal types, server ranges or dependencies.
 - Batch 2b preflight passed: distinguish EF parsed Size from actual length facets, check properties separately,
   and restrict declaration clones to their existing transport family. Implementation/tests pending.
 - Remaining Batch 2 scalar work and Batches 3–10 pending. The overall goal remains active.
+- Batch 8 package README slice: use the provider project's README as package-owned documentation and declare
+  PackageReadmeFile. Verify archive metadata/content with no-build packing of an already verified isolated
+  assembly, independently of the active scalar worker; this does not complete the broader package/release gates.
+  Archive metadata/exact content and SHA-256 equality with the verified assembly pass; pack no longer reports a
+  missing README. Evidence: artifacts/local-development/package-readme/. Independent review passed. The isolated
+  probe has exact EF10.0.14 dependencies; it does not replace bounded-range alias package/consumer evidence.
