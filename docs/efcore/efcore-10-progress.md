@@ -11,6 +11,28 @@ each small group. Real database integration/tests and EF8/EF9 adaptation are exp
 [local development plan](efcore-10-local-development-plan.md) tracks the full remaining inventory, including
 an audit of locally feasible deferred families. Finishing one batch does not finish the overall goal.
 
+### String concatenation and Oracle query-null checkpoint
+
+String addition and fixed Concat overloads now use MySQL CONCAT and Oracle grouped `||`; numeric addition is
+unchanged. Oracle processing precedes EF nullability optimization, preserving potentially-null concat results
+and native empty-string behavior in comparisons/coalesce. Empty/null classification uses provider-converted
+values without changing caller parameters; normal string/enum/Guid converters are covered. Experimental
+null-converting string query converters reject explicitly. Oracle provider-string parameters conservatively
+disable command-SQL caching; model and query-compilation caching remains available.
+
+Focused tests pass 33. Debug/Release and isolated EF10.0.14 Release each pass **785 tests** (611 unit,
+172 intercepted pipeline, two project consumers). Independent spec/quality review passed. The same baseline-built
+`10.0.0-checkpoint.concat-20261110` package passes both modes on EF10.0.0/10.0.14, including native concat and
+changing Oracle fallback parameters. The previous numeric package fails the new syntax check. The repeatable
+package-content gate and package-only dependency graph pass. These checks do not execute OceanBase functions.
+
+Latest package: `artifacts/checkpoint-concat-20261110/OceanBase.EntityFrameworkCore.10.0.0-checkpoint.concat-20261110.nupkg`.
+Evidence: `artifacts/local-development/batch3a/`. Next local query work includes integer division/remainder,
+string search/member functions and the wider checklist. The provider remains incomplete.
+
+Windows/Linux CI now has restore, Release tests, pack and package-content checks (`5feef06`); YAML and independent
+review pass. Hosted runs/Linux execution remain unverified. No push, publication or database execution occurred.
+
 ### Configuration/cache/SQL boundary checkpoint
 
 Both generic/untyped configuration overloads now have both-mode positive/negative coverage. Tests verify actual
@@ -75,7 +97,7 @@ passed. The same baseline-built `10.0.0-checkpoint.numeric-20261110` package pas
 the preceding temporal2 package fails the new floating-fraction reader check. Identity/net10.0/README/ranges and
 the package-only graph were inspected. No live database execution or publication.
 
-Latest package: `artifacts/checkpoint-numeric-20261110/OceanBase.EntityFrameworkCore.10.0.0-checkpoint.numeric-20261110.nupkg`.
+Historical numeric package: `artifacts/checkpoint-numeric-20261110/OceanBase.EntityFrameworkCore.10.0.0-checkpoint.numeric-20261110.nupkg`.
 Evidence: `artifacts/local-development/batch2c/`. Before string work, the published connector source was checked
 at its nuspec revision: GetDecimal explicitly converts OceanBaseDecimal through ToDecimal, so no duplicate
 provider decimal-reader transport is justified. Live decimal/wire behavior remains open. Next local work is

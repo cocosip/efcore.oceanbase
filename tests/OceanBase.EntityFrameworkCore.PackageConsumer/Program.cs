@@ -32,6 +32,37 @@ namespace PackageConsumer
                     throw new Exception("Oracle Boolean projection was not converted to a scalar value.");
                 }
 
+                var suffix = "包'_%\\";
+                var concatSql = context.Set<Row>().Select(row => string.Concat(row.Name, suffix)).ToQueryString();
+                if (!concatSql.Contains(mode == OceanBaseCompatibilityMode.MySql ? "CONCAT(" : " || ", StringComparison.Ordinal)
+                    || concatSql.Contains(" + ", StringComparison.Ordinal))
+                {
+                    throw new Exception("Packed provider used the wrong string concatenation syntax.");
+                }
+
+                if (mode == OceanBaseCompatibilityMode.Oracle)
+                {
+                    string? fallback = "present";
+                    var nullQuery = context.Set<Row>().Where(row => (row.Name + suffix ?? fallback) == null);
+                    if (!nullQuery.ToQueryString().Contains("WHERE 0 = 1", StringComparison.Ordinal))
+                    {
+                        throw new Exception("A nonempty Oracle coalesce fallback was treated as nullable.");
+                    }
+                    foreach (var value in new string?[] { "", null, "again", "" })
+                    {
+                        fallback = value;
+                        var nullSql = nullQuery.ToQueryString();
+                        if (string.IsNullOrEmpty(value)
+                            ? !nullSql.Contains(" || ", StringComparison.Ordinal)
+                                || !nullSql.Contains("IS NULL", StringComparison.Ordinal)
+                                || nullSql.Contains("WHERE 0 = 1", StringComparison.Ordinal)
+                            : !nullSql.Contains("WHERE 0 = 1", StringComparison.Ordinal))
+                        {
+                            throw new Exception("Oracle empty/null parameter processing reused stale command SQL.");
+                        }
+                    }
+                }
+
                 var guidType = context.Model.FindEntityType(typeof(Row))!.FindProperty(nameof(Row.Token))!.GetColumnType();
                 if (guidType != (mode == OceanBaseCompatibilityMode.Oracle ? "RAW(16)" : "CHAR(36)"))
                 {
@@ -202,7 +233,7 @@ namespace PackageConsumer
                 catch (ArgumentException) { invalidUnicodeRejected = true; }
                 if (!invalidUnicodeRejected) throw new Exception("Invalid UTF-16 was silently accepted.");
 
-                Console.WriteLine($"{mode}: packed provider registration, scalar/text/temporal/binary/decimal model, Boolean SQL and paging passed; EF {typeof(DbContext).Assembly.GetName().Version}.");
+                Console.WriteLine($"{mode}: packed provider registration, scalar/text/temporal/binary/decimal model, string/null/Boolean SQL and paging passed; EF {typeof(DbContext).Assembly.GetName().Version}.");
             }
         }
 

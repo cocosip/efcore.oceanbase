@@ -7,6 +7,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using OceanBaseConnector;
 using Xunit;
 
@@ -14,6 +15,113 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
 {
     public sealed class BasicRelationalTests
     {
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false, true)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true, true)]
+        public async Task String_concat_commands_bind_parameters_and_materialize_synthetic_native_results(
+            OceanBaseCompatibilityMode mode, bool async, bool relationalNulls)
+        {
+            using var table = new DataTable();
+            table.Columns.Add("Value", typeof(string));
+            var commands = new CommandCapture { Results = table };
+            await using var context = CreateContext(mode, commands, relationalNulls);
+            var oracle = mode == OceanBaseCompatibilityMode.Oracle;
+            string? suffix = "海'_%\\";
+            var query = context.Set<ShortTextRow>().Select(row => row.Caption + suffix);
+            foreach (var value in new string?[] { suffix, "", null, "again", "", null })
+            {
+                suffix = value;
+                commands.StringInputs.Clear();
+                table.Rows.Clear();
+                // The reader supplies known values; this does not execute the server concatenation function.
+                object native = oracle && string.IsNullOrEmpty(value) ? DBNull.Value : value ?? "";
+                table.Rows.Add(native);
+                var result = Assert.Single(async ? await query.ToListAsync() : query.ToList());
+                Assert.Equal(native == DBNull.Value ? null : native, result);
+                Assert.Contains(oracle ? " || " : "CONCAT(", commands.Sql[^1]);
+                Assert.DoesNotContain(" + ", commands.Sql[^1]);
+                if (value is not null && (!oracle || value.Length != 0))
+                {
+                    var parameter = Assert.Single(commands.StringInputs);
+                    Assert.Equal(value, parameter.Value);
+                    Assert.True(parameter.Size >= value.Length);
+                    Assert.Equal(DbType.String, parameter.DbType);
+                }
+                else
+                {
+                    Assert.Empty(commands.StringInputs);
+                }
+            }
+
+            table.Rows.Clear();
+            table.Rows.Add("client");
+            var clientProjection = context.Set<ShortTextRow>().Select(row => AppendClientSuffix(row.Caption));
+            Assert.Equal("client!", Assert.Single(async ? await clientProjection.ToListAsync() : clientProjection.ToList()));
+            var convertedValue = "";
+            var convertedQuery = context.Set<ShortTextRow>().Where(row => row.Converted == convertedValue).Select(row => row.Caption);
+            foreach (var value in new[] { "", "converted" })
+            {
+                convertedValue = value;
+                commands.StringInputs.Clear();
+                Assert.Equal("client", Assert.Single(async ? await convertedQuery.ToListAsync() : convertedQuery.ToList()));
+                Assert.Equal(value + "!", Assert.Single(commands.StringInputs).Value);
+            }
+            Assert.Contains(oracle ? "N'!'" : "'!'", context.Set<ShortTextRow>()
+                .Where(row => row.Converted == "").ToQueryString());
+            var beforeFailure = commands.Sql.Count;
+            var unsupported = context.Set<ShortTextRow>().Where(row => AppendClientSuffix(row.Caption) == "x");
+            if (async)
+            {
+                await Assert.ThrowsAsync<InvalidOperationException>(() => unsupported.ToListAsync());
+            }
+            else
+            {
+                Assert.Throws<InvalidOperationException>(() => unsupported.ToList());
+            }
+            Assert.Equal(beforeFailure, commands.Sql.Count);
+        }
+
+        private static string AppendClientSuffix(string? value) => value + "!";
+
+        [Theory]
+        [InlineData(false, false)]
+        [InlineData(false, true)]
+        [InlineData(true, false)]
+        [InlineData(true, true)]
+        public async Task Oracle_concat_null_predicate_reprocesses_empty_coalesce_parameters(bool async, bool relationalNulls)
+        {
+            using var table = new DataTable();
+            table.Columns.Add("Caption", typeof(string));
+            var commands = new CommandCapture { Results = table };
+            await using var context = CreateContext(OceanBaseCompatibilityMode.Oracle, commands, relationalNulls);
+            string? fallback = "present";
+            var query = context.Set<ShortTextRow>()
+                .Where(row => (row.Caption + row.Caption ?? fallback) == null).Select(row => row.Caption);
+            foreach (var value in new string?[] { "present", "", null, "again", "", null })
+            {
+                fallback = value;
+                Assert.Empty(async ? await query.ToListAsync() : query.ToList());
+                var sql = commands.Sql[^1];
+                if (string.IsNullOrEmpty(value))
+                {
+                    Assert.Contains(" || ", sql);
+                    Assert.Contains("IS NULL", sql);
+                    Assert.DoesNotContain("COALESCE(", sql);
+                    Assert.DoesNotContain("WHERE 0 = 1", sql);
+                }
+                else
+                {
+                    Assert.Contains("WHERE 0 = 1", sql);
+                }
+            }
+        }
+
         [Theory]
         [InlineData(OceanBaseCompatibilityMode.MySql, false)]
         [InlineData(OceanBaseCompatibilityMode.MySql, true)]
@@ -972,11 +1080,14 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
             Assert.Empty(commands.Sql);
         }
 
-        private static TestContext CreateContext(OceanBaseCompatibilityMode mode, CommandCapture commands)
+        private static TestContext CreateContext(OceanBaseCompatibilityMode mode, CommandCapture commands, bool relationalNulls = false)
         {
-            var context = new TestContext(new DbContextOptionsBuilder<TestContext>()
+            var builder = new DbContextOptionsBuilder<TestContext>()
                 .UseOceanBase("Server=localhost;Database=test", mode)
-                .AddInterceptors(new NoNetworkConnection(), commands).Options, mode);
+                .AddInterceptors(new NoNetworkConnection(), commands);
+            ((IDbContextOptionsBuilderInfrastructure)builder).AddOrUpdateExtension(
+                builder.Options.Extensions.OfType<RelationalOptionsExtension>().Single().WithUseRelationalNulls(relationalNulls));
+            var context = new TestContext(builder.Options, mode);
             // These tests exercise EF commands; transaction semantics are verified separately against OceanBase.
             context.Database.AutoTransactionBehavior = AutoTransactionBehavior.Never;
             return context;

@@ -53,7 +53,7 @@ evidence remains required before advertising support.
 
 ## String concatenation local contract
 
-The next QRY-01/QRY-06/QRY-11 slice fixes string addition and the fixed two/three/four-string Concat overloads.
+The QRY-01/QRY-06/QRY-11 concatenation slice fixes string addition and the fixed two/three/four-string Concat overloads.
 EF10 StringMethodTranslator produces string SqlBinary Add; the base SQL generator emits `+`, which is not this
 provider's concatenation syntax. Preserve numeric addition. MySQL emits `CONCAT(left, right)` and Oracle emits
 `left || right`, with nested grouping and type mappings preserved. Keep EF's null-as-empty protection for MySQL;
@@ -68,8 +68,18 @@ These sources define generated SQL, not live acceptance.
 Oracle treats zero-length strings as NULL; concatenating two NULL strings yields NULL, while a non-null operand
 survives concatenation with NULL. Exact CLR empty-string result equivalence is not promised. Test nullable
 projections and null-sensitive predicates explicitly: do not inherit a proven-wrong non-nullability assumption
-from EF's generic Add processing. Any unsupported null-sensitive shape must fail clearly rather than silently
-folding a potentially-null database result to a constant. Keep the Oracle Boolean condition conversion in place.
+from EF's generic Add processing. Oracle string Add is represented as a nullable, non-null-propagating
+concatenation function before EF nullability processing, then rendered as `||`; this prevents incorrect operand-OR
+null tests. Empty provider string constants/parameters become SQL NULL before that processing. Classify values
+after normal value conversion, including enum/Guid/string converters, while preserving original caller values
+for binding. Oracle query values using experimental null-converting string converters fail explicitly.
+Any unsupported null-sensitive shape must fail clearly rather than silently folding a potentially-null database
+result to a constant. Keep the Oracle Boolean condition conversion in place.
+
+Oracle queries with provider-string SQL parameters conservatively disable command-SQL caching: EF's normal cache
+key distinguishes null from non-null, while Oracle also needs to distinguish empty strings after conversion.
+Model/query-compilation caching is unchanged. Repeated nonempty/empty/null executions must prove that command SQL
+is regenerated correctly; no parameter dictionary or caller string is mutated. MySQL retains its existing caches.
 
 Characterize existing string equality/inequality and Equals overloads through real EF SQL. Comparison uses
 database collation semantics; StringComparison/culture overloads remain unsupported predicates. Preserve allowed
@@ -77,6 +87,32 @@ top-level client projections. Array/object/IEnumerable Concat overloads and the 
 matrix work. Local tests cover constants/parameters/nullable columns, nesting, projection/predicate use,
 opposite-mode contexts and sync/async intercepted commands; server collation, lengths, LOBs and result semantics
 still require the postponed live phase.
+
+## Arithmetic division and remainder local contract
+
+The planned QRY-01 arithmetic slice will render integer division using MySQL `DIV` and Oracle one-argument
+`TRUNC(left / right)`, preserving truncation toward zero. Oracle remainder uses `MOD(left, right)`;
+MySQL retains `%`. Decimal, Single and Double division retains `/`. Integer classification follows the
+translated expression's CLR numeric type, including nullable types and integral promotions, rather than
+the Oracle NUMBER store name, which is also used for decimal values. Casts to fractional CLR types must
+retain fractional division. Converters are not a general arithmetic transformation: characterize ordinary
+value-preserving numeric conversion, without promising arbitrary scaled/text converter arithmetic.
+
+Sources are EF Core v10.0.0 SqlExpressionFactory, SqlBinaryExpression and QuerySqlGenerator, plus OceanBase
+documentation revision `2a5ae3a23a51729d065cec716508eb26cb064106`: the per-mode arithmetic-operator pages,
+Oracle MOD and numeric TRUNC. Their source audit is recorded in the local query research artifact.
+Oracle MOD's negative example and stated dividend-sign rule govern this contract; the page's conflicting
+FLOOR formula is not copied into provider code. Server execution remains unverified.
+
+Tests must use mapped columns, since constant-only expressions can be evaluated by EF before translation.
+Cover all eight integer CLR types through their actual promoted expression types, signed negative operands,
+nullable values, decimal/Single/Double controls, casts, parameters, predicates, projections and nested
+division/remainder with explicit grouping. Opposite-mode contexts must retain separate dialects. Sync/async
+intercepted materialization proves client generation, binding and reading only, not arithmetic results.
+
+This slice does not promise CLR checked overflow, minimum-integer divided by -1, zero-divisor exceptions,
+unsigned subtraction, floating special values or bitwise width/sign equivalence. These require their own
+contract and tests; live arithmetic result/predicate tests remain open for both modes.
 
 ## Tracked writes
 
@@ -179,7 +215,19 @@ restore, execute provider queries or establish server/runtime compatibility. The
 wrong expected version, the old README-less alias package and the exact-patch README probe fail at their intended
 checks. These runs were on Windows; Linux execution remains unverified. Change the path/version for each new pack.
 
-### Current exact integer normalization checkpoint (2026-11-10)
+### Current string concatenation checkpoint (2026-11-10)
+
+Debug/Release and isolated EF10.0.14 Release each pass 785 tests (611 unit, 172 intercepted pipeline, two project
+consumers). Independent review passed. The same baseline-built `10.0.0-checkpoint.concat-20261110` package passes
+both-mode consumers at EF10.0.0/10.0.14, including native concatenation and changing Oracle empty/null/nonempty
+fallback captures. The previous numeric package fails the new concat assertion. Verify-Package.ps1 passes
+identity/assets/README/ranges; the isolated consumer graph contains only packages. No server function was run.
+
+Repeat the commands below with `10.0.0-checkpoint.concat-20261110` and `artifacts/checkpoint-concat-20261110`.
+Evidence: `artifacts/local-development/batch3a/`. See the local contract above for native Oracle empty/null rules,
+converter boundaries and the conservative command-SQL cache tradeoff. Wider query and live gates remain open.
+
+### Historical exact integer normalization checkpoint (2026-11-10)
 
 Debug/Release on EF10.0.0 and isolated Release on EF10.0.14 each pass 752 tests (590 unit, 160 intercepted
 pipeline, two project consumers). The same baseline-built `10.0.0-checkpoint.numeric-20261110` nupkg passes both

@@ -1,3 +1,4 @@
+using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore.Query;
 using Microsoft.EntityFrameworkCore.Query.SqlExpressions;
 
@@ -14,6 +15,38 @@ namespace OceanBase.EntityFrameworkCore.Query
         }
 
         protected override string AliasSeparator => _mode == OceanBaseCompatibilityMode.Oracle ? " " : " AS ";
+
+        protected override Expression VisitSqlBinary(SqlBinaryExpression sqlBinaryExpression)
+        {
+            if (sqlBinaryExpression.OperatorType == ExpressionType.Add && sqlBinaryExpression.Type == typeof(string))
+            {
+                Sql.Append(_mode == OceanBaseCompatibilityMode.Oracle ? "(" : "CONCAT(");
+                Visit(sqlBinaryExpression.Left);
+                Sql.Append(_mode == OceanBaseCompatibilityMode.Oracle ? " || " : ", ");
+                Visit(sqlBinaryExpression.Right);
+                Sql.Append(")");
+                return sqlBinaryExpression;
+            }
+
+            return base.VisitSqlBinary(sqlBinaryExpression);
+        }
+
+        protected override Expression VisitSqlFunction(SqlFunctionExpression sqlFunctionExpression)
+        {
+            if (_mode == OceanBaseCompatibilityMode.Oracle
+                && sqlFunctionExpression is { IsBuiltIn: true, Name: "CONCAT", Arguments.Count: 2, Type: var type }
+                && type == typeof(string))
+            {
+                Sql.Append("(");
+                Visit(sqlFunctionExpression.Arguments[0]);
+                Sql.Append(" || ");
+                Visit(sqlFunctionExpression.Arguments[1]);
+                Sql.Append(")");
+                return sqlFunctionExpression;
+            }
+
+            return base.VisitSqlFunction(sqlFunctionExpression);
+        }
 
         protected override void GeneratePseudoFromClause()
         {

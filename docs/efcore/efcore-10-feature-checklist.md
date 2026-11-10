@@ -55,20 +55,20 @@ so that an undocumented feature is not accidentally advertised.
 Development resumed at the user's request (2026-11-10) on efcore/10.0. See the
 [progress handoff](efcore-10-progress.md) for saved state, remaining work and the exact resume point.
 
-Snapshot: 2026-11-10, `efcore/10.0` exact integer normalization batch following 725b1ce.
+Snapshot: 2026-11-10, `efcore/10.0` string concatenation batch following 5feef06.
 The same baseline-built package passes both tested EF patches. This is not a release result.
 
 `dotnet test OceanBase.EntityFrameworkCore.slnx --no-restore -m:1 -nr:false` produced:
 
-The expanded suite passed in Debug and Release (752 tests per configuration).
+The expanded suite passed in Debug and Release (785 tests per configuration).
 
 | Layer | Passed | Failed | Evidence boundary |
 | --- | --- | --- | --- |
-| Unit | 590 | 0 | Prior scalar/configuration coverage plus floating-fraction integer rejection, numeric property facets and missing nullable/Boolean/Guid cells; live coverage incomplete. |
-| Command pipeline | 160 | 0 | Intercepted scalar queries/materialization, converted writes/original predicates and exact generated integer/enum rejection; transactions disabled. |
+| Unit | 611 | 0 | Prior scalar/configuration coverage plus native concat, Oracle empty/null/converter/cache processing and negative translation cases; live coverage incomplete. |
+| Command pipeline | 172 | 0 | Intercepted scalar and string/null queries, materialization, converted writes/original predicates and generated values; transactions disabled. |
 | Consumer | 2 | 0 | Both-mode provider detection through a project reference, not an isolated packed-package consumer. |
-| Packed consumer | Both modes | 0 | Same numeric-20261110 package passes EF10.0.0/10.0.14, including exact integer reader, temporal clone/facet rejection, aliases and prior scalar checks; README included; no live execution. |
-| Later-patch Release suite | 752 | 0 | Current source compiled/tested against EF10.0.14 in isolated artifacts. |
+| Packed consumer | Both modes | 0 | Same concat-20261110 package passes EF10.0.0/10.0.14, including native concat and changing Oracle fallback parameters plus prior scalar checks; README included; no live execution. |
+| Later-patch Release suite | 785 | 0 | Current source compiled/tested against EF10.0.14 in isolated artifacts. |
 | Live MySQL / Oracle | Not established | Not established | No live provider execution recorded for either mode. |
 | Relational specification | Not established | Not established | No specification test project yet. |
 
@@ -188,7 +188,7 @@ Existing evidence references used below identify partial coverage, not automatic
   project reference only.
 - **PC**: [Standalone package consumer](../../tests/OceanBase.EntityFrameworkCore.PackageConsumer/Program.cs),
   registration/native floating/explicit Guid/temporal/binary/integer and Boolean model/SQL/paging checks against the
-   latest numeric-20261110 local prerelease package, including integer reader, Oracle aliases and temporal clones;
+   latest concat-20261110 local prerelease package, including concat/null-cache checks, integer reader, Oracle aliases and temporal clones;
   [commands and evidence](efcore-10-query-update-design.md#package-checkpoint-validation).
 
 `Missing` means tests and evidence still need to be added.
@@ -262,12 +262,12 @@ duplicates and mode-specific string semantics.
 | QRY-03 | Inner/left joins, correlated subqueries, Any/All and scalar/collection Contains have verified results or explicit exclusions. | Required | In progress | In progress | UQ simple join only; collection/null/empty cases missing. |
 | QRY-04 | GroupBy aggregates, Count/LongCount, Sum/Average/Min/Max handle empty and nullable inputs correctly. | Required | In progress | In progress | UQ grouped Count shape only. |
 | QRY-05 | First/Single/default variants enforce cardinality; entity/scalar async materialization matches sync. | Required | In progress | In progress | FP ToList scalar only; entity/cardinality cases missing. |
-| QRY-06 | String translations have a supported-overload matrix: equality, Contains, StartsWith/EndsWith, length, substring, case and trim. | Required | Planned | Planned | Missing; include wildcard escaping, collation and Oracle empty-string semantics. |
+| QRY-06 | String translations have a supported-overload matrix: equality, Contains, StartsWith/EndsWith, length, substring, case and trim. | Required | In progress | In progress | StringQueryTests cover native addition/fixed Concat, equality, Oracle empty/null/converter/cache boundaries; FP adds 12 intercepted cases. Search/member/substring/case/trim and live collation/result evidence remain open. |
 | QRY-07 | Date/time members, numeric functions, conditional/coalesce expressions have a supported-overload matrix. | Required | Planned | Planned | Missing; include precision, nulls and unsupported overloads. |
 | QRY-08 | Include/ThenInclude for reference/collection navigations, tracking/no-tracking and identity resolution preserve related entities. | Required | Planned | Planned | Missing; split queries are listed separately below. |
 | QRY-09 | Global query filters compose with parameterized predicates and can be disabled using supported EF APIs. | Required | Planned | Planned | Missing; named filters require EF10 review below. |
 | QRY-10 | FromSqlRaw/FromSqlInterpolated and ExecuteSqlRaw/ExecuteSqlInterpolated bind values; hostile parameter values cannot change SQL shape. | Required | Planned | Planned | Missing; raw SQL text remains caller-authored. |
-| QRY-11 | Unsupported predicates fail with actionable translation errors; preserve EF's allowed top-level client projection evaluation. | Required | Planned | Planned | Missing; do not promise EF forbids all client projection evaluation. |
+| QRY-11 | Unsupported predicates fail with actionable translation errors; preserve EF's allowed top-level client projection evaluation. | Required | In progress | In progress | StringQueryTests/FP cover StringComparison/custom/unsupported Concat predicates and permitted client projections. Wider function boundaries remain open. |
 
 ## Tracked writes, concurrency and transactions
 
@@ -301,9 +301,9 @@ commit/transaction behavior per mode.
 | ID | Requirement and acceptance criteria | Priority | MySQL | Oracle | Existing evidence / gap |
 | --- | --- | --- | --- | --- | --- |
 | PKG-01 | Build net10.0 assets against published OceanBaseConnector 0.2.0 with warnings as errors. | Required | Done | Done | Current solution test command builds assets; not a package-content assertion. |
-| PKG-02 | Packed nuspec uses OceanBase.EntityFrameworkCore and EF ranges [10.0.0,11.0.0). | Required | Done | Done | PackageConsumer/Verify-Package.ps1 passes the numeric nupkg identity/net10.0/README/range checks; wrong-version, missing-README and exact-patch probes reject as expected. Rerun on every release pack; runtime/live gates are separate. |
-| PKG-03 | Isolated packed consumer restores/executes provider API without project/local connector references. | Required | Done | Done | PC numeric-20261110 passes both modes on both selected patches, including exact integer reader, temporal facets/clones, aliases and prior scalar checks; README included; rerun after provider changes. |
-| PKG-04 | Minimum EF10 and selected later available EF10 patch restore/build/test without pinning consumer patch; EF11 cannot satisfy dependencies. | Required | Done | Done | Source Release suite 752 passes at 10.0.14; same baseline-built numeric package passes EF10.0.0/10.0.14; nuspec ranges rechecked, prior range parser rejects 11.0.0; rerun after changes. |
+| PKG-02 | Packed nuspec uses OceanBase.EntityFrameworkCore and EF ranges [10.0.0,11.0.0). | Required | Done | Done | PackageConsumer/Verify-Package.ps1 passes the concat nupkg identity/net10.0/README/range checks; prior wrong-version, missing-README and exact-patch probes reject as expected. Rerun on every release pack; runtime/live gates are separate. |
+| PKG-03 | Isolated packed consumer restores/executes provider API without project/local connector references. | Required | Done | Done | PC concat-20261110 passes both modes on both selected patches, including native concat, Oracle fallback cache behavior and prior scalar checks; README included; rerun after provider changes. |
+| PKG-04 | Minimum EF10 and selected later available EF10 patch restore/build/test without pinning consumer patch; EF11 cannot satisfy dependencies. | Required | Done | Done | Source Release suite 785 passes at 10.0.14; same baseline-built concat package passes EF10.0.0/10.0.14; nuspec ranges rechecked, prior range parser rejects 11.0.0; rerun after changes. |
 | TST-01 | Selected EF relational specification classes pass; exclusions map to checklist IDs and limitations. | Required | Planned | Planned | Specification project/selection absent. |
 | TST-02 | Live core query/write/transaction/schema/scalar suites pass in at least one declared supported environment per mode. | Required | Planned | Planned | User will supply access later; User Secrets fixture and authorized schema/cleanup scope required; no live provider execution recorded. |
 | REL-01 | Support notes record server/connector/runtime/EF versions, tenant mode, direct/proxy endpoint, transport/options without credentials. | Required | Planned | Planned | Release evidence record missing. |

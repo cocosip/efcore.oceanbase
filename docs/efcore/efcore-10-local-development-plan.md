@@ -139,6 +139,24 @@ FunctionalTests/BasicRelationalTests.cs. Follow the concatenation contract in th
 4. Add sync/async intercepted parameter/materialization evidence, full Debug/Release, independent review and
    scoped commit. QRY-06 stays partial; later search/member/substring/case/trim slices still need their own matrix.
 
+## Batch 3b brief: numeric division and remainder
+
+**Files:** Query/OceanBaseQuerySqlGenerator.cs; a focused UnitTests/ArithmeticQueryTests.cs;
+FunctionalTests/BasicRelationalTests.cs. The arithmetic contract in the query/update design is authoritative.
+Do not replace the expression factory or general query pipeline for a SQL-rendering correction.
+
+1. RED: mapped integer division emits MySQL DIV and Oracle TRUNC(a / b), while Oracle remainder emits MOD(a,b).
+   Include signed int/long, promoted small integers, uint/ulong, nullable expressions, negative operands,
+   captured divisors and a value-preserving numeric converter. Decimal/Single/Double and explicit fractional
+   casts retain ordinary division, even when Oracle storage is NUMBER. Preserve numeric +,-,* and unary minus.
+2. Implement the smallest generator correction. Preserve grouping for a/(b+c), a/(b/c), nested remainder,
+   multiplication around division and predicate comparisons. Keep inferred mappings/null propagation;
+   do not use store declaration names as an integer classifier. No bitwise or Math/Random expansion here.
+3. Add sync/async intercepted queries for parameter binding and nullable/non-null materialization in both modes.
+   Supply synthetic results honestly: these prove no server arithmetic or predicate-membership results.
+4. Focused RED/GREEN, full Debug/Release, independent review, selected-patch/package checks, documentation
+   and scoped commit. QRY-01 remains partial until wider operators and live acceptance pass.
+
 ## Execution record
 
 - Baseline: 57fd44a, clean efcore/10.0. Prior verified suite: 563 (420 unit, 142 intercepted, one consumer).
@@ -170,7 +188,13 @@ FunctionalTests/BasicRelationalTests.cs. Follow the concatenation contract in th
 - Scalar audit note: connector 0.2.0 nuspec revision 4734781a7028aea990af7a832ca7d251a2055556
   OceanBaseDataReader.GetDecimal/GetFieldValue already handles OceanBaseDecimal.ToDecimal; reuse that reader
   path rather than inventing a second transport. Byte/session/calendar/LOB/wire gates remain external evidence.
-- Batch 3a: next local slice; supported string-function/operator matrices and later batches remain pending.
+- Batch 3a local concat/null-boundary scope complete: initial SQL RED 12/14 failures and converter RED 2/2
+  failures became 33 focused passes. Debug/Release and isolated EF10.0.14 Release pass 785 (611+172+2).
+  Independent review passed. Same baseline-built concat-20261110 package passes both modes on EF10.0.0/10.0.14;
+  previous numeric package fails the new syntax check. Package-content gate and package-only graph pass.
+  Oracle provider-string parameters disable command-SQL caching for native empty/null correctness; pure
+  converters preserve raw binding values and null-converting string converters reject explicitly.
+  Evidence: artifacts/local-development/batch3a/. Batch 3b arithmetic and wider string/query work remain open.
 - Remaining Batch 2 scalar work and Batches 3–10 pending. The overall goal remains active.
 - Batch 8 package README slice: use the provider project's README as package-owned documentation and declare
   PackageReadmeFile. Verify archive metadata/content with no-build packing of an already verified isolated
@@ -185,3 +209,7 @@ FunctionalTests/BasicRelationalTests.cs. Follow the concatenation contract in th
   gate neither builds nor executes a provider or changes the independent source/consumer/live gates.
   Current numeric package passes; wrong-version, old missing-README and exact-patch probes fail at their intended
   checks on Windows PowerShell 7. Independent spec/quality review passed; Linux execution unverified.
+- Cross-platform CI follow-up: add a Windows/Linux GitHub Actions matrix for restore, Release tests, pack and
+  the existing package-content gate, using PowerShell 7 on both hosts. It performs no database access or
+  publication. YAML parsing/structure and independent spec/quality review pass; committed as 5feef06.
+  Hosted execution and Linux runtime remain unverified until an actual workflow run succeeds.
