@@ -19,6 +19,71 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
         [InlineData(OceanBaseCompatibilityMode.MySql, true)]
         [InlineData(OceanBaseCompatibilityMode.Oracle, false)]
         [InlineData(OceanBaseCompatibilityMode.Oracle, true)]
+        public async Task Text_writes_validate_converted_characters_but_leave_query_and_original_values_unbounded(
+            OceanBaseCompatibilityMode mode, bool async)
+        {
+            using var table = new DataTable();
+            table.Columns.Add("Caption", typeof(string));
+            table.Columns.Add("Converted", typeof(string));
+            table.Rows.Add("海🌊", "海🌊河!");
+            var commands = new CommandCapture { Results = table };
+            await using var context = CreateContext(mode, commands);
+            var boundary = "longer🌊query";
+            var query = context.Set<ShortTextRow>().Where(row => row.Caption == boundary)
+                .Select(row => new { row.Caption, row.Converted });
+            var result = Assert.Single(async ? await query.ToListAsync() : query.ToList());
+            Assert.Equal("海🌊", result.Caption);
+            Assert.Equal("海🌊河", result.Converted);
+            Assert.Equal(boundary, Assert.Single(commands.StringInputs).Value);
+            Assert.Equal(boundary.Length, commands.StringInputs[0].Size);
+            var row = new ShortTextRow { Code = "id", Caption = result.Caption, Converted = result.Converted };
+            context.Add(row);
+            Assert.Equal(1, async ? await context.SaveChangesAsync() : context.SaveChanges());
+            Assert.Contains("海🌊河!", commands.Values);
+            row.Caption = null;
+            Assert.Equal(1, async ? await context.SaveChangesAsync() : context.SaveChanges());
+            row.Caption = "";
+            Assert.Equal(1, async ? await context.SaveChangesAsync() : context.SaveChanges());
+            context.ChangeTracker.Clear();
+            row = new ShortTextRow { Code = "original-key-longer-than-column", Caption = "old" };
+            context.Attach(row);
+            row.Caption = "海🌊";
+            Assert.Equal(1, async ? await context.SaveChangesAsync() : context.SaveChanges());
+            Assert.Contains("original-key-longer-than-column", commands.Values);
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false, 0)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true, 0)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false, 1)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true, 1)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false, 2)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true, 2)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false, 0)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true, 0)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false, 1)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true, 1)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false, 2)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true, 2)]
+        public async Task Text_invalid_current_writes_fail_before_interception(
+            OceanBaseCompatibilityMode mode, bool async, int invalid)
+        {
+            var commands = new CommandCapture();
+            await using var context = CreateContext(mode, commands);
+            context.Add(new ShortTextRow { Code = "id", Caption = invalid == 0 ? "海🌊河" : invalid == 2 ? "\ud800" : "ok",
+                Converted = invalid == 1 ? "海🌊河岸" : "ok" });
+            var exception = async ? await Assert.ThrowsAsync<DbUpdateException>(() => context.SaveChangesAsync())
+                : Assert.Throws<DbUpdateException>(() => context.SaveChanges());
+            Assert.IsAssignableFrom<ArgumentException>(exception.InnerException);
+            Assert.Empty(commands.Sql);
+            Assert.Empty(commands.Values);
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true)]
         public async Task National_text_and_enum_Guid_converters_preserve_parameter_type_and_query_size(
             OceanBaseCompatibilityMode mode, bool async)
         {
@@ -873,10 +938,22 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
                 modelBuilder.Entity<TextParameterRow>().Property(entity => entity.Fixed).IsFixedLength().HasMaxLength(4);
                 modelBuilder.Entity<TextParameterRow>().Property(entity => entity.State).HasConversion<string>().HasMaxLength(16);
                 modelBuilder.Entity<TextParameterRow>().Property(entity => entity.Token).HasColumnType(oracle ? "NVARCHAR2(36)" : "VARCHAR(36)");
+                modelBuilder.Entity<ShortTextRow>().HasKey(entity => entity.Code);
+                modelBuilder.Entity<ShortTextRow>().Property(entity => entity.Code).ValueGeneratedNever().HasMaxLength(2);
+                modelBuilder.Entity<ShortTextRow>().Property(entity => entity.Caption).HasMaxLength(2);
+                modelBuilder.Entity<ShortTextRow>().Property(entity => entity.Converted)
+                    .HasConversion(value => value + "!", value => value.Substring(0, value.Length - 1)).HasMaxLength(4);
             }
         }
 
         private enum RowState { Inactive = 0, Active = 2 }
+
+        private sealed class ShortTextRow
+        {
+            public string Code { get; set; } = string.Empty;
+            public string? Caption { get; set; }
+            public string Converted { get; set; } = string.Empty;
+        }
 
         private sealed class TextParameterRow
         {

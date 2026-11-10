@@ -52,23 +52,23 @@ so that an undocumented feature is not accidentally advertised.
 
 ## Current evidence and blockers
 
-Development is paused at the user's request (2026-11-10). See the
+Development resumed at the user's request (2026-11-10) on efcore/10.0. See the
 [progress handoff](efcore-10-progress.md) for saved state, remaining work and the exact resume point.
 
-Snapshot: 2026-11-10, `dev` national text parameter implementation and consumer revision d46ae9d.
+Snapshot: 2026-11-10, `efcore/10.0` text declaration/write slice, continuing from 20a2f18.
 The same baseline-built package passes both tested EF patches. This is not a release result.
 
 `dotnet test OceanBase.EntityFrameworkCore.slnx --no-restore -m:1 -nr:false` produced:
 
-The expanded suite passed in Debug and Release (510 tests per configuration).
+The expanded suite passed in Debug and Release (563 tests per configuration).
 
 | Layer | Passed | Failed | Evidence boundary |
 | --- | --- | --- | --- |
-| Unit | 383 | 0 | Options, connection cleanup, scalar/temporal/binary/native floating/decimal/national-text converter hooks, explicit declarations/facets/clones, literals and Oracle Boolean SQL; full explicit-type/live coverage incomplete. |
-| Command pipeline | 126 | 0 | Intercepted before network execution; scalar/temporal/binary/Guid/floating/decimal/national-text query/input conversion, converted write bounds and synthetic generated-output readback; transactions disabled. |
+| Unit | 420 | 0 | Prior mapping coverage plus text declarations/facet/property/clone validation, Unicode and converted character bounds; full explicit-type/live coverage incomplete. |
+| Command pipeline | 142 | 0 | Prior intercepted coverage plus text query/materialization, converted write rejection and original-value predicates; transactions disabled. |
 | Consumer | 1 | 0 | Project reference, not an isolated packed-package consumer. |
-| Packed consumer | Both modes | 0 | Revision d46ae9d; same baseline-built package passes EF10.0.0/10.0.14 in both modes, including national text type and query Size; no live execution. |
-| Later-patch Release suite | 510 | 0 | Current national-text source compiled/tested against EF10.0.14 in isolated artifacts; separate from baseline-package compatibility. |
+| Packed consumer | Both modes | 0 | Same text-20261110 package passes EF10.0.0/10.0.14, including invalid declaration/UTF-16 rejection and lossless national text query binding; no live execution. |
+| Later-patch Release suite | 563 | 0 | Current text source compiled/tested against EF10.0.14 in isolated artifacts; separate from baseline-package compatibility. |
 | Live MySQL / Oracle | Not established | Not established | No live provider execution recorded for either mode. |
 | Relational specification | Not established | Not established | No specification test project yet. |
 
@@ -156,6 +156,10 @@ LOBs, surrogate/empty/NULL/padding and server round trips remain required open e
 
 Existing evidence references used below identify partial coverage, not automatic satisfaction of a row:
 
+- **UX**: [StringMappingTests](../../tests/OceanBase.EntityFrameworkCore.UnitTests/StringMappingTests.cs),
+  37 declarations/direct-property facets/LOB index/clone/converter/Unicode/character-bound cases. Initially 29 failed;
+  all pass after implementation. Sixteen additional FP cases cover sync/async text query/materialization,
+  converted write bounds, null/empty inputs and predicate-only original values in both modes.
 - **UO**: [OptionsTests](../../tests/OceanBase.EntityFrameworkCore.UnitTests/OptionsTests.cs).
 - **UH**: [SqlGenerationHelperTests](../../tests/OceanBase.EntityFrameworkCore.UnitTests/SqlGenerationHelperTests.cs).
 - **UT**: [TypeMappingTests](../../tests/OceanBase.EntityFrameworkCore.UnitTests/TypeMappingTests.cs).
@@ -184,7 +188,7 @@ Existing evidence references used below identify partial coverage, not automatic
   project reference only.
 - **PC**: [Standalone package consumer](../../tests/OceanBase.EntityFrameworkCore.PackageConsumer/Program.cs),
   registration/native floating/explicit Guid/temporal/binary/integer and Boolean model/SQL/paging checks against the
-  local prerelease package at implementation revision f645608;
+   latest text-20261110 local prerelease package;
   [commands and evidence](efcore-10-query-update-design.md#package-checkpoint-validation).
 
 `Missing` means tests and evidence still need to be added.
@@ -218,11 +222,11 @@ explicitly; silent truncation or lossy fallback is not acceptable.
 | MOD-03 | Generated/default/computed metadata, explicit names and schema settings produce supported SQL or validation errors. | Required | In progress | In progress | FP generated integer key only; complete generation/schema contract missing. |
 | MAP-01 | Boolean and signed/unsigned integers bind/round-trip in documented ranges; predicates use valid Boolean SQL. | Required | In progress | In progress | US/UI integer reader/storage/write bounds and explicit Boolean binding pass; UQ Oracle conditions/projections and FP converters pass; full Boolean/live matrix missing. |
 | MAP-02 | Decimal precision/scale and float/double round-trip; default decimal storage preserves documented fractional precision. | Required | In progress | In progress | UT/UD decimal defaults/declarations/exact write bounds/query transport/clones and UF native float/double reader widths/literals/finite inputs pass; FP decimal/floating query/write paths pass; aliases, decimal-backed float/REAL and all live coverage remain open. |
-| MAP-03 | Unicode/non-Unicode, fixed/variable and bounded/unbounded text honor length and key/index constraints. | Required | In progress | In progress | UT facets/key sizes/LOB fallback; US escaped literals pass; live charset/index/LOB behavior missing. |
+| MAP-03 | Unicode/non-Unicode, fixed/variable and bounded/unbounded text honor length and key/index constraints. | Required | In progress | In progress | UT/UX complete supported declarations, character bounds, Unicode, LOB index rejection and FP converted writes pass; BYTE/charset/index/padding/LOB live behavior missing. |
 | MAP-04 | Binary/Guid storage and byte order are explicit and round-trip through parameters, literals and generated values. | Required | In progress | In progress | UB/UG declarations/length/facets/null/composition and FP explicit Guid text/binary query/write/generated outputs pass locally; Oracle empty-BLOB transport, padding, large BLOB semantics and all live round trips remain open. |
 | MAP-05 | DateTime/DateTimeOffset/DateOnly/TimeOnly/TimeSpan have documented precision, timezone and range semantics. | Required | In progress | In progress | UTM/UTQ five-type mapping/reader/literal/precision/range/cloning, lossless query transport and DML-only precision rejection pass; FP query/write/generated temporal outputs pass; live round trips/coercion/session semantics missing. |
-| MAP-06 | Explicit store type, size, precision/scale, Unicode/fixed facets and null/DBNull parameter values are honored or rejected clearly. | Required | In progress | In progress | UT/UD/UTM/UB/UI/UG decimal/string/temporal/binary/integer/Boolean/Guid declarations and facets pass; property-path length conflicts and UF floating precision conflicts reject; remaining declarations and live cases missing. |
-| MAP-07 | EF value converters, including ordinary enum-to-integer/string conversions, work in query/update paths. | Required | In progress | In progress | US/UI/UD/UN/UTM/UB/UG/UF converter hooks and FP enum-to-int/string, national-text Guid, floating/Boolean/temporal/custom hex-to-bytes query/write cases pass; wider custom and live cases missing. |
+| MAP-06 | Explicit store type, size, precision/scale, Unicode/fixed facets and null/DBNull parameter values are honored or rejected clearly. | Required | In progress | In progress | UT/UD/UTM/UB/UI/UG/UX declarations/facets/clones pass, including direct/property text conflicts and Unicode transport; remaining declarations and live cases missing. |
+| MAP-07 | EF value converters, including ordinary enum-to-integer/string conversions, work in query/update paths. | Required | In progress | In progress | US/UI/UD/UN/UTM/UB/UG/UF/UX converter hooks and FP enum/Guid/custom text write bounds/query paths pass; wider custom and live cases missing. |
 
 ### Next mapping acceptance cases
 
@@ -298,12 +302,12 @@ commit/transaction behavior per mode.
 | --- | --- | --- | --- | --- | --- |
 | PKG-01 | Build net10.0 assets against published OceanBaseConnector 0.2.0 with warnings as errors. | Required | Done | Done | Current solution test command builds assets; not a package-content assertion. |
 | PKG-02 | Packed nuspec uses OceanBase.EntityFrameworkCore and EF ranges [10.0.0,11.0.0). | Required | In progress | In progress | Checkpoint nuspec/asset assertions passed; repeatable release package-content gate still needed. |
-| PKG-03 | Isolated packed consumer restores/executes provider API without project/local connector references. | Required | Done | Done | PC at d46ae9d passes both modes on both selected patches, including national text query binding; rerun after provider changes. |
-| PKG-04 | Minimum EF10 and selected later available EF10 patch restore/build/test without pinning consumer patch; EF11 cannot satisfy dependencies. | Required | Done | Done | Source Release suite 510 passes at 10.0.14; same d46ae9d baseline-built package passes EF10.0.0/10.0.14; nuspec ranges rechecked, prior range parser rejects 11.0.0; rerun after changes. |
+| PKG-03 | Isolated packed consumer restores/executes provider API without project/local connector references. | Required | Done | Done | PC text-20261110 passes both modes on both selected patches, including declaration/UTF-16 rejection and national binding; rerun after provider changes. |
+| PKG-04 | Minimum EF10 and selected later available EF10 patch restore/build/test without pinning consumer patch; EF11 cannot satisfy dependencies. | Required | Done | Done | Source Release suite 563 passes at 10.0.14; same baseline-built text package passes EF10.0.0/10.0.14; nuspec ranges rechecked, prior range parser rejects 11.0.0; rerun after changes. |
 | TST-01 | Selected EF relational specification classes pass; exclusions map to checklist IDs and limitations. | Required | Planned | Planned | Specification project/selection absent. |
 | TST-02 | Live core query/write/transaction/schema/scalar suites pass in at least one declared supported environment per mode. | Required | Planned | Planned | User will supply access later; User Secrets fixture and authorized schema/cleanup scope required; no live provider execution recorded. |
 | REL-01 | Support notes record server/connector/runtime/EF versions, tenant mode, direct/proxy endpoint, transport/options without credentials. | Required | Planned | Planned | Release evidence record missing. |
-| REL-02 | Validated dev checkpoint merges to efcore/10.0; packaging/release checks run on release revision. | Required | In progress | In progress | f645608 synchronized and locally packed on efcore/10.0; complete release gates remain open. |
+| REL-02 | Tested efcore/10.0 development checkpoint is reviewed; packaging/release checks run on release revision. | Required | In progress | In progress | Development resumed directly on efcore/10.0 as requested; local text package validated; complete release gates remain open. |
 
 ## Visible deferred inventory
 
@@ -351,7 +355,7 @@ nor establishes a provider defect.
 
 Release requires every `Required` row to be `Done`, no failing required tests, explicit deferred limitations and
 release-branch package evidence. Do not derive completion percentages from test counts or unequal feature rows.
-Tested development checkpoints may merge from `dev` into `efcore/10.0` before all rows finish; these are not
+Tested development checkpoints may be committed on `efcore/10.0` before all rows finish; these are not
 release candidates.
 
 Implement in this order:

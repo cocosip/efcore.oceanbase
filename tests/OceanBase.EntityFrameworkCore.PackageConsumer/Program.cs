@@ -1,6 +1,8 @@
 using System;
 using System.Linq;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Storage;
 using OceanBase.EntityFrameworkCore;
 using OceanBaseCommand = OceanBaseConnector.OceanBaseCommand;
 using OceanBaseParameter = OceanBaseConnector.OceanBaseParameter;
@@ -123,7 +125,23 @@ namespace PackageConsumer
                     throw new Exception("National text query binding lost its type or transport length.");
                 }
 
-                Console.WriteLine($"{mode}: packed provider registration, scalar/temporal/binary/decimal model, Boolean SQL and paging passed; EF {typeof(DbContext).Assembly.GetName().Version}.");
+                var source = context.GetService<IRelationalTypeMappingSource>();
+                foreach (var declaration in mode == OceanBaseCompatibilityMode.Oracle
+                    ? new[] { "NVARCHAR2(4) trailing", "NCLOB(4)", "VARCHAR2" }
+                    : new[] { "VARCHAR(4) trailing", "TEXT(4)", "VARCHAR" })
+                {
+                    var rejected = false;
+                    try { source.FindMapping(typeof(string), declaration); }
+                    catch (ArgumentException) { rejected = true; }
+                    if (!rejected) throw new Exception("An invalid text declaration was silently accepted.");
+                }
+
+                var invalidUnicodeRejected = false;
+                try { captionMapping.CreateParameter(command, "caption", "\ud800"); }
+                catch (ArgumentException) { invalidUnicodeRejected = true; }
+                if (!invalidUnicodeRejected) throw new Exception("Invalid UTF-16 was silently accepted.");
+
+                Console.WriteLine($"{mode}: packed provider registration, scalar/text/temporal/binary/decimal model, Boolean SQL and paging passed; EF {typeof(DbContext).Assembly.GetName().Version}.");
             }
         }
 

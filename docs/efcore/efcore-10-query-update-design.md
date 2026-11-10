@@ -64,7 +64,7 @@ carry the type mapping and current or original value selected by EF's column mod
 Before executing DML, the batch validates the current value of each `IsWrite` column whose mapping implements
 the internal write-validation contract. Integer precision/native-width, decimal precision/scale/unsigned,
 floating width/unsigned, temporal precision/
-interval leading width and binary column-length checks run after
+interval leading width, binary column-length and text character-length/Unicode checks run after
 value conversion and fail as `DbUpdateException` with the original validation error. This check applies to actual
 writes; original key/concurrency values used only in predicates must not inherit a physical write bound.
 General parameter/literal generation also serves queries, where an arithmetic operand, CASE branch or comparand
@@ -135,6 +135,41 @@ Still required for Task 4 and release:
 - Extend specification tests, expand the packed consumer beyond smoke checks and validate EF10 patch compatibility.
 
 ## Package checkpoint validation
+
+### Current text checkpoint (2026-11-10)
+
+Development resumed directly on efcore/10.0 from 20a2f18. The text declaration/write slice passes 563 tests
+(420 unit, 142 intercepted pipeline, one project consumer) in Debug/Release on EF10.0.0 and in isolated Release
+on EF10.0.14. The same baseline-built `10.0.0-checkpoint.text-20261110` package passes both-mode consumers
+on EF10.0.0/10.0.14, including invalid text declaration/UTF-16 rejection and lossless national query binding.
+Its ZIP/nuspec contains the net10.0 assembly, connector 0.2.0 and both bounded EF ranges. The consumer assets
+have only package dependencies; loaded EF assembly versions are 10.0.0.0/10.0.14.0. No live execution occurs.
+The missing package README message remains release preparation work. No publish or release tag was created.
+
+Repeat the package checks from the repository root in PowerShell:
+
+```powershell
+$textVersion = '10.0.0-checkpoint.text-20261110'
+$textFeed = Join-Path (Get-Location) 'artifacts/checkpoint-text-20261110'
+$textConsumer = 'tests/OceanBase.EntityFrameworkCore.PackageConsumer/OceanBase.EntityFrameworkCore.PackageConsumer.csproj'
+dotnet pack src/OceanBase.EntityFrameworkCore/OceanBase.EntityFrameworkCore.csproj -c Release `
+    "-p:PackageVersion=$textVersion" -o $textFeed -m:1 -nr:false
+foreach ($textPatch in @('10.0.0', '10.0.14')) {
+    dotnet restore $textConsumer "-p:OceanBaseProviderVersion=$textVersion" `
+        "-p:OceanBaseConsumerEfCoreVersion=$textPatch" --source $textFeed `
+        --source (Join-Path $env:USERPROFILE '.nuget/packages') `
+        --packages (Join-Path $textFeed 'consumer-packages') --force-evaluate --disable-parallel
+    dotnet run --project $textConsumer -c Release --no-restore `
+        "-p:OceanBaseProviderVersion=$textVersion" "-p:OceanBaseConsumerEfCoreVersion=$textPatch" -m:1 -nr:false
+}
+```
+
+The recorded default consumer omitted the explicit EF version and resolved the minimum 10.0.0; the selected
+later-patch run requested 10.0.14. Do not reuse this package version for later source changes: pack a unique
+checkpoint version and repeat the evidence. Character-set byte budgets, live text/LOB semantics, transactions,
+specification tests and final release gates remain open.
+
+### Historical national-text checkpoint
 
 Implementation revision `d46ae9d` was fast-forwarded from dev into efcore/10.0 after Debug and Release each passed
 510 tests (383 unit, 126 intercepted pipeline and one project-reference consumer). A local prerelease package was

@@ -4,7 +4,7 @@
 
 **Goal:** Build the first tested OceanBase EF Core provider for EF Core 10 with explicit MySQL and Oracle compatibility modes.
 
-**Architecture:** Keep dev and efcore/10.0 aligned, with efcore/10.0 used for packaging. The provider consumes the
+**Architecture:** Develop and package on efcore/10.0; synchronize other branches deliberately. The provider consumes the
 public OceanBaseConnector ADO.NET API. Mode-independent EF services are shared only when generated SQL and result
 semantics are identical; mode-specific SQL and mappings stay explicit.
 
@@ -17,8 +17,8 @@ checklist rows, implementation, tests and package impact are updated together.
 
 ## Acceptance map and current state
 
-Development is paused as of 2026-11-10 at the user's request. The
-[progress handoff](efcore-10-progress.md) records the saved checkpoint, verification and exact resume point.
+Development resumed on 2026-11-10 at the user's request on efcore/10.0. The
+[progress handoff](efcore-10-progress.md) records the current checkpoint, verification and next work.
 
 The feature checklist is the release authority. Task checkboxes describe work steps, not proof that all features
 in a category are supported. Before starting a step, name its checklist IDs and required evidence; after it,
@@ -26,7 +26,7 @@ update MySQL and Oracle statuses independently. Generated SQL and intercepted te
 
 | Task | Checklist IDs | Remaining acceptance work |
 | --- | --- | --- |
-| 1: Package boundary | PKG-01 through PKG-04 | d46ae9d package passes both selected patches; repeatable release package-content gate remains. |
+| 1: Package boundary | PKG-01 through PKG-04 | Text checkpoint package validation recorded in the progress handoff; repeatable release package-content gate remains. |
 | 2: Configuration | CFG-01 through CFG-04 | Negative cases, both-mode service graph and actual cache behavior. |
 | 3: Connection and mappings | CON-01 through CON-05, SQL-01/02, MOD-01 through MOD-03, MAP-01 through MAP-07 | Closed-connection cleanup/facets/scalar/temporal/binary conversion/precision/length hooks have tests; opened ownership, remaining explicit types and live round trips remain. |
 | 4: Runtime and schema | DIA-01/02, QRY-01 through QRY-11, UPD-01 through UPD-05, TXN-01 through TXN-03, SCH-01 through SCH-03 | Live query/write/transaction evidence and schema implementation; incomplete. |
@@ -38,19 +38,35 @@ do not complete mappings.
 
 Before further production changes, use the checklist's **Before starting a feature** record to enumerate concrete
 cases for the selected IDs. The **Next mapping acceptance cases** table defines the immediate scalar work;
-its initial failing tests are the RED baseline. National text revision d46ae9d passes 510 tests
-in Debug/Release and isolated EF10.0.14 Release (383 unit, 126 intercepted pipeline, one project consumer), including
-the preceding temporal/decimal changes and national text/converter paths. The same baseline-built package passes
-both modes on EF10.0.0 and EF10.0.14. This is partial acceptance, not Task 3/4 completion or live evidence.
+its initial failing tests are the RED baseline. The resumed text slice passes 563 tests
+in Debug/Release and isolated EF10.0.14 Release (420 unit, 142 intercepted pipeline, one project consumer).
+Package evidence is recorded in the progress handoff. This is partial acceptance, not Task 3/4 completion or live evidence.
+
+### Resumed text slice (2026-11-10)
+
+The user resumed development on efcore/10.0. The text contract in the technical baseline governs this slice.
+Work in the existing clean checkout on that branch; do not create or synchronize other branches implicitly.
+
+1. Add StringMappingTests for complete declarations, direct/property facets, LOB key/index rejection and clones.
+   Run the focused tests RED, then implement validation in OceanBaseStringTypeMapping/TypeMappingSource.
+2. Add converted length, Unicode, query/original-value and sync/async write regressions RED, then reuse
+   IOceanBaseWriteValidation for text without constraining query operands. Preserve national parameter hooks.
+3. Run full Debug/Release suites and selected EF10.0.14 Release compatibility. Expand the isolated packed
+   consumer, verify the same new package on EF10.0.0/10.0.14, review the connected code, update progress and commit.
+
+Review focus: supplementary characters versus UTF-16 Size; BYTE declarations versus unknown encoding;
+converted writes versus predicate-only originals; malformed declarations/facets through property resolution;
+clone preservation of converters/native bindings. Required live gates stay open.
 
 ## Global Constraints
 
-- The release branch is efcore/10.0 and is merged from dev after tests pass.
+- The development and release branch is efcore/10.0; no other branch is synchronized implicitly.
 - The package ID is OceanBase.EntityFrameworkCore and the package line is 10.x.
 - EF Core and EF Core Relational dependencies use the NuGet range [10.0.0, 11.0.0).
 - MySQL and Oracle compatibility mode is explicit and participates in the model-cache key.
 - Connector protocol, pooling, TLS, authentication and connection-string parsing remain in OceanBaseConnector.
-- Migrations, reverse engineering, JSON/LOB/OBJECT/REF CURSOR mappings and bulk APIs are deferred.
+- Migrations, reverse engineering, JSON, LOB locators, OBJECT/REF CURSOR mappings and bulk APIs are deferred;
+  ordinary string/byte-array LOB storage remains required acceptance work.
 - All public behavior must be tested locally; live database evidence is reported separately.
 - The user will supply database access later; local live credentials must use .NET User Secrets under the
   [repository credential/ownership contract](../repository-guidelines.md#live-test-credentials-and-ownership).
@@ -260,6 +276,6 @@ select EF Core 8 or EF Core 9 provider dependencies.
 
 - [ ] Step 4: Merge and tag the release branch.
 
-Run: git switch efcore/10.0, merge the validated dev commit, run the release checks, and create the 10.x tag.
+Run: review the tested efcore/10.0 revision, run every release check, and create the 10.x tag only when releasing.
 
-Expected: efcore/10.0 contains the same tested provider as dev and is the only branch used for the first package.
+Expected: efcore/10.0 contains the tested provider and is the only branch used for the first package.

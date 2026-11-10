@@ -351,6 +351,11 @@ namespace OceanBase.EntityFrameworkCore.Storage
 
         private RelationalTypeMapping? FindStringMapping(in RelationalTypeMappingInfo info)
         {
+            if (info.Precision is not null || info.Scale is not null)
+            {
+                throw new ArgumentException("Text mappings do not support precision or scale.");
+            }
+
             var oracle = _compatibilityMode == OceanBaseCompatibilityMode.Oracle;
             var unicode = info.IsUnicode ?? true;
             var fixedLength = info.IsFixedLength ?? false;
@@ -358,22 +363,30 @@ namespace OceanBase.EntityFrameworkCore.Storage
             var storeType = info.StoreTypeName;
             if (storeType is not null)
             {
-                var typeName = info.StoreTypeNameBase?.ToUpperInvariant();
+                var typeName = Regex.Match(storeType.Trim(), @"\A\w+").Value.ToUpperInvariant();
                 if (oracle)
                 {
                     if (typeName is not "CHAR" and not "VARCHAR2" and not "NCHAR" and not "NVARCHAR2" and not "CLOB" and not "NCLOB")
                     {
-                        return null;
+                        throw new ArgumentException("The text store type is not supported in Oracle mode.");
                     }
 
                     unicode = typeName is "NCHAR" or "NVARCHAR2" or "NCLOB";
+                    if (info.IsUnicode is { } configuredUnicode && configuredUnicode != unicode)
+                    {
+                        throw new ArgumentException("The explicit Oracle text type conflicts with its Unicode facet.");
+                    }
                 }
                 else if (typeName is not "CHAR" and not "VARCHAR" and not "TINYTEXT" and not "TEXT" and not "MEDIUMTEXT" and not "LONGTEXT")
                 {
-                    return null;
+                    throw new ArgumentException("The text store type is not supported in MySQL mode.");
                 }
 
                 fixedLength = typeName is "CHAR" or "NCHAR";
+                if (info.IsFixedLength is { } configuredFixed && configuredFixed != fixedLength)
+                {
+                    throw new ArgumentException("The explicit text type conflicts with its fixed-length facet.");
+                }
             }
             else
             {
@@ -406,7 +419,14 @@ namespace OceanBase.EntityFrameworkCore.Storage
 
             var dbType = unicode ? fixedLength ? DbType.StringFixedLength : DbType.String
                 : fixedLength ? DbType.AnsiStringFixedLength : DbType.AnsiString;
-            return new OceanBaseStringTypeMapping(storeType, dbType, unicode, size, fixedLength, _compatibilityMode);
+            var mapping = new OceanBaseStringTypeMapping(storeType, dbType, unicode, size, fixedLength, _compatibilityMode);
+            if (info.IsKeyOrIndex && mapping.StoreTypeNameBase.Trim().ToUpperInvariant()
+                is "TINYTEXT" or "TEXT" or "MEDIUMTEXT" or "LONGTEXT" or "CLOB" or "NCLOB")
+            {
+                throw new ArgumentException("Text keys and indexes require bounded storage in this provider profile.");
+            }
+
+            return mapping;
         }
     }
 }

@@ -2,7 +2,7 @@
 
 ## Goal
 
-Implement EF Core 10 first on dev with an independent efcore/10.0 release line and explicit MySQL/Oracle modes.
+Implement EF Core 10 on efcore/10.0, the active development and release line, with explicit MySQL/Oracle modes.
 EF8/EF9 compatibility branches adapt a tested EF10 baseline later; they are not existing implementation evidence.
 
 ## Porting rules
@@ -26,7 +26,7 @@ seeding or migration behavior require individual design notes and tests before b
 
 ## Package and runtime
 
-- Branch: efcore/10.0, kept in sync with dev for packaging and release.
+- Branch: efcore/10.0 for development, packaging and release; other branch synchronization is deliberate.
 - Package: OceanBase.EntityFrameworkCore 10.x.
 - EF dependency: the 10.x range only.
 - Initial asset: the runtime target required by EF Core 10.
@@ -41,7 +41,7 @@ implemented in both OceanBase modes and covered by provider tests.
 
 ## Verification gates
 
-Release requires dev to be merged into efcore/10.0, followed by the shared behavioral suite, EF10-specific provider
+Release requires the efcore/10.0 revision to pass the shared behavioral suite, EF10-specific provider
 tests, selected EF relational specification tests, packed-package consumer tests and the available MySQL/Oracle
 live matrix. Unsupported server features and missing infrastructure remain recorded as verification limits rather
 than inferred support.

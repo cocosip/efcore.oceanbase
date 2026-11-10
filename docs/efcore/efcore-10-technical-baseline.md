@@ -8,7 +8,7 @@ smaller than a complete EF Core feature catalog.
 
 ## Version and package baseline
 
-- Development branch: dev.
+- Development branch: efcore/10.0 (also used for packaging and release).
 - Release branch: efcore/10.0.
 - EF dependency range: Microsoft.EntityFrameworkCore and Microsoft.EntityFrameworkCore.Relational [10.0.0, 11.0.0).
 - Initial provider asset: the runtime target required by EF Core 10.
@@ -153,6 +153,40 @@ null inputs retain declared Size. This is transport metadata, not validation of 
 National fixed/variable bindings, output/null metadata, larger query operands and composed converters require
 StringParameterMappingTests and intercepted EF sync/async query/write evidence. National character-set byte
 limits, surrogate handling, empty-string/NULL semantics, LOBs and server round trips remain required open gates.
+
+### Text declarations and tracked-write length contract
+
+Scope: MAP-03/06/07 and QRY-01. Continue the existing StringTypeMapping/RelationalTypeMapping
+EF10 contracts and connector 0.2.0 public parameter API. Reuse OceanBaseStringTypeMapping and
+IOceanBaseWriteValidation; do not introduce another transport or a character-set option.
+
+- Parse the complete explicit declaration, case-insensitively, allowing surrounding/token whitespace.
+  MySQL accepts CHAR/VARCHAR and TINYTEXT/TEXT/MEDIUMTEXT/LONGTEXT. Oracle accepts
+  CHAR/VARCHAR2/NCHAR/NVARCHAR2 and CLOB/NCLOB. CHAR (and Oracle NCHAR) without a length defaults
+  to one; variable types require a length. LOB declarations cannot have a length suffix.
+- Retain the existing conservative profile limits: MySQL CHAR 255 and VARCHAR 16383;
+  Oracle CHAR 2000, NCHAR 1000, VARCHAR2 4000 and NVARCHAR2 2000. Larger inferred variable
+  mappings use existing LOB storage; explicit oversized scalar declarations reject instead of changing type.
+  Oracle CHAR/VARCHAR2 may specify CHAR/BYTE; other types cannot. Bare Oracle units remain session-dependent.
+- Reject nonpositive/overflowing lengths, numeric facets, cross-mode types, trailing syntax and conflicting
+  explicit length/fixed/Oracle Unicode facets, including property and clone paths. MySQL Unicode remains a
+  parameter facet, not a declaration of the tenant/column character set. Keys/indexes cannot use LOB mappings;
+  actual charset-dependent index byte limits still require a live environment.
+- Actual current tracked writes validate the converted string, including enum/Guid/custom converters.
+  Count well-formed Unicode scalar values for the mapping's character bound (Size), including logical
+  bounded properties mapped to a LOB. Query comparands/literals and original predicate-only values do not
+  inherit that bound. Input Size remains at least UTF-16 Length for connector transport; output/null metadata
+  retains declared Size. Clone and converter composition must preserve validation and native national binding.
+- Reject unpaired UTF-16 surrogates in parameters/literals/writes instead of allowing replacement encoding.
+  Empty strings and null remain distinct provider inputs; Oracle's server empty-string/NULL semantics are
+  still unverified. Do not trim, pad or normalize text. Encoded byte budgets (including BYTE declarations,
+  TEXT tiers and Oracle national storage) remain server/session constraints: the character check alone does
+  not prove byte capacity. No guessed UTF-8 limit is imposed on another configured encoding.
+
+Acceptance: declaration/facet/property/clone tests; boundary/emoji/null/converter write tests; intercepted
+sync/async query, write-rejection and predicate-only tests in both modes; standalone package checks.
+Live character sets, BYTE capacity, padding/comparisons, empty-string/NULL and ordinary LOB round trips remain
+required open evidence. This local slice does not close MAP-03/06/07.
 
 ## Numeric and Guid reading contract
 

@@ -35,8 +35,8 @@ key and every mode-dependent service is safe to resolve at runtime.
 EF Core provider services use APIs that can change between major releases. The source is therefore maintained in
 an EF10 mainline and independent compatibility branches:
 
-    dev         -> active EF10 integration work
-    efcore/10.0 -> mirrors dev; packaging and release branch for 10.x
+    dev         -> historical integration checkpoint
+    efcore/10.0 -> active EF10 development, packaging and release branch
                     \
                      +-> efcore/8.0  -> EF Core 8 compatibility line
                      +-> efcore/9.0  -> EF Core 9 compatibility line
@@ -48,8 +48,8 @@ fix/efcore-10.0.1.
 
 The normal release flow is:
 
-1. Develop and test on dev.
-2. Merge dev into efcore/10.0 after the shared EF10 test gates pass.
+1. Develop and test on efcore/10.0 (the user's current development branch).
+2. Review the tested checkpoint on efcore/10.0; synchronization with other branches is deliberate.
 3. Pack and publish the 10.x package from efcore/10.0.
 4. Fork efcore/8.0 and efcore/9.0 from a stable efcore/10.0 release commit when compatibility work is needed.
 5. Adapt each compatibility branch independently and publish only its matching package line.
@@ -79,8 +79,8 @@ appropriate only when the generated SQL and EF contract are demonstrably identic
 ## Release process
 
 1. Read the official EF Core documentation and breaking-change notes for the target major.
-2. Develop the current implementation on dev.
-3. Merge dev into efcore/10.0 and compile against the exact EF Core 10 dependency range.
+2. Develop the current implementation on efcore/10.0.
+3. Review the checkpoint and compile against the bounded EF Core 10 dependency range.
 4. Run provider, relational, package-consumer and available live tests for both modes.
 5. Pack and publish OceanBase.EntityFrameworkCore 10.x from efcore/10.0.
 6. When required, fork efcore/8.0 or efcore/9.0 from that release commit and port the version-local APIs.
