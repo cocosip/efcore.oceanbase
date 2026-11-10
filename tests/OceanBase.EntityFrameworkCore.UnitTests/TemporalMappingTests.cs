@@ -3,7 +3,9 @@ using System.Data;
 using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.EntityFrameworkCore.Storage;
+using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using OceanBase.EntityFrameworkCore.Storage;
 using OceanBaseConnector;
 using Xunit;
@@ -12,6 +14,198 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
 {
     public sealed class TemporalMappingTests
     {
+        public static TheoryData<OceanBaseCompatibilityMode, Type, string> TemporalStorageCases => new()
+        {
+            { OceanBaseCompatibilityMode.MySql, typeof(DateTime), "DATETIME(3)" },
+            { OceanBaseCompatibilityMode.MySql, typeof(DateTimeOffset), "DATETIME(3)" },
+            { OceanBaseCompatibilityMode.MySql, typeof(DateOnly), "DATE" },
+            { OceanBaseCompatibilityMode.MySql, typeof(TimeOnly), "TIME(3)" },
+            { OceanBaseCompatibilityMode.MySql, typeof(TimeSpan), "TIME(3)" },
+            { OceanBaseCompatibilityMode.Oracle, typeof(DateTime), "TIMESTAMP(3)" },
+            { OceanBaseCompatibilityMode.Oracle, typeof(DateTimeOffset), "TIMESTAMP(3) WITH TIME ZONE" },
+            { OceanBaseCompatibilityMode.Oracle, typeof(DateOnly), "DATE" },
+            { OceanBaseCompatibilityMode.Oracle, typeof(TimeOnly), "INTERVAL DAY(1) TO SECOND(3)" },
+            { OceanBaseCompatibilityMode.Oracle, typeof(TimeSpan), "INTERVAL DAY(9) TO SECOND(3)" }
+        };
+
+        [Theory]
+        [MemberData(nameof(TemporalStorageCases))]
+        public void Temporal_resolution_rejects_length_and_fixed_facets(OceanBaseCompatibilityMode mode, Type type, string storeType)
+        {
+            using var context = CreateContext(mode);
+            var source = context.GetService<IRelationalTypeMappingSource>();
+            Assert.Throws<ArgumentException>(() => source.FindMapping(type, null, size: 4));
+            Assert.Throws<ArgumentException>(() => source.FindMapping(type, null, fixedLength: true));
+            Assert.Throws<ArgumentException>(() => source.FindMapping(type, storeType, size: 4));
+            Assert.Throws<ArgumentException>(() => source.FindMapping(type, storeType, fixedLength: true));
+            Assert.NotNull(source.FindMapping(type, storeType, fixedLength: false));
+        }
+
+        [Theory]
+        [MemberData(nameof(TemporalStorageCases))]
+        public void Temporal_property_length_rejects_even_when_equal_to_parsed_precision(
+            OceanBaseCompatibilityMode mode, Type type, string storeType)
+        {
+            using var context = CreateContext(mode);
+            var source = context.GetService<IRelationalTypeMappingSource>();
+            var property = new ModelBuilder().Entity("TemporalFacet").Property(type, "Value")
+                .HasColumnType(storeType).HasMaxLength(3).Metadata;
+            Assert.Throws<ArgumentException>(() => source.FindMapping((IProperty)property));
+            property.SetMaxLength(null);
+            property.SetIsFixedLength(true);
+            Assert.Throws<ArgumentException>(() => source.FindMapping((IProperty)property));
+            property.SetIsFixedLength(false);
+            Assert.NotNull(source.FindMapping((IProperty)property));
+        }
+
+        [Theory]
+        [MemberData(nameof(TemporalStorageCases))]
+        public void Temporal_clones_reject_length_and_fixed_facets_without_breaking_unchanged_clones(
+            OceanBaseCompatibilityMode mode, Type type, string storeType)
+        {
+            using var context = CreateContext(mode);
+            var mapping = context.GetService<IRelationalTypeMappingSource>().FindMapping(type, storeType)!;
+            Assert.Throws<ArgumentException>(() => mapping.WithStoreTypeAndSize(storeType, 4));
+            Assert.Throws<ArgumentException>(() => mapping.Clone(new RelationalTypeMappingInfo(type, fixedLength: true)));
+            var clone = mapping.WithStoreTypeAndSize(storeType, null);
+            Assert.Equal(storeType, clone.StoreType);
+            Assert.Equal(mapping.Precision, clone.Precision);
+            Assert.Equal(mapping.DbType, clone.DbType);
+            using var command = new OceanBaseCommand();
+            var output = clone.CreateParameter(command, "output", null, direction: ParameterDirection.Output);
+            Assert.Equal(mapping.Precision, output.Scale);
+            Assert.Equal(mapping.CreateParameter(command, "original", null, direction: ParameterDirection.Output).Precision,
+                output.Precision);
+            Assert.Equal(mapping.Converter, clone.Converter);
+        }
+
+        [Theory]
+        [MemberData(nameof(TemporalStorageCases))]
+        public void Temporal_clones_cannot_replace_the_existing_transport_DbType(
+            OceanBaseCompatibilityMode mode, Type type, string storeType)
+        {
+            using var context = CreateContext(mode);
+            var mapping = context.GetService<IRelationalTypeMappingSource>().FindMapping(type, storeType)!;
+            Assert.Throws<ArgumentException>(() => mapping.Clone(
+                new RelationalTypeMappingInfo(type, storeTypeName: storeType, dbType: DbType.String)));
+            var clone = mapping.Clone(new RelationalTypeMappingInfo(type, storeTypeName: storeType, dbType: mapping.DbType));
+            Assert.Equal(storeType, clone.StoreType);
+            Assert.Equal(mapping.DbType, clone.DbType);
+            Assert.Equal(mapping.Converter, clone.Converter);
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql, typeof(DateTime), "DATETIME(3)", "DATE", DbType.Date, 0)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, typeof(TimeSpan), "TIME(3)", "DATETIME(3)", DbType.DateTime2, 3)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, typeof(DateTime), "TIMESTAMP(3)", "DATE", DbType.Date, 0)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, typeof(DateTime), "DATE", "TIMESTAMP(3)", DbType.DateTime2, 3)]
+        public void Temporal_clones_cannot_change_family_by_also_replacing_DbType(
+            OceanBaseCompatibilityMode mode, Type type, string storeType, string invalid, DbType dbType, int precision)
+        {
+            using var context = CreateContext(mode);
+            var mapping = context.GetService<IRelationalTypeMappingSource>().FindMapping(type, storeType)!;
+            Assert.Throws<ArgumentException>(() => mapping.Clone(
+                new RelationalTypeMappingInfo(type, storeTypeName: invalid, precision: precision, dbType: dbType)));
+        }
+
+        [Theory]
+        [InlineData(typeof(DateTimeOffset), "TIMESTAMP(3) WITH TIME ZONE")]
+        [InlineData(typeof(TimeSpan), "INTERVAL DAY(9) TO SECOND(3)")]
+        public void Temporal_clones_reject_postfixes_that_rewrite_the_validated_declaration(Type type, string storeType)
+        {
+            using var context = CreateContext(OceanBaseCompatibilityMode.Oracle);
+            var mapping = context.GetService<IRelationalTypeMappingSource>().FindMapping(type, storeType)!;
+            var ignoredPostfix = mapping.Clone(storeTypePostfix: StoreTypePostfix.Precision);
+            Assert.Equal(storeType, ignoredPostfix.StoreType);
+            Assert.Equal(mapping.DbType, ignoredPostfix.DbType);
+            Assert.Throws<ArgumentException>(() => mapping.Clone(
+                new RelationalTypeMappingInfo(type), storeTypePostfix: StoreTypePostfix.Precision));
+            var clone = mapping.Clone(new RelationalTypeMappingInfo(type), storeTypePostfix: StoreTypePostfix.None);
+            Assert.Equal(storeType, clone.StoreType);
+            Assert.Equal(mapping.DbType, clone.DbType);
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql, typeof(DateTime), "DATETIME(3)", "VARCHAR(3)")]
+        [InlineData(OceanBaseCompatibilityMode.MySql, typeof(DateTime), "DATETIME(3)", "TIMESTAMP(3)")]
+        [InlineData(OceanBaseCompatibilityMode.MySql, typeof(DateTime), "DATETIME(3)", "DATE")]
+        [InlineData(OceanBaseCompatibilityMode.MySql, typeof(DateTimeOffset), "DATETIME(3)", "TIMESTAMP(3) WITH TIME ZONE")]
+        [InlineData(OceanBaseCompatibilityMode.MySql, typeof(DateOnly), "DATE", "DATETIME(0)")]
+        [InlineData(OceanBaseCompatibilityMode.MySql, typeof(TimeOnly), "TIME(3)", "DATETIME(3)")]
+        [InlineData(OceanBaseCompatibilityMode.MySql, typeof(TimeSpan), "TIME(3)", "INTERVAL DAY(9) TO SECOND(3)")]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, typeof(DateTime), "TIMESTAMP(3)", "DATETIME(3)")]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, typeof(DateTime), "TIMESTAMP(3)", "DATE")]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, typeof(DateTime), "DATE", "TIMESTAMP(0)")]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, typeof(DateOnly), "DATE", "TIMESTAMP(0)")]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, typeof(DateTimeOffset), "TIMESTAMP(3) WITH TIME ZONE", "TIMESTAMP(3)")]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, typeof(TimeOnly), "INTERVAL DAY(1) TO SECOND(3)", "TIME(3)")]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, typeof(TimeSpan), "INTERVAL DAY(9) TO SECOND(3)", "NUMBER")]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, typeof(DateTime), "TIMESTAMP(3)", "TIMESTAMP(3) junk")]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, typeof(TimeSpan), "INTERVAL DAY(9) TO SECOND(3)", "INTERVAL DAY(9) TO SECOND(3) junk")]
+        public void Temporal_clones_reject_incompatible_transport_families_and_suffixes(
+            OceanBaseCompatibilityMode mode, Type type, string storeType, string invalid)
+        {
+            using var context = CreateContext(mode);
+            var mapping = context.GetService<IRelationalTypeMappingSource>().FindMapping(type, storeType)!;
+            Assert.Throws<NotSupportedException>(() => mapping.WithStoreTypeAndSize(invalid, null));
+            Assert.Throws<NotSupportedException>(() => mapping.Clone(
+                new RelationalTypeMappingInfo(type, storeTypeName: invalid, precision: mapping.Precision == 0 ? 0 : 2)));
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql, typeof(DateTime), -1)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, typeof(DateTime), 7)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, typeof(DateOnly), 1)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, typeof(DateTime), -1)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, typeof(DateTime), 10)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, typeof(DateOnly), 1)]
+        public void Temporal_precision_clones_reject_invalid_ranges(OceanBaseCompatibilityMode mode, Type type, int precision)
+        {
+            using var context = CreateContext(mode);
+            var mapping = context.GetService<IRelationalTypeMappingSource>().FindMapping(type)!;
+            Assert.Throws<ArgumentOutOfRangeException>(() => mapping.WithPrecisionAndScale(precision, null));
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql, typeof(DateTime), "DATETIME(3)", "DATETIME(4)")]
+        [InlineData(OceanBaseCompatibilityMode.MySql, typeof(TimeSpan), "TIME(3)", "TIME(4)")]
+        [InlineData(OceanBaseCompatibilityMode.MySql, typeof(DateTime), "DATETIME(3)", "DATETIME(7)")]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, typeof(DateTime), "TIMESTAMP(3)", "TIMESTAMP(4)")]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, typeof(DateTimeOffset), "TIMESTAMP(3) WITH TIME ZONE", "TIMESTAMP(4) WITH TIME ZONE")]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, typeof(TimeOnly), "INTERVAL DAY(1) TO SECOND(3)", "INTERVAL DAY(2) TO SECOND(3)")]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, typeof(TimeSpan), "INTERVAL DAY(9) TO SECOND(3)", "INTERVAL DAY(9) TO SECOND(4)")]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, typeof(TimeSpan), "INTERVAL DAY(9) TO SECOND(3)", "INTERVAL DAY(10) TO SECOND(3)")]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, typeof(DateTime), "TIMESTAMP(3)", "TIMESTAMP(999999999999)")]
+        public void Temporal_clones_reject_conflicting_fractional_and_leading_precision(
+            OceanBaseCompatibilityMode mode, Type type, string storeType, string invalid)
+        {
+            using var context = CreateContext(mode);
+            var mapping = context.GetService<IRelationalTypeMappingSource>().FindMapping(type, storeType)!;
+            Assert.ThrowsAny<ArgumentException>(() => mapping.WithStoreTypeAndSize(invalid, null));
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql, "DATETIME(3)")]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, "TIMESTAMP(3)")]
+        public void Temporal_declaration_clones_keep_converter_and_require_matching_explicit_precision(
+            OceanBaseCompatibilityMode mode, string storeType)
+        {
+            using var context = CreateContext(mode);
+            var mapping = (RelationalTypeMapping)context.GetService<IRelationalTypeMappingSource>()
+                .FindMapping(typeof(DateTime), storeType)!.WithComposedConverter(
+                    new ValueConverter<Stamp, DateTime>(stamp => stamp.Value, value => new Stamp(value)));
+            var declaration = mode == OceanBaseCompatibilityMode.MySql ? "datetime(2)" : "timestamp(2)";
+            var clone = mapping.Clone(new RelationalTypeMappingInfo(typeof(Stamp), storeTypeName: declaration, precision: 2));
+            Assert.Equal(declaration, clone.StoreType);
+            Assert.Equal(2, clone.Precision);
+            Assert.Same(mapping.Converter, clone.Converter);
+            using var command = new OceanBaseCommand();
+            var value = new DateTime(2026, 11, 10).AddTicks(10);
+            Assert.Equal(value, clone.CreateParameter(command, "value", new Stamp(value)).Value);
+            Assert.Equal((byte)2, clone.CreateParameter(command, "output", null, direction: ParameterDirection.Output).Scale);
+            Assert.Throws<ArgumentException>(() => ((IOceanBaseWriteValidation)clone).ValidateWriteValue(new Stamp(value)));
+        }
+
         [Theory]
         [InlineData(OceanBaseCompatibilityMode.MySql, typeof(DateTime), "DATETIME(6)", 6)]
         [InlineData(OceanBaseCompatibilityMode.MySql, typeof(DateTimeOffset), "DATETIME(6)", 6)]
@@ -328,5 +522,6 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             => new(new DbContextOptionsBuilder<TestContext>().UseOceanBase("Server=localhost;Database=test", mode).Options);
 
         private sealed class TestContext(DbContextOptions<TestContext> options) : DbContext(options);
+        private sealed record Stamp(DateTime Value);
     }
 }

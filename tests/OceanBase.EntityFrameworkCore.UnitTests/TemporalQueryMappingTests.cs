@@ -45,6 +45,14 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             Assert.ThrowsAny<ArgumentException>(() => Assert.IsAssignableFrom<IOceanBaseWriteValidation>(mapping).ValidateWriteValue(value));
             var output = mapping.CreateParameter(command, "output", null, direction: ParameterDirection.Output);
             Assert.Equal((byte)3, output.Scale);
+            var reduced = mapping.WithPrecisionAndScale(1, null);
+            var reducedInput = reduced.CreateParameter(command, "reduced", value, direction: ParameterDirection.InputOutput);
+            Assert.Equal(parameter.Value, reducedInput.Value);
+            Assert.Equal(parameter.Scale, reducedInput.Scale);
+            Assert.Equal(parameter.Precision, reducedInput.Precision);
+            var reducedOutput = reduced.CreateParameter(command, "output", null, direction: ParameterDirection.Output);
+            Assert.Equal((byte)1, reducedOutput.Scale);
+            Assert.Equal(output.Precision, reducedOutput.Precision);
         }
 
         [Fact]

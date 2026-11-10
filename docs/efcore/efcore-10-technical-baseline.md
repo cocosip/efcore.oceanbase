@@ -205,6 +205,11 @@ than silently rounding. Oracle generated output propagation uses the same normal
 applying the property's converter. MySQL's signed/unsigned integer storage must preserve the CLR range. Boolean reading
 must accept the connector's Boolean and numeric result forms, independently of the tiny-integer reader option.
 
+The no-rounding integer rule also applies to unexpected Single/Double reader values: finite fractional values
+reject, exact integral values retain checked conversion, and non-finite/out-of-range values fail. This is a
+defensive normalization contract, not support for mapping integer properties to floating-point columns. Query
+materialization and generated outputs must use the same rule, including converter-backed integer properties.
+
 Guid storage is explicit: MySQL CHAR(36) uses the standard hyphenated string representation; Oracle RAW(16)
 uses the built-in EF GuidToBytesConverter, which follows Guid.ToByteArray .NET serialization order. This does
 not imply compatibility with an external application's alternative UUID byte order. Parameter and result

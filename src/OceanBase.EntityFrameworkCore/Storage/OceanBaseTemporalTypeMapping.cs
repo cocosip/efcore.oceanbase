@@ -4,6 +4,7 @@ using System.Data.Common;
 using System.Globalization;
 using System.Linq.Expressions;
 using System.Reflection;
+using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore.Storage;
 using OceanBaseConnector;
 
@@ -39,7 +40,18 @@ namespace OceanBase.EntityFrameworkCore.Storage
 
         protected override RelationalTypeMapping Clone(RelationalTypeMappingParameters parameters)
         {
-            var date = parameters.DbType == System.Data.DbType.Date;
+            if (parameters.DbType != DbType || parameters.StoreTypePostfix != StoreTypePostfix.None)
+            {
+                throw new ArgumentException("Temporal clones must preserve their DbType and complete store declaration.");
+            }
+
+            if (parameters.Size is not null || parameters.FixedLength)
+            {
+                throw new ArgumentException("Temporal mappings do not support size or fixed-length facets.");
+            }
+
+            var date = DbType == System.Data.DbType.Date;
+            var duration = typeof(T) == typeof(TimeSpan) || typeof(T) == typeof(OceanBaseIntervalDayToSecond);
             var precision = parameters.Precision ?? Precision ?? (date ? 0 : _mode == OceanBaseCompatibilityMode.Oracle ? 7 : 6);
             if (precision < 0 || precision > (date ? 0 : _mode == OceanBaseCompatibilityMode.Oracle ? 9 : 6))
             {
@@ -52,13 +64,28 @@ namespace OceanBase.EntityFrameworkCore.Storage
             }
 
             parameters = parameters.WithPrecisionAndScale(precision, null);
-            if (precision != Precision)
+            if (precision != Precision && parameters.StoreType == StoreType)
             {
                 var storeType = date ? "DATE" : typeof(T) == typeof(OceanBaseIntervalDayToSecond)
                     ? $"INTERVAL DAY({_leadingPrecision}) TO SECOND({precision})"
                     : _mode == OceanBaseCompatibilityMode.Oracle ? $"TIMESTAMP({precision})" + (typeof(T) == typeof(DateTimeOffset) ? " WITH TIME ZONE" : string.Empty)
                     : typeof(T) == typeof(TimeSpan) ? $"TIME({precision})" : $"DATETIME({precision})";
                 parameters = parameters.WithStoreTypeAndSize(storeType, parameters.Size);
+            }
+
+            var match = OceanBaseTemporalTypeMapping.MatchDeclaration(parameters.StoreType, _mode, date, duration,
+                typeof(T) == typeof(DateTimeOffset));
+            if (!match.Success)
+            {
+                throw new NotSupportedException("The store declaration is incompatible with the current temporal transport.");
+            }
+
+            var declaredPrecision = OceanBaseTemporalTypeMapping.ReadFacet(match, "precision",
+                date ? 0 : _mode == OceanBaseCompatibilityMode.Oracle ? 6 : 0);
+            if (declaredPrecision != precision || duration && _mode == OceanBaseCompatibilityMode.Oracle
+                && OceanBaseTemporalTypeMapping.ReadFacet(match, "days", 2) != _leadingPrecision)
+            {
+                throw new ArgumentException("The temporal declaration conflicts with its fractional or leading precision.");
             }
 
             return new OceanBaseTemporalTypeMapping<T>(parameters, _mode, _leadingPrecision);
@@ -179,6 +206,31 @@ namespace OceanBase.EntityFrameworkCore.Storage
                 default:
                     throw new ArgumentException("The temporal literal has an incompatible provider value.");
             }
+        }
+    }
+
+    internal static class OceanBaseTemporalTypeMapping
+    {
+        internal static Match MatchDeclaration(string storeType, OceanBaseCompatibilityMode mode, bool date, bool duration, bool zoned)
+        {
+            var oracle = mode == OceanBaseCompatibilityMode.Oracle;
+            var pattern = date ? @"\ADATE\z"
+                : duration && oracle ? @"\AINTERVAL\s+DAY(?:\((?<days>\d+)\))?\s+TO\s+SECOND(?:\((?<precision>\d+)\))?\z"
+                : oracle ? zoned ? @"\ATIMESTAMP(?:\((?<precision>\d+)\))?\s+WITH\s+TIME\s+ZONE\z"
+                    : @"\ATIMESTAMP(?:\((?<precision>\d+)\))?\z"
+                : duration ? @"\ATIME(?:\((?<precision>\d+)\))?\z" : @"\ADATETIME(?:\((?<precision>\d+)\))?\z";
+            return Regex.Match(storeType.Trim(), pattern, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+        }
+
+        internal static int ReadFacet(Match match, string name, int fallback)
+        {
+            if (!match.Groups[name].Success) return fallback;
+            if (!int.TryParse(match.Groups[name].Value, NumberStyles.None, CultureInfo.InvariantCulture, out var precision))
+            {
+                throw new ArgumentOutOfRangeException(nameof(match), "The temporal declaration exceeds supported precision.");
+            }
+
+            return precision;
         }
     }
 }

@@ -39,9 +39,27 @@ The new consumer fails against the preceding text package, confirming the regres
 net10.0 assembly, dependency ranges and package-only consumer graph were inspected. The package still lacks a
 README; no publication or live database execution occurred.
 
-Latest package: `artifacts/checkpoint-alias-20261110/OceanBase.EntityFrameworkCore.10.0.0-checkpoint.alias-20261110.nupkg`.
-The historical text package below does not include this change. Remaining local scalar work includes temporal
+Historical alias package: `artifacts/checkpoint-alias-20261110/OceanBase.EntityFrameworkCore.10.0.0-checkpoint.alias-20261110.nupkg`.
+The historical text package below does not include this change. At this checkpoint, remaining scalar work included temporal
 facet/clone consistency and exact integer normalization for unexpected floating reader values; see the local plan.
+
+### Temporal facet/clone checkpoint
+
+Both-mode temporal resolution now rejects actual size/fixed-length facets while preserving EF's parsed temporal
+precision. Model properties recheck configured length and precision. Declaration clones stay within their current
+transport family and retain DbType, fractional/interval-leading precision and complete SQL. Unsafe postfix/DbType
+overrides reject; legitimate unchanged/converter/precision clones retain their reader and wide query-input hooks.
+
+Final Debug/Release and isolated EF10.0.14 Release each pass **706 tests** (554 unit, 150 intercepted pipeline,
+two project consumers). Focused tests pass 131 after RED and an independent-review fix round. Review confirmed
+both transport and postfix findings addressed; an unnecessary public Clone override was avoided after checking
+the exact EF API. Expanded consumers fail against the earlier alias/unfinished temporal probes and pass with the
+same new `10.0.0-checkpoint.temporal2-20261110` package on EF10.0.0/10.0.14, both modes. Package-only dependencies,
+nuspec identity/ranges, net10.0 assembly and included README were inspected. No live database claim or publication.
+
+Latest package: `artifacts/checkpoint-temporal2-20261110/OceanBase.EntityFrameworkCore.10.0.0-checkpoint.temporal2-20261110.nupkg`.
+Evidence: `artifacts/local-development/batch2b/`. The first temporal probe predates review fixes and is not current
+evidence. Next local scalar work is exact integer normalization and the remaining characterization cells.
 
 ### Package README preparation
 
@@ -51,7 +69,7 @@ verified isolated alias assembly; its SHA-256 matches the package assembly. The 
 resolved for future packs. This metadata/documentation check does not replace source or consumer verification
 after later provider changes. The preceding alias/text packages remain immutable historical artifacts.
 The isolated README probe uses exact EF10.0.14 override dependencies and is only a packaging check; bounded
-dependency-range and consumer compatibility evidence remains the alias package above. Independent review passed.
+dependency-range and consumer compatibility evidence comes from the full-source checkpoints above. Independent review passed.
 
 Git line endings are now governed by `.gitattributes` (a2bbe5f): automatic text uses LF, batch scripts CRLF.
 Attribute checks and normalization under core.autocrlf=true/false/input passed; existing index blobs were already LF.
@@ -132,7 +150,7 @@ mapping limits are a profile, not a comprehensive OceanBase type-support claim.
 Continue in this order:
 
 1. Recheck efcore/10.0/worktree state and read the checklist plus this handoff.
-2. Finish remaining local scalar gaps, starting with temporal facet/clone consistency, before broadening query claims.
+2. Finish remaining local scalar gaps, starting with exact integer normalization, before broadening query claims.
 3. Define per-mode text/byte/session acceptance fixtures when live access is supplied. Cover empty/NULL,
    supplementary characters, trailing spaces, byte capacity and ordinary LOB values; preserve query transport.
 4. Finish opened-connection ownership, diagnostics and cancellation, followed by the wider query/update/transaction

@@ -136,7 +136,19 @@ Still required for Task 4 and release:
 
 ## Package checkpoint validation
 
-### Current fixed-point alias checkpoint (2026-11-10)
+### Current temporal facet/clone checkpoint (2026-11-10)
+
+Debug/Release on EF10.0.0 and isolated Release on EF10.0.14 each pass 706 tests (554 unit, 150 intercepted
+pipeline, two project consumers). The same baseline-built `10.0.0-checkpoint.temporal2-20261110` nupkg passes
+both-mode consumers on EF10.0.0/10.0.14, including temporal length/declaration/DbType clone rejection. Earlier
+alias/unfinished temporal packages fail these regressions. Independent review and one focused fix round passed.
+Nuspec identity, net10.0 assembly, included README, connector version, bounded EF ranges and package-only graph
+were inspected. The initial temporal probe predates review fixes and is not current evidence.
+
+Repeat the commands below with `10.0.0-checkpoint.temporal2-20261110` and `artifacts/checkpoint-temporal2-20261110`.
+Logs: `artifacts/local-development/batch2b/`. Broader release gates and live database acceptance remain open.
+
+### Historical fixed-point alias checkpoint (2026-11-10)
 
 After the configuration/cache coverage and Oracle bare DECIMAL/NUMERIC fix, Debug/Release on EF10.0.0 and isolated
 Release on EF10.0.14 each pass 627 tests (475 unit, 150 intercepted pipeline, two project consumers).

@@ -127,6 +127,24 @@ namespace PackageConsumer
                 }
 
                 var source = context.GetService<IRelationalTypeMappingSource>();
+                var temporalFacetRejected = false;
+                try { source.FindMapping(typeof(DateTime), null, size: 3); }
+                catch (ArgumentException) { temporalFacetRejected = true; }
+                if (!temporalFacetRejected) throw new Exception("A temporal length facet was silently discarded.");
+
+                var temporalCloneRejected = false;
+                try { source.FindMapping(typeof(DateTime))!.WithStoreTypeAndSize("VARCHAR(4)", null); }
+                catch (Exception exception) when (exception is ArgumentException or NotSupportedException)
+                {
+                    temporalCloneRejected = true;
+                }
+                if (!temporalCloneRejected) throw new Exception("An incompatible temporal clone was silently accepted.");
+
+                var temporalTransportRejected = false;
+                try { source.FindMapping(typeof(DateTime))!.Clone(new RelationalTypeMappingInfo(typeof(DateTime), dbType: DbType.String)); }
+                catch (ArgumentException) { temporalTransportRejected = true; }
+                if (!temporalTransportRejected) throw new Exception("A temporal clone changed its parameter transport.");
+
                 if (mode == OceanBaseCompatibilityMode.Oracle)
                 {
                     foreach (var declaration in new[] { "DECIMAL", "NUMERIC" })

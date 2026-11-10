@@ -61,6 +61,23 @@ namespace OceanBase.EntityFrameworkCore.Storage
                 }
             }
 
+            if (mapping is OceanBaseTemporalTypeMapping<DateTime> or OceanBaseTemporalTypeMapping<DateTimeOffset>
+                or OceanBaseTemporalTypeMapping<TimeSpan> or OceanBaseTemporalTypeMapping<OceanBaseIntervalDayToSecond>)
+            {
+                foreach (var principal in property.GetPrincipals())
+                {
+                    if (principal.GetMaxLength() is not null || principal.IsFixedLength() == true)
+                    {
+                        throw new ArgumentException("Temporal mappings do not support size or fixed-length facets.");
+                    }
+
+                    if (principal.GetPrecision() is { } precision && ((RelationalTypeMapping)mapping).Precision != precision)
+                    {
+                        throw new ArgumentException("The explicit and configured temporal precisions conflict.");
+                    }
+                }
+            }
+
             return mapping;
         }
 
@@ -192,21 +209,16 @@ namespace OceanBase.EntityFrameworkCore.Storage
             var storeType = info.StoreTypeName;
             if (storeType is not null)
             {
-                var pattern = dateOnly ? @"\ADATE\z"
-                    : duration && oracle ? @"\AINTERVAL\s+DAY(?:\((?<days>\d+)\))?\s+TO\s+SECOND(?:\((?<precision>\d+)\))?\z"
-                    : oracle ? zoned ? @"\ATIMESTAMP(?:\((?<precision>\d+)\))?\s+WITH\s+TIME\s+ZONE\z"
-                        : @"\A(?<type>TIMESTAMP(?:\((?<precision>\d+)\))?|DATE)\z"
-                    : duration ? @"\ATIME(?:\((?<precision>\d+)\))?\z" : @"\ADATETIME(?:\((?<precision>\d+)\))?\z";
-                var match = Regex.Match(storeType.Trim(), pattern, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+                var date = dateOnly || oracle && !duration && !zoned && storeType.Trim().Equals("DATE", StringComparison.OrdinalIgnoreCase);
+                var match = OceanBaseTemporalTypeMapping.MatchDeclaration(storeType, _compatibilityMode, date, duration, zoned);
                 if (!match.Success)
                 {
                     throw new NotSupportedException($"The store type '{storeType}' is not supported for {clrType.Name} in {_compatibilityMode} mode.");
                 }
 
-                var date = storeType.Trim().Equals("DATE", StringComparison.OrdinalIgnoreCase);
                 if (date) typeName = "DATE";
                 var declaredPrecision = match.Groups["precision"].Success
-                    ? int.Parse(match.Groups["precision"].Value, CultureInfo.InvariantCulture) : (int?)null;
+                    ? OceanBaseTemporalTypeMapping.ReadFacet(match, "precision", 0) : (int?)null;
                 if (declaredPrecision is not null && info.Precision is not null && declaredPrecision != info.Precision)
                 {
                     throw new ArgumentException("The explicit and configured temporal precisions conflict.");
@@ -215,13 +227,18 @@ namespace OceanBase.EntityFrameworkCore.Storage
                 precision = declaredPrecision ?? info.Precision ?? (date ? 0 : oracle ? 6 : 0);
                 if (duration && oracle)
                 {
-                    leading = match.Groups["days"].Success ? int.Parse(match.Groups["days"].Value, CultureInfo.InvariantCulture) : 2;
+                    leading = OceanBaseTemporalTypeMapping.ReadFacet(match, "days", 2);
                 }
 
                 if (declaredPrecision is null && info.Precision is not null && !date)
                 {
                     storeType = null;
                 }
+            }
+
+            if (info.Size is not null || info.IsFixedLength == true)
+            {
+                throw new ArgumentException("Temporal mappings do not support size or fixed-length facets.");
             }
 
             if (precision < 0 || precision > (typeName == "DATE" ? 0 : oracle ? 9 : 6) || leading is < 0 or > 9)
@@ -293,6 +310,12 @@ namespace OceanBase.EntityFrameworkCore.Storage
             var configuredPrecision = precision;
             var configuredScale = scale;
             var name = base.ParseStoreTypeName(storeTypeName, ref unicode, ref size, ref precision, ref scale);
+            if (storeTypeName is not null && Regex.IsMatch(storeTypeName.Trim(), @"\A(?:DATE|DATETIME|TIME|TIMESTAMP|INTERVAL)\b",
+                RegexOptions.IgnoreCase | RegexOptions.CultureInvariant))
+            {
+                // Temporal declaration parentheses describe precision, not a length facet.
+                size = configuredSize;
+            }
             if (name?.Trim().ToUpperInvariant() is "NUMBER" or "DECIMAL" or "NUMERIC"
                 && storeTypeName?.Contains('(') == true)
             {

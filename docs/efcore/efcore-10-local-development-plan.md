@@ -102,6 +102,23 @@ transport and converters; no new temporal types, server ranges or dependencies.
 3. Focused RED/GREEN, full Debug/Release and independent review. Record actual failing checks and exact counts,
    update MAP-05/06/07 evidence and commit. Live temporal/session/calendar acceptance remains open.
 
+## Batch 2c brief: exact integer normalization and scalar gaps
+
+**Files:** Storage/OceanBaseNumericConversion.cs; UnitTests/ScalarMappingTests.cs;
+FunctionalTests/BasicRelationalTests.cs. ExplicitIntegerMappingTests.cs and OceanBaseTypeMappingSource.cs only
+if a property-facet regression actually fails. Keep the existing type profile and public API.
+
+1. RED: finite Single/Double fractions must not round into any of the eight integer CLR types, including
+   converter-backed readers and generated outputs. Use the real mapping reader path and intercepted EF output
+   propagation. Preserve exact integral conversions, checked range/NaN/infinity failures and floating CLR readers.
+2. Fix the shared normalization boundary, retaining decimal/OceanBaseDecimal behavior and avoiding a second
+   generated-output conversion path. Characterize missing nullable integer endpoints, Boolean false/null and
+   Guid.Empty cells using existing helpers instead of duplicating the established scalar suite.
+3. Probe explicit Oracle integer property precision conflicts through actual model/property mapping. If already
+   rejected, retain only useful characterization; if not, record RED and fix at the shared validation boundary.
+4. Focused RED/GREEN, full Debug/Release, independent review and scoped commit. Repeat current package/selected
+   patch evidence after the scalar production changes before completing Batch 2 locally.
+
 ## Execution record
 
 - Baseline: 57fd44a, clean efcore/10.0. Prior verified suite: 563 (420 unit, 142 intercepted, one consumer).
@@ -115,8 +132,16 @@ transport and converters; no new temporal types, server ranges or dependencies.
   Independent review passed; the same alias-20261110 nupkg passes both modes on EF10.0.0/10.0.14, with package
   identity/assets/ranges and package-only graph inspected. Expanded consumer fails against the old text package.
   Evidence: artifacts/local-development/batch2a/. No server connection or release publication.
-- Batch 2b preflight passed: distinguish EF parsed Size from actual length facets, check properties separately,
-  and restrict declaration clones to their existing transport family. Implementation/tests pending.
+- Batch 2b local scope complete: actual facets/property metadata and complete transport-family clones validated,
+  while legal precision/converter clones preserve wide query inputs. Final focused 131 and Debug/Release 706 pass.
+- Batch 2b fix round 1: initial focused/full checks pass, but independent review found public Clone DbType and
+  StoreTypePostfix overrides may bypass transport/declaration consistency. Add RED regressions and reject unsafe
+  overrides. Both findings are addressed and independently re-reviewed. True postfix regression uses mappingInfo;
+  a postfix-only argument is an EF no-op and does not justify another public override. Final isolated EF10.0.14
+  Release passes 706. The same baseline-built temporal2-20261110 package passes both modes at EF10.0.0/10.0.14;
+  README, identity, assets, bounded ranges and package-only consumer graph inspected. The initial temporal probe
+  predates review fixes and is not current completion evidence. No publication or database connection occurred.
+- Batch 2c: next local scalar slice; not yet implemented. Evidence for 2b: artifacts/local-development/batch2b/.
 - Remaining Batch 2 scalar work and Batches 3–10 pending. The overall goal remains active.
 - Batch 8 package README slice: use the provider project's README as package-owned documentation and declare
   PackageReadmeFile. Verify archive metadata/content with no-build packing of an already verified isolated
