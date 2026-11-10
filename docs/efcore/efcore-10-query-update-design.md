@@ -277,17 +277,24 @@ Constant literals retain raw model values and mappings. The same baseline-built 
 passes both patches/modes, including Oracle all-provider-null predicates with no surviving equality/IN arm.
 These are translation/binding/shaping checks; live text membership and general collection roots remain open.
 
-## Planned captured integral collection roots
+## Captured integral collection roots local contract
 
-After bare membership, the next bounded collection slice covers general captured int/int? array/list roots
+After bare membership, the bounded collection slice covers general captured int/int? array/list roots
 and nonempty inline roots, including native int and existing int-to-long converters. Filter/project/order,
 composed membership, joins and Count/Any must retain duplicates, nullable elements, ordinal semantics and
 current values. General roots contain exactly one row per input element; membership padding does not apply.
+Converted roots require consistent EF-inferred element mapping. A root Value used against both native and
+converted columns, or projected directly by a Join that also infers an int-to-long comparison mapping, can
+be rejected by EF's earlier type-mapping postprocessor. Preserve that explicit conflict rather than override
+inference in the runtime visitor. Native joins and consistently inferred converted membership remain in scope;
+broader converted-root projection support needs a separately evidenced local design, not database access.
 
 Expand ValuesParameter before the base nullability processor's IntTypeMapping cast, using execution-local
 snapshots/mapping/name reuse and raw model values. Preserve caller collections, disable SQL caching and honor
 the actual remaining Value or _ord/Value column layout after EF pruning. Captured empty/null roots carry
 immutable typed NULL metadata and render a typed zero-row relation, never one fabricated NULL row.
+The null rule concerns an already translated runtime parameter; ordinary LINQ null-source argument
+validation can fail before translation and keeps its own explicit boundary.
 
 The generator retains EF wrapping/aliasing but renders SELECT/UNION ALL SELECT, with quoted first-arm aliases
 and Oracle FROM DUAL in every arm. Keep UNION ALL and outer EF ordering. Synthetic integer typing uses legal,
@@ -299,7 +306,32 @@ Default/MultipleParameters and Constant retain their parameter/literal policies;
 and explicit EF.Parameter remain unsupported without a separate translator. Originally empty inline roots
 need compile-time metadata beyond this runtime slice; general text/other carrier roots need their own typing
 contracts. These remain local follow-up work. Native UNION coercion/results/order and server limits require
-later database validation. No implementation or passing evidence is claimed for this planned slice.
+later database validation.
+
+The slice passes 40 unit and 16 intercepted cases; full Debug/Release and isolated EF10.0.14 Release pass
+1256 tests. Independent source review and the subsequent nested-CAST test re-review pass. The test-only
+extension ran the two amended cases in all three configurations, with no production edit or repack.
+The same integral-roots package passes both patches/modes. An AsQueryable capture can inline its values;
+correlated Enumerable.Where reaches the parameter root and reproduces the original IntTypeMapping cast.
+Recorded SQL trees distinguish those cases. Supplied reader rows do not establish actual SQL results.
+
+## Planned originally empty inline integral roots
+
+The next collection slice addresses originally empty inline int/int? Count/Any/Select/join and nested
+subqueries. Preserve the original element type before projection/pruning can discard Value; never infer it
+from Count's int result or a first row that does not exist. Retain contextual inference and conflict rejection.
+Use ordinary int mapping only without contextual mapping. Other empty families remain explicit boundaries.
+
+If the demonstrated metadata gap requires it, derive the relational queryable visitor and postprocessor
+through their existing factories. Delegate inherited translation and postprocessing; preserve the derived
+visitor in subqueries using its copy constructor. Track empty-root metadata per compilation, retain it
+through mapping/projection, and reattach it after base pruning before alias rewriting. Do not copy the whole
+Process pipeline or add global mutable state. Reuse immutable typed NULL prototypes and legal integer
+targets for genuinely zero-row bodies; normal outer DefaultIfEmpty/left-join behavior stays with EF.
+
+Real EF Count-only/nested/alias/ordinal cases and intercepted sync/async readers must verify the compilation
+and shaping seams. Direct renderer tests alone cannot prove type preservation. This is planned local work;
+native execution and general text/other families are separate gates, and no implementation is claimed here.
 
 ## Arithmetic division and remainder local contract
 
@@ -418,18 +450,33 @@ Run the read-only gate after packing, before the isolated consumer checks:
 
 ```powershell
 pwsh -NoProfile -File tests/OceanBase.EntityFrameworkCore.PackageConsumer/Verify-Package.ps1 `
-    -PackagePath artifacts/checkpoint-text-membership-20261111/OceanBase.EntityFrameworkCore.10.0.0-checkpoint.text-membership-20261111.nupkg `
-    -ExpectedVersion 10.0.0-checkpoint.text-membership-20261111
+    -PackagePath artifacts/checkpoint-integral-roots-20261111/OceanBase.EntityFrameworkCore.10.0.0-checkpoint.integral-roots-20261111.nupkg `
+    -ExpectedVersion 10.0.0-checkpoint.integral-roots-20261111
 ```
 
 The PowerShell 7 script uses .NET ZIP/XML APIs and checks ID/version, the net10.0 assembly and dependency group,
 exact expected dependency ranges, and a nonempty packaged README with matching metadata. It does not build,
-restore, execute provider queries or establish server/runtime compatibility. The current text-membership package passes;
+restore, execute provider queries or establish server/runtime compatibility. The current integral-roots package passes;
 wrong expected version, the old README-less alias package and the exact-patch README probe fail at their intended
 checks. The hosted e41981e package-content gate passed on Windows/Linux; the current package checks ran locally
 on Windows. Change the path/version for each new pack.
 
-### Current scalar text membership checkpoint (2026-11-11)
+### Current captured integral roots checkpoint (2026-11-11)
+
+Full Debug/Release and isolated EF10.0.14 Release pass 1256 tests (950 unit, 304 intercepted pipeline,
+two project consumers). Independent source/scoped test reviews pass; the two nested-CAST cases pass in
+all three configurations after a test-only extension. The same baseline-built
+`10.0.0-checkpoint.integral-roots-20261111` nupkg passes both modes at EF10.0.0/10.0.14, with repeated correlated
+three/zero/six/zero collection roots, SELECT unions and Oracle DUAL in every arm, plus previous checks.
+The prior text-membership package fails the parameter-root IntTypeMapping cast. Content and package-only
+graph checks pass; baseline assets stay EF10.0.0. No production change/repack followed the test extension.
+
+Repeat the commands below with `10.0.0-checkpoint.integral-roots-20261111` and
+`artifacts/checkpoint-integral-roots-20261111`. Evidence: `artifacts/local-development/batch3j/`.
+Originally empty inline/general text/other carrier roots, broader converter projection and actual server
+UNION coercion/results/order/limits remain open. Hosted evidence still applies to e41981e.
+
+### Historical scalar text membership checkpoint (2026-11-11)
 
 Debug/Release and isolated EF10.0.14 Release pass 1200 tests (910 unit, 288 intercepted pipeline, two project
 consumers). Independent spec/quality review passed. The same baseline-built

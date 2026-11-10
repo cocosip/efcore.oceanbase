@@ -333,6 +333,22 @@ The planned captured-root contract in query/update design defines this bounded f
    selected-patch/same-package gates. Originally empty inline/general text/other carriers stay explicit
    local follow-ups; native coercion/cardinality/order/results remain live gates. Not dispatched yet.
 
+## Batch3k brief: originally empty inline integral roots
+
+**Files:** derived relational queryable-visitor/postprocessor factories only if the demonstrated metadata
+gap requires them; minimal options registration and existing VALUES annotation/generator integration;
+CollectionRootQueryTests.cs and FunctionalTests/BasicRelationalTests.cs.
+The planned inline-empty contract in query/update design and local metadata research define this slice.
+
+1. Record the existing real EF empty-inline Count/Any/Select/join failures, then retain original int/int?
+   type/mapping before projection/pruning. Preserve contextual inference and its conflict rejection.
+2. Use narrow inherited hooks/factories, retain the derived visitor in nested subqueries, and carry immutable
+   empty metadata through pruning/alias rewriting without copying Process or guessing Count's element type.
+3. Reuse legal typed zero-row rendering; verify nested/alias/ordinal/converted/unsupported-family boundaries
+   with real EF and sync/async supplied readers. Keep current captured/nonempty/membership regressions.
+4. Focused/full tests, independent review, isolated patch/same-package gates and scoped commit. General
+   text/other families and native database results remain separate. Planned, not dispatched yet.
+
 ## Execution record
 
 - Baseline: 57fd44a, clean efcore/10.0. Prior verified suite: 563 (420 unit, 142 intercepted, one consumer).
@@ -495,6 +511,25 @@ The planned captured-root contract in query/update design defines this bounded f
   rejects stale false/IS NULL-only predicates and preserves MySQL empty versus Oracle NULL semantics. Same
   unchanged package passes both patches/modes; provider DLL/package hashes unchanged. Scoped independent
   spec/quality re-review approves with no new findings. Local slice ready for commit; next is planned Batch3j.
+- Batch3i committed as c7f1bb0 after all code/docs/consumer reviews and covering checks. Clean efcore/10.0,
+  ahead5, no push/publication. Batch3j starts next under the captured-integral-root contract; runtime-null
+  zero-row handling does not replace upstream LINQ null-source argument validation.
+- Batch3j ruling: preserve proven upstream conflicting-mapping rejection for a collection Value used with
+  native and converted properties, or directly projected by Join while its key infers an int-to-long mapping.
+  The error occurs in EF's type-mapping postprocessor before the owned runtime seams. Keep exact negative
+  tests, native join positives and consistently inferred converted membership/reader positives. No new
+  compile-time service in this bounded slice; broader converted-root projection stays local follow-up work.
+- Batch3j initial gates pass40 unit/16 intercepted, full Debug/Release and isolated EF10.0.14 Release1256
+  (950+304+2), and same integral-roots package consumers pass both modes/patches. Independent review passes
+  spec but requests a nested synthetic-wrapper/explicit-CAST regression. Fix round1 is test-only, confined
+  to the existing renderer cases and covering checks; production code and package stay unchanged.
+- Batch3j fix round1/5 complete (one addressed, zero open): existing renderer cases now enter the outer
+  identity wrapper around an explicit long-to-int CAST and retain both targets/node/mapping identities.
+  Covering2/2 pass in baseline Debug/Release and isolated14 Release; production/assets/centralprops unchanged.
+  Scoped independent spec/quality re-review approves. No full suite/pack/consumer repeat for this test-only fix.
+- Batch3j local slice source/patch/package gates pass1256; same integral-roots-20261111 package passes both
+  modes/patches and content/package-only graph, baseline assets stay10.0.0. QRY-03 stays partial. Native UNION
+  coercion/cardinality/order/limits and current hosted execution remain open. Next is planned Batch3k.
 - Line-ending recheck: git ls-files --eol reports no CRLF/mixed index text. Existing working CRLF files remain
   safe under the repository attributes; do not reset local edits or change global core.autocrlf to refresh them.
 - Remaining Batch 2 scalar work and Batches 3–10 pending. The overall goal remains active.

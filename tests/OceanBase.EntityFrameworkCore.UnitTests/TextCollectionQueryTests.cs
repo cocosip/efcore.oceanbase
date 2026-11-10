@@ -212,7 +212,7 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             var dictionary = new Dictionary<string, object?> { ["values"] = raw, ["values_text0"] = "existing" };
             var decorator = new ParametersCacheDecorator(dictionary);
             var visitor = new OceanBaseCollectionParameterExpandingVisitor(factory,
-                new RelationalParameterBasedSqlProcessorParameters(false, mode), decorator);
+                new RelationalParameterBasedSqlProcessorParameters(false, mode), decorator, source, OceanBaseCompatibilityMode.Oracle);
             var results = new List<InExpression>();
             foreach (var property in new[] { nameof(Row.Suffix), nameof(Row.EmptyConverted) })
             {
@@ -263,7 +263,7 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             var dictionary = new Dictionary<string, object?> { ["values"] = values };
             var decorator = new ParametersCacheDecorator(dictionary);
             var parameters = new RelationalParameterBasedSqlProcessorParameters(relationalNulls, ParameterTranslationMode.MultipleParameters);
-            var visitor = new OceanBaseCollectionParameterExpandingVisitor(factory, parameters, decorator);
+            var visitor = new OceanBaseCollectionParameterExpandingVisitor(factory, parameters, decorator, source, OceanBaseCompatibilityMode.Oracle);
             var item = new ColumnExpression("EmptyState", "r", typeof(State), mapping, true);
             var parameter = new SqlParameterExpression("values", typeof(State?[]), collectionMapping);
             var membership = factory.In(item, parameter);
@@ -310,7 +310,7 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
                 var parameter = new SqlParameterExpression("values", typeof(string[]), source.FindMapping(typeof(string[]), context.Model, mapping));
                 var membership = factory.In(new ColumnExpression("EmptyConverted", "r", typeof(string), mapping, true), parameter);
                 var visitor = new OceanBaseCollectionParameterExpandingVisitor(factory,
-                    new RelationalParameterBasedSqlProcessorParameters(false, ParameterTranslationMode.MultipleParameters), decorator);
+                    new RelationalParameterBasedSqlProcessorParameters(false, ParameterTranslationMode.MultipleParameters), decorator, source, OceanBaseCompatibilityMode.Oracle);
                 var expanded = Assert.IsType<InExpression>(visitor.Visit(membership));
                 var bucket = size <= 5 ? 1 : size <= 150 ? 10 : size <= 750 ? 50 : size <= 2000 ? 100 : 200;
                 var padded = size + (bucket - size % bucket) % bucket;

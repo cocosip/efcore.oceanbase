@@ -201,6 +201,23 @@ namespace PackageConsumer
                     }
                 }
 
+                int[] rootValues = [3, 1, 3];
+                var rootQuery = context.Set<Row>()
+                    .Where(row => rootValues.Where(value => value > row.Id).Any());
+                foreach (var values in new[] { new[] { 3, 1, 3 }, Array.Empty<int>(), new[] { 1, 2, 3, 4, 5, 6 }, Array.Empty<int>() })
+                {
+                    rootValues = values;
+                    var rootSql = rootQuery.ToQueryString();
+                    if (rootSql.Contains("UNION ALL VALUES", StringComparison.Ordinal)
+                        || (values.Length > 0 && rootSql.Split("UNION ALL SELECT", StringSplitOptions.None).Length - 1 != values.Length - 1)
+                        || (values.Length == 0 && !rootSql.Contains("WHERE 0", StringComparison.Ordinal)
+                            && !rootSql.Contains("WHERE 1 = 0", StringComparison.Ordinal)))
+                        throw new Exception("Packed general collection root has invalid or stale row SQL: " + rootSql);
+                    if (mode == OceanBaseCompatibilityMode.Oracle && values.Length > 0
+                        && rootSql.Split("FROM DUAL", StringSplitOptions.None).Length - 1 != values.Length)
+                        throw new Exception("Oracle collection SELECT arms do not each have FROM DUAL.");
+                }
+
                 var guidType = context.Model.FindEntityType(typeof(Row))!.FindProperty(nameof(Row.Token))!.GetColumnType();
                 if (guidType != (mode == OceanBaseCompatibilityMode.Oracle ? "RAW(16)" : "CHAR(36)"))
                 {

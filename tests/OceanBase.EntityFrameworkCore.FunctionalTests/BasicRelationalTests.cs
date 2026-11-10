@@ -26,6 +26,123 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
         [InlineData(OceanBaseCompatibilityMode.Oracle, true, false)]
         [InlineData(OceanBaseCompatibilityMode.Oracle, false, true)]
         [InlineData(OceanBaseCompatibilityMode.Oracle, true, true)]
+        public async Task Integral_root_commands_rebind_current_values_without_padding_or_mutating_sources(
+            OceanBaseCompatibilityMode mode, bool async, bool relationalNulls)
+        {
+            using var table = new DataTable();
+            table.Columns.Add("Value", typeof(object));
+            table.Rows.Add(new OceanBaseDecimal(42m));
+            var commands = new CommandCapture { Results = table };
+            await using var context = CreateContext(mode, commands, relationalNulls);
+            int?[] values = [];
+            var query = context.Set<ArithmeticRow>().SelectMany(row => values.Where(value => value > row.Id));
+            foreach (var capture in new int?[][] { [], [17], [17, null, 17], [null, null],
+                [1, 2, 3, 4, 5, 6], [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11], [], null! })
+            {
+                values = capture;
+                var snapshot = capture?.ToArray();
+                commands.Sql.Clear();
+                commands.Values.Clear();
+                commands.Inputs.Clear();
+                // The interceptor supplies a row even for a zero-row SQL body: this verifies shaping, not cardinality.
+                Assert.Equal(42, Assert.Single(async ? await query.ToListAsync() : query.ToList()));
+                Assert.Equal(snapshot, capture);
+                var sql = Assert.Single(commands.Sql);
+                Assert.DoesNotContain("UNION ALL VALUES", sql);
+                if (capture is null || capture.Length == 0)
+                {
+                    Assert.Contains("WHERE 1 = 0", sql);
+                    Assert.Empty(commands.Inputs);
+                }
+                else
+                {
+                    Assert.Equal(capture.Length - 1, sql.Split("UNION ALL SELECT").Length - 1);
+                    Assert.Equal(capture.Where(value => value.HasValue).Select(value => (object)value!.Value),
+                        commands.Values.Where(value => value is not DBNull));
+                    Assert.All(commands.Inputs, parameter => Assert.Equal(DbType.Int32, parameter.DbType));
+                }
+            }
+
+            List<int?> list = [17, null, 17, 3, 5, 7];
+            var listQuery = context.Set<ArithmeticRow>().SelectMany(row => list.Where(value => value > row.Id));
+            commands.Sql.Clear();
+            _ = async ? await listQuery.ToListAsync() : listQuery.ToList();
+            Assert.Equal(5, Assert.Single(commands.Sql).Split("UNION ALL SELECT").Length - 1);
+            Assert.Equal(new int?[] { 17, null, 17, 3, 5, 7 }, list);
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true)]
+        public async Task Integral_roots_preserve_long_converter_bindings_and_read_hooks(OceanBaseCompatibilityMode mode, bool async)
+        {
+            using var table = new DataTable();
+            table.Columns.Add("Value", typeof(object));
+            table.Rows.Add(new OceanBaseDecimal(42m));
+            var commands = new CommandCapture { Results = table };
+            await using var context = CreateContext(mode, commands);
+            int[] values = [int.MinValue, int.MaxValue, 17, 17, 3, 5];
+            var query = context.Set<ArithmeticRow>().Where(row => values.Where(value => value > row.Converted)
+                .Contains(row.Converted)).Select(row => row.Id);
+            Assert.Equal(42, Assert.Single(async ? await query.ToListAsync() : query.ToList()));
+            Assert.Equal(values.Select(value => (object)(long)value), commands.Values);
+            Assert.All(commands.Inputs, parameter =>
+            {
+                Assert.IsType<long>(parameter.Value);
+                Assert.Equal(DbType.Int64, parameter.DbType);
+            });
+            var mapped = context.Set<ArithmeticRow>().Where(row => values.Where(value => value > row.Converted)
+                .Contains(row.Converted)).Select(row => row.Converted);
+            Assert.Equal(42, Assert.Single(async ? await mapped.ToListAsync() : mapped.ToList()));
+            table.Rows.Clear();
+            table.Rows.Add(new OceanBaseDecimal((decimal)long.MaxValue + 1));
+            if (async) await Assert.ThrowsAsync<OverflowException>(() => mapped.ToListAsync());
+            else Assert.Throws<OverflowException>(() => mapped.ToList());
+
+            table.Rows.Clear();
+            table.Rows.Add(new OceanBaseDecimal((decimal)int.MaxValue + 1));
+            var native = context.Set<ArithmeticRow>().SelectMany(row => values.Where(value => value > row.Id));
+            if (async) await Assert.ThrowsAsync<OverflowException>(() => native.ToListAsync());
+            else Assert.Throws<OverflowException>(() => native.ToList());
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true)]
+        public async Task Integral_roots_materialize_supplied_nullable_rows_and_constants_without_bindings(
+            OceanBaseCompatibilityMode mode, bool async)
+        {
+            using var table = new DataTable();
+            table.Columns.Add("Value", typeof(object));
+            table.Rows.Add(DBNull.Value);
+            table.Rows.Add(new OceanBaseDecimal(17m));
+            var commands = new CommandCapture { Results = table };
+            await using var context = CreateContext(mode, commands);
+            int?[] values = [null, 17, 17];
+            var query = context.Set<ArithmeticRow>().SelectMany(row => EF.Constant(values).Where(value => value > row.Id));
+            var rows = async ? await query.ToListAsync() : query.ToList();
+            Assert.Equal(new int?[] { null, 17 }, rows);
+            Assert.Empty(commands.Inputs);
+            Assert.Contains("UNION ALL SELECT", Assert.Single(commands.Sql));
+            commands.Sql.Clear();
+            var inline = context.Set<ArithmeticRow>().SelectMany(row => new int?[] { null, 17, 17 }.Where(value => value > row.Id));
+            Assert.Equal(new int?[] { null, 17 }, async ? await inline.ToListAsync() : inline.ToList());
+            Assert.Empty(commands.Inputs);
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false, true)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true, true)]
         public async Task Text_membership_commands_rebind_raw_captures_and_keep_converters_separate(
             OceanBaseCompatibilityMode mode, bool async, bool relationalNulls)
         {

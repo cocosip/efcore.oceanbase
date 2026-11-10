@@ -21,6 +21,28 @@ not later local commits or database integration. Earlier db676ff also passed in
 Run/job/step metadata is saved under artifacts/local-development/. The earlier log archive endpoint returned
 HTTP403 (repository admin rights); no new per-test count or resolved EF patch is inferred from job metadata.
 
+### Captured integral roots and nonempty inline roots checkpoint (2026-11-11)
+
+General captured int/int? arrays/lists now expand before EF's concrete IntTypeMapping cast in both modes,
+preserving raw values, mappings/converters, exact row counts/duplicates and ordinal positions. Empty/null
+translated parameters retain typed zero-row metadata. The generator emits SELECT/UNION ALL SELECT, with
+quoted aliases and Oracle DUAL in every arm. Narrow synthetic typing uses SIGNED/unqualified NUMBER;
+explicit nested and Type-changing casts stay on their original path. Bare membership behavior is retained.
+
+Focused coverage passes 40 unit and 16 intercepted cases. Full Debug/Release and isolated EF10.0.14 Release
+pass **1256 tests** (950 unit, 304 intercepted pipeline, two project consumers). A subsequent test-only nested-
+CAST extension passes its two existing cases in all three configurations; production/package stay unchanged.
+Independent source and scoped test re-review pass. The same baseline-built
+`10.0.0-checkpoint.integral-roots-20261111` nupkg passes both modes/patches for changed correlated collection
+roots, empty relations and Oracle DUAL per arm. Previous text-membership package fails the parameter-root cast.
+Content/package-only graph pass; baseline assets remain EF10.0.0.
+
+Latest package: `artifacts/checkpoint-integral-roots-20261111/OceanBase.EntityFrameworkCore.10.0.0-checkpoint.integral-roots-20261111.nupkg`.
+Evidence: `artifacts/local-development/batch3j/`. Native UNION typing/results/order/limits remain unverified.
+Earlier conflicting inferred mapping still excludes some converted Join Value projections; native joins and
+consistently inferred converted membership/property reads pass locally. Next is originally empty inline
+integral roots. General text/other carriers and broader converter projections remain local work; goal active.
+
 ### Scalar text collection membership checkpoint (2026-11-11)
 
 Bare inline/captured text array/list Contains now has EF's element JSON metadata. Oracle expands provider-text
@@ -35,7 +57,7 @@ Focused tests pass 25 unit and 20 intercepted cases. Debug/Release and isolated 
 fails the new string collection mapping. Content/package-only graph gates pass; baseline assets stay EF10.0.0.
 Independent source and docs/consumer reviews passed; the consumer assertion follow-up passed scoped re-review.
 
-Latest package: `artifacts/checkpoint-text-membership-20261111/OceanBase.EntityFrameworkCore.10.0.0-checkpoint.text-membership-20261111.nupkg`.
+Historical package: `artifacts/checkpoint-text-membership-20261111/OceanBase.EntityFrameworkCore.10.0.0-checkpoint.text-membership-20261111.nupkg`.
 Evidence: `artifacts/local-development/batch3i/`. Native collation/padding/LOB equality/charset/results and
 current hosted execution remain unverified. Next is captured integral general collection roots/nonempty inline
 roots. Originally empty inline roots and general text/other carriers remain local work; the EF10 goal stays active.

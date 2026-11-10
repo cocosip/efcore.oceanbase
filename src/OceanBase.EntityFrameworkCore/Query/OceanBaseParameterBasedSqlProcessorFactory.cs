@@ -17,10 +17,11 @@ namespace OceanBase.EntityFrameworkCore.Query
         {
             public override Expression Process(Expression queryExpression, ParametersCacheDecorator parametersDecorator)
             {
+                queryExpression = new OceanBaseCollectionParameterExpandingVisitor(
+                    Dependencies.SqlExpressionFactory, Parameters, parametersDecorator,
+                    Dependencies.TypeMappingSource, mode).Visit(queryExpression);
                 if (mode == OceanBaseCompatibilityMode.Oracle)
                 {
-                    queryExpression = new OceanBaseCollectionParameterExpandingVisitor(
-                        Dependencies.SqlExpressionFactory, Parameters, parametersDecorator).Visit(queryExpression);
                     queryExpression = new OceanBaseOracleStringVisitor(Dependencies.SqlExpressionFactory, parametersDecorator)
                         .Visit(queryExpression);
                 }

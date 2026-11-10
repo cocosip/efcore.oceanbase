@@ -54,7 +54,7 @@ so that an undocumented feature is not accidentally advertised.
 
 An open row is not automatically waiting for a database. Track the remaining work explicitly:
 
-- **Local implementation or coverage:** general VALUES roots, wider functions/aggregates,
+- **Local implementation or coverage:** remaining collection families/inline-empty roots, wider functions/aggregates,
   model/materialization/Include/filter contracts, writes/transactions and the missing database creator still
   have locally feasible work. No live connection is needed to continue those implementation and pipeline tests.
 - **Live validation:** implemented mappings and SQL still need OceanBase round trips and execution in both
@@ -66,20 +66,23 @@ An open row is not automatically waiting for a database. Track the remaining wor
 Development resumed at the user's request (2026-11-10) on efcore/10.0. See the
 [progress handoff](efcore-10-progress.md) for saved state, remaining work and the exact resume point.
 
-Snapshot: 2026-11-11, `efcore/10.0` scalar text membership after 1b14513; independent spec/quality review passed.
+Snapshot: 2026-11-11, `efcore/10.0` captured integral roots/nonempty inline roots after c7f1bb0;
+independent source and scoped nested-CAST regression reviews passed.
 The same baseline-built package passes both tested EF patches. This is not a release result.
 
 `dotnet test OceanBase.EntityFrameworkCore.slnx --no-restore -m:1 -nr:false` produced:
 
-The expanded suite passed in Debug and Release (1200 tests per configuration).
+The expanded suite passed in Debug and Release (1256 tests per configuration). A subsequent test-only
+nested-CAST assertion extension passed its two existing cases in Debug/Release and isolated EF10.0.14;
+production code and the tested package were unchanged.
 
 | Layer | Passed | Failed | Evidence boundary |
 | --- | --- | --- | --- |
-| Unit | 910 | 0 | Prior coverage plus 25 text membership/mapping/converter/snapshot/cache/padding/null-policy cases; live coverage incomplete. |
-| Command pipeline | 288 | 0 | Prior queries/writes plus 20 text membership current-capture/converter/national-type and supplied Boolean/nullable reader cases, sync/async; transactions disabled. |
+| Unit | 950 | 0 | Prior coverage plus 40 captured/nonempty inline integral root, mapping/cast/ordinal/empty/cache/boundary cases; live coverage incomplete. |
+| Command pipeline | 304 | 0 | Prior queries/writes plus 16 integral-root current scalar/nullable/converter/checked reader cases, sync/async; transactions disabled. |
 | Consumer | 2 | 0 | Both-mode provider detection through a project reference, not an isolated packed-package consumer. |
-| Packed consumer | Both modes | 0 | Same text-membership-20261111 package passes EF10.0.0/10.0.14, changed text captures and Oracle provider-empty compensation plus prior checks; README included; no live execution. |
-| Later-patch Release suite | 1200 | 0 | Current source passes EF10.0.14 in isolated artifacts. |
+| Packed consumer | Both modes | 0 | Same integral-roots-20261111 package passes EF10.0.0/10.0.14, correlated collection roots across three/zero/six/zero values and Oracle DUAL per arm plus prior checks; README included; no live execution. |
+| Later-patch Release suite | 1256 | 0 | Current source passes EF10.0.14 in isolated artifacts; nested-CAST test-only follow-up also passes. |
 | Hosted Windows/Linux CI | Both jobs succeeded | 0 failed steps | Run 42865290840 at e41981e: restore, Release test, pack and content gate succeeded; later commits require their own hosted evidence. |
 | Live MySQL / Oracle | Not established | Not established | No live provider execution recorded for either mode. |
 | Relational specification | Not established | Not established | No specification test project yet. |
@@ -204,14 +207,16 @@ Existing evidence references used below identify partial coverage, not automatic
   30 both-mode integral membership/mapping/cache-mode/ordinary join/subquery/quantifier/count cases.
 - **UTC**: [TextCollectionQueryTests](../../tests/OceanBase.EntityFrameworkCore.UnitTests/TextCollectionQueryTests.cs),
   25 text membership/converter/mapping/current-value/NULL/padding/snapshot/cache/name-reuse cases.
+- **URC**: [CollectionRootQueryTests](../../tests/OceanBase.EntityFrameworkCore.UnitTests/CollectionRootQueryTests.cs),
+  40 captured integral/nonempty inline root, empty metadata, ordinal, cast, converter/cache and boundary cases.
 - **FP**: [BasicRelationalTests](../../tests/OceanBase.EntityFrameworkCore.FunctionalTests/BasicRelationalTests.cs),
   intercepted execution only.
 - **CP**: [ProviderConfigurationTests](../../tests/OceanBase.EntityFrameworkCore.ConsumerTests/ProviderConfigurationTests.cs),
   project reference only.
 - **PC**: [Standalone package consumer](../../tests/OceanBase.EntityFrameworkCore.PackageConsumer/Program.cs),
   registration/native floating/explicit Guid/temporal/binary/integer and Boolean model/SQL/paging checks against the
-  latest text-membership-20261111 local prerelease package, including repeated integral/text captures,
-  Oracle provider-empty membership, context collection-mode cache separation and prior checks;
+  latest integral-roots-20261111 local prerelease package, including changed general integral roots,
+  Oracle DUAL per arm, integral/text membership, collection-mode cache separation and prior checks;
   [commands and evidence](efcore-10-query-update-design.md#package-checkpoint-validation).
 
 `Missing` means tests and evidence still need to be added.
@@ -282,7 +287,7 @@ duplicates and mode-specific string semantics.
 | SQL-02 | Parameter names/placeholders follow each dialect. | Required | Done | Done | UH Generates_mode_specific_identifiers_and_parameters. |
 | QRY-01 | SELECT/projection, arithmetic/comparison/Boolean predicates and null semantics bind values and materialize nullable/non-null results. | Required | In progress | In progress | UQ/FP cover Boolean/string/scalar handling; ArithmeticQueryTests add native integer division/remainder, promotions, nullable/grouping/fractional controls and four intercepted cases. Bitwise/wider operators and live results remain open. |
 | QRY-02 | OrderBy/ThenBy, Distinct, Skip/Take and offset-only queries return correct results, including deterministic paging/empty pages. | Required | In progress | In progress | UQ SQL shape only; live ordering/string/paging missing. |
-| QRY-03 | Inner/left joins, correlated subqueries, Any/All and scalar/collection Contains have verified results or explicit exclusions. | Required | In progress | In progress | URS/UTC/FP cover ordinary/composite/.NET10 left joins, scalar subqueries, Any/All and bare int/int?/text collection Contains with current captures, provider conversion, NULL/empty and policy modes; PC checks cache separation and text normalization. General VALUES/other collection families and wider shapes remain local work; actual server results remain open. |
+| QRY-03 | Inner/left joins, correlated subqueries, Any/All and scalar/collection Contains have verified results or explicit exclusions. | Required | In progress | In progress | URS/UTC/URC/FP cover ordinary joins/subqueries/quantifiers, bare integral/text membership and captured int/int? roots/nonempty inline roots with typed empty relations/SELECT unions/ordinals/current captures. Consistently inferred int-to-long bindings pass; converted Join Value projections can fail earlier EF inference. Originally empty inline/general text/other carriers and wider shapes remain local work; actual server results remain open. |
 | QRY-04 | GroupBy aggregates, Count/LongCount, Sum/Average/Min/Max handle empty and nullable inputs correctly. | Required | In progress | In progress | URS/FP cover grouped/ungrouped/predicate/HAVING/distinct/nullable Count/LongCount, fresh int/long mappings and supplied zero/no-row/wrapper/overflow reads. Sum/Average/Min/Max promotion and real aggregate execution remain open. |
 | QRY-05 | First/Single/default variants enforce cardinality; entity/scalar async materialization matches sync. | Required | In progress | In progress | FP ToList scalar only; entity/cardinality cases missing. |
 | QRY-06 | String translations have a supported-overload matrix: equality, Contains, StartsWith/EndsWith, length, substring, case and trim. | Required | In progress | In progress | Exact local equality/concat, unary/Length, search and both Substring arities have unit/FP coverage. Safe long origin/mapping/converter/null cases and computed Oracle NULL needles pass. Live collation/character/space/padding/LOB results and NCLOB capability remain open; native semantics/unsupported overloads are explicit. |
