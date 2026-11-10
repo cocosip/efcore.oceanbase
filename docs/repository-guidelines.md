@@ -32,6 +32,10 @@ Existing tracked blobs are already LF-normalized; no bulk renormalization is nee
 Existing working files may retain their prior endings until rewritten or checked out again; Git still
 normalizes text when staging. Use an LF-capable editor. Do not discard local changes to refresh line endings.
 
+The GitHub Actions CI workflow runs the Release solution tests and package-content gate on both Windows and
+Linux using PowerShell 7. It does not connect to databases or publish packages. The matrix is configuration until
+an actual remote run succeeds; local Windows checks do not establish Linux or hosted-runner compatibility.
+
 ### C# conventions
 
 - Use the repository's existing block namespace style, four-space indentation and braces on all non-trivial
