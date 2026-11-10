@@ -1,0 +1,6 @@
+# Keep text checkouts consistent across Windows development and Linux CI.
+* text=auto eol=lf
+
+# Windows command scripts require CRLF; PowerShell scripts use the LF default.
+*.bat text eol=crlf
+*.cmd text eol=crlf

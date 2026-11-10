@@ -21,6 +21,19 @@ EF Core version.
 
 ## C# and project style
 
+### Line endings
+
+The root `.gitattributes` is authoritative for Git line endings on every platform: detected text uses LF,
+including C#, XML project/solution files, Markdown, YAML and PowerShell scripts; `.bat`/`.cmd` use CRLF.
+Binary detection remains automatic. These repository rules take precedence over a developer's global
+`core.autocrlf` setting, so CI and fresh checkouts do not depend on the host operating system.
+
+Existing tracked blobs are already LF-normalized; no bulk renormalization is needed for this change.
+Existing working files may retain their prior endings until rewritten or checked out again; Git still
+normalizes text when staging. Use an LF-capable editor. Do not discard local changes to refresh line endings.
+
+### C# conventions
+
 - Use the repository's existing block namespace style, four-space indentation and braces on all non-trivial
   blocks.
 - Keep Nullable enabled and ImplicitUsings disabled.
