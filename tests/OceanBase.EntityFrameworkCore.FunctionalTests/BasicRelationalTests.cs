@@ -19,6 +19,50 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
         [InlineData(OceanBaseCompatibilityMode.MySql, true)]
         [InlineData(OceanBaseCompatibilityMode.Oracle, false)]
         [InlineData(OceanBaseCompatibilityMode.Oracle, true)]
+        public async Task National_text_and_enum_Guid_converters_preserve_parameter_type_and_query_size(
+            OceanBaseCompatibilityMode mode, bool async)
+        {
+            var oracle = mode == OceanBaseCompatibilityMode.Oracle;
+            var token = Guid.Parse("00112233-4455-6677-8899-aabbccddeeff");
+            using var table = new DataTable();
+            table.Columns.Add("Caption", typeof(string));
+            table.Columns.Add("Fixed", typeof(string));
+            table.Columns.Add("State", typeof(string));
+            table.Columns.Add("Token", typeof(string));
+            table.Rows.Add("海洋", "海", "Active", token.ToString());
+            var commands = new CommandCapture { Results = table };
+            await using var context = CreateContext(mode, commands);
+            var boundary = "海洋🌊数据库";
+            var query = context.Set<TextParameterRow>().Where(row => row.Caption == boundary && row.State == RowState.Active)
+                .Select(row => new { row.Caption, row.Fixed, row.State, row.Token });
+            var result = Assert.Single(async ? await query.ToListAsync() : query.ToList());
+            Assert.Equal("海洋", result.Caption);
+            Assert.Equal("海", result.Fixed);
+            Assert.Equal(RowState.Active, result.State);
+            Assert.Equal(token, result.Token);
+            var operand = Assert.Single(commands.StringInputs);
+            Assert.Equal(boundary, operand.Value);
+            Assert.Equal(boundary.Length, operand.Size);
+            Assert.Equal(oracle ? OceanBaseDbType.NVarchar2 : (OceanBaseDbType?)null, operand.OceanBaseDbType);
+            Assert.Contains(oracle ? "N'Active'" : "'Active'", query.ToQueryString());
+            context.Add(new TextParameterRow { Id = 1, Caption = result.Caption, Fixed = result.Fixed,
+                State = result.State, Token = result.Token });
+            Assert.Equal(1, async ? await context.SaveChangesAsync() : context.SaveChanges());
+            foreach (var value in new[] { "海洋", "Active", token.ToString() })
+            {
+                Assert.Contains(commands.StringInputs, parameter => Equals(parameter.Value, value)
+                    && parameter.OceanBaseDbType == (oracle ? OceanBaseDbType.NVarchar2 : (OceanBaseDbType?)null));
+            }
+
+            Assert.Contains(commands.StringInputs, parameter => Equals(parameter.Value, "海")
+                && parameter.OceanBaseDbType == (oracle ? OceanBaseDbType.NChar : (OceanBaseDbType?)null));
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true)]
         public async Task Decimal_queries_keep_comparands_and_converted_writes_check_physical_precision(
             OceanBaseCompatibilityMode mode, bool async)
         {
@@ -824,10 +868,24 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
                 modelBuilder.Entity<DecimalRow>().Property(entity => entity.Converted)
                     .HasConversion(value => value * 2m, value => value / 2m).HasPrecision(5, 2);
                 modelBuilder.Entity<DecimalRow>().Property(entity => entity.Optional).HasPrecision(5, 2);
+                modelBuilder.Entity<TextParameterRow>().Property(entity => entity.Id).ValueGeneratedNever();
+                modelBuilder.Entity<TextParameterRow>().Property(entity => entity.Caption).HasMaxLength(4);
+                modelBuilder.Entity<TextParameterRow>().Property(entity => entity.Fixed).IsFixedLength().HasMaxLength(4);
+                modelBuilder.Entity<TextParameterRow>().Property(entity => entity.State).HasConversion<string>().HasMaxLength(16);
+                modelBuilder.Entity<TextParameterRow>().Property(entity => entity.Token).HasColumnType(oracle ? "NVARCHAR2(36)" : "VARCHAR(36)");
             }
         }
 
         private enum RowState { Inactive = 0, Active = 2 }
+
+        private sealed class TextParameterRow
+        {
+            public int Id { get; set; }
+            public string Caption { get; set; } = string.Empty;
+            public string Fixed { get; set; } = string.Empty;
+            public RowState State { get; set; }
+            public Guid Token { get; set; }
+        }
 
         private sealed class DecimalRow
         {
@@ -980,6 +1038,7 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
             public List<string> Sql { get; } = [];
             public List<object?> Values { get; } = [];
             public List<OceanBaseParameter> DecimalInputs { get; } = [];
+            public List<OceanBaseParameter> StringInputs { get; } = [];
             public int AffectedRows { get; init; } = 1;
             public DataTable? Results { get; init; }
             public object OutputValue { get; init; } = 42m;
@@ -989,6 +1048,8 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
                 Sql.Add(command.CommandText);
                 DecimalInputs.AddRange(command.Parameters.Cast<OceanBaseParameter>()
                     .Where(parameter => parameter.DbType == DbType.Decimal && parameter.Direction == ParameterDirection.Input));
+                StringInputs.AddRange(command.Parameters.Cast<OceanBaseParameter>()
+                    .Where(parameter => parameter.Value is string && parameter.Direction == ParameterDirection.Input));
                 foreach (DbParameter parameter in command.Parameters)
                 {
                     if (parameter.Direction == ParameterDirection.Output)
@@ -1015,6 +1076,8 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
                 Sql.Add(command.CommandText);
                 DecimalInputs.AddRange(command.Parameters.Cast<OceanBaseParameter>()
                     .Where(parameter => parameter.DbType == DbType.Decimal && parameter.Direction == ParameterDirection.Input));
+                StringInputs.AddRange(command.Parameters.Cast<OceanBaseParameter>()
+                    .Where(parameter => parameter.Value is string && parameter.Direction == ParameterDirection.Input));
                 if (Results is not null)
                 {
                     return InterceptionResult<DbDataReader>.SuppressWithResult(Results.CreateDataReader());

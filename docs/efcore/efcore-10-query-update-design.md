@@ -76,6 +76,10 @@ Decimal input and InputOutput parameters leave precision/scale unset for connect
 parameters retain physical facets. Converted current writes reject coefficient overflow and any nonzero remainder
 at the declared scale before execution. Intercepted decimal tests cover fractional and large query comparands,
 CASE operands, nullable reads, converted writes and failure before command interception in both modes sync/async.
+National text tests exercise native Oracle NChar/NVarchar2 input binding, larger query operands and enum-to-string/
+Guid converters through real EF query/materialization/write paths. Ordinary MySQL/Oracle text retains generic
+binding. Output-only declared Size remains separate from the actual input transport length; live character-set
+capacity and server text/LOB behavior remain unverified.
 
 | Mode | Generated-value path | Transaction requirement |
 | --- | --- | --- |

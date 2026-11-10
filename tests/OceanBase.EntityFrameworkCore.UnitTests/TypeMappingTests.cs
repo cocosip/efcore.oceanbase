@@ -54,7 +54,7 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
         [InlineData(OceanBaseCompatibilityMode.MySql, false, true, "CHAR(64)", DbType.AnsiStringFixedLength)]
         [InlineData(OceanBaseCompatibilityMode.Oracle, true, false, "NVARCHAR2(64)", DbType.String)]
         [InlineData(OceanBaseCompatibilityMode.Oracle, false, false, "VARCHAR2(64 CHAR)", DbType.AnsiString)]
-        [InlineData(OceanBaseCompatibilityMode.Oracle, true, true, "NCHAR(64)", DbType.StringFixedLength)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true, true, "NCHAR(64)", DbType.String)]
         [InlineData(OceanBaseCompatibilityMode.Oracle, false, true, "CHAR(64 CHAR)", DbType.AnsiStringFixedLength)]
         public void String_facets_reach_store_type_and_connector_parameter(
             OceanBaseCompatibilityMode mode, bool unicode, bool fixedLength, string storeType, DbType dbType)

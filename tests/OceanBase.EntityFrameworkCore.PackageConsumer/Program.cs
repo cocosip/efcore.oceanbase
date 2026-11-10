@@ -114,6 +114,15 @@ namespace PackageConsumer
                     throw new Exception("Decimal query transport inherited physical column precision.");
                 }
 
+                var captionMapping = rowType.FindProperty(nameof(Row.Name))!.GetRelationalTypeMapping();
+                var captionParameter = (OceanBaseParameter)captionMapping.CreateParameter(command, "caption", "海洋🌊数据库");
+                if (captionParameter.Size != "海洋🌊数据库".Length || captionMapping.Size != 4
+                    || captionParameter.OceanBaseDbType != (mode == OceanBaseCompatibilityMode.Oracle
+                        ? OceanBaseConnector.OceanBaseDbType.NVarchar2 : (OceanBaseConnector.OceanBaseDbType?)null))
+                {
+                    throw new Exception("National text query binding lost its type or transport length.");
+                }
+
                 Console.WriteLine($"{mode}: packed provider registration, scalar/temporal/binary/decimal model, Boolean SQL and paging passed; EF {typeof(DbContext).Assembly.GetName().Version}.");
             }
         }
@@ -122,6 +131,7 @@ namespace PackageConsumer
         {
             protected override void OnModelCreating(ModelBuilder modelBuilder)
             {
+                modelBuilder.Entity<Row>().Property(row => row.Name).HasMaxLength(4);
                 modelBuilder.Entity<Row>().Property(row => row.Payload).HasMaxLength(8);
                 modelBuilder.Entity<Row>().Property(row => row.Count).HasColumnType(mode == OceanBaseCompatibilityMode.Oracle ? "NUMBER(3)" : "MEDIUMINT");
                 modelBuilder.Entity<Row>().Property(row => row.Enabled).HasColumnType(mode == OceanBaseCompatibilityMode.Oracle ? "NUMBER(3)" : "BOOLEAN");

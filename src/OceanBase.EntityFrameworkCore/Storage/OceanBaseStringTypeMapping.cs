@@ -3,6 +3,7 @@ using System.Data;
 using System.Data.Common;
 using System.Text;
 using Microsoft.EntityFrameworkCore.Storage;
+using OceanBaseConnector;
 
 namespace OceanBase.EntityFrameworkCore.Storage
 {
@@ -47,9 +48,26 @@ namespace OceanBase.EntityFrameworkCore.Storage
 
         protected override void ConfigureParameter(DbParameter parameter)
         {
+            if (_mode == OceanBaseCompatibilityMode.Oracle)
+            {
+                var type = StoreTypeNameBase.Trim().ToUpperInvariant();
+                if (type is "NCHAR" or "NVARCHAR2")
+                {
+                    ((OceanBaseParameter)parameter).OceanBaseDbType = type == "NCHAR"
+                        ? OceanBaseDbType.NChar : OceanBaseDbType.NVarchar2;
+                }
+            }
+
             if (Size is { } size)
             {
                 parameter.Size = size;
+            }
+
+            if (parameter.Direction is ParameterDirection.Input or ParameterDirection.InputOutput
+                && parameter.Value is string text)
+            {
+                // A column mapping also binds query operands that can exceed the column length.
+                parameter.Size = Math.Max(parameter.Size, text.Length);
             }
         }
     }

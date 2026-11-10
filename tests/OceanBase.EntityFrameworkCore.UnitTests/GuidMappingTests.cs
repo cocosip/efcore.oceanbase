@@ -22,7 +22,7 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
         [InlineData(OceanBaseCompatibilityMode.Oracle, "CHAR(36 CHAR)", DbType.AnsiStringFixedLength, true)]
         [InlineData(OceanBaseCompatibilityMode.Oracle, "VARCHAR2(36)", DbType.AnsiString, false)]
         [InlineData(OceanBaseCompatibilityMode.Oracle, "VARCHAR2(36 CHAR)", DbType.AnsiString, false)]
-        [InlineData(OceanBaseCompatibilityMode.Oracle, "NCHAR(36)", DbType.StringFixedLength, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, "NCHAR(36)", DbType.String, true)]
         [InlineData(OceanBaseCompatibilityMode.Oracle, "NVARCHAR2(36)", DbType.String, false)]
         public void Explicit_declaration_controls_Guid_transport_and_literals(
             OceanBaseCompatibilityMode mode, string storeType, DbType dbType, bool fixedLength)

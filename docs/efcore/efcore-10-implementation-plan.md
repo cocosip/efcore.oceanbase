@@ -143,6 +143,9 @@ The decimal slice adds full declaration parsing, property precision/scale confli
 clones and exact DML-only write validation. Query inputs infer precision/scale from their value independently of
 column capacity; output-only metadata retains physical facets. Decimal alias defaults and live round trips remain
 open, along with remaining string contracts and the wider mapping inventory.
+The national-text parameter slice selects connector-native NChar/NVarchar2 for Oracle national columns and
+widens input Size for larger query operands. Local enum-to-string and national Guid converter paths are exercised;
+server character-set byte capacity, text declarations, LOB and empty-string semantics remain open.
 
 **Files:**
 - Create: src/OceanBase.EntityFrameworkCore/Storage/OceanBaseRelationalConnection.cs

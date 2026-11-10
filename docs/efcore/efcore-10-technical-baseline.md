@@ -137,6 +137,23 @@ and Oracle NUMBER. Server rounding is deliberately rejected for tracked writes t
   connected paths. Live decimal reads, server coercion/rounding, generated values and mode-specific alias defaults
   remain required evidence; this slice does not close MAP-02 or release readiness.
 
+### Oracle national text parameter contract
+
+Scope: MAP-03/06/07 and QRY-01 for native NCHAR/NVARCHAR2 parameters, including composed Guid/enum/string
+converters. Connector 0.2.0 PreparedParameters selects protocol types 208/207 only from public OceanBaseDbType
+NChar/NVarchar2; ordinary DbType.String/StringFixedLength uses protocol type 253 and the client character set.
+Consequently, Oracle NCHAR/NVARCHAR2 mappings must set the provider type explicitly after EF configures DbType.
+The connector reports DbType.String for either native type; fixed-length column metadata remains on the mapping.
+MySQL and ordinary Oracle text bindings retain the generic string parameter type. NCLOB/LOB transport remains
+open; selecting a native LOB type would require locator values rather than ordinary CLR strings.
+
+Input/InputOutput Size is at least the actual converted string's UTF-16 length, because the connector validates
+national inputs against Size. Query comparands can exceed the mapped column length. Output-only parameters and
+null inputs retain declared Size. This is transport metadata, not validation of server column capacity.
+National fixed/variable bindings, output/null metadata, larger query operands and composed converters require
+StringParameterMappingTests and intercepted EF sync/async query/write evidence. National character-set byte
+limits, surrogate handling, empty-string/NULL semantics, LOBs and server round trips remain required open gates.
+
 ## Numeric and Guid reading contract
 
 OceanBaseConnector 0.2.0 identifies source revision 4734781a7028aea990af7a832ca7d251a2055556 in its nuspec.
