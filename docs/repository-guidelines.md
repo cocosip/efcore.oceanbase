@@ -13,9 +13,9 @@ authentication and wire-format work belongs in the connector repository.
     src/OceanBase.EntityFrameworkCore/          EF-version provider project
     tests/                        Unit, relational and live integration tests
 
-The dev branch and 10.0 branch carry the same current provider implementation. dev is the active integration
-branch; 10.0 is the packaging and release branch. The 8.0 and 9.0 branches fork from a 10.0 release baseline and
-then adapt independently to their EF Core major. This follows the version-line naming used by Npgsql. Shared source is kept small
+The dev branch and efcore/10.0 branch carry the same current provider implementation. dev is the active integration
+branch; efcore/10.0 is the packaging and release branch. The efcore/8.0 and efcore/9.0 branches fork from an
+efcore/10.0 release baseline and then adapt independently to their EF Core major. Shared source is kept small
 and dependency-free where practical. Do not introduce a compatibility wrapper for an API that is used in only one
 EF Core version.
 
@@ -70,12 +70,12 @@ identity/key retrieval, transaction behavior and cancellation behavior for both 
 ## Git and releases
 
 - dev is the active integration branch and follows the current EF Core 10 implementation.
-- 10.0 mirrors dev and is the release branch used to pack and publish the 10.x package.
-- 8.0 and 9.0 fork from a 10.0 release commit and are adapted independently.
+- efcore/10.0 mirrors dev and is the release branch used to pack and publish the 10.x package.
+- efcore/8.0 and efcore/9.0 fork from an efcore/10.0 release commit and are adapted independently.
 - A version branch is compiled against exactly one EF Core major version.
 - All branches publish the package ID OceanBase.EntityFrameworkCore; the package major version identifies
   the EF Core major (8.x, 9.x, 10.x, 11.x).
 - Use Gitmoji Conventional Commits, for example: ✨ feat(efcore8): add relational options registration.
-- Merge dev into 10.0 only after the shared tests pass, then pack and publish from 10.0.
+- Merge dev into efcore/10.0 only after the shared tests pass, then pack and publish from efcore/10.0.
 - A release requires passing unit tests, package-consumer tests and the documented compatibility checks for the
   target branch. Live evidence is reported separately from local validation.

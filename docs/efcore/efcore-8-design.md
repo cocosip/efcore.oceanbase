@@ -7,7 +7,7 @@ Oracle tenant compatibility modes through the existing OceanBaseConnector ADO.NE
 
 ## Package and runtime
 
-- Branch: 8.0 (forked from a stable 10.0 release commit).
+- Branch: efcore/8.0 (forked from a stable efcore/10.0 release commit).
 - Package: OceanBase.EntityFrameworkCore 8.x.
 - EF dependency: Microsoft.EntityFrameworkCore and Microsoft.EntityFrameworkCore.Relational in the 8.x range.
 - Initial provider asset: net8.0.
