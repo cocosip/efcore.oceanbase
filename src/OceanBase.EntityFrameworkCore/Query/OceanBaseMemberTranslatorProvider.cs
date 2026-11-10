@@ -8,6 +8,9 @@ namespace OceanBase.EntityFrameworkCore.Query
         public OceanBaseMemberTranslatorProvider(RelationalMemberTranslatorProviderDependencies dependencies,
             IRelationalTypeMappingSource mappingSource, OceanBaseCompatibilityMode mode)
             : base(dependencies)
-            => AddTranslators([new OceanBaseStringTranslator(dependencies.SqlExpressionFactory, mappingSource, mode)]);
+            => AddTranslators([
+                new OceanBaseStringTranslator(dependencies.SqlExpressionFactory, mappingSource, mode),
+                new OceanBaseTemporalMemberTranslator(dependencies.SqlExpressionFactory, mappingSource, mode)
+            ]);
     }
 }

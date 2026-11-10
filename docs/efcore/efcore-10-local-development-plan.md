@@ -244,6 +244,43 @@ Follow the planned Substring contract in query/update design; retain the current
    and scoped commit. Server contents, invalid-range outcomes, characters, padding/LOB and hosted execution
    for new source remain distinct acceptance gates. No live work or EF8/9 adaptation.
 
+## Batch 3f brief: ordinary temporal members
+
+**Files:** Query/OceanBaseTemporalMemberTranslator.cs (new), OceanBaseMemberTranslatorProvider.cs,
+OceanBaseQuerySqlGenerator.cs; UnitTests/TemporalMemberQueryTests.cs and FunctionalTests/BasicRelationalTests.cs.
+The planned ordinary temporal-member contract in query/update design is authoritative.
+
+1. RED the twelve exact DateTime/DateOnly/TimeOnly members in both modes/null settings, mapped predicates,
+   projections/order/group and composition. Preserve plugin precedence/scoped services/opposite-mode isolation.
+2. Use MySQL native functions and a narrow Oracle builtin marker with fixed allowlisted unit fragment and
+   visited operand, rendered as EXTRACT(unit FROM input). Only Oracle DATE clock parts cast to TIMESTAMP(7).
+   SECOND extracts as decimal then one-argument TRUNC; final result mapping is int without source converter.
+3. Validate existing temporal carriers/families without stripping built-in/custom temporal conversions.
+   Reject unrelated string/binary/numeric/zoned carriers and unsupported members. Preserve nullable function
+   result tests and captured parameter precision; no SQL grammar interpolation or general visitor replacement.
+4. Add both-mode sync/async intercepted Int32 comparison/nullable reader/Oracle NUMBER wrapper checks,
+   with controlled temporal inputs where present. No synthetic server extraction, clock/cast or calendar claim.
+5. Focused RED/GREEN, full Debug/Release, independent code/docs review, selected-patch/package gates and
+   scoped commit. Clocks/offset/fractional/Add/duration members and broader numeric queries remain separate.
+
+## Batch 3g brief: numeric Abs, Sign and Truncate
+
+**Files:** Query/OceanBaseMathTranslator.cs (new), OceanBaseMethodCallTranslatorProvider.cs,
+UnitTests/MathQueryTests.cs (new) and FunctionalTests/BasicRelationalTests.cs. Root owns docs/package consumer.
+The planned numeric contract in query/update design defines the exact twenty-two methods and native limits.
+
+1. Genuine RED for every exact signature in mapped predicates/order/projections, both modes/null settings,
+   nullable composition and result NULL tests. Cover negative fractions, signed/decimal endpoints, zero and
+   finite wide floating values. Top-level client evaluation and synthetic results cannot prove translation
+   or server arithmetic.
+2. Reuse strict numeric mapping validation as a probe, preserving operand mappings/converters and full query
+   ranges. Reject nonnumeric/null-converting carriers; permit accepted numeric BOOL/BOOLEAN aliases. Pin
+   SIGN's fresh int mapping and TRUNCATE's independent int zero. Preserve plugin/DbFunction/mode precedence.
+3. Add intercepted sync/async captures/readers in both modes, including numeric wrappers, converters and wide
+   floats. Native ABS/SIGN/TRUNCATE/TRUNC domain, overflow and result metadata remain live acceptance gates.
+4. Focused GREEN, full Debug/Release, independent code/docs review, isolated later-patch and same-package
+   consumer/content gates, then scoped commit. No new dependency, generator, visitor or public configuration.
+
 ## Execution record
 
 - Baseline: 57fd44a, clean efcore/10.0. Prior verified suite: 563 (420 unit, 142 intercepted, one consumer).
@@ -334,6 +371,22 @@ Follow the planned Substring contract in query/update design; retain the current
   fails missing Substring. Content gate and package-only graph pass. Evidence: artifacts/local-development/batch3e/.
   Batch 3d computed-needle review minor is closed. Native NCLOB/range/character/padding/LOB and current hosted
   gates remain open. Next is Batch 3f ordinary temporal parts; the complete local EF10 goal remains active.
+- Batch 3e committed as 4e78da1 after code/docs approval, 934 local tests and both selected package patches.
+  Batch 3f ordinary temporal members starts next; no push/publication or EF8/9 work.
+- Read-only CI follow-up: run 42865290840 at e41981e has successful Windows/Linux jobs and all four
+  restore/test/pack/content gates. Metadata is artifacts/local-development/ci-e41981e.json; this covers
+  the search checkpoint and preceding changes, not later source. No run dispatch or push was performed.
+- Batch 3f fix round 1/5: all three coverage findings addressed; captured DateOnly/TimeOnly carrier/precision,
+  numeric/binary negatives and representable temporal endpoints added without production changes. Scoped
+  independent re-review approved. Final Debug/Release and isolated EF10.0.14 Release pass 963 (745+216+2).
+- Batch 3f local ordinary temporal parts complete: twelve exact members, Oracle DATE clock cast and decimal
+  SECOND then TRUNC, converter-free int results and conservative NULL metadata. Focused 21 unit/eight
+  intercepted pass. Same baseline-built temporal-parts-20261111 package passes both modes on EF10.0.0/10.0.14;
+  prior Substring package fails the new member predicate. Content gate and package-only graph pass.
+  Evidence: artifacts/local-development/batch3f/. Native extraction/casts/calendar/interval and current hosted
+  execution remain open. Next is Batch 3g numeric Abs/Sign/Truncate; the complete local EF10 goal stays active.
+- Line-ending recheck: git ls-files --eol reports no CRLF/mixed index text. Existing working CRLF files remain
+  safe under the repository attributes; do not reset local edits or change global core.autocrlf to refresh them.
 - Remaining Batch 2 scalar work and Batches 3–10 pending. The overall goal remains active.
 - Batch 8 package README slice: use the provider project's README as package-owned documentation and declare
   PackageReadmeFile. Verify archive metadata/content with no-build packing of an already verified isolated

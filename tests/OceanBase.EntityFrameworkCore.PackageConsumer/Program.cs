@@ -131,6 +131,21 @@ namespace PackageConsumer
                     throw new Exception("Substring origin adjustment overflowed before SQL generation.");
                 }
 
+                var temporalPartsSql = context.Set<Row>().Where(row => row.OccurredAt.Year == 2024
+                    && row.Day.Month == 2 && row.Clock.Second == 59 && row.LegacyStamp.Hour == 12)
+                    .Select(row => new { row.OccurredAt.Month, Day = row.Day.Day, row.Clock.Minute }).ToQueryString();
+                var temporalParts = mode == OceanBaseCompatibilityMode.MySql
+                    ? new[] { "YEAR(", "MONTH(", "DAYOFMONTH(", "HOUR(", "MINUTE(", "SECOND(" }
+                    : new[] { "EXTRACT(YEAR FROM", "EXTRACT(MONTH FROM", "EXTRACT(DAY FROM",
+                        "EXTRACT(HOUR FROM", "EXTRACT(MINUTE FROM", "TRUNC(EXTRACT(SECOND FROM" };
+                foreach (var part in temporalParts)
+                {
+                    if (!temporalPartsSql.Contains(part, StringComparison.Ordinal))
+                        throw new Exception($"Packed provider did not translate temporal part {part}");
+                }
+                if (mode == OceanBaseCompatibilityMode.Oracle && !temporalPartsSql.Contains("AS TIMESTAMP(7)", StringComparison.Ordinal))
+                    throw new Exception("Oracle DATE clock extraction lacked a timestamp cast.");
+
                 var guidType = context.Model.FindEntityType(typeof(Row))!.FindProperty(nameof(Row.Token))!.GetColumnType();
                 if (guidType != (mode == OceanBaseCompatibilityMode.Oracle ? "RAW(16)" : "CHAR(36)"))
                 {
@@ -332,6 +347,8 @@ namespace PackageConsumer
                 modelBuilder.Entity<Row>().Property(row => row.Amplitude).HasColumnType(mode == OceanBaseCompatibilityMode.Oracle ? "BINARY_FLOAT" : "FLOAT(24)");
                 modelBuilder.Entity<Row>().Property(row => row.Wide).HasColumnType(mode == OceanBaseCompatibilityMode.Oracle ? "BINARY_DOUBLE" : "DOUBLE PRECISION");
                 modelBuilder.Entity<Row>().Property(row => row.NarrowStamp).HasPrecision(3);
+                modelBuilder.Entity<Row>().Property(row => row.LegacyStamp)
+                    .HasColumnType(mode == OceanBaseCompatibilityMode.Oracle ? "DATE" : "DATETIME(6)");
                 modelBuilder.Entity<Row>().Property(row => row.Amount).HasPrecision(5, 2);
                 modelBuilder.Entity<Row>().Property(row => row.NarrowDuration)
                     .HasColumnType(mode == OceanBaseCompatibilityMode.Oracle ? "INTERVAL DAY(1) TO SECOND(3)" : "TIME(3)");
@@ -357,6 +374,7 @@ namespace PackageConsumer
             public double Amplitude { get; set; }
             public float Wide { get; set; }
             public DateTime NarrowStamp { get; set; }
+            public DateTime LegacyStamp { get; set; }
             public decimal Amount { get; set; }
             public TimeSpan NarrowDuration { get; set; }
         }

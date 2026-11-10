@@ -66,6 +66,20 @@ namespace OceanBase.EntityFrameworkCore.Query
         protected override Expression VisitSqlFunction(SqlFunctionExpression sqlFunctionExpression)
         {
             if (_mode == OceanBaseCompatibilityMode.Oracle
+                && sqlFunctionExpression.Name == OceanBaseTemporalMemberTranslator.ExtractMarker)
+            {
+                if (sqlFunctionExpression is not { IsBuiltIn: true, Arguments.Count: 2 }
+                    || sqlFunctionExpression.Arguments[0] is not SqlFragmentExpression { Sql: var unit }
+                    || unit is not ("YEAR" or "MONTH" or "DAY" or "HOUR" or "MINUTE" or "SECOND"))
+                    throw new InvalidOperationException("Invalid internal EXTRACT expression.");
+
+                Sql.Append("EXTRACT(").Append(unit).Append(" FROM ");
+                Visit(sqlFunctionExpression.Arguments[1]);
+                Sql.Append(")");
+                return sqlFunctionExpression;
+            }
+
+            if (_mode == OceanBaseCompatibilityMode.Oracle
                 && sqlFunctionExpression is { IsBuiltIn: true, Name: "CONCAT", Arguments.Count: 2, Type: var type }
                 && type == typeof(string))
             {

@@ -13,11 +13,31 @@ an audit of locally feasible deferred families. Finishing one batch does not fin
 
 ### Hosted Windows/Linux CI evidence (2026-11-11)
 
-Read-only GitHub inspection confirms [run 42854480450](https://github.com/cocosip/efcore.oceanbase/actions/runs/42854480450)
-for db676ff succeeded on ubuntu-latest and windows-latest: restore, Release tests, pack and package-content
-verification each succeeded. This establishes hosted execution for the unary-function checkpoint, not later
-local commits or database integration. Run/job/step metadata is saved under artifacts/local-development/;
-the log archive endpoint returned HTTP403 (repository admin rights), so no new per-test count is inferred.
+Read-only GitHub inspection confirms [run 42865290840](https://github.com/cocosip/efcore.oceanbase/actions/runs/42865290840)
+for e41981e succeeded on ubuntu-latest and windows-latest: restore, Release tests, pack and package-content
+verification each succeeded. This covers the search checkpoint, including preceding wide-decimal changes,
+not later local commits or database integration. Earlier db676ff also passed in
+[run 42854480450](https://github.com/cocosip/efcore.oceanbase/actions/runs/42854480450).
+Run/job/step metadata is saved under artifacts/local-development/. The earlier log archive endpoint returned
+HTTP403 (repository admin rights); no new per-test count or resolved EF patch is inferred from job metadata.
+
+### Ordinary temporal parts checkpoint (2026-11-11)
+
+Twelve exact members now translate: DateTime.Year/Month/Day/Hour/Minute/Second, DateOnly.Year/Month/Day
+and TimeOnly.Hour/Minute/Second. MySQL uses native part functions; Oracle uses allowlisted EXTRACT syntax.
+Oracle DATE clock extraction first casts to TIMESTAMP(7); SECOND extracts decimal then applies TRUNC.
+Final results use converter-free int mappings, preserving source carriers/converters and independent NULL tests.
+
+After the independent review's test-only follow-up, focused checks pass 21 unit and eight intercepted cases.
+Full Debug/Release and isolated EF10.0.14 Release pass **963 tests** (745 unit, 216 intercepted pipeline, two consumers). Captured DateOnly
+and TimeOnly values/DbType/precision, numeric/binary carrier rejection and representable endpoints are covered.
+The same baseline-built `10.0.0-checkpoint.temporal-parts-20261111` package passes both modes on EF10.0.0/10.0.14;
+the preceding Substring package fails the new temporal predicate. Content and package-only graph gates pass.
+
+Latest package: `artifacts/checkpoint-temporal-parts-20261111/OceanBase.EntityFrameworkCore.10.0.0-checkpoint.temporal-parts-20261111.nupkg`.
+Evidence: `artifacts/local-development/batch3f/`. Native extraction/casts/calendar/fractional/interval behavior
+and hosted execution for this source remain open. Clocks/offset/fractional/Add/duration and broader queries
+remain separate work. Next is numeric Abs/Sign/Truncate; the overall EF10 goal remains active.
 
 ### Substring checkpoint (2026-11-11)
 
@@ -32,9 +52,9 @@ The same baseline-built `10.0.0-checkpoint.substring-20261111` package passes bo
 including both arities and the maximum-start boundary; the previous search package fails the new translation.
 Package-content and package-only graph checks pass.
 
-Latest package: `artifacts/checkpoint-substring-20261111/OceanBase.EntityFrameworkCore.10.0.0-checkpoint.substring-20261111.nupkg`.
+Historical package: `artifacts/checkpoint-substring-20261111/OceanBase.EntityFrameworkCore.10.0.0-checkpoint.substring-20261111.nupkg`.
 Evidence: `artifacts/local-development/batch3e/`. Native range/character/padding/LOB results, including the
-unverified NCLOB extension, remain server gates. Hosted CI above applies only to db676ff. Next is ordinary
+unverified NCLOB extension, remain server gates. Hosted CI above applies through e41981e. Next is ordinary
 temporal members and wider numeric/query work; the overall EF10 goal remains active.
 
 ### String search checkpoint (2026-11-11)
@@ -53,8 +73,8 @@ fails the new method translations. Package-content and package-only graph checks
 
 Historical package: `artifacts/checkpoint-search-20261111/OceanBase.EntityFrameworkCore.10.0.0-checkpoint.search-20261111.nupkg`.
 Evidence: `artifacts/local-development/batch3d/`. Native collation/padding/character/LOB results remain live
-gates; exact CLR ordinal/culture/null-exception behavior is not promised. Hosted evidence above applies only
-to db676ff. The Substring follow-up is recorded above; wider query work and the overall goal remain active.
+gates; exact CLR ordinal/culture/null-exception behavior is not promised. The later e41981e hosted run is
+recorded above. The Substring follow-up follows this checkpoint; wider query work and the goal remain active.
 
 ### Wide exact decimal to floating checkpoint (2026-11-11)
 

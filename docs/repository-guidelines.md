@@ -34,7 +34,7 @@ normalizes text when staging. Use an LF-capable editor. Do not discard local cha
 
 The GitHub Actions CI workflow runs the Release solution tests and package-content gate on both Windows and
 Linux using PowerShell 7. It does not connect to databases or publish packages. Both jobs and all four gates
-passed for db676ff in [run 42854480450](https://github.com/cocosip/efcore.oceanbase/actions/runs/42854480450).
+passed for e41981e in [run 42865290840](https://github.com/cocosip/efcore.oceanbase/actions/runs/42865290840).
 That evidence applies to that commit; subsequent changes need their own run. Local Windows checks alone do
 not establish Linux or hosted-runner compatibility.
 

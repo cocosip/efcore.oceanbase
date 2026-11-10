@@ -158,6 +158,55 @@ text. NCLOB translation is an explicitly unverified extension because the pinned
 String-to-binary converter predicates remain unsupported. Conservative nullable function metadata preserves
 result null tests even for required sources. Existing plugin/DbFunction/mode and Oracle parameter rules remain.
 
+## Ordinary temporal-member local contract
+
+The implemented QRY-07 slice covers exactly DateTime.Year/Month/Day/Hour/Minute/Second, DateOnly.Year/Month/Day
+and TimeOnly.Hour/Minute/Second. Match exact members; use MySQL YEAR/MONTH/DAYOFMONTH/HOUR/MINUTE/SECOND
+and Oracle EXTRACT(unit FROM input), with fixed allowlisted units rendered through a narrow internal marker.
+Inputs remain visited expressions with their existing carriers/converters/precision; no user text becomes SQL syntax.
+
+Oracle DATE permits only calendar extraction directly. DateTime clock parts on DATE first cast to the normal
+unzoned TIMESTAMP(7) query mapping; do not clone a DATE transport into another family or cast timestamps down
+to DATE. TimeOnly retains its native day-to-second interval. SECOND extraction is decimal internally and
+wrapped in one-argument TRUNC before producing an int. All exposed parts use converter-free int mappings,
+independent of source DateOnly/TimeOnly/custom carriers. Conservative nullable/all-false propagation keeps
+result NULL tests; nullable SQL results require nullable projections.
+
+Accept only existing supported temporal families: DateTime DATETIME or unzoned DATE/TIMESTAMP, DateOnly DATE,
+TimeOnly TIME/INTERVAL. Preserve built-in carriers and connected temporal converters, rejecting unrelated
+string/binary/numeric/zoned replacements. Native parts operate on stored values, not arbitrary model-space
+converter equivalence. Plugin/model precedence and mode-separated services stay intact.
+
+DateTimeOffset, clocks/Now/UtcNow/Today, fractional parts/Ticks, Date/TimeOfDay/day-number properties, duration
+parts and Add operations need their own timezone/range/precision/calendar/wrapping contracts. This slice makes
+no server extraction, DATE cast, calendar/zero-date, interval-clock or result-metadata claim without live evidence.
+
+## Planned numeric Abs, Sign and Truncate contract
+
+The next QRY-07 numeric slice covers twenty-two exact unary static signatures: Math.Abs and Math.Sign for
+sbyte/short/int/long/float/double/decimal, MathF.Abs/Sign(float), decimal.Abs/Sign(decimal), and
+Math.Truncate(double/decimal), MathF.Truncate(float), decimal.Truncate(decimal). Both modes use ABS/SIGN;
+MySQL uses TRUNCATE(input, 0), Oracle one-argument TRUNC(input). Match exact method identities and retain
+conservative nullable/all-false argument propagation. No general visitor or public option is introduced.
+
+Validate the actual provider carrier against existing primitive numeric types, then reuse the owning strict
+mapping source with that carrier and the complete store declaration as a validation probe. The probe must
+also retain a numeric provider carrier; implicit text conversion is insufficient. Preserve the original input
+mapping/converter and query-input precision. Numeric MySQL BOOL/BOOLEAN aliases remain valid when accepted
+by the existing integer mapper; actual Boolean, text/binary/temporal and null-converting carriers reject.
+ABS/Truncate retain the compatible operand result mapping; SIGN and MySQL's precision-zero argument use
+fresh converter-free int mappings. Native functions act on stored values followed by result conversion;
+arbitrary converter algebra is not promised.
+
+Use native domain/overflow behavior uniformly for literals, captures and columns. Preserve the full existing
+finite integer/decimal/float/double ranges, including signed minima and floating values beyond CLR decimal.
+Do not add an artificial int32/decimal/2^53/BIGINT input limit or convert approximate inputs through decimal.
+Projected out-of-range results retain checked reading; server predicates and overflow timing need live
+evidence. Existing non-finite rejection remains; signed-zero bit preservation is not promised. Truncation
+removes fractions toward zero, without casting or rounding the input. Floor/Ceiling/Round/Log/Pow/Random
+and Min/Max remain separate contracts. Pinned EF v10.0.0 and OceanBase documentation revision
+2a5ae3a23a51729d065cec716508eb26cb064106 are audited in the numeric-core local research artifact.
+
 ## Arithmetic division and remainder local contract
 
 The QRY-01 arithmetic slice renders integer division using MySQL `DIV` and Oracle one-argument
@@ -275,17 +324,31 @@ Run the read-only gate after packing, before the isolated consumer checks:
 
 ```powershell
 pwsh -NoProfile -File tests/OceanBase.EntityFrameworkCore.PackageConsumer/Verify-Package.ps1 `
-    -PackagePath artifacts/checkpoint-substring-20261111/OceanBase.EntityFrameworkCore.10.0.0-checkpoint.substring-20261111.nupkg `
-    -ExpectedVersion 10.0.0-checkpoint.substring-20261111
+    -PackagePath artifacts/checkpoint-temporal-parts-20261111/OceanBase.EntityFrameworkCore.10.0.0-checkpoint.temporal-parts-20261111.nupkg `
+    -ExpectedVersion 10.0.0-checkpoint.temporal-parts-20261111
 ```
 
 The PowerShell 7 script uses .NET ZIP/XML APIs and checks ID/version, the net10.0 assembly and dependency group,
 exact expected dependency ranges, and a nonempty packaged README with matching metadata. It does not build,
-restore, execute provider queries or establish server/runtime compatibility. The current substring package passes;
+restore, execute provider queries or establish server/runtime compatibility. The current temporal-parts package passes;
 wrong expected version, the old README-less alias package and the exact-patch README probe fail at their intended
-checks. These runs were on Windows; Linux execution remains unverified. Change the path/version for each new pack.
+checks. The hosted e41981e package-content gate passed on Windows/Linux; the current package checks ran locally
+on Windows. Change the path/version for each new pack.
 
-### Current Substring checkpoint (2026-11-11)
+### Current ordinary temporal parts checkpoint (2026-11-11)
+
+Final Debug/Release and isolated EF10.0.14 Release pass 963 tests (745 unit, 216 intercepted pipeline, two
+project consumers), including four test-only review cases added after the initial 959-pass run. Independent code review
+and scoped test-fix re-review passed. Captured DateOnly/TimeOnly carrier and precision checks retain existing
+transport behavior. The same baseline-built `10.0.0-checkpoint.temporal-parts-20261111` nupkg passes both modes
+at EF10.0.0/10.0.14, covering all six units, DATE clock casts and prior checks. The preceding Substring package
+fails the new temporal predicate. Content and package-only graph gates pass.
+
+Repeat the commands below with `10.0.0-checkpoint.temporal-parts-20261111` and
+`artifacts/checkpoint-temporal-parts-20261111`. Evidence: `artifacts/local-development/batch3f/`.
+Native extraction/casts/fractional/calendar/interval results and hosted execution for this source remain open.
+
+### Historical Substring checkpoint (2026-11-11)
 
 Debug/Release and isolated EF10.0.14 Release pass 934 tests (724 unit, 208 intercepted pipeline, two project
 consumers). Independent spec/quality review passed. The same baseline-built `10.0.0-checkpoint.substring-20261111`
@@ -305,8 +368,9 @@ captures. The previous wide-decimal package fails the new method translations. P
 package-only dependency checks pass.
 
 Repeat the commands below with `10.0.0-checkpoint.search-20261111` and `artifacts/checkpoint-search-20261111`.
-Evidence: `artifacts/local-development/batch3d/`. These checks do not execute server searches or hosted CI
-for the current source; native collation/padding/character/LOB behavior retains the stated live gates.
+Evidence: `artifacts/local-development/batch3d/`. The later e41981e
+[hosted run 42865290840](https://github.com/cocosip/efcore.oceanbase/actions/runs/42865290840) passed all four gates
+on Windows/Linux. It does not cover later source or server searches; collation/padding/character/LOB gates remain.
 
 ### Historical wide-decimal floating checkpoint (2026-11-11)
 

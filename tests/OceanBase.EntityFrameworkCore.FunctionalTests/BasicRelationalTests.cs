@@ -26,6 +26,75 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
         [InlineData(OceanBaseCompatibilityMode.Oracle, true, false)]
         [InlineData(OceanBaseCompatibilityMode.Oracle, false, true)]
         [InlineData(OceanBaseCompatibilityMode.Oracle, true, true)]
+        public async Task Temporal_parts_bind_integer_comparisons_and_read_synthetic_results(
+            OceanBaseCompatibilityMode mode, bool async, bool relationalNulls)
+        {
+            var oracle = mode == OceanBaseCompatibilityMode.Oracle;
+            using var table = new DataTable();
+            foreach (var name in new[] { "Part", "StampPart", "Optional" })
+                table.Columns.Add(name, oracle ? typeof(OceanBaseDecimal) : typeof(int));
+            table.Rows.Add(oracle ? new OceanBaseDecimal(59m) : 59,
+                oracle ? new OceanBaseDecimal(2024m) : 2024,
+                oracle ? new OceanBaseDecimal(59m) : 59);
+            table.Rows.Add(oracle ? new OceanBaseDecimal(0m) : 0,
+                oracle ? new OceanBaseDecimal(2024m) : 2024, DBNull.Value);
+            var commands = new CommandCapture { Results = table };
+            await using var context = CreateContext(mode, commands, relationalNulls);
+            var date = new DateTime(2024, 2, 29, 23, 59, 59);
+            var part = 59;
+            var hour = 23;
+            var query = context.Set<NarrowTemporalRow>()
+                .Where(row => row.Date < date && row.Date.Second == part && row.Clock.Hour == hour)
+                .Select(row => new { Part = row.Date.Second, StampPart = row.Stamp.Year,
+                    Optional = (int?)row.Clock.Second });
+            var rows = async ? await query.ToListAsync() : query.ToList();
+            Assert.Equal(2, rows.Count);
+            Assert.Equal(59, rows[0].Part);
+            Assert.Equal(2024, rows[0].StampPart);
+            Assert.Equal(59, rows[0].Optional);
+            Assert.Null(rows[1].Optional);
+            Assert.Contains(commands.Values, value => Equals(value, part));
+            Assert.Contains(commands.Values, value => Equals(value, hour));
+            Assert.Contains(commands.Values, value => Equals(value, date));
+            Assert.Contains(commands.Inputs, parameter => Equals(parameter.Value, part) && parameter.DbType == DbType.Int32);
+            Assert.Contains(commands.Inputs, parameter => Equals(parameter.Value, date) && parameter.DbType == DbType.DateTime2);
+            Assert.Contains(oracle ? "TRUNC(EXTRACT(SECOND FROM CAST(" : "SECOND(", commands.Sql[^1]);
+            Assert.DoesNotContain("__oceanbase_internal", commands.Sql[^1]);
+
+            commands.Values.Clear();
+            commands.Inputs.Clear();
+            table.Rows[0]["Optional"] = oracle ? new OceanBaseDecimal(29m) : 29;
+            var calendar = new DateOnly(2024, 2, 29);
+            var clock = new TimeOnly(23, 59, 59).Add(TimeSpan.FromTicks(oracle ? 9999999 : 9999990));
+            var calendarQuery = context.Set<TemporalRow>()
+                .Where(row => row.Date == calendar && row.Clock == clock && row.Date.Day == 29)
+                .Select(row => new { Part = row.Clock.Second, StampPart = row.Date.Year,
+                    Optional = (int?)row.OptionalDate!.Value.Day });
+            var calendarRows = async ? await calendarQuery.ToListAsync() : calendarQuery.ToList();
+            Assert.Equal(59, calendarRows[0].Part);
+            Assert.Equal(2024, calendarRows[0].StampPart);
+            Assert.Equal(29, calendarRows[0].Optional);
+            Assert.Null(calendarRows[1].Optional);
+            Assert.Contains(commands.Inputs, parameter => Equals(parameter.Value, calendar.ToDateTime(TimeOnly.MinValue))
+                && parameter.DbType == DbType.Date && parameter.Scale == 0);
+            Assert.Contains(commands.Inputs, parameter => (oracle
+                    ? parameter.Value is OceanBaseIntervalDayToSecond interval && interval.ToTimeSpan() == clock.ToTimeSpan()
+                        && parameter.DbType == DbType.Object && parameter.OceanBaseDbType == OceanBaseDbType.IntervalDayToSecond
+                        && parameter.Precision == 9 && parameter.Scale == 7
+                    : Equals(parameter.Value, clock.ToTimeSpan()) && parameter.DbType == DbType.Time && parameter.Scale == 6));
+            Assert.Contains(oracle ? "TRUNC(EXTRACT(SECOND FROM" : "SECOND(", commands.Sql[^1]);
+            Assert.DoesNotContain("__oceanbase_internal", commands.Sql[^1]);
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false, true)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true, true)]
         public async Task Substring_commands_bind_dynamic_arguments_and_convert_synthetic_results(
             OceanBaseCompatibilityMode mode, bool async, bool relationalNulls)
         {
@@ -1704,6 +1773,7 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
         {
             public List<string> Sql { get; } = [];
             public List<object?> Values { get; } = [];
+            public List<OceanBaseParameter> Inputs { get; } = [];
             public List<OceanBaseParameter> DecimalInputs { get; } = [];
             public List<OceanBaseParameter> StringInputs { get; } = [];
             public int AffectedRows { get; init; } = 1;
@@ -1741,6 +1811,8 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
                 DbCommand command, CommandEventData eventData, InterceptionResult<DbDataReader> result)
             {
                 Sql.Add(command.CommandText);
+                Inputs.AddRange(command.Parameters.Cast<OceanBaseParameter>()
+                    .Where(parameter => parameter.Direction == ParameterDirection.Input));
                 Values.AddRange(command.Parameters.Cast<DbParameter>().Select(parameter => parameter.Value));
                 DecimalInputs.AddRange(command.Parameters.Cast<OceanBaseParameter>()
                     .Where(parameter => parameter.DbType == DbType.Decimal && parameter.Direction == ParameterDirection.Input));
