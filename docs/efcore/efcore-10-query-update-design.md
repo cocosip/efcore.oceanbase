@@ -116,19 +116,19 @@ Still required for Task 4 and release:
 
 ## Package checkpoint validation
 
-Implementation revision `188c25d` was fast-forwarded from dev into efcore/10.0 after Debug and Release each passed
-195 tests (150 unit, 44 intercepted pipeline and one project-reference consumer). A local prerelease package was
-built on efcore/10.0; nothing was tagged, pushed or published. The earlier `2a02bc8`/95-test and `8664692`/145-test packages
+Implementation revision `fbb33ea` was fast-forwarded from dev into efcore/10.0 after Debug and Release each passed
+257 tests (196 unit, 60 intercepted pipeline and one project-reference consumer). A local prerelease package was
+built on efcore/10.0; nothing was tagged, pushed or published. The earlier `2a02bc8`/95-test and `8664692`/145-test and `188c25d`/195-test packages
 remain historical evidence; use the current revision below with the expanded consumer fixture.
 
-The package `OceanBase.EntityFrameworkCore.10.0.0-checkpoint.188c25d.nupkg` contains net10.0 assets and its nuspec
+The package `OceanBase.EntityFrameworkCore.10.0.0-checkpoint.fbb33ea.nupkg` contains net10.0 assets and its nuspec
 declares `[10.0.0,11.0.0)` for both EF Core and EF Core Relational. These were checked by opening the ZIP/nuspec
 and asserting the dependency IDs, ranges and assembly path. The packaging tool reported a missing package README;
 package presentation remains release preparation work.
 
 The standalone [package consumer](../../tests/OceanBase.EntityFrameworkCore.PackageConsumer/Program.cs) references
 only the packed provider by default, with no ProjectReference or direct connector/EF dependencies. Its executable asserts
-registration, Guid and five-type temporal storage, Boolean projection and mode-specific paged query generation in both modes. It deliberately does
+registration, Guid, five-type temporal and bounded/unbounded binary storage, Boolean projection and mode-specific paged query generation in both modes. It deliberately does
 not connect to a database. It stays outside the normal solution because it requires an already-built local
 provider package. Central versions are disabled only in this isolated fixture so repository EF references cannot
 mask package dependency errors. Setting `OceanBaseConsumerEfCoreVersion` adds explicit EF Core and Relational
@@ -136,10 +136,10 @@ references to simulate a consumer requesting a later patch; it does not rebuild 
 
 | Validation | EF Core / Relational | Result and evidence boundary |
 | --- | --- | --- |
-| Provider build and Debug/Release suites | 10.0.0 | 195 passed per configuration; unit/intercepted/project consumer only. |
+| Provider build and Debug/Release suites | 10.0.0 | 257 passed per configuration; unit/intercepted/project consumer only. |
 | Default standalone consumer | 10.0.0 | Both modes pass; provider package built against 10.0.0. |
 | Consumer explicitly upgrades EF packages | 10.0.14 | Both modes pass with the same provider nupkg/assembly; runtime reports EF 10.0.14.0. |
-| Source build and full Release suite | 10.0.14 | 195 passed; isolated central-version override and artifact paths, not the baseline-compiled package. |
+| Source build and full Release suite | 10.0.14 | 257 passed; isolated central-version override and artifact paths, not the baseline-compiled package. |
 | Package range boundary | [10.0.0,11.0.0) | Nuspec inspected; NuGet.Versioning parser accepts 10.0.0/10.0.14 and rejects 11.0.0. No EF11 runtime test claimed. |
 
 Both `project.assets.json` and the consumer's loaded EF assembly version were inspected. These checks establish
@@ -149,9 +149,9 @@ server behavior. Re-run the matrix after provider changes before release.
 To repeat the checkpoint consumer verification from the repository root in PowerShell:
 
 ```powershell
-$providerVersion = '10.0.0-checkpoint.188c25d'
+$providerVersion = '10.0.0-checkpoint.fbb33ea'
 $consumerProject = 'tests/OceanBase.EntityFrameworkCore.PackageConsumer/OceanBase.EntityFrameworkCore.PackageConsumer.csproj'
-$packageFeed = Join-Path (Get-Location) 'artifacts/checkpoint-188c25d'
+$packageFeed = Join-Path (Get-Location) 'artifacts/checkpoint-fbb33ea'
 $consumerPackages = Join-Path $packageFeed 'consumer-packages'
 dotnet restore $consumerProject "-p:OceanBaseProviderVersion=$providerVersion" `
     --source $packageFeed --source (Join-Path $env:USERPROFILE '.nuget/packages') `

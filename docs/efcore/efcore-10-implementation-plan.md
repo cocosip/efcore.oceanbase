@@ -23,7 +23,7 @@ update MySQL and Oracle statuses independently. Generated SQL and intercepted te
 
 | Task | Checklist IDs | Remaining acceptance work |
 | --- | --- | --- |
-| 1: Package boundary | PKG-01 through PKG-04 | Historical package 188c25d passes EF10.0.0/10.0.14; new binary package validation and release package-content gate remain. |
+| 1: Package boundary | PKG-01 through PKG-04 | Package fbb33ea passes EF10.0.0/10.0.14; full source suites pass both patches; release package-content gate remains. |
 | 2: Configuration | CFG-01 through CFG-04 | Negative cases, both-mode service graph and actual cache behavior. |
 | 3: Connection and mappings | CON-01 through CON-05, SQL-01/02, MOD-01 through MOD-03, MAP-01 through MAP-07 | Closed-connection cleanup/facets/scalar/temporal/binary conversion/precision/length hooks have tests; opened ownership, remaining explicit types and live round trips remain. |
 | 4: Runtime and schema | DIA-01/02, QRY-01 through QRY-11, UPD-01 through UPD-05, TXN-01 through TXN-03, SCH-01 through SCH-03 | Live query/write/transaction evidence and schema implementation; incomplete. |
@@ -35,9 +35,9 @@ do not complete mappings.
 
 Before further production changes, use the checklist's **Before starting a feature** record to enumerate concrete
 cases for the selected IDs. The **Next mapping acceptance cases** table defines the immediate scalar work;
-its initial failing tests are the RED baseline. Current binary work based on 5964bc2 passes 257 tests in Debug
+its initial failing tests are the RED baseline. Binary checkpoint fbb33ea passes 257 tests in Debug
 and Release (196 unit, 60 intercepted pipeline, one project consumer), including 46 binary unit cases and 16 binary
-pipeline cases. The source Release suite also passes on EF10.0.14; the changed binary package matrix is pending.
+pipeline cases. The source Release suite also passes on EF10.0.14; the same baseline-built binary package passes consumers on both tested patches.
 This is partial acceptance, not Task 3/4 completion or live server evidence.
 
 ## Global Constraints
