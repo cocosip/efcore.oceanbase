@@ -11,6 +11,24 @@ each small group. Real database integration/tests and EF8/EF9 adaptation are exp
 [local development plan](efcore-10-local-development-plan.md) tracks the full remaining inventory, including
 an audit of locally feasible deferred families. Finishing one batch does not finish the overall goal.
 
+### Unary string functions/character-length checkpoint (2026-11-11)
+
+Exact parameterless ToLower/ToUpper/Trim/TrimStart/TrimEnd and string.Length now translate through derived EF
+method/member providers. SQL uses native casing/space trimming and character counts; Oracle empty/null behavior
+retains conservative function nullability. Scoped services preserve plugins/DbFunctions/mode isolation. Trim
+returns variable text while preserving Unicode/converters and Oracle LOB families, including lowercase spellings.
+
+Focused tests pass 24 unit and eight intercepted cases after missing-translation and four LOB regression failures.
+Debug/Release and isolated EF10.0.14 Release each pass **833 tests** (647 unit, 184 intercepted pipeline, two
+consumers). Independent review passed. The same baseline-built `10.0.0-checkpoint.unary-20261111` package passes
+both modes at EF10.0.0/10.0.14; the preceding arithmetic package fails the unary predicate. Package-content and
+package-only graph checks pass. No live database, Linux or hosted CI run occurred.
+
+Latest package: `artifacts/checkpoint-unary-20261111/OceanBase.EntityFrameworkCore.10.0.0-checkpoint.unary-20261111.nupkg`.
+Evidence: `artifacts/local-development/batch3c/`. Native casing/space/character semantics do not promise exact CLR
+culture/Unicode-whitespace/UTF-16 behavior. Next is the confirmed Batch 2d wide-decimal floating-reader fix,
+followed by Batch 3d search and wider query work. The goal remains active.
+
 ### Integer division/remainder checkpoint
 
 Integer CLR division now renders MySQL DIV or Oracle one-argument TRUNC; Oracle remainder uses MOD and MySQL
@@ -23,7 +41,7 @@ each pass **801 tests** (623 unit, 176 intercepted pipeline, two consumers). Ind
 baseline-built `10.0.0-checkpoint.arithmetic-20261110` package passes both modes on EF10.0.0/10.0.14; the previous
 concat package fails the new arithmetic smoke. Package identity/assets/README/ranges and package-only graph pass.
 
-Latest package: `artifacts/checkpoint-arithmetic-20261110/OceanBase.EntityFrameworkCore.10.0.0-checkpoint.arithmetic-20261110.nupkg`.
+Historical arithmetic package: `artifacts/checkpoint-arithmetic-20261110/OceanBase.EntityFrameworkCore.10.0.0-checkpoint.arithmetic-20261110.nupkg`.
 Evidence: `artifacts/local-development/batch3b/`. Synthetic reads prove client generation/binding/reading, not
 server arithmetic/predicate membership, zero-divisor or overflow behavior. Next local work is unary string
 functions/character length and wider query support. The overall goal remains active; no live test/publication.

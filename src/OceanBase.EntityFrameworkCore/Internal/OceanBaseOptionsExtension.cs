@@ -102,6 +102,13 @@ namespace OceanBase.EntityFrameworkCore.Internal
                 new OceanBaseSqlGenerationHelper(
                     serviceProvider.GetRequiredService<RelationalSqlGenerationHelperDependencies>(),
                     CompatibilityMode));
+            builder.TryAdd<IMemberTranslatorProvider>(serviceProvider =>
+                new OceanBaseMemberTranslatorProvider(
+                    serviceProvider.GetRequiredService<RelationalMemberTranslatorProviderDependencies>(),
+                    serviceProvider.GetRequiredService<IRelationalTypeMappingSource>(), CompatibilityMode));
+            builder.TryAdd<IMethodCallTranslatorProvider>(serviceProvider =>
+                new OceanBaseMethodCallTranslatorProvider(
+                    serviceProvider.GetRequiredService<RelationalMethodCallTranslatorProviderDependencies>(), CompatibilityMode));
             builder.TryAdd<IUpdateSqlGenerator>(serviceProvider =>
                 new OceanBaseUpdateSqlGenerator(
                     serviceProvider.GetRequiredService<UpdateSqlGeneratorDependencies>(), CompatibilityMode));

@@ -16,6 +16,63 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
     public sealed class BasicRelationalTests
     {
         [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false, true)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true, true)]
+        public async Task Unary_string_commands_bind_inputs_and_read_synthetic_function_results(
+            OceanBaseCompatibilityMode mode, bool async, bool relationalNulls)
+        {
+            using var table = new DataTable();
+            foreach (var name in new[] { "Lower", "Upper", "Trim", "Start", "End", "Converted" })
+                table.Columns.Add(name, typeof(string));
+            table.Columns.Add("Length", typeof(int));
+            table.Rows.Add("lower", "UPPER", "trim", "start ", " end", "CONVERTED!", 4);
+            table.Rows.Add(DBNull.Value, DBNull.Value, DBNull.Value, DBNull.Value, DBNull.Value, DBNull.Value, DBNull.Value);
+            var commands = new CommandCapture { Results = table };
+            await using var context = CreateContext(mode, commands, relationalNulls);
+            string? fallback = "海'_%\\";
+            var query = context.Set<ShortTextRow>()
+                .Where(row => row.Converted.ToUpper() != fallback)
+                .Select(row => new
+                {
+                    Lower = (row.Caption ?? fallback)!.ToLower(), Upper = row.Caption!.ToUpper(),
+                    Trim = row.Caption!.Trim(), Start = row.Caption!.TrimStart(), End = row.Caption!.TrimEnd(),
+                    Converted = row.Converted.ToUpper(), Length = (int?)row.Caption!.Length
+                });
+            foreach (var value in new string?[] { fallback, "", null, "again" })
+            {
+                fallback = value;
+                commands.StringInputs.Clear();
+                var rows = async ? await query.ToListAsync() : query.ToList();
+                Assert.Equal(2, rows.Count);
+                Assert.Equal("lower", rows[0].Lower);
+                Assert.Equal("UPPER", rows[0].Upper);
+                Assert.Equal("trim", rows[0].Trim);
+                Assert.Equal("start ", rows[0].Start);
+                Assert.Equal(" end", rows[0].End);
+                Assert.Equal("CONVERTED", rows[0].Converted);
+                Assert.Equal(4, rows[0].Length);
+                Assert.Null(rows[1].Lower);
+                Assert.Null(rows[1].Trim);
+                Assert.Null(rows[1].Converted);
+                Assert.Null(rows[1].Length);
+                var sql = commands.Sql[^1];
+                foreach (var function in new[] { "LOWER(", "UPPER(", "TRIM(", "LTRIM(", "RTRIM(",
+                    mode == OceanBaseCompatibilityMode.MySql ? "CHAR_LENGTH(" : "LENGTH(" })
+                    Assert.Contains(function, sql);
+                if (value is not null)
+                    Assert.Contains(commands.StringInputs, parameter => Equals(parameter.Value, value + "!"));
+                else Assert.Empty(commands.StringInputs);
+                Assert.All(commands.StringInputs, parameter => Assert.True(parameter.Size >= ((string)parameter.Value!).Length));
+            }
+        }
+
+        [Theory]
         [InlineData(OceanBaseCompatibilityMode.MySql, false)]
         [InlineData(OceanBaseCompatibilityMode.MySql, true)]
         [InlineData(OceanBaseCompatibilityMode.Oracle, false)]

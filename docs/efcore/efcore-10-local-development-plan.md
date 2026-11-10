@@ -178,6 +178,47 @@ contract in the query/update design and pinned research in artifacts/local-devel
    Focused RED/GREEN, full Debug/Release, independent review, patch/package evidence and scoped commit.
    Search/substring, exact UTF-16/Unicode-whitespace guarantees and server results remain separate work.
 
+## Batch 2d follow-up brief: wide exact decimal to floating normalization
+
+Run after the active Batch 3c worker has stopped. This is a confirmed remaining local scalar gap, not a
+database integration task. Requirements are the planned normalization paragraph in the technical baseline.
+The package-only reproduction is artifacts/local-development/floating-decimal-probe/ (six genuine failures
+against the arithmetic package after correcting an initial probe-only namespace compilation ambiguity).
+
+**Files:** Storage/OceanBaseNumericConversion.cs; UnitTests/FloatingPointMappingTests.cs;
+FunctionalTests/BasicRelationalTests.cs. Do not add new store mappings, converters, dependencies or numeric types.
+
+1. RED through actual mapping-reader/generated-output paths: OceanBaseDecimal 1E30, a 38-digit fraction and
+   1E-40 target both float/double without CLR decimal overflow. Include positive/negative/zero values, normal,
+   subnormal/underflow and target overflow boundaries, extreme scales and a converter-composed reader.
+2. Fix the shared conversion boundary using public connector APIs/BCL. Round directly to the requested IEEE
+   target; avoid a float-via-double double-rounding path. Finite conversion to infinity rejects. Preserve exact
+   integer/fraction/range and decimal semantics, existing native non-finite reader behavior and narrowing checks.
+3. Add intercepted sync/async floating reads and generated outputs with synthetic wrapper values, reusing
+   existing helpers. These prove shared normalization rather than new wire/server type claims.
+4. Focused RED/GREEN, full Debug/Release, independent review, patch/package gates, progress and scoped commit.
+   Check the actual connector 0.2.0 nuspec source revision rather than relying on connector repository HEAD.
+
+## Batch 3d brief: string search with safe empty-needle handling
+
+Run after Batch 3c and the confirmed Batch 2d normalization follow-up. **Files:** existing string method
+translator/provider, scoped Oracle string processor/generator only if required, focused StringSearchQueryTests.cs,
+and FunctionalTests/BasicRelationalTests.cs. The planned search contract in query/update design is authoritative.
+
+1. RED exact Contains(string)/StartsWith(string)/EndsWith(string) over mapped nullable/required columns,
+   constants, parameters and column needles; wildcard-like characters are ordinary data. Include nonempty,
+   empty/null, long/repeated needles, negatives, bool projections and default/relational nulls.
+2. Reuse existing translator services and fixed SQL function names. MySQL dynamic empty branch uses character
+   length. Oracle known constant/captured empty must become source IS NOT NULL before normalization erases
+   its identity; null remains native NULL. Expand any private marker before base nullability, preserving normal
+   DbFunction behavior and raw caller values. Column/computed needles retain documented native NULL semantics.
+3. Test changing one cached query between nonempty/empty/null, composition with concat/unary functions/CASE/
+   COALESCE, both-mode context isolation and unsupported char/comparison overloads. No LIKE escaping helper,
+   user-derived SQL fragments or general pipeline replacement. Retain conservative function nullability.
+4. Add sync/async intercepted binding/materialization/parameter-change cases, focused RED/GREEN, full
+   Debug/Release, independent review, patch/package gates, docs and scoped commit. Server collation/padding/
+   substring results remain live gates; exact CLR exception/ordinal semantics are not promised.
+
 ## Execution record
 
 - Baseline: 57fd44a, clean efcore/10.0. Prior verified suite: 563 (420 unit, 142 intercepted, one consumer).
@@ -222,6 +263,18 @@ contract in the query/update design and pinned research in artifacts/local-devel
   package fails the arithmetic smoke. Package-content gate and package-only graph pass. Server arithmetic,
   predicate membership/zero-divisor/overflow gates remain open. Evidence: artifacts/local-development/batch3b/.
   Next local slice is Batch 3c unary string functions; search/substring/date/numeric/wider query work remains.
+- Numeric research exposed a local floating-reader defect: the existing shared conversion always calls exact
+  OceanBaseDecimal.ToDecimal before selecting float/double. A package-only probe against arithmetic-20261110
+  reproduces six overflows for representable target values (1E30, 38-digit fraction, 1E-40). The published
+  connector revision confirms invariant bounded scientific ToString is available. Queue Batch 2d after 3c;
+  no production fix or passing evidence is claimed yet.
+- Batch 3c unary functions/Length local scope complete: focused 24 unit + eight intercepted pass after RED,
+  including four lowercase/whitespace Oracle LOB return-family failures. Debug/Release and isolated EF10.0.14
+  Release pass 833 (647+184+2). Independent review passed. Same baseline-built unary-20261111 package passes
+  both modes on EF10.0.0/10.0.14; the previous arithmetic package fails the new unary predicate. Repeatable
+  package-content gate and package-only graph pass. Evidence: artifacts/local-development/batch3c/.
+  Native casing/SQL-space trim/database-character semantics and converter/live limits are documented.
+  Next is Batch 2d normalization, then Batch 3d search; the full goal remains active.
 - Remaining Batch 2 scalar work and Batches 3–10 pending. The overall goal remains active.
 - Batch 8 package README slice: use the provider project's README as package-owned documentation and declare
   PackageReadmeFile. Verify archive metadata/content with no-build packing of an already verified isolated

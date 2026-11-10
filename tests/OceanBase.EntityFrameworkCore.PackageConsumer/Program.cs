@@ -78,6 +78,18 @@ namespace PackageConsumer
                     throw new Exception("Packed provider truncated fractional division.");
                 }
 
+                var stringFunctionsSql = context.Set<Row>().Where(row => row.Name.Trim().ToLower() == "pkg")
+                    .Select(row => new { Upper = row.Name.ToUpper(), Start = row.Name.TrimStart(),
+                        End = row.Name.TrimEnd(), Length = row.Name.Length }).ToQueryString();
+                foreach (var function in new[] { "LOWER(", "UPPER(", "TRIM(", "LTRIM(", "RTRIM(",
+                    mode == OceanBaseCompatibilityMode.MySql ? "CHAR_LENGTH(" : "LENGTH(" })
+                {
+                    if (!stringFunctionsSql.Contains(function, StringComparison.Ordinal))
+                    {
+                        throw new Exception($"Packed provider did not translate {function}");
+                    }
+                }
+
                 var guidType = context.Model.FindEntityType(typeof(Row))!.FindProperty(nameof(Row.Token))!.GetColumnType();
                 if (guidType != (mode == OceanBaseCompatibilityMode.Oracle ? "RAW(16)" : "CHAR(36)"))
                 {

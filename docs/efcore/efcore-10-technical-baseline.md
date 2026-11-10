@@ -46,6 +46,7 @@ verified against the 10.x assemblies before each task:
 | SQL helpers | ISqlGenerationHelper | Quote identifiers and create parameter names per mode. |
 | Type mapping | IRelationalTypeMappingSource | Map common CLR and OceanBase scalar types. |
 | Query SQL | IQuerySqlGeneratorFactory and provider query generator | Emit mode-correct SELECT, predicates, joins and paging. |
+| Query functions | IMethodCallTranslatorProvider / IMemberTranslatorProvider (scoped) | Add exact supported methods/members, preserving plugins/model DbFunctions and per-mode mappings. |
 | Boolean SQL | IRelationalParameterBasedSqlProcessorFactory / RelationalParameterBasedSqlProcessor | Convert Oracle conditions and numeric Boolean projections after parameter/nullability processing. |
 | Updates | IUpdateSqlGenerator and modification-command batch services | Emit INSERT, UPDATE and DELETE with parameters. |
 | Key retrieval | Generated-value and result-column mapping services | Read database-generated keys without assuming SQL Server OUTPUT. |
@@ -251,6 +252,14 @@ composition and generated outputs. IEEE rounding during explicit float/double co
 database value that would overflow CLR float must throw rather than materializing infinity. Existing non-finite
 reader values are preserved, following the connector. Parameters and literals reject NaN/infinity: the pinned
 server documentation does not support these input constants. Output-only parameters retain their direction.
+
+Planned numeric-normalization follow-up: finite OceanBaseDecimal reader/generated values targeting Single or
+Double must not be forced through CLR decimal first. The published connector's exact ToDecimal rejects both
+large finite magnitudes and precision beyond decimal's range, although a floating target can represent their
+rounded values. Use only public connector representation and invariant BCL numeric conversion; preserve exact
+decimal/integer paths. Floating conversion may round or underflow according to the target IEEE format, but a
+finite value whose target conversion becomes infinity must reject. Existing native non-finite reader behavior
+and float/double narrowing checks remain unchanged. This is normalization, not new NUMBER-backed storage support.
 
 Apply physical 32-bit capacity and UNSIGNED checks only to converted values actually written by SaveChanges;
 finite query operands/arithmetic/CASE results may exceed a column's capacity or be negative. Never narrow query

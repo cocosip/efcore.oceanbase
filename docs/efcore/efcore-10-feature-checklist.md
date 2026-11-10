@@ -55,20 +55,20 @@ so that an undocumented feature is not accidentally advertised.
 Development resumed at the user's request (2026-11-10) on efcore/10.0. See the
 [progress handoff](efcore-10-progress.md) for saved state, remaining work and the exact resume point.
 
-Snapshot: 2026-11-10, `efcore/10.0` integer division/remainder batch following 34cf2fd.
+Snapshot: 2026-11-11, `efcore/10.0` unary string-function batch following ee21972.
 The same baseline-built package passes both tested EF patches. This is not a release result.
 
 `dotnet test OceanBase.EntityFrameworkCore.slnx --no-restore -m:1 -nr:false` produced:
 
-The expanded suite passed in Debug and Release (801 tests per configuration).
+The expanded suite passed in Debug and Release (833 tests per configuration).
 
 | Layer | Passed | Failed | Evidence boundary |
 | --- | --- | --- | --- |
-| Unit | 623 | 0 | Prior scalar/configuration/string coverage plus integer division/remainder, promotions, nullable/grouping and fractional controls; live coverage incomplete. |
-| Command pipeline | 176 | 0 | Intercepted scalar/string/arithmetic queries, materialization, converted writes/original predicates and generated values; transactions disabled. |
+| Unit | 647 | 0 | Prior coverage plus unary string functions/character length, scoped translator/plugin precedence, nullability, converter and LOB return families; live coverage incomplete. |
+| Command pipeline | 184 | 0 | Intercepted scalar/string/arithmetic queries and unary function binding/nullable reads, writes and generated values; transactions disabled. |
 | Consumer | 2 | 0 | Both-mode provider detection through a project reference, not an isolated packed-package consumer. |
-| Packed consumer | Both modes | 0 | Same arithmetic-20261110 package passes EF10.0.0/10.0.14, including integer/fractional division and remainder plus prior string/scalar checks; README included; no live execution. |
-| Later-patch Release suite | 801 | 0 | Current source compiled/tested against EF10.0.14 in isolated artifacts. |
+| Packed consumer | Both modes | 0 | Same unary-20261111 package passes EF10.0.0/10.0.14, including five unary string methods/character length plus prior string/arithmetic/scalar checks; README included; no live execution. |
+| Later-patch Release suite | 833 | 0 | Current source compiled/tested against EF10.0.14 in isolated artifacts. |
 | Live MySQL / Oracle | Not established | Not established | No live provider execution recorded for either mode. |
 | Relational specification | Not established | Not established | No specification test project yet. |
 
@@ -126,6 +126,11 @@ Twenty-two intercepted cases cover alternate-width query/write and generated out
 and finite overflow rejection. Independent review found a clone size facet erased during precision changes;
 a RED-to-GREEN regression now preserves it for validation. Live rounding/subnormal/negative-zero/arithmetic,
 remaining decimal-backed floating declarations and session-dependent REAL remain required open cases.
+
+A package-only probe also confirms six local OceanBaseDecimal-to-Single/Double reader failures: values such
+as 1E30, a 38-digit fraction and 1E-40 overflow because normalization first requires an exact CLR decimal.
+These values should round to finite floating results. The local plan queues Batch 2d to fix the shared boundary;
+existing passing totals do not include that pending regression. No new store mapping is implied.
 
 Temporal query transport is independent of physical write precision. Ten new UTQ cases initially failed; input
 parameters, input-output values and literals now retain transport precision and Oracle interval leading width,
@@ -188,7 +193,7 @@ Existing evidence references used below identify partial coverage, not automatic
   project reference only.
 - **PC**: [Standalone package consumer](../../tests/OceanBase.EntityFrameworkCore.PackageConsumer/Program.cs),
   registration/native floating/explicit Guid/temporal/binary/integer and Boolean model/SQL/paging checks against the
-   latest arithmetic-20261110 local prerelease package, including integer/fractional division, concat/null-cache checks and prior scalar checks;
+   latest unary-20261111 local prerelease package, including unary string functions/character length and prior arithmetic/string/scalar checks;
   [commands and evidence](efcore-10-query-update-design.md#package-checkpoint-validation).
 
 `Missing` means tests and evidence still need to be added.
@@ -262,12 +267,12 @@ duplicates and mode-specific string semantics.
 | QRY-03 | Inner/left joins, correlated subqueries, Any/All and scalar/collection Contains have verified results or explicit exclusions. | Required | In progress | In progress | UQ simple join only; collection/null/empty cases missing. |
 | QRY-04 | GroupBy aggregates, Count/LongCount, Sum/Average/Min/Max handle empty and nullable inputs correctly. | Required | In progress | In progress | UQ grouped Count shape only. |
 | QRY-05 | First/Single/default variants enforce cardinality; entity/scalar async materialization matches sync. | Required | In progress | In progress | FP ToList scalar only; entity/cardinality cases missing. |
-| QRY-06 | String translations have a supported-overload matrix: equality, Contains, StartsWith/EndsWith, length, substring, case and trim. | Required | In progress | In progress | StringQueryTests cover native addition/fixed Concat, equality, Oracle empty/null/converter/cache boundaries; FP adds 12 intercepted cases. Search/member/substring/case/trim and live collation/result evidence remain open. |
+| QRY-06 | String translations have a supported-overload matrix: equality, Contains, StartsWith/EndsWith, length, substring, case and trim. | Required | In progress | In progress | StringQueryTests cover concat/equality; StringFunctionQueryTests adds 24 unary method/Length/service/mapping cases and eight FP cases. Search/substring and live casing/character/space/LOB results remain open; native database semantics are explicit. |
 | QRY-07 | Date/time members, numeric functions, conditional/coalesce expressions have a supported-overload matrix. | Required | Planned | Planned | Missing; include precision, nulls and unsupported overloads. |
 | QRY-08 | Include/ThenInclude for reference/collection navigations, tracking/no-tracking and identity resolution preserve related entities. | Required | Planned | Planned | Missing; split queries are listed separately below. |
 | QRY-09 | Global query filters compose with parameterized predicates and can be disabled using supported EF APIs. | Required | Planned | Planned | Missing; named filters require EF10 review below. |
 | QRY-10 | FromSqlRaw/FromSqlInterpolated and ExecuteSqlRaw/ExecuteSqlInterpolated bind values; hostile parameter values cannot change SQL shape. | Required | Planned | Planned | Missing; raw SQL text remains caller-authored. |
-| QRY-11 | Unsupported predicates fail with actionable translation errors; preserve EF's allowed top-level client projection evaluation. | Required | In progress | In progress | StringQueryTests/FP cover StringComparison/custom/unsupported Concat predicates and permitted client projections. Wider function boundaries remain open. |
+| QRY-11 | Unsupported predicates fail with actionable translation errors; preserve EF's allowed top-level client projection evaluation. | Required | In progress | In progress | StringQueryTests/StringFunctionQueryTests/FP cover StringComparison/custom/Concat/culture/Invariant/trim-overload predicates and permitted client projections. Wider function boundaries remain open. |
 
 ## Tracked writes, concurrency and transactions
 
@@ -301,9 +306,9 @@ commit/transaction behavior per mode.
 | ID | Requirement and acceptance criteria | Priority | MySQL | Oracle | Existing evidence / gap |
 | --- | --- | --- | --- | --- | --- |
 | PKG-01 | Build net10.0 assets against published OceanBaseConnector 0.2.0 with warnings as errors. | Required | Done | Done | Current solution test command builds assets; not a package-content assertion. |
-| PKG-02 | Packed nuspec uses OceanBase.EntityFrameworkCore and EF ranges [10.0.0,11.0.0). | Required | Done | Done | PackageConsumer/Verify-Package.ps1 passes the arithmetic nupkg identity/net10.0/README/range checks; prior wrong-version, missing-README and exact-patch probes reject as expected. Rerun on every release pack; runtime/live gates are separate. |
-| PKG-03 | Isolated packed consumer restores/executes provider API without project/local connector references. | Required | Done | Done | PC arithmetic-20261110 passes both modes on both selected patches, including integer/fractional division, remainder and prior string/scalar checks; README included; rerun after provider changes. |
-| PKG-04 | Minimum EF10 and selected later available EF10 patch restore/build/test without pinning consumer patch; EF11 cannot satisfy dependencies. | Required | Done | Done | Source Release suite 801 passes at 10.0.14; same baseline-built arithmetic package passes EF10.0.0/10.0.14; nuspec ranges rechecked, prior range parser rejects 11.0.0; rerun after changes. |
+| PKG-02 | Packed nuspec uses OceanBase.EntityFrameworkCore and EF ranges [10.0.0,11.0.0). | Required | Done | Done | PackageConsumer/Verify-Package.ps1 passes the unary nupkg identity/net10.0/README/range checks; prior wrong-version, missing-README and exact-patch probes reject as expected. Rerun on every release pack; runtime/live gates are separate. |
+| PKG-03 | Isolated packed consumer restores/executes provider API without project/local connector references. | Required | Done | Done | PC unary-20261111 passes both modes on both selected patches, including native unary string/Length translations and prior arithmetic/string/scalar checks; README included; rerun after provider changes. |
+| PKG-04 | Minimum EF10 and selected later available EF10 patch restore/build/test without pinning consumer patch; EF11 cannot satisfy dependencies. | Required | Done | Done | Source Release suite 833 passes at 10.0.14; same baseline-built unary package passes EF10.0.0/10.0.14; nuspec ranges rechecked, prior range parser rejects 11.0.0; rerun after changes. |
 | TST-01 | Selected EF relational specification classes pass; exclusions map to checklist IDs and limitations. | Required | Planned | Planned | Specification project/selection absent. |
 | TST-02 | Live core query/write/transaction/schema/scalar suites pass in at least one declared supported environment per mode. | Required | Planned | Planned | User will supply access later; User Secrets fixture and authorized schema/cleanup scope required; no live provider execution recorded. |
 | REL-01 | Support notes record server/connector/runtime/EF versions, tenant mode, direct/proxy endpoint, transport/options without credentials. | Required | Planned | Planned | Release evidence record missing. |

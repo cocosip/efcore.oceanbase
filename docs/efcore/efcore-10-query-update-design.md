@@ -25,6 +25,8 @@ The implementation was checked against the EF Core Relational 10.0.0 assembly an
 | `IModelCustomizer` | Singleton | Use `RelationalModelCustomizer` for relational model conventions and DbSet table naming. |
 | `IModelValidator` | Singleton | Use `RelationalModelValidator` for the relational model boundary. |
 | `IQuerySqlGeneratorFactory` | Singleton | Create a generator using `QuerySqlGeneratorDependencies` and the configured mode. |
+| `IMethodCallTranslatorProvider` | Scoped | Add exact string method translations while retaining EF plugins and model DbFunctions. |
+| `IMemberTranslatorProvider` | Scoped | Add the exact string Length member using per-mode character-count SQL. |
 | `IUpdateSqlGenerator` | Singleton | Use `UpdateSqlGeneratorDependencies` and the configured mode to emit DML. |
 | `IModificationCommandBatchFactory` | Scoped | Consume `ModificationCommandBatchFactoryDependencies` and context options. |
 | `ModificationCommandBatch` | Per batch | Implement admission, completion, transaction requirements, sync/async execution and value propagation. |
@@ -88,9 +90,9 @@ matrix work. Local tests cover constants/parameters/nullable columns, nesting, p
 opposite-mode contexts and sync/async intercepted commands; server collation, lengths, LOBs and result semantics
 still require the postponed live phase.
 
-## Planned unary string function contract
+## Unary string function local contract
 
-The next QRY-06 function slice will add exact parameterless `ToLower()`, `ToUpper()`, `Trim()`, `TrimStart()`
+The QRY-06 function slice adds exact parameterless `ToLower()`, `ToUpper()`, `Trim()`, `TrimStart()`
 and `TrimEnd()` translations, plus the exact `string.Length` member. Use LOWER/UPPER and TRIM/LTRIM/RTRIM in
 both modes; character length uses MySQL CHAR_LENGTH and Oracle LENGTH. The pinned official per-function pages
 and EF10 translator-extension contracts are audited in `artifacts/local-development/query-functions-design.md`.
@@ -107,6 +109,29 @@ method/member translator providers, and keep mode/cache isolation. Invariant/cul
 search and substring are outside this slice and need negative predicate tests. Top-level client projection
 rules remain unchanged. Custom value converters do not establish arbitrary CLR method equivalence; preserve
 ordinary mapping/parameter behavior and test connected converter cases rather than stripping conversions.
+
+## Planned string search contract
+
+A later QRY-06 slice will cover exact instance Contains(string), StartsWith(string) and EndsWith(string).
+Search uses database comparison rules and treats `%`, `_`, quotes and backslashes as ordinary characters;
+use INSTR for contains/prefix and native suffix extraction/equality for ends-with, with no LIKE pattern
+interpolation. MySQL suffix uses RIGHT(source, CHAR_LENGTH(needle)); Oracle uses SUBSTR(source, -LENGTH(needle)).
+The pinned function documentation and padding/character limitations are in the string-function research.
+
+An empty constant/captured needle is true for a non-null receiver; a null receiver/needle follows relational
+NULL handling, without a CLR null-argument exception guarantee. MySQL can test CHAR_LENGTH(needle)=0 in SQL.
+For Oracle, inspect a constant/captured needle's provider representation before generic empty-string
+normalization: a known empty needle becomes a receiver IS NOT NULL expression, while null remains SQL NULL.
+Reuse the existing conservative parameter-cache disabling, preserve raw parameter values and distinguish these
+cases on each execution. A narrowly scoped internal search marker expanded before EF nullability processing
+is acceptable if required; never change the semantics of user-mapped native INSTR/SUBSTR functions.
+
+Oracle column/computed needles follow native storage semantics: an empty result already collapsed to NULL
+cannot be distinguished from SQL NULL. Document this boundary; do not guess original CLR emptiness. Search
+nullability must remain conservative, including suffix extraction that may return NULL for non-null inputs.
+Test positive/negated/projected conditions, nullable receivers, CASE/coalesce/concat composition, long needles,
+changing empty/null/nonempty captures and both null-semantics settings. Exact char/StringComparison/culture
+overloads remain outside this slice and fail as predicates; allowed client projection evaluation remains.
 
 ## Arithmetic division and remainder local contract
 
@@ -235,7 +260,20 @@ restore, execute provider queries or establish server/runtime compatibility. The
 wrong expected version, the old README-less alias package and the exact-patch README probe fail at their intended
 checks. These runs were on Windows; Linux execution remains unverified. Change the path/version for each new pack.
 
-### Current arithmetic checkpoint (2026-11-10)
+### Current unary string-function checkpoint (2026-11-11)
+
+Debug/Release and isolated EF10.0.14 Release pass 833 tests (647 unit, 184 intercepted pipeline, two project
+consumers). Independent spec/quality review passed. The same baseline-built `10.0.0-checkpoint.unary-20261111`
+package passes both modes at EF10.0.0/10.0.14, including native LOWER/UPPER/TRIM/LTRIM/RTRIM and character length.
+The previous arithmetic package fails the new function predicate. The package-content gate and package-only
+graph checks pass. No server function, cross-platform or hosted CI run was performed.
+
+Repeat the commands below with `10.0.0-checkpoint.unary-20261111` and `artifacts/checkpoint-unary-20261111`.
+Evidence: `artifacts/local-development/batch3c/`. Native casing, SQL-space trim, database-character units,
+converter/LOB execution and live results retain the limits above. The separately reproduced wide-decimal
+floating-reader gap remains queued in Batch 2d; this checkpoint does not claim that pending regression passes.
+
+### Historical arithmetic checkpoint (2026-11-10)
 
 Debug/Release and isolated EF10.0.14 Release each pass 801 tests (623 unit, 176 intercepted pipeline, two project
 consumers). Independent spec/quality review passed. The same baseline-built
