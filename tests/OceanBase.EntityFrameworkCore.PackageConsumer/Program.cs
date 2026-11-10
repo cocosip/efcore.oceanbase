@@ -13,11 +13,11 @@ namespace PackageConsumer
             {
                 var options = new DbContextOptionsBuilder<ConsumerContext>()
                     .UseOceanBase("Server=localhost;Database=package_smoke", mode).Options;
-                using var context = new ConsumerContext(options);
+                using var context = new ConsumerContext(options, mode);
                 if (!context.Database.IsOceanBase()) throw new Exception("Provider registration failed.");
                 var sql = context.Set<Row>().Where(row => row.Enabled).OrderBy(row => row.Id).Skip(1).Take(2)
                     .Select(row => new { row.Name, row.Token, row.OccurredAt, row.OffsetAt, row.Day,
-                        row.Clock, row.Duration, row.Payload, row.LargePayload, Positive = row.Id > 0 }).ToQueryString();
+                        row.Clock, row.Duration, row.Payload, row.LargePayload, row.Count, Positive = row.Id > 0 }).ToQueryString();
                 var paging = mode == OceanBaseCompatibilityMode.MySql ? "LIMIT" : "FETCH NEXT";
                 if (!sql.Contains(paging, StringComparison.Ordinal)) throw new Exception("Wrong query dialect.");
                 if (mode == OceanBaseCompatibilityMode.Oracle && !sql.Contains("CASE", StringComparison.Ordinal))
@@ -55,14 +55,26 @@ namespace PackageConsumer
                     throw new Exception("Wrong bounded/unbounded binary storage type.");
                 }
 
-                Console.WriteLine($"{mode}: packed provider registration, Guid/temporal/binary model, Boolean SQL and paging passed; EF {typeof(DbContext).Assembly.GetName().Version}.");
+                if (rowType.FindProperty(nameof(Row.Count))!.GetRelationalTypeMapping().StoreType
+                        != (mode == OceanBaseCompatibilityMode.Oracle ? "NUMBER(3)" : "MEDIUMINT")
+                    || rowType.FindProperty(nameof(Row.Enabled))!.GetRelationalTypeMapping().StoreType
+                        != (mode == OceanBaseCompatibilityMode.Oracle ? "NUMBER(3)" : "BOOLEAN"))
+                {
+                    throw new Exception("Explicit integer/Boolean store types were not preserved by their mappings.");
+                }
+
+                Console.WriteLine($"{mode}: packed provider registration, scalar/temporal/binary model, Boolean SQL and paging passed; EF {typeof(DbContext).Assembly.GetName().Version}.");
             }
         }
 
-        private sealed class ConsumerContext(DbContextOptions<ConsumerContext> options) : DbContext(options)
+        private sealed class ConsumerContext(DbContextOptions<ConsumerContext> options, OceanBaseCompatibilityMode mode) : DbContext(options)
         {
             protected override void OnModelCreating(ModelBuilder modelBuilder)
-                => modelBuilder.Entity<Row>().Property(row => row.Payload).HasMaxLength(8);
+            {
+                modelBuilder.Entity<Row>().Property(row => row.Payload).HasMaxLength(8);
+                modelBuilder.Entity<Row>().Property(row => row.Count).HasColumnType(mode == OceanBaseCompatibilityMode.Oracle ? "NUMBER(3)" : "MEDIUMINT");
+                modelBuilder.Entity<Row>().Property(row => row.Enabled).HasColumnType(mode == OceanBaseCompatibilityMode.Oracle ? "NUMBER(3)" : "BOOLEAN");
+            }
         }
 
         private sealed class Row
@@ -78,6 +90,7 @@ namespace PackageConsumer
             public TimeSpan Duration { get; set; }
             public byte[] Payload { get; set; } = [];
             public byte[]? LargePayload { get; set; }
+            public long Count { get; set; }
         }
     }
 }

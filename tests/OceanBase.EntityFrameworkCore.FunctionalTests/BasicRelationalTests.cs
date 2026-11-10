@@ -15,6 +15,83 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
     public sealed class BasicRelationalTests
     {
         [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle)]
+        public void Query_operands_and_results_are_not_limited_to_integer_column_capacity(OceanBaseCompatibilityMode mode)
+        {
+            var commands = new CommandCapture();
+            using var context = CreateContext(mode, commands);
+            var rows = context.Set<NarrowScalarRow>();
+            const long literal = 1000000000L;
+            var captured = literal;
+            Assert.Contains("1000000000", rows.Select(row => row.Count + literal).ToQueryString());
+            Assert.Contains("1000000000", rows.Where(row => row.Count < captured).ToQueryString());
+            Assert.Contains("1000000000", rows.Select(row => row.Count == 1 ? literal : row.Count).ToQueryString());
+            Assert.Contains("1000000000", rows.Select(row => row.Count * literal).ToQueryString());
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle)]
+        public void Binary_query_comparands_can_exceed_the_column_length(OceanBaseCompatibilityMode mode)
+        {
+            using var context = CreateContext(mode, new CommandCapture());
+            var bytes = new byte[] { 0, 1, 2, 3, 4, 5, 6, 7, 8 };
+            var sql = context.Set<BinaryRow>().Where(row => row.Payload == bytes).ToQueryString();
+            Assert.Contains("000102030405060708", sql);
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true)]
+        public async Task Explicit_integer_and_boolean_columns_keep_converters_in_query_and_write(
+            OceanBaseCompatibilityMode mode, bool async)
+        {
+            var oracle = mode == OceanBaseCompatibilityMode.Oracle;
+            using var table = new DataTable();
+            table.Columns.Add("Id", oracle ? typeof(decimal) : typeof(int));
+            table.Columns.Add("Count", oracle ? typeof(decimal) : typeof(int));
+            table.Columns.Add("State", oracle ? typeof(decimal) : typeof(sbyte));
+            table.Columns.Add("Enabled", oracle ? typeof(decimal) : typeof(sbyte));
+            table.Rows.Add(1, 123, 2, 1);
+            var commands = new CommandCapture { Results = table };
+            await using var context = CreateContext(mode, commands);
+            var query = context.Set<NarrowScalarRow>().Select(row => new { row.Id, row.Count, row.State, row.Enabled });
+
+            var row = Assert.Single(async ? await query.ToListAsync() : query.ToList());
+            Assert.Equal(123L, row.Count);
+            Assert.Equal(RowState.Active, row.State);
+            Assert.True(row.Enabled);
+            var entityType = context.Model.FindEntityType(typeof(NarrowScalarRow))!;
+            Assert.Equal(oracle ? "NUMBER(3)" : "MEDIUMINT", entityType.FindProperty(nameof(NarrowScalarRow.Count))!.GetRelationalTypeMapping().StoreType);
+            Assert.Equal(oracle ? "NUMBER(3)" : "BOOLEAN", entityType.FindProperty(nameof(NarrowScalarRow.Enabled))!.GetRelationalTypeMapping().StoreType);
+            context.Add(new NarrowScalarRow { Id = row.Id, Count = row.Count, State = row.State, Enabled = row.Enabled });
+
+            Assert.Equal(1, async ? await context.SaveChangesAsync() : context.SaveChanges());
+            Assert.Contains(123L, commands.Values);
+            Assert.Contains(2, commands.Values);
+            Assert.Contains(oracle ? (object)1m : true, commands.Values);
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true)]
+        public async Task Narrow_integer_columns_reject_oversized_writes_before_execution(OceanBaseCompatibilityMode mode, bool async)
+        {
+            var commands = new CommandCapture();
+            await using var context = CreateContext(mode, commands);
+            context.Add(new NarrowScalarRow { Id = 1, Count = mode == OceanBaseCompatibilityMode.Oracle ? 1000 : 8388608 });
+            var exception = async ? await Assert.ThrowsAsync<DbUpdateException>(() => context.SaveChangesAsync())
+                : Assert.Throws<DbUpdateException>(() => context.SaveChanges());
+            Assert.IsType<ArgumentOutOfRangeException>(exception.InnerException);
+            Assert.Empty(commands.Sql);
+        }
+
+        [Theory]
         [InlineData(OceanBaseCompatibilityMode.MySql, false)]
         [InlineData(OceanBaseCompatibilityMode.MySql, true)]
         [InlineData(OceanBaseCompatibilityMode.Oracle, false)]
@@ -422,16 +499,17 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
         {
             var context = new TestContext(new DbContextOptionsBuilder<TestContext>()
                 .UseOceanBase("Server=localhost;Database=test", mode)
-                .AddInterceptors(new NoNetworkConnection(), commands).Options);
+                .AddInterceptors(new NoNetworkConnection(), commands).Options, mode);
             // These tests exercise EF commands; transaction semantics are verified separately against OceanBase.
             context.Database.AutoTransactionBehavior = AutoTransactionBehavior.Never;
             return context;
         }
 
-        private sealed class TestContext(DbContextOptions<TestContext> options) : DbContext(options)
+        private sealed class TestContext(DbContextOptions<TestContext> options, OceanBaseCompatibilityMode mode) : DbContext(options)
         {
             protected override void OnModelCreating(ModelBuilder modelBuilder)
             {
+                var oracle = mode == OceanBaseCompatibilityMode.Oracle;
                 modelBuilder.Entity<Customer>().ToTable("Customers");
                 modelBuilder.Entity<Customer>().Property(customer => customer.Version).IsConcurrencyToken();
                 modelBuilder.Entity<KeyOnly>().ToTable("Keys");
@@ -454,10 +532,23 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
                 modelBuilder.Entity<GeneratedBinary>().Property(entity => entity.Data).HasMaxLength(8).HasComputedColumnSql("NULL");
                 modelBuilder.Entity<GeneratedGuid>().Property(entity => entity.Id).ValueGeneratedNever();
                 modelBuilder.Entity<GeneratedGuid>().Property(entity => entity.Data).HasComputedColumnSql("NULL");
+                modelBuilder.Entity<NarrowScalarRow>().Property(entity => entity.Id).ValueGeneratedNever();
+                modelBuilder.Entity<NarrowScalarRow>().Property(entity => entity.Count).HasColumnType(oracle ? "NUMBER(3)" : "MEDIUMINT");
+                modelBuilder.Entity<NarrowScalarRow>().Property(entity => entity.State).HasConversion<int>()
+                    .HasColumnType(oracle ? "NUMBER(2)" : "TINYINT");
+                modelBuilder.Entity<NarrowScalarRow>().Property(entity => entity.Enabled).HasColumnType(oracle ? "NUMBER(3)" : "BOOLEAN");
             }
         }
 
         private enum RowState { Inactive = 0, Active = 2 }
+
+        private sealed class NarrowScalarRow
+        {
+            public int Id { get; set; }
+            public long Count { get; set; }
+            public RowState State { get; set; }
+            public bool Enabled { get; set; }
+        }
 
         private sealed class BinaryRow
         {

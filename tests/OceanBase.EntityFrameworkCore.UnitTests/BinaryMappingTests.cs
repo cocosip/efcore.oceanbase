@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
+using OceanBase.EntityFrameworkCore.Storage;
 using OceanBaseConnector;
 using Xunit;
 
@@ -118,8 +119,10 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             using var command = new OceanBaseCommand();
             var bytes = new byte[] { 0, 0x80, 0xff, 0 };
             Assert.Equal(bytes, Assert.IsType<byte[]>(mapping.CreateParameter(command, "data", bytes).Value));
-            Assert.Throws<ArgumentException>(() => mapping.CreateParameter(command, "data", new byte[5]));
-            Assert.Throws<ArgumentException>(() => mapping.GenerateSqlLiteral(new byte[5]));
+            var validation = Assert.IsAssignableFrom<IOceanBaseWriteValidation>(mapping);
+            validation.ValidateWriteValue(bytes);
+            Assert.Throws<ArgumentException>(() => validation.ValidateWriteValue(new byte[5]));
+            Assert.Equal(new byte[5], Assert.IsType<byte[]>(mapping.CreateParameter(command, "data", new byte[5]).Value));
             Assert.Equal(DBNull.Value, mapping.CreateParameter(command, "data", null, nullable: true).Value);
             Assert.Equal("NULL", mapping.GenerateSqlLiteral(null));
             var output = mapping.CreateParameter(command, "data", null, direction: ParameterDirection.Output);
@@ -140,7 +143,7 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             {
                 using var command = new OceanBaseCommand();
                 var mapping = source.FindMapping(typeof(byte[]), storeType)!;
-                Assert.Throws<ArgumentException>(() => mapping.CreateParameter(command, "data", new byte[size]));
+                Assert.Throws<ArgumentException>(() => ((IOceanBaseWriteValidation)mapping).ValidateWriteValue(new byte[size]));
             }
         }
 
@@ -158,7 +161,7 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
                     value => Convert.ToHexString(value)));
             using var command = new OceanBaseCommand();
             Assert.Equal(8, clone.CreateParameter(command, "data", "0001020304050607").Size);
-            Assert.Throws<ArgumentException>(() => clone.CreateParameter(command, "data", "000102030405060708"));
+            Assert.Throws<ArgumentException>(() => ((IOceanBaseWriteValidation)clone).ValidateWriteValue("000102030405060708"));
             Assert.ThrowsAny<ArgumentException>(() => mapping.WithPrecisionAndScale(3, null));
         }
 

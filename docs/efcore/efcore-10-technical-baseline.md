@@ -139,6 +139,38 @@ hooks. Direct converter tests and intercepted EF query/write tests cover Oracle-
 MySQL numeric Boolean results; this does not prove wire execution. Temporal types, complete explicit-type/facet
 validation, binary boundaries and the full custom-converter matrix remain open.
 
+## Explicit integer and Boolean storage contract
+
+This MAP-01/MAP-06/MAP-07 slice extends the existing checked integer reader contract to physical column types.
+Read EF v10.0.0 `IntTypeMapping`, `BoolTypeMapping`, `RelationalTypeMapping` and `RelationalTypeMappingSource` and
+the published connector's prepared numeric parameter handling before implementation. The OceanBase documentation
+baseline is the same pinned V4.3.5 revision used below: MySQL `200.numeric-of-mysql-mode/200.integer-type-of-mysql-mode.md`
+and Oracle `300.numeric-data-type-of-oracle-mode/200.number-data-type-of-oracle-mode.md` in their respective type directories.
+
+| Contract | MySQL | Oracle |
+| --- | --- | --- |
+| Explicit integral storage | TINYINT, SMALLINT, MEDIUMINT, INT/INTEGER, BIGINT, each optionally UNSIGNED | NUMBER, NUMBER(p), NUMBER(p,0), DECIMAL/NUMERIC equivalents; bare INT/INTEGER/SMALLINT aliases |
+| Boolean storage | The same integer families, including BOOL/BOOLEAN and TINYINT(1) | The same zero-scale numeric profile, with the existing Boolean-to-decimal converter |
+| Physical bounds | Native signed/unsigned width, including signed/unsigned 24-bit MEDIUMINT | Precision 1..38, zero scale; bare NUMBER does not constrain precision |
+| Configured precision | Rejected: integer display width is not EF numeric precision | HasPrecision(p) generates NUMBER(p,0); conflicting explicit/configured precision rejects |
+| Display width | Optional width 1..255 is preserved in SQL; it never narrows storage or becomes parameter Size | Not a display-width feature |
+| Unsupported combinations | BIT, ZEROFILL, SERIAL attributes and non-integral columns reject instead of silently using the default | Nonzero scale, unsupported columns and incompatible facets reject instead of introducing rounding |
+
+All eight CLR integer types retain their own range and DbType; a narrower explicit column additionally constrains
+input values. Validate current values of written columns before executing DML, independently of permissive server
+SQL modes. Apply converters before validation. EF propagates column mappings to query operands and CASE branches;
+those values and arithmetic results may exceed the stored column's capacity and must remain valid queries.
+Original/concurrency values used only in predicates are also query operands. Query parameters retain CLR binding
+and required metadata; physical capacity checks must not run in general parameter or literal generation.
+Oracle integer Precision/Scale are passed to parameter metadata; the connector retains typed numeric binding.
+Nulls and output-only parameters retain existing semantics. Clones and enum converters preserve validation and
+reader hooks; changing a clone's Oracle precision must update its declaration and capacity together. Boolean
+input remains zero/one; existing reader semantics are unchanged. Full Boolean predicate/null behavior remains QRY-01.
+
+Acceptance tests cover aliases, display-width independence, signed/unsigned and precision boundaries, null/output
+parameters, malformed/incompatible declarations, clones/converters and real EF query/write interception. Live
+round trips, unsigned arithmetic restrictions and server SQL mode/DDL remain separate open gates.
+
 ## Binary mapping contract
 
 This MAP-04/MAP-06 acceptance slice covers `byte[]` storage selection, explicit declarations, parameter/literal
@@ -169,8 +201,10 @@ must match the mode and configured size/fixed facets; malformed declarations, ab
 required lengths, non-positive lengths, unsupported precision/scale and conflicting facets fail clearly.
 LOB keys/indexes are rejected because this profile does not implement prefix/function indexes. MySQL storage
 capacities are 255 / 65,535 / 16,777,215 / 536,870,910 bytes respectively for the four BLOB families; packet/memory
-limits remain independent. Reject oversized input parameters and SQL literals before execution, including values
-that a permissive MySQL SQL mode could truncate. Output-only parameters retain direction/facets without input checks.
+limits remain independent. Reject oversized values actually written by SaveChanges before DML, including values
+that a permissive MySQL SQL mode could truncate. Apply converters first. Query comparisons can use values longer
+than the column and must not inherit this write constraint. Output-only parameters retain direction/facets without
+input checks. Oracle empty-input and literal-function limits are separate transport constraints.
 
 Oracle literal generation uses HEXTORAW for at most 2,000 bytes; reject larger literals and use parameters instead.
 The BLOB parameter path, large payloads, empty-BLOB support, MySQL padding, binary-key comparison and generated

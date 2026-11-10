@@ -29,14 +29,14 @@ namespace OceanBase.EntityFrameworkCore.Storage
             var storeTypes = OceanBaseTypeMappings.For(_compatibilityMode);
             var oracle = _compatibilityMode == OceanBaseCompatibilityMode.Oracle;
 
-            if (clrType == typeof(sbyte)) return new OceanBaseIntegerTypeMapping<sbyte>(oracle ? "NUMBER(3)" : "TINYINT", DbType.SByte);
-            if (clrType == typeof(byte)) return new OceanBaseIntegerTypeMapping<byte>(oracle ? "NUMBER(3)" : "TINYINT UNSIGNED", DbType.Byte);
-            if (clrType == typeof(short)) return new OceanBaseIntegerTypeMapping<short>(oracle ? "NUMBER(5)" : "SMALLINT", DbType.Int16);
-            if (clrType == typeof(ushort)) return new OceanBaseIntegerTypeMapping<ushort>(oracle ? "NUMBER(5)" : "SMALLINT UNSIGNED", DbType.UInt16);
-            if (clrType == typeof(int)) return new OceanBaseIntegerTypeMapping<int>(storeTypes.Integer, DbType.Int32);
-            if (clrType == typeof(uint)) return new OceanBaseIntegerTypeMapping<uint>(oracle ? "NUMBER(10)" : "INT UNSIGNED", DbType.UInt32);
-            if (clrType == typeof(long)) return new OceanBaseIntegerTypeMapping<long>(storeTypes.Long, DbType.Int64);
-            if (clrType == typeof(ulong)) return new OceanBaseIntegerTypeMapping<ulong>(oracle ? "NUMBER(20)" : "BIGINT UNSIGNED", DbType.UInt64);
+            if (clrType == typeof(sbyte)) return FindIntegerMapping<sbyte>(mappingInfo, oracle ? "NUMBER(3)" : "TINYINT", DbType.SByte);
+            if (clrType == typeof(byte)) return FindIntegerMapping<byte>(mappingInfo, oracle ? "NUMBER(3)" : "TINYINT UNSIGNED", DbType.Byte);
+            if (clrType == typeof(short)) return FindIntegerMapping<short>(mappingInfo, oracle ? "NUMBER(5)" : "SMALLINT", DbType.Int16);
+            if (clrType == typeof(ushort)) return FindIntegerMapping<ushort>(mappingInfo, oracle ? "NUMBER(5)" : "SMALLINT UNSIGNED", DbType.UInt16);
+            if (clrType == typeof(int)) return FindIntegerMapping<int>(mappingInfo, storeTypes.Integer, DbType.Int32);
+            if (clrType == typeof(uint)) return FindIntegerMapping<uint>(mappingInfo, oracle ? "NUMBER(10)" : "INT UNSIGNED", DbType.UInt32);
+            if (clrType == typeof(long)) return FindIntegerMapping<long>(mappingInfo, storeTypes.Long, DbType.Int64);
+            if (clrType == typeof(ulong)) return FindIntegerMapping<ulong>(mappingInfo, oracle ? "NUMBER(20)" : "BIGINT UNSIGNED", DbType.UInt64);
             if (clrType == typeof(decimal)) return FindDecimalMapping(mappingInfo);
             if (clrType == typeof(string)) return FindStringMapping(mappingInfo);
             if (clrType == typeof(byte[])) return FindBinaryMapping(mappingInfo);
@@ -53,11 +53,20 @@ namespace OceanBase.EntityFrameworkCore.Storage
             if (clrType == typeof(double)) return new DoubleTypeMapping(storeTypes.Double, DbType.Double);
             if (clrType == typeof(float)) return new FloatTypeMapping(storeTypes.Float, DbType.Single);
             if (clrType == typeof(bool)) return (RelationalTypeMapping)(oracle
-                ? new OceanBaseDecimalTypeMapping(storeTypes.Boolean, 1, 0)
+                ? FindIntegerMapping<decimal>(mappingInfo, storeTypes.Boolean, DbType.Decimal)
                     .WithComposedConverter(new BoolToZeroOneConverter<decimal>())
-                : new OceanBaseIntegerTypeMapping<bool>(storeTypes.Boolean, DbType.Boolean));
+                : FindIntegerMapping<bool>(mappingInfo, storeTypes.Boolean, DbType.Boolean));
 
             return base.FindMapping(mappingInfo);
+        }
+
+        private RelationalTypeMapping FindIntegerMapping<T>(in RelationalTypeMappingInfo info, string defaultStoreType, DbType dbType)
+            where T : struct, IConvertible
+        {
+            var storeType = info.StoreTypeName ?? (_compatibilityMode == OceanBaseCompatibilityMode.Oracle
+                && info.Precision is not null ? "NUMBER" : defaultStoreType);
+            return new OceanBaseIntegerTypeMapping<T>(storeType, dbType, _compatibilityMode,
+                info.Precision, info.Scale, info.Size, info.IsFixedLength ?? false);
         }
 
         private RelationalTypeMapping FindBinaryMapping(in RelationalTypeMappingInfo info)

@@ -8,7 +8,7 @@ using Microsoft.EntityFrameworkCore.Storage.Json;
 
 namespace OceanBase.EntityFrameworkCore.Storage
 {
-    internal sealed class OceanBaseByteArrayTypeMapping : ByteArrayTypeMapping
+    internal sealed class OceanBaseByteArrayTypeMapping : ByteArrayTypeMapping, IOceanBaseWriteValidation
     {
         private readonly OceanBaseCompatibilityMode _mode;
 
@@ -39,14 +39,14 @@ namespace OceanBase.EntityFrameworkCore.Storage
             if (parameter.Direction is ParameterDirection.Input or ParameterDirection.InputOutput
                 && parameter.Value is byte[] bytes)
             {
-                ValidateValue(bytes);
+                ValidateTransportValue(bytes);
             }
         }
 
         protected override string GenerateNonNullSqlLiteral(object value)
         {
             var bytes = (byte[])value;
-            ValidateValue(bytes);
+            ValidateTransportValue(bytes);
             if (_mode == OceanBaseCompatibilityMode.Oracle && bytes.Length > 2000)
             {
                 throw new NotSupportedException("Oracle binary literals above 2,000 bytes require a parameter.");
@@ -56,14 +56,21 @@ namespace OceanBase.EntityFrameworkCore.Storage
                 ? $"HEXTORAW('{Convert.ToHexString(bytes)}')" : base.GenerateNonNullSqlLiteral(value);
         }
 
-        private void ValidateValue(byte[] value)
+        private void ValidateTransportValue(byte[] value)
         {
             if (_mode == OceanBaseCompatibilityMode.Oracle && value.Length == 0)
             {
                 throw new NotSupportedException("Non-null empty Oracle binary inputs require a tested empty-BLOB transport.");
             }
+        }
 
-            if (value.Length > (Size ?? MaximumLength(StoreTypeNameBase.ToUpperInvariant(), _mode)))
+        public void ValidateWriteValue(object? value)
+        {
+            if (Converter is { } converter) value = converter.ConvertToProvider(value);
+            if (value is null or DBNull) return;
+            var bytes = (byte[])value;
+            ValidateTransportValue(bytes);
+            if (bytes.Length > (Size ?? MaximumLength(StoreTypeNameBase.ToUpperInvariant(), _mode)))
             {
                 throw new ArgumentException("The binary value exceeds its declared storage length.", nameof(value));
             }

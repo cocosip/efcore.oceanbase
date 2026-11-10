@@ -166,6 +166,7 @@ namespace OceanBase.EntityFrameworkCore.Update
             if (!_complete) throw new InvalidOperationException("The command batch must be completed before execution.");
             try
             {
+                ValidateWriteValues();
                 CheckRows(_write!.ExecuteNonQuery(Parameters(connection)));
                 if (_read is not null)
                 {
@@ -188,6 +189,7 @@ namespace OceanBase.EntityFrameworkCore.Update
             if (!_complete) throw new InvalidOperationException("The command batch must be completed before execution.");
             try
             {
+                ValidateWriteValues();
                 CheckRows(await _write!.ExecuteNonQueryAsync(Parameters(connection), cancellationToken).ConfigureAwait(false));
                 if (_read is not null)
                 {
@@ -210,6 +212,18 @@ namespace OceanBase.EntityFrameworkCore.Update
 
         private RelationalCommandParameterObject Parameters(IRelationalConnection connection)
             => new(connection, _values, null, _dependencies.CurrentContext.Context, _dependencies.Logger, CommandSource.SaveChanges);
+
+        private void ValidateWriteValues()
+        {
+            // Query operands can exceed a column's capacity; only values actually written need its bounds.
+            foreach (var column in _commands[0].ColumnModifications)
+            {
+                if (column.IsWrite && column.TypeMapping is IOceanBaseWriteValidation validation)
+                {
+                    validation.ValidateWriteValue(column.Value);
+                }
+            }
+        }
 
         private void CheckRows(int affectedRows)
         {
