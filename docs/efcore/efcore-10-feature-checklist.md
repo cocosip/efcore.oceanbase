@@ -52,6 +52,9 @@ so that an undocumented feature is not accidentally advertised.
 
 ## Current evidence and blockers
 
+Development is paused at the user's request (2026-11-10). See the
+[progress handoff](efcore-10-progress.md) for saved state, remaining work and the exact resume point.
+
 Snapshot: 2026-11-10, `dev` national text parameter implementation and consumer revision d46ae9d.
 The same baseline-built package passes both tested EF patches. This is not a release result.
 

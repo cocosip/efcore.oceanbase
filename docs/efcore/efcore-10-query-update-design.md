@@ -138,7 +138,8 @@ Still required for Task 4 and release:
 
 Implementation revision `d46ae9d` was fast-forwarded from dev into efcore/10.0 after Debug and Release each passed
 510 tests (383 unit, 126 intercepted pipeline and one project-reference consumer). A local prerelease package was
-built on efcore/10.0; nothing was tagged, pushed or published. The earlier `2a02bc8`/95-test, `8664692`/145-test,
+built on efcore/10.0; no release tag or NuGet publication was created. Branch synchronization is recorded in the
+[progress handoff](efcore-10-progress.md). The earlier `2a02bc8`/95-test, `8664692`/145-test,
 `188c25d`/195-test, `fbb33ea`/257-test, `3ab2345`/317-test, `9c78329`/366-test and `c84ad9d`/432-test and `f645608`/450-test and `3365ad9`/498-test packages
 remain historical evidence; use the current revision below with the expanded consumer fixture.
 
