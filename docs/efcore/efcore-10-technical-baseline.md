@@ -139,6 +139,45 @@ hooks. Direct converter tests and intercepted EF query/write tests cover Oracle-
 MySQL numeric Boolean results; this does not prove wire execution. Temporal types, complete explicit-type/facet
 validation, binary boundaries and the full custom-converter matrix remain open.
 
+## Binary mapping contract
+
+This MAP-04/MAP-06 acceptance slice covers `byte[]` storage selection, explicit declarations, parameter/literal
+length validation, nulls and mapping clones. It does not close large/empty Oracle BLOB execution or live gates.
+Read EF v10.0.0 `ByteArrayTypeMapping`, `RelationalTypeMappingInfo` and `RelationalTypeMapping` before changes.
+The published connector revision identified above binds ordinary byte arrays through `DbType.Binary`; its
+`OceanBaseDbType.Blob` denotes a LOB locator and must not be used for ordinary byte-array values.
+
+The OceanBase documentation baseline is revision `2a5ae3a23a51729d065cec716508eb26cb064106` (V4.3.5):
+[binary strings](https://github.com/oceanbase/oceanbase-doc/blob/2a5ae3a23a51729d065cec716508eb26cb064106/en-US/700.reference/500.sql-reference/100.sql-syntax/200.common-tenant-of-mysql-mode/100.basic-elements-of-mysql-mode/100.data-type-of-mysql-mode/400.string-of-mysql-mode/300.binary-and-varbinary-of-mysql-mode.md),
+[string lengths](https://github.com/oceanbase/oceanbase-doc/blob/2a5ae3a23a51729d065cec716508eb26cb064106/en-US/700.reference/500.sql-reference/100.sql-syntax/200.common-tenant-of-mysql-mode/100.basic-elements-of-mysql-mode/100.data-type-of-mysql-mode/400.string-of-mysql-mode/200.char-and-varchar-of-mysql-mode.md),
+[BLOB types](https://github.com/oceanbase/oceanbase-doc/blob/2a5ae3a23a51729d065cec716508eb26cb064106/en-US/700.reference/500.sql-reference/100.sql-syntax/200.common-tenant-of-mysql-mode/100.basic-elements-of-mysql-mode/100.data-type-of-mysql-mode/500.large-object-of-mysql-mode/200.blob-type-of-mysql-mode.md) and
+[RAW](https://github.com/oceanbase/oceanbase-doc/blob/2a5ae3a23a51729d065cec716508eb26cb064106/en-US/700.reference/500.sql-reference/100.sql-syntax/300.common-tenant-of-oracle-mode/300.basic-elements-of-oracle-mode/100.built-in-data-types-of-oracle-mode/500.raw-data-type-of-oracle-mode.md).
+These references guide conservative mapping choices; they do not establish a tested server version.
+
+| Case | MySQL | Oracle |
+| --- | --- | --- |
+| Unbounded byte array | LONGBLOB, replacing the previous 65,535-byte BLOB default | BLOB |
+| Bounded variable array | VARBINARY(n) through 262,144 bytes, otherwise LONGBLOB | RAW(n) through 2,000 bytes, otherwise BLOB |
+| Key/index without a size | VARBINARY(255) | RAW(255) |
+| Fixed array | BINARY(n), conservative length 1..255; server right-pads shorter values with zero bytes | Rejected: RAW is variable-length and does not implement fixed binary semantics |
+| Explicit declarations | BINARY (default 1), BINARY(n), VARBINARY(n), TINYBLOB, BLOB, MEDIUMBLOB, LONGBLOB | RAW(n), BLOB |
+| Null parameter/literal | DBNull / NULL | DBNull / NULL |
+| Empty non-null input | Allowed without padding for variable storage | Rejected until a tested non-null empty-BLOB transport exists; RAW empty values cannot be assumed distinct from NULL |
+
+Outer declaration whitespace is normalized consistently before storage classification. Explicit declarations
+must match the mode and configured size/fixed facets; malformed declarations, absent
+required lengths, non-positive lengths, unsupported precision/scale and conflicting facets fail clearly.
+LOB keys/indexes are rejected because this profile does not implement prefix/function indexes. MySQL storage
+capacities are 255 / 65,535 / 16,777,215 / 536,870,910 bytes respectively for the four BLOB families; packet/memory
+limits remain independent. Reject oversized input parameters and SQL literals before execution, including values
+that a permissive MySQL SQL mode could truncate. Output-only parameters retain direction/facets without input checks.
+
+Oracle literal generation uses HEXTORAW for at most 2,000 bytes; reject larger literals and use parameters instead.
+The BLOB parameter path, large payloads, empty-BLOB support, MySQL padding, binary-key comparison and generated
+binary/Guid outputs still require additional implementation or live evidence. The focused unit suite must cover
+both modes, declaration boundaries, null/empty/oversized inputs and cloned/converter-composed mappings; intercepted
+sync/async EF queries and tracked writes must verify parameter and materialization paths.
+
 ## Temporal mapping contract
 
 MAP-05/MAP-06/MAP-07 and UPD-02 cover parameter binding, SQL literals, reader conversion and generated outputs.

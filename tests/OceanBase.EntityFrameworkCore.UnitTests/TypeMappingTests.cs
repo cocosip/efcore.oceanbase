@@ -15,7 +15,7 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
         [InlineData(OceanBaseCompatibilityMode.MySql, typeof(long), "BIGINT")]
         [InlineData(OceanBaseCompatibilityMode.MySql, typeof(decimal), "DECIMAL(65,30)")]
         [InlineData(OceanBaseCompatibilityMode.MySql, typeof(string), "LONGTEXT")]
-        [InlineData(OceanBaseCompatibilityMode.MySql, typeof(byte[]), "BLOB")]
+        [InlineData(OceanBaseCompatibilityMode.MySql, typeof(byte[]), "LONGBLOB")]
         [InlineData(OceanBaseCompatibilityMode.MySql, typeof(DateTime), "DATETIME(6)")]
         [InlineData(OceanBaseCompatibilityMode.Oracle, typeof(int), "NUMBER(10)")]
         [InlineData(OceanBaseCompatibilityMode.Oracle, typeof(long), "NUMBER(19)")]

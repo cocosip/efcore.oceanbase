@@ -17,7 +17,7 @@ namespace PackageConsumer
                 if (!context.Database.IsOceanBase()) throw new Exception("Provider registration failed.");
                 var sql = context.Set<Row>().Where(row => row.Enabled).OrderBy(row => row.Id).Skip(1).Take(2)
                     .Select(row => new { row.Name, row.Token, row.OccurredAt, row.OffsetAt, row.Day,
-                        row.Clock, row.Duration, Positive = row.Id > 0 }).ToQueryString();
+                        row.Clock, row.Duration, row.Payload, row.LargePayload, Positive = row.Id > 0 }).ToQueryString();
                 var paging = mode == OceanBaseCompatibilityMode.MySql ? "LIMIT" : "FETCH NEXT";
                 if (!sql.Contains(paging, StringComparison.Ordinal)) throw new Exception("Wrong query dialect.");
                 if (mode == OceanBaseCompatibilityMode.Oracle && !sql.Contains("CASE", StringComparison.Ordinal))
@@ -46,13 +46,23 @@ namespace PackageConsumer
                     }
                 }
 
-                Console.WriteLine($"{mode}: packed provider registration, Guid/temporal model, Boolean SQL and paging passed; EF {typeof(DbContext).Assembly.GetName().Version}.");
+                var rowType = context.Model.FindEntityType(typeof(Row))!;
+                if (rowType.FindProperty(nameof(Row.Payload))!.GetColumnType()
+                        != (mode == OceanBaseCompatibilityMode.Oracle ? "RAW(8)" : "VARBINARY(8)")
+                    || rowType.FindProperty(nameof(Row.LargePayload))!.GetColumnType()
+                        != (mode == OceanBaseCompatibilityMode.Oracle ? "BLOB" : "LONGBLOB"))
+                {
+                    throw new Exception("Wrong bounded/unbounded binary storage type.");
+                }
+
+                Console.WriteLine($"{mode}: packed provider registration, Guid/temporal/binary model, Boolean SQL and paging passed; EF {typeof(DbContext).Assembly.GetName().Version}.");
             }
         }
 
         private sealed class ConsumerContext(DbContextOptions<ConsumerContext> options) : DbContext(options)
         {
-            protected override void OnModelCreating(ModelBuilder modelBuilder) => modelBuilder.Entity<Row>();
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+                => modelBuilder.Entity<Row>().Property(row => row.Payload).HasMaxLength(8);
         }
 
         private sealed class Row
@@ -66,6 +76,8 @@ namespace PackageConsumer
             public DateOnly Day { get; set; }
             public TimeOnly Clock { get; set; }
             public TimeSpan Duration { get; set; }
+            public byte[] Payload { get; set; } = [];
+            public byte[]? LargePayload { get; set; }
         }
     }
 }

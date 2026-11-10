@@ -39,7 +39,7 @@ namespace OceanBase.EntityFrameworkCore.Storage
             if (clrType == typeof(ulong)) return new OceanBaseIntegerTypeMapping<ulong>(oracle ? "NUMBER(20)" : "BIGINT UNSIGNED", DbType.UInt64);
             if (clrType == typeof(decimal)) return FindDecimalMapping(mappingInfo);
             if (clrType == typeof(string)) return FindStringMapping(mappingInfo);
-            if (clrType == typeof(byte[])) return new OceanBaseByteArrayTypeMapping(storeTypes.Binary, mappingInfo.Size, _compatibilityMode);
+            if (clrType == typeof(byte[])) return FindBinaryMapping(mappingInfo);
             if (clrType == typeof(DateTime) || clrType == typeof(DateTimeOffset) || clrType == typeof(DateOnly)
                 || clrType == typeof(TimeOnly) || clrType == typeof(TimeSpan))
             {
@@ -58,6 +58,29 @@ namespace OceanBase.EntityFrameworkCore.Storage
                 : new OceanBaseIntegerTypeMapping<bool>(storeTypes.Boolean, DbType.Boolean));
 
             return base.FindMapping(mappingInfo);
+        }
+
+        private RelationalTypeMapping FindBinaryMapping(in RelationalTypeMappingInfo info)
+        {
+            if (info.Precision is not null || info.Scale is not null)
+            {
+                throw new ArgumentException("Binary mappings do not support precision or scale.");
+            }
+
+            var oracle = _compatibilityMode == OceanBaseCompatibilityMode.Oracle;
+            var size = info.Size ?? (info.IsKeyOrIndex && info.StoreTypeName is null ? 255 : (int?)null);
+            var storeType = info.StoreTypeName ?? (info.IsFixedLength == true
+                ? $"BINARY({size})"
+                : size is { } length && length <= (oracle ? 2000 : 262144)
+                    ? $"{(oracle ? "RAW" : "VARBINARY")}({size})"
+                    : oracle ? "BLOB" : "LONGBLOB");
+            var mapping = new OceanBaseByteArrayTypeMapping(storeType, size, _compatibilityMode, info.IsFixedLength);
+            if (info.IsKeyOrIndex && mapping.StoreTypeNameBase.EndsWith("BLOB", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new ArgumentException("Binary keys and indexes require bounded storage in this provider profile.");
+            }
+
+            return mapping;
         }
 
         private RelationalTypeMapping FindTemporalMapping(Type clrType, in RelationalTypeMappingInfo info)
@@ -195,7 +218,14 @@ namespace OceanBase.EntityFrameworkCore.Storage
         protected override string? ParseStoreTypeName(
             string? storeTypeName, ref bool? unicode, ref int? size, ref int? precision, ref int? scale)
         {
+            var configuredSize = size;
             var name = base.ParseStoreTypeName(storeTypeName, ref unicode, ref size, ref precision, ref scale);
+            if (configuredSize is not null && size != configuredSize
+                && name?.ToUpperInvariant() is "BINARY" or "VARBINARY" or "RAW")
+            {
+                throw new ArgumentException("The explicit binary store length conflicts with its configured size.");
+            }
+
             if (_compatibilityMode == OceanBaseCompatibilityMode.Oracle && storeTypeName is not null
                 && (string.Equals(name, "CHAR", StringComparison.OrdinalIgnoreCase)
                     || string.Equals(name, "VARCHAR2", StringComparison.OrdinalIgnoreCase)))

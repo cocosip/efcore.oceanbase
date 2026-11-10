@@ -19,6 +19,85 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
         [InlineData(OceanBaseCompatibilityMode.MySql, true)]
         [InlineData(OceanBaseCompatibilityMode.Oracle, false)]
         [InlineData(OceanBaseCompatibilityMode.Oracle, true)]
+        public async Task Query_and_write_apply_bounded_binary_and_custom_converters(OceanBaseCompatibilityMode mode, bool async)
+        {
+            var bytes = new byte[] { 0, 0x80, 0xff, 0 };
+            using var table = new DataTable();
+            table.Columns.Add("Id", mode == OceanBaseCompatibilityMode.Oracle ? typeof(decimal) : typeof(int));
+            table.Columns.Add("Payload", typeof(byte[]));
+            table.Columns.Add("Optional", typeof(byte[]));
+            table.Columns.Add("Hex", typeof(byte[]));
+            table.Rows.Add(17, bytes, DBNull.Value, bytes);
+            var commands = new CommandCapture { Results = table };
+            await using var context = CreateContext(mode, commands);
+            var query = context.Set<BinaryRow>().Select(row => new { row.Id, row.Payload, row.Optional, row.Hex });
+
+            var row = Assert.Single(async ? await query.ToListAsync() : query.ToList());
+            Assert.Equal(bytes, row.Payload);
+            Assert.Null(row.Optional);
+            Assert.Equal("0080FF00", row.Hex);
+            var mapping = context.Model.FindEntityType(typeof(BinaryRow))!.FindProperty(nameof(BinaryRow.Payload))!
+                .GetRelationalTypeMapping();
+            Assert.Equal(mode == OceanBaseCompatibilityMode.Oracle ? "RAW(8)" : "VARBINARY(8)", mapping.StoreType);
+            context.Add(new BinaryRow { Id = row.Id, Payload = row.Payload, Hex = row.Hex });
+
+            Assert.Equal(1, async ? await context.SaveChangesAsync() : context.SaveChanges());
+            Assert.Equal(2, commands.Values.OfType<byte[]>().Count(value => value.SequenceEqual(bytes)));
+            Assert.Contains(DBNull.Value, commands.Values);
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true)]
+        public async Task Oversized_binary_write_is_rejected_before_command_execution(OceanBaseCompatibilityMode mode, bool async)
+        {
+            var commands = new CommandCapture();
+            await using var context = CreateContext(mode, commands);
+            context.Add(new BinaryRow { Id = 1, Payload = new byte[9], Hex = "01" });
+
+            var exception = async
+                ? await Assert.ThrowsAsync<DbUpdateException>(() => context.SaveChangesAsync())
+                : Assert.Throws<DbUpdateException>(() => context.SaveChanges());
+            Assert.IsType<ArgumentException>(exception.InnerException);
+            Assert.Empty(commands.Sql);
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false, true)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true, true)]
+        public async Task Generated_binary_and_guid_outputs_apply_provider_converters(
+            OceanBaseCompatibilityMode mode, bool guid, bool async)
+        {
+            var token = Guid.Parse("00112233-4455-6677-8899-aabbccddeeff");
+            var bytes = new byte[] { 0, 0x80, 0xff };
+            object output = guid ? mode == OceanBaseCompatibilityMode.Oracle ? token.ToByteArray() : token.ToString() : bytes;
+            using var table = new DataTable();
+            table.Columns.Add("Data", output.GetType());
+            table.Rows.Add(output);
+            var commands = new CommandCapture { Results = table, OutputValue = output };
+            await using var context = CreateContext(mode, commands);
+            var binaryEntity = new GeneratedBinary { Id = 1 };
+            var guidEntity = new GeneratedGuid { Id = 1 };
+            context.Add(guid ? (object)guidEntity : binaryEntity);
+
+            Assert.Equal(1, async ? await context.SaveChangesAsync() : context.SaveChanges());
+            if (guid) Assert.Equal(token, guidEntity.Data);
+            else Assert.Equal(bytes, binaryEntity.Data);
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true)]
         public async Task Query_and_write_apply_temporal_transport_conversions(OceanBaseCompatibilityMode mode, bool async)
         {
             var oracle = mode == OceanBaseCompatibilityMode.Oracle;
@@ -367,10 +446,38 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
                 modelBuilder.Entity<GeneratedStamp>().Property(entity => entity.Stamp).HasComputedColumnSql("CURRENT_TIMESTAMP");
                 modelBuilder.Entity<GeneratedZoned>().Property(entity => entity.Id).ValueGeneratedNever();
                 modelBuilder.Entity<GeneratedZoned>().Property(entity => entity.Stamp).HasComputedColumnSql("CURRENT_TIMESTAMP");
+                modelBuilder.Entity<BinaryRow>().Property(entity => entity.Id).ValueGeneratedNever();
+                modelBuilder.Entity<BinaryRow>().Property(entity => entity.Payload).HasMaxLength(8);
+                modelBuilder.Entity<BinaryRow>().Property(entity => entity.Hex).HasMaxLength(8)
+                    .HasConversion(value => Convert.FromHexString(value), value => Convert.ToHexString(value));
+                modelBuilder.Entity<GeneratedBinary>().Property(entity => entity.Id).ValueGeneratedNever();
+                modelBuilder.Entity<GeneratedBinary>().Property(entity => entity.Data).HasMaxLength(8).HasComputedColumnSql("NULL");
+                modelBuilder.Entity<GeneratedGuid>().Property(entity => entity.Id).ValueGeneratedNever();
+                modelBuilder.Entity<GeneratedGuid>().Property(entity => entity.Data).HasComputedColumnSql("NULL");
             }
         }
 
         private enum RowState { Inactive = 0, Active = 2 }
+
+        private sealed class BinaryRow
+        {
+            public int Id { get; set; }
+            public byte[] Payload { get; set; } = [];
+            public byte[]? Optional { get; set; }
+            public string Hex { get; set; } = string.Empty;
+        }
+
+        private sealed class GeneratedBinary
+        {
+            public int Id { get; set; }
+            public byte[] Data { get; set; } = [];
+        }
+
+        private sealed class GeneratedGuid
+        {
+            public int Id { get; set; }
+            public Guid Data { get; set; }
+        }
 
         private sealed class TemporalRow
         {
