@@ -21,7 +21,35 @@ not later local commits or database integration. Earlier db676ff also passed in
 Run/job/step metadata is saved under artifacts/local-development/. The earlier log archive endpoint returned
 HTTP403 (repository admin rights); no new per-test count or resolved EF patch is inferred from job metadata.
 
-### Exact transcendental checkpoint (2026-11-11)
+### Numeric aggregate checkpoint (2026-11-11)
+
+Exact numeric Sum/Average and generic numeric Min/Max now use native aggregate translation through the
+provider aggregate service, retaining plugin priority and filtered CASE/DISTINCT ordering. AVG keeps its
+original mapped input; model int/long Average has a fresh converter-free Double result. Same-type results
+retain the source converter, result-only decimal readers and checked numeric decoding. Final Single casts
+use neutral FLOAT/BINARY_FLOAT targets, including physically wider declarations and mixed numeric carriers.
+SUM retains its mapped native node so EF's COALESCE uses converted model zero; its generated Int32 body
+metadata has a narrow marker allowance. Oracle Single literal generation now accepts that synthetic zero
+through validated numeric normalization and rejects narrowing overflow. Invalid owned mappings fail before
+inherited fallback, while unrelated methods and Count/LongCount keep their existing owners.
+
+Focused279 numeric aggregate unit cases and16 intercepted cases pass, along with prior numeric/shape
+regressions. Initial8 native-AVG/wide-Single RED failures and an Oracle zero-literal RED become GREEN.
+Final Debug/Release and isolated EF10.0.14 Release each pass **1711 tests** (1357 unit, 352 intercepted
+pipeline, two project consumers), zero failures/skips. The same baseline-built
+`10.0.0-checkpoint.aggregates-20261111` package passes both modes/patches for native AVG, all four aggregate
+names, neutral Single results, filtered DISTINCT/HAVING/order and prior checks. The previous transcendental
+package fails the new aggregate assertion. Content/package-only graph, packed/baseline DLL identity and
+unchanged baseline EF10.0.0 assets pass. Independent source review passes with no actionable findings.
+
+Latest package: `artifacts/checkpoint-aggregates-20261111/OceanBase.EntityFrameworkCore.10.0.0-checkpoint.aggregates-20261111.nupkg`.
+Evidence: `artifacts/local-development/batch3n/`. Supplied results establish command/shaper/reader behavior,
+not native aggregate calculation or server grouping/empty results. Actual accumulator precision, return
+metadata, CASE/COALESCE types, casts/rounding/overflow remain live gates. Wider temporal/math/collection
+queries, nonnumeric extrema, model/materialization/write/transaction/schema and specification/deferred
+audits remain local work. The complete EF10 goal remains active; real DB and EF8/9 remain postponed.
+
+### Historical exact transcendental checkpoint (2026-11-11)
 
 All twelve Math/MathF Sqrt, Exp, Log (one/two arguments), Log10 and Pow identities now translate. MySQL
 Log(x,base) uses LN(x)/LN(base), including bases in (0,1); Oracle uses LOG(base,x), with a fresh integer ten

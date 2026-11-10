@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore.Query;
 using Microsoft.EntityFrameworkCore.Query.SqlExpressions;
+using Microsoft.EntityFrameworkCore.Storage;
 
 namespace OceanBase.EntityFrameworkCore.Query
 {
@@ -116,9 +117,12 @@ namespace OceanBase.EntityFrameworkCore.Query
                         IsNullable: true, ArgumentsPropagateNullability: [false] }
                     || mapping is null || mapping.Converter?.ConvertsNulls == true
                     || sqlFunctionExpression.Type != mapping.ClrType
-                    || sqlFunctionExpression.Type != typeof(float) && sqlFunctionExpression.Type != typeof(double)
+                    || !OceanBaseMathTranslator.IsNumeric(sqlFunctionExpression.Type)
                     || (Nullable.GetUnderlyingType(carrier!) ?? carrier) != typeof(float)
-                    || sqlFunctionExpression.Arguments[0].Type != typeof(double))
+                    || sqlFunctionExpression.Arguments[0].Type != typeof(double)
+                        && sqlFunctionExpression.Arguments[0].Type != sqlFunctionExpression.Type
+                        // EF's SUM compensation derives COALESCE.Type from its Int32 zero constant.
+                        && !IsCompensatedSingleSum(sqlFunctionExpression.Arguments[0], sqlFunctionExpression.Type, mapping))
                     throw new InvalidOperationException("Invalid internal Single result expression.");
                 Sql.Append("CAST(");
                 Visit(sqlFunctionExpression.Arguments[0]);
@@ -154,6 +158,12 @@ namespace OceanBase.EntityFrameworkCore.Query
 
             return base.VisitSqlFunction(sqlFunctionExpression);
         }
+
+        private static bool IsCompensatedSingleSum(SqlExpression body, Type modelType, RelationalTypeMapping mapping)
+            => body is SqlFunctionExpression { IsBuiltIn: true, Name: "COALESCE", Arguments:
+                    [SqlFunctionExpression { IsBuiltIn: true, Name: "SUM" } sum, SqlConstantExpression { Value: 0 } zero] }
+                && sum.Type == modelType && ReferenceEquals(sum.TypeMapping, mapping)
+                && ReferenceEquals(body.TypeMapping, mapping) && ReferenceEquals(zero.TypeMapping, mapping);
 
         protected override void GeneratePseudoFromClause()
         {

@@ -72,7 +72,9 @@ namespace OceanBase.EntityFrameworkCore.Storage
             var number = ValidateFinite(value);
             if (_mode == OceanBaseCompatibilityMode.Oracle)
             {
-                return typeof(T) == typeof(float) ? ((float)value).ToString("R", CultureInfo.InvariantCulture) + "F"
+                if (typeof(T) == typeof(float) && (number > float.MaxValue || number < -float.MaxValue))
+                    throw new ArgumentOutOfRangeException(nameof(value), "The floating-point literal exceeds Single range.");
+                return typeof(T) == typeof(float) ? Convert.ToSingle(number).ToString("R", CultureInfo.InvariantCulture) + "F"
                     : number.ToString("R", CultureInfo.InvariantCulture) + "D";
             }
 

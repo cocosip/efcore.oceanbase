@@ -204,7 +204,7 @@ Do not add an artificial int32/decimal/2^53/BIGINT input limit or convert approx
 Projected out-of-range results retain checked reading; server predicates and overflow timing need live
 evidence. Existing non-finite rejection remains; signed-zero bit preservation is not promised. Truncation
 removes fractions toward zero, without casting or rounding the input. Floor/Ceiling have the local contract
-below; Round/Random and Min/Max remain separate contracts. Pinned EF v10.0.0 and OceanBase documentation revision
+below; Round/Random and scalar Math.Min/Max remain separate contracts. Pinned EF v10.0.0 and OceanBase documentation revision
 2a5ae3a23a51729d065cec716508eb26cb064106 are audited in the numeric-core local research artifact.
 
 ## Numeric Floor and Ceiling local contract
@@ -260,6 +260,39 @@ Local tests cover exact server predicates, order/HAVING, null/composition, indep
 width profiles and supplied-reader conversion. Native function metadata/calculation, quotient precision,
 Single casts, domain NULL/warnings/errors, overflow/underflow and subnormal behavior remain live gates.
 
+## Numeric aggregates local contract
+
+The numeric aggregate service adds exact Sum/Average selector and scalar identities for int/long/float/
+double/decimal and nullable forms, plus generic Min/Max for the eleven existing primitive numeric families.
+Use a derived relational aggregate provider and AddTranslators, retaining plugin priority and unrelated
+inherited paths. An invalid mapping in an owned numeric method must fail explicitly; returning null would
+let the inherited default translator silently take over. Count/LongCount stay with their existing owner.
+
+Build native SUM/AVG/MIN/MAX over the original mapped selector. Native AVG avoids per-row conversion:
+model int/long Average has a fresh converter-free Double result, while other result mappings retain the
+source converter. Stored-number semantics are h(aggregate(g(x))) for same-model results, not arbitrary
+converter cancellation or a CLR Enumerable accumulation loop. Promoted integer Average instead returns
+the native stored average through the independent Double reader, without an integer inverse converter.
+
+Keep SUM's original model type/result mapping so EF injects COALESCE with converted model zero g(0).
+Wrap completed Single-provider results outside that node with fixed FLOAT/BINARY_FLOAT normalization;
+the null processor must retain the converter when generating the zero. Apply final provider-carrier policy
+to all four aggregates, including physically wider Single mappings and cross-carrier numeric converters.
+Promoted integer Average retains its independent Double result. Broaden only numeric model/body validation
+on the existing internal marker; EF's generated COALESCE can carry Int32 from its syntax zero, so that
+precise mapped SUM/coalesce shape is accepted without replacing the null processor. Ordinary CAST behavior
+and nonnumeric/arbitrary mismatched-body rejection remain unchanged.
+
+Reuse the immutable opt-in decimal result reader and existing checked integral/floating readers. A server
+accumulator's width does not change CLR return type or impose a property's write capacity on an aggregate.
+Do not add SQL decimal/integer narrowing, input clipping or a precision cast to force reader success.
+
+Retain filter -> CASE -> DISTINCT -> aggregate, independent nullable metadata and inherited cardinality
+shapers. Empty/all-null Sum returns model zero, including nullable Sum. Nullable Average/Min/Max retain
+NULL; nonnullable empty results use EF's no-elements behavior. Empty GroupBy yields no group row. Tests
+with supplied rows establish SQL/parameters/shaping/reading only. Native accumulation, physical metadata,
+empty/group execution, CASE/COALESCE typing, casting and rounding remain real-server gates.
+
 ## Ordinary relational shapes and integral membership local contract
 
 The local QRY-03/04 slice characterizes inherited inner/recognized left equijoins, composite numeric keys,
@@ -287,7 +320,8 @@ EF.Constant/context Constant use mapping-owned literals. Context Parameter mode 
 fallback to scalar IN; explicit EF.Parameter(collection) remains unsupported without a primitive-collection
 translator. Test both boundaries. Text lists need provider-converted Oracle empty/NULL normalization before
 membership compensation; general VALUES roots need their own integer-ordinal and dialect rendering fixes.
-Those, APPLY/collection projections and SUM/AVG/Min/Max promotion/casts remain separate locally feasible work.
+Those and APPLY/collection projections remain separate locally feasible work. Numeric aggregate promotion/
+result normalization has the contract above; nonnumeric aggregate extrema and native execution remain open.
 The shipped EF10.0.0 package owners and source-derived gaps are audited in the local query-shapes research.
 
 The local slice passes 30 focused unit and 40 intercepted cases. Full Debug/Release and isolated EF10.0.14
@@ -514,18 +548,33 @@ Run the read-only gate after packing, before the isolated consumer checks:
 
 ```powershell
 pwsh -NoProfile -File tests/OceanBase.EntityFrameworkCore.PackageConsumer/Verify-Package.ps1 `
-    -PackagePath artifacts/checkpoint-transcendental-20261111/OceanBase.EntityFrameworkCore.10.0.0-checkpoint.transcendental-20261111.nupkg `
-    -ExpectedVersion 10.0.0-checkpoint.transcendental-20261111
+    -PackagePath artifacts/checkpoint-aggregates-20261111/OceanBase.EntityFrameworkCore.10.0.0-checkpoint.aggregates-20261111.nupkg `
+    -ExpectedVersion 10.0.0-checkpoint.aggregates-20261111
 ```
 
 The PowerShell 7 script uses .NET ZIP/XML APIs and checks ID/version, the net10.0 assembly and dependency group,
 exact expected dependency ranges, and a nonempty packaged README with matching metadata. It does not build,
-restore, execute provider queries or establish server/runtime compatibility. The current transcendental package passes;
+restore, execute provider queries or establish server/runtime compatibility. The current aggregates package passes;
 wrong expected version, the old README-less alias package and the exact-patch README probe fail at their intended
 checks. The hosted e41981e package-content gate passed on Windows/Linux; the current package checks ran locally
 on Windows. Change the path/version for each new pack.
 
-### Current exact transcendental checkpoint (2026-11-11)
+### Current numeric aggregate checkpoint (2026-11-11)
+
+Full Debug/Release and isolated EF10.0.14 Release each pass1711 (1357 unit, 352 intercepted pipeline, two
+project consumers). Focused279 numeric aggregate unit/16 intercepted cases and prior numeric/shape regressions
+pass after genuine native-AVG/wide-Single and Oracle synthetic-zero RED/GREEN evidence. The same baseline-
+built `10.0.0-checkpoint.aggregates-20261111` nupkg passes both modes at EF10.0.0/10.0.14. It requires native
+AVG input precision, all four aggregate names, neutral Single targets including wide-column extrema,
+filtered DISTINCT/HAVING/order and prior checks. Previous transcendental package fails the new aggregate
+assertion. Content/package-only graph, unchanged EF10.0.0 baseline assets and packed/baseline DLL identity
+pass. Independent source review passes without findings. Native metadata/accumulator/CASE/COALESCE/cast/
+rounding and server empty/group execution remain live gates. Wider local query/model/write/transaction/
+schema work and current hosted/Linux execution remain open. Repeat consumer commands below with
+`10.0.0-checkpoint.aggregates-20261111` and `artifacts/checkpoint-aggregates-20261111`.
+Evidence: `artifacts/local-development/batch3n/`.
+
+### Historical exact transcendental checkpoint (2026-11-11)
 
 Full Debug/Release and isolated EF10.0.14 Release each pass1416 (1078 unit, 336 intercepted pipeline, two
 project consumers). Focused65 unit/12 intercepted pass after missing-dispatch and private-marker RED/GREEN
@@ -535,7 +584,7 @@ Single result targets and all prior assertions. Previous Floor/Ceiling package r
 Content/package-only graph, unchanged baseline EF10.0.0 assets and packed/baseline DLL identity pass.
 Independent source review passes without findings. Native metadata/calculation, quotient/cast precision,
 domain errors/NULL, overflow/underflow and subnormals remain real-server gates. Round/wider local query/
-model/write/transaction/schema and current hosted/Linux execution remain open. Repeat the consumer commands
+model/write/transaction/schema and current hosted/Linux execution were still open there. Repeat the consumer commands
 below with `10.0.0-checkpoint.transcendental-20261111` and `artifacts/checkpoint-transcendental-20261111`.
 Evidence: `artifacts/local-development/batch3m/`.
 

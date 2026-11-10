@@ -303,6 +303,38 @@ namespace PackageConsumer
                         throw new Exception("Packed numeric function lost its dialect or Single normalization: " + numericSql);
                 }
 
+                var aggregateSql = context.Set<Row>().GroupBy(row => row.Id).Select(group => new
+                {
+                    group.Key,
+                    SumCount = group.Sum(row => row.Count), AverageCount = group.Average(row => row.Count),
+                    SumSingle = group.Sum(row => row.SingleValue), AverageSingle = group.Average(row => row.SingleValue),
+                    SumWide = group.Sum(row => row.Wide), AverageWide = group.Average(row => row.Wide),
+                    MinimumWide = group.Min(row => row.Wide), MaximumWide = group.Max(row => row.Wide),
+                    Minimum = group.Min(row => row.Amount), Maximum = group.Max(row => row.Amount),
+                    Filtered = group.Where(row => row.Id > 0).Select(row => row.Count).Distinct().Sum()
+                }).Where(group => group.AverageCount > 0d).OrderBy(group => group.SumWide).ToQueryString();
+                if (!aggregateSql.Contains("SUM(", StringComparison.Ordinal)
+                    || !aggregateSql.Contains("AVG(", StringComparison.Ordinal)
+                    || !aggregateSql.Contains("MIN(", StringComparison.Ordinal)
+                    || !aggregateSql.Contains("MAX(", StringComparison.Ordinal)
+                    || !aggregateSql.Contains("HAVING", StringComparison.Ordinal)
+                    || !aggregateSql.Contains("ORDER BY", StringComparison.Ordinal)
+                    || !aggregateSql.Contains("SUM(DISTINCT (CASE", StringComparison.Ordinal)
+                    || aggregateSql.Contains("AVG(CAST(", StringComparison.Ordinal)
+                    || aggregateSql.Contains(" AS DOUBLE", StringComparison.Ordinal)
+                    || aggregateSql.Contains(" AS BINARY_DOUBLE)", StringComparison.Ordinal))
+                    throw new Exception("Packed aggregates lost native input precision or Single result normalization: " + aggregateSql);
+                var singleAggregateTarget = mode == OceanBaseCompatibilityMode.MySql ? "FLOAT" : "BINARY_FLOAT";
+                var aggregateAliasSeparator = mode == OceanBaseCompatibilityMode.MySql ? " AS " : " ";
+                var aggregateIdentifiers = context.GetService<ISqlGenerationHelper>();
+                foreach (var projection in new[] { "SumSingle", "AverageSingle", "SumWide", "AverageWide", "MinimumWide", "MaximumWide" })
+                {
+                    var normalizedProjection = " AS " + singleAggregateTarget + ")" + aggregateAliasSeparator
+                        + aggregateIdentifiers.DelimitIdentifier(projection);
+                    if (!aggregateSql.Contains(normalizedProjection, StringComparison.Ordinal))
+                        throw new Exception("Packed aggregate projection lost Single normalization: " + projection + ": " + aggregateSql);
+                }
+
                 var guidType = context.Model.FindEntityType(typeof(Row))!.FindProperty(nameof(Row.Token))!.GetColumnType();
                 if (guidType != (mode == OceanBaseCompatibilityMode.Oracle ? "RAW(16)" : "CHAR(36)"))
                 {

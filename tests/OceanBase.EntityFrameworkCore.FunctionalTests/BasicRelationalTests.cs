@@ -26,6 +26,135 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
         [InlineData(OceanBaseCompatibilityMode.Oracle, true, false)]
         [InlineData(OceanBaseCompatibilityMode.Oracle, false, true)]
         [InlineData(OceanBaseCompatibilityMode.Oracle, true, true)]
+        public async Task Numeric_aggregate_commands_keep_native_results_current_parameters_and_inverse_once(
+            OceanBaseCompatibilityMode mode, bool async, bool relationalNulls)
+        {
+            using var table = new DataTable();
+            foreach (var column in new[] { "Key", "Sum", "Average", "SingleSum", "SingleAverage", "DecimalSum", "Min", "Max", "Optional", "Cross", "CrossAverage" })
+                table.Columns.Add(column, typeof(object));
+            // Supplied rows verify mapping and shaping; no database computes the aggregates here.
+            table.Rows.Add(DBNull.Value, new OceanBaseDecimal(23m), new OceanBaseDecimal(11.5m), 23f, 11.5d,
+                new OceanBaseDecimal(23m), new OceanBaseDecimal(-8m), new OceanBaseDecimal(8m), DBNull.Value, 23f, 11.5d);
+            var commands = new CommandCapture { Results = table };
+            await using var context = CreateContext(mode, commands, relationalNulls);
+            var threshold = 2;
+            var query = context.Set<NumericAggregateRow>().Where(r => r.Id > threshold).GroupBy(r => r.Key)
+                .OrderBy(g => g.Average(r => r.Offset)).Select(g => new
+                {
+                    g.Key, Sum = g.Sum(r => r.Offset), Average = g.Average(r => r.Offset),
+                    SingleSum = g.Sum(r => r.Single), SingleAverage = g.Average(r => r.Single),
+                    DecimalSum = g.Sum(r => r.Decimal), Min = g.Min(r => r.Reversed), Max = g.Max(r => r.Reversed),
+                    Optional = g.Average(r => r.Optional), Cross = g.Sum(r => r.Cross), CrossAverage = g.Average(r => r.CrossInt)
+                });
+            foreach (var value in new[] { 2, 7 })
+            {
+                threshold = value;
+                commands.Sql.Clear(); commands.Values.Clear(); commands.Inputs.Clear();
+                var row = Assert.Single(async ? await query.ToListAsync() : query.ToList());
+                Assert.Null(row.Key); Assert.Equal(13, row.Sum); Assert.Equal(11.5d, row.Average);
+                Assert.Equal(13f, row.SingleSum); Assert.Equal(1.5f, row.SingleAverage); Assert.Equal(13m, row.DecimalSum);
+                Assert.Equal(4m, row.Min); Assert.Equal(-4m, row.Max); Assert.Null(row.Optional);
+                Assert.Equal(13m, row.Cross); Assert.Equal(11.5d, row.CrossAverage);
+                Assert.Contains(value, commands.Values);
+                var sql = Assert.Single(commands.Sql);
+                Assert.Contains("AVG(", sql); Assert.Contains("ORDER BY", sql); Assert.Contains("GROUP BY", sql);
+                Assert.DoesNotContain("AVG(CAST(", sql);
+                Assert.Contains("CAST(COALESCE(SUM(", sql);
+                Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? "10E0" : "10F", sql);
+            }
+            table.Rows.Clear();
+            Assert.Empty(async ? await query.ToListAsync() : query.ToList());
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true)]
+        public async Task Numeric_aggregate_empty_and_all_null_supplied_results_follow_inherited_shaping(OceanBaseCompatibilityMode mode, bool async)
+        {
+            using var table = new DataTable(); table.Columns.Add("Value", typeof(object));
+            var commands = new CommandCapture { Results = table };
+            await using var context = CreateContext(mode, commands);
+            var rows = context.Set<NumericAggregateRow>();
+            table.Rows.Add(new OceanBaseDecimal(10m));
+            Assert.Equal(0, async ? await rows.SumAsync(r => r.Offset) : rows.Sum(r => r.Offset));
+            table.Rows.Clear(); table.Rows.Add(10f);
+            Assert.Equal(0f, async ? await rows.SumAsync(r => r.Single) : rows.Sum(r => r.Single));
+            table.Rows.Clear(); table.Rows.Add(new OceanBaseDecimal(0m));
+            Assert.Equal(0, async ? await rows.SumAsync(r => r.Optional) : rows.Sum(r => r.Optional));
+            table.Rows.Clear(); table.Rows.Add(DBNull.Value);
+            Assert.Null(async ? await rows.AverageAsync(r => r.Optional) : rows.Average(r => r.Optional));
+            Assert.Null(async ? await rows.MinAsync(r => r.Optional) : rows.Min(r => r.Optional));
+            Assert.Null(async ? await rows.MaxAsync(r => r.Optional) : rows.Max(r => r.Optional));
+            if (async)
+            {
+                await Assert.ThrowsAsync<InvalidOperationException>(() => rows.AverageAsync(r => r.Id));
+                await Assert.ThrowsAsync<InvalidOperationException>(() => rows.MinAsync(r => r.Id));
+                await Assert.ThrowsAsync<InvalidOperationException>(() => rows.MaxAsync(r => r.Id));
+            }
+            else
+            {
+                Assert.Throws<InvalidOperationException>(() => rows.Average(r => r.Id));
+                Assert.Throws<InvalidOperationException>(() => rows.Min(r => r.Id));
+                Assert.Throws<InvalidOperationException>(() => rows.Max(r => r.Id));
+            }
+            Assert.DoesNotContain("COALESCE", commands.Sql[^1]);
+            table.Rows.Clear();
+            var grouped = rows.GroupBy(r => r.Key).Select(g => g.Sum(r => r.Optional));
+            Assert.Empty(async ? await grouped.ToListAsync() : grouped.ToList());
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true)]
+        public async Task Numeric_aggregate_readers_keep_fractional_promotion_and_checked_result_domains(OceanBaseCompatibilityMode mode, bool async)
+        {
+            using var table = new DataTable(); table.Columns.Add("Value", typeof(object));
+            var commands = new CommandCapture { Results = table };
+            await using var context = CreateContext(mode, commands);
+            var rows = context.Set<NumericAggregateRow>();
+            foreach (var value in new object[] { new OceanBaseDecimal(11.5m), 11.5d, 11.5f })
+            {
+                table.Rows.Clear(); table.Rows.Add(value);
+                Assert.Equal(11.5d, async ? await rows.AverageAsync(r => r.Offset) : rows.Average(r => r.Offset));
+            }
+            table.Rows.Clear(); table.Rows.Add(new OceanBaseDecimal((decimal)int.MaxValue + 1));
+            if (async) await Assert.ThrowsAsync<OverflowException>(() => rows.SumAsync(r => r.Id));
+            else Assert.Throws<OverflowException>(() => rows.Sum(r => r.Id));
+            table.Rows.Clear(); table.Rows.Add(new OceanBaseDecimal(1.5m));
+            if (async) await Assert.ThrowsAsync<InvalidCastException>(() => rows.SumAsync(r => r.Id));
+            else Assert.Throws<InvalidCastException>(() => rows.Sum(r => r.Id));
+            table.Rows.Clear(); table.Rows.Add(double.MaxValue);
+            if (async) await Assert.ThrowsAsync<OverflowException>(() => rows.SumAsync(r => r.Single));
+            else Assert.Throws<OverflowException>(() => rows.Sum(r => r.Single));
+            foreach (var value in new object[] { 11.5d, 11.5f, new OceanBaseDecimal(11.5m) })
+            {
+                table.Rows.Clear(); table.Rows.Add(value);
+                Assert.Equal(1.5m, async ? await rows.SumAsync(r => r.Decimal) : rows.Sum(r => r.Decimal));
+            }
+            table.Rows.Clear(); table.Rows.Add(new OceanBaseDecimal(12345.678m));
+            var threshold = 1234.567m;
+            var having = rows.GroupBy(r => r.Key).Where(g => g.Sum(r => r.Decimal) > threshold).Select(g => g.Sum(r => r.Decimal));
+            Assert.Equal(12335.678m, Assert.Single(async ? await having.ToListAsync() : having.ToList()));
+            Assert.Contains("HAVING", commands.Sql[^1]);
+            Assert.Contains(1244.567m, commands.Values);
+            table.Rows.Clear(); table.Rows.Add(new OceanBaseDecimal(BigInteger.One, 29));
+            if (async) await Assert.ThrowsAsync<OverflowException>(() => rows.SumAsync(r => r.Decimal));
+            else Assert.Throws<OverflowException>(() => rows.Sum(r => r.Decimal));
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false, true)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true, true)]
         public async Task Originally_empty_inline_commands_keep_zero_row_bodies_and_shape_supplied_results(
             OceanBaseCompatibilityMode mode, bool async, bool relationalNulls)
         {
@@ -2419,6 +2548,18 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
             protected override void OnModelCreating(ModelBuilder modelBuilder)
             {
                 var oracle = mode == OceanBaseCompatibilityMode.Oracle;
+                modelBuilder.Entity<NumericAggregateRow>().Property(r => r.Offset)
+                    .HasConversion(v => v + 10L, v => (int)(v - 10));
+                modelBuilder.Entity<NumericAggregateRow>().Property(r => r.Single)
+                    .HasConversion(v => v + 10f, v => v - 10f).HasColumnType(oracle ? "BINARY_DOUBLE" : "DOUBLE");
+                modelBuilder.Entity<NumericAggregateRow>().Property(r => r.Decimal)
+                    .HasConversion(v => v + 10m, v => v - 10m).HasPrecision(3, 0);
+                modelBuilder.Entity<NumericAggregateRow>().Property(r => r.Reversed)
+                    .HasConversion(v => v * -2m, v => v / -2m).HasPrecision(3, 0);
+                modelBuilder.Entity<NumericAggregateRow>().Property(r => r.Cross)
+                    .HasConversion(v => (float)v + 10f, v => (decimal)(v - 10f)).HasColumnType(oracle ? "BINARY_DOUBLE" : "DOUBLE");
+                modelBuilder.Entity<NumericAggregateRow>().Property(r => r.CrossInt)
+                    .HasConversion(v => (float?)v + 10f, v => (int)(v!.Value - 10f));
                 modelBuilder.Entity<TextMembershipRow>().Property(row => row.Text).HasMaxLength(8);
                 modelBuilder.Entity<TextMembershipRow>().Property(row => row.Suffix)
                     .HasConversion(value => value + "!", value => value);
@@ -2536,6 +2677,19 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
         }
 
         private enum RowState { Inactive = 0, Active = 2 }
+
+        private sealed class NumericAggregateRow
+        {
+            public int Id { get; set; }
+            public int? Key { get; set; }
+            public int Offset { get; set; }
+            public int? Optional { get; set; }
+            public float Single { get; set; }
+            public decimal Decimal { get; set; }
+            public decimal Reversed { get; set; }
+            public decimal Cross { get; set; }
+            public int CrossInt { get; set; }
+        }
 
         private sealed class CountGroupRow
         {

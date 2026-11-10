@@ -385,7 +385,40 @@ Native execution/typing/precision/domain errors remain live gates. Detailed brie
 artifacts/local-development/batch3m/. Local source/patch/package gates and independent source review pass;
 broader local work remains open.
 
+## Batch3n brief: numeric aggregates
+
+Implement native SUM/AVG/MIN/MAX through a derived aggregate translator provider, preserving plugin
+priority. Own exact Sum/Average numeric/nullable selector identities and generic numeric Min/Max across
+the existing eleven primitive numeric families. Keep filtered CASE/DISTINCT ordering, inherited cardinality
+shapers and current Count/LongCount behavior. Invalid owned mappings fail explicitly rather than falling
+through to EF's default aggregate translator.
+
+AVG retains the mapped input without per-row conversion. Model int/long Average uses an independent
+converter-free Double result; other aggregates retain the source converter/result convention. Native SUM
+keeps its mapping so EF's COALESCE uses converted model zero. Normalize final Single-provider results
+outside that SUM/COALESCE with fixed FLOAT/BINARY_FLOAT targets, including physically wider declarations.
+Narrowly widen the existing private marker to numeric aggregate model types; preserve nonnumeric rejection.
+Reuse the result-only decimal reader without SQL decimal narrowing or physical write-bound clipping.
+
+Baseline package SQL and consumer RED reproduce integer AVG pre-casts and wide-declaration Single result
+casts. Unit/pipeline tests will cover both modes/null settings, selected numeric/nullable families, mixed
+converters, empty/null shaping, filtering/distinct, current parameters and checked reads. Native execution/
+metadata/accumulation/rounding remain live gates. Detailed brief/provenance/evidence:
+artifacts/local-development/batch3n/. Local source/patch/package gates and independent source review pass.
+The overall local EF10 goal remains active.
+
 ## Execution record
+
+- Batch3n native numeric aggregates: initial8 native-AVG/wide-Single RED failures and a focused Oracle
+  synthetic-zero literal RED become279 numeric unit/16 intercepted passes. New aggregate service preserves
+  plugins/Count/LongCount, native AVG inputs, independent promoted Double, mapped SUM zero and result
+  converters; a narrow marker allowance retains EF's Int32-typed coalesce. Oracle Single zero literals
+  normalize safely without InfinityF. Final Debug/Release and isolated14 Release1711=1357+352+2 pass, no
+  skips. Same baseline-built aggregates package passes both modes/patches, content/graph/DLL/baseline
+  identity gates. Independent source spec/quality review passes without findings. Evidence:
+  artifacts/local-development/batch3n/. Real server
+  accumulation/metadata/empty/group execution remain live gates; wider local query/model/write/transaction/
+  schema/specification/deferred audit remains. Overall EF10 goal active, no push or EF8/9 work.
 
 - Batch3m local transcendental slice:54 expected missing-dispatch RED failures become65 focused unit and12
   intercepted passes. Exact twelve Math/MathF identities preserve independent operands and x-owned result

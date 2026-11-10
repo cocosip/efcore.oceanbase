@@ -112,6 +112,10 @@ namespace OceanBase.EntityFrameworkCore.Internal
             builder.TryAdd<IMethodCallTranslatorProvider>(serviceProvider =>
                 new OceanBaseMethodCallTranslatorProvider(
                     serviceProvider.GetRequiredService<RelationalMethodCallTranslatorProviderDependencies>(), CompatibilityMode));
+            builder.TryAdd<IAggregateMethodCallTranslatorProvider>(serviceProvider =>
+                new OceanBaseAggregateMethodCallTranslatorProvider(
+                    serviceProvider.GetRequiredService<RelationalAggregateMethodCallTranslatorProviderDependencies>(),
+                    serviceProvider.GetRequiredService<IRelationalTypeMappingSource>()));
             builder.TryAdd<IUpdateSqlGenerator>(serviceProvider =>
                 new OceanBaseUpdateSqlGenerator(
                     serviceProvider.GetRequiredService<UpdateSqlGeneratorDependencies>(), CompatibilityMode));

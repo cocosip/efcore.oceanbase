@@ -327,7 +327,7 @@ public sealed class TranscendentalQueryTests
             factory.Function(OceanBaseMathTranslator.SingleResultMarker, [body, body], true, [false, false], typeof(float), single),
             factory.Function(OceanBaseMathTranslator.SingleResultMarker, [body], true, [false], typeof(double), wide),
             factory.Function(OceanBaseMathTranslator.SingleResultMarker, [body], true, [false], typeof(string), textModel),
-            factory.Function(OceanBaseMathTranslator.SingleResultMarker, [factory.Constant(2f, single)], true, [false], typeof(float), single),
+            factory.Function(OceanBaseMathTranslator.SingleResultMarker, [factory.Constant("bad")], true, [false], typeof(float), single),
             factory.Function(OceanBaseMathTranslator.SingleResultMarker, [body], false, [false], typeof(float), single),
             factory.Function(OceanBaseMathTranslator.SingleResultMarker, [body], true, [true], typeof(float), single) })
             Assert.Throws<InvalidOperationException>(() => Render(context, mode, broken));

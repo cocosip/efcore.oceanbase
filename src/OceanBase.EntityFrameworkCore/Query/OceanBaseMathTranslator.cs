@@ -74,7 +74,7 @@ namespace OceanBase.EntityFrameworkCore.Query
             for (var index = 0; index < inputs.Length; index++)
             {
                 inputs[index] = sqlExpressionFactory.ApplyDefaultTypeMapping(arguments[index]);
-                if (!IsValidNumeric(inputs[index].TypeMapping))
+                if (!IsValidNumeric(inputs[index].TypeMapping, mappingSource))
                     return null;
             }
             var input = inputs[0];
@@ -143,7 +143,7 @@ namespace OceanBase.EntityFrameworkCore.Query
                     argumentsPropagateNullability: operands.Select(_ => false), type, typeMapping);
         }
 
-        private bool IsValidNumeric(RelationalTypeMapping? mapping)
+        internal static bool IsValidNumeric(RelationalTypeMapping? mapping, IRelationalTypeMappingSource mappingSource)
         {
             if (mapping is null || mapping.Converter?.ConvertsNulls == true
                 || !IsNumeric(mapping.Converter?.ProviderClrType ?? mapping.ClrType))
@@ -161,7 +161,7 @@ namespace OceanBase.EntityFrameworkCore.Query
             }
         }
 
-        private static bool IsNumeric(Type type)
+        internal static bool IsNumeric(Type type)
         {
             type = Nullable.GetUnderlyingType(type) ?? type;
             return type == typeof(sbyte) || type == typeof(byte) || type == typeof(short) || type == typeof(ushort)
