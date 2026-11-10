@@ -95,6 +95,7 @@ namespace OceanBase.EntityFrameworkCore.Internal
                 .TryAdd<IModelRuntimeInitializer, RelationalModelRuntimeInitializer>()
                 .TryAdd<IModelCustomizer, RelationalModelCustomizer>()
                 .TryAdd<IModelValidator, RelationalModelValidator>()
+                .TryAdd<ICompiledQueryCacheKeyGenerator, OceanBaseCompiledQueryCacheKeyGenerator>()
                 .TryAdd<IRelationalConnection, OceanBaseRelationalConnection>()
                 .TryAdd<IModificationCommandBatchFactory, OceanBaseModificationCommandBatchFactory>();
 

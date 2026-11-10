@@ -299,6 +299,24 @@ The planned relational-shape contract in query/update design defines this bounde
 5. Focused/full tests, independent code/docs review, selected-patch and same-package gates, then scoped commit.
    Text lists, general VALUES, APPLY, SUM/AVG/Min/Max promotion and actual server results stay separate work.
 
+## Batch 3i brief: scalar text collection membership
+
+**Files:** Storage/OceanBaseStringTypeMapping.cs, Query/OceanBaseCollectionParameterExpandingVisitor.cs (new),
+OceanBaseParameterBasedSqlProcessorFactory.cs and existing Oracle string visitor only as needed;
+UnitTests/TextCollectionQueryTests.cs (new) and FunctionalTests/BasicRelationalTests.cs.
+The planned text-collection contract in query/update design is authoritative.
+
+1. Reproduce missing string collection mapping and Oracle converted-empty expansion; reuse the built-in
+   string JSON reader/writer while preserving mapping clone/converter/parameter hooks.
+2. Expand only Oracle provider-text IN parameter collections before existing scalar normalization/base NULL
+   compensation. Preserve raw values and per-mapping bindings, execution-local state, safe generated names,
+   EF bucket policy and cache disabling. MySQL keeps inherited scalar expansion.
+3. Cover inline/captured arrays/lists, NULL/empty/nonempty/duplicates and converted-empty elements, both NULL
+   settings, changed captures, padding boundaries, name collisions and same capture under two converters.
+4. Add sync/async binding/Boolean/nullable reader checks with supplied results; full tests, independent review,
+   selected-patch/same-package gates and commit. General VALUES/explicit parameter transport and native
+   collation/LOB/charset/actual membership remain separate work and acceptance gates.
+
 ## Execution record
 
 - Baseline: 57fd44a, clean efcore/10.0. Prior verified suite: 563 (420 unit, 142 intercepted, one consumer).
@@ -414,6 +432,31 @@ The planned relational-shape contract in query/update design defines this bounde
   EF10.0.0. Evidence: artifacts/local-development/batch3g/. Native arithmetic/domain/overflow/result families
   and current hosted execution remain open. Next is Batch 3h integral membership/ordinary relational shapes;
   wider local work remains active. Development resumed after the user's pause; no push or publication.
+- Batch 3g committed as a98e27b after code/docs approval and full source/patch/package gates; no push.
+- Batch 3h ruling: initialize matching built-in JSON reader/writer metadata for all existing closed generic
+  integer-mapper carriers (eight integers, bool and decimal), preserving clones/converters. An int-only special
+  case would miss int properties converted to long; the same constructor also owns Boolean transport. This
+  enables EF collection mapping metadata, not a claim of mapped JSON/one-parameter collection SQL support.
+- Batch 3h additional RED: Oracle null collection normalization rewrites a parameter envelope into a scalar
+  NULL; exclude ElementTypeMapping envelopes from the scalar string visitor. A separate four-case same-query
+  mode-order RED confirms shipped EF's relational compiled-query key omits ParameterizedCollectionMode.
+  Ruling: add the current collection mode around the full base key in a scoped derived generator, registered
+  through the existing provider builder; retain service-provider hash/sharing. This fixes a demonstrated
+  local cache defect without copying EF's key or isolating service graphs unnecessarily.
+- Batch 3h initial Debug/Release pass 1153 and independent code review approves, but isolated EF10.0.14
+  Release exposes one existing Oracle model-reference cache assertion failure (1152 other passes). Fix round1
+  investigates exact service/key/cache state before any correction; no package/commit acceptance yet.
+- Batch 3h fix round1/5: controlled same-capacity pressure reproduces identity failure with equal keys and
+  shared services, proving unconditional model retention is an invalid fixture assumption. The exact natural
+  failure timing remains unproven. Test-owned retained cache preserves every positive assertion; two explicit
+  eviction cases verify equivalent rebuilding/shared keys/services. No production cache change. Scoped review
+  approves (one addressed, zero open). Final Debug/Release and isolated EF10.0.14 Release pass 1155 (885+268+2).
+- Batch 3h local slice complete: integral scalar IN metadata, Oracle envelope exclusion and complete-base-key
+  collection-mode partitioning; inherited joins/subqueries/quantifiers/counts receive characterization only.
+  Focused 30 unit/40 intercepted pass. Same membership-20261111 nupkg passes both modes on EF10.0.0/10.0.14,
+  while the preceding numeric package fails the new captured collection mapping. Content/package-only graph
+  pass; baseline assets remain EF10.0.0. Evidence: artifacts/local-development/batch3h/. QRY-03/04 stay partial;
+  actual server results/current hosted execution remain open. Next is Batch3i scalar text membership.
 - Line-ending recheck: git ls-files --eol reports no CRLF/mixed index text. Existing working CRLF files remain
   safe under the repository attributes; do not reset local edits or change global core.autocrlf to refresh them.
 - Remaining Batch 2 scalar work and Batches 3–10 pending. The overall goal remains active.

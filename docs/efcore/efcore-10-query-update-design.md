@@ -207,9 +207,9 @@ removes fractions toward zero, without casting or rounding the input. Floor/Ceil
 and Min/Max remain separate contracts. Pinned EF v10.0.0 and OceanBase documentation revision
 2a5ae3a23a51729d065cec716508eb26cb064106 are audited in the numeric-core local research artifact.
 
-## Planned ordinary relational shapes and integral membership
+## Ordinary relational shapes and integral membership local contract
 
-The next QRY-03/04 slice characterizes inherited inner/recognized left equijoins, composite numeric keys,
+The local QRY-03/04 slice characterizes inherited inner/recognized left equijoins, composite numeric keys,
 correlated Any/All, ordered nullable scalar FirstOrDefault, queryable scalar Contains and grouped/ungrouped
 Count/LongCount. Keep ON and WHERE predicates distinct, nullable right projections, projected/root/negated
 EXISTS and Oracle table-free FROM DUAL/Boolean conversion. Count selected nullable values still counts rows;
@@ -223,12 +223,51 @@ Retain EF padding/cache processing and current capture values across empty/nonem
 Empty/null collection objects follow the inherited empty relational policy; nullable element/item compensation
 and UseRelationalNulls differences are explicit. Do not mutate caller collections or invent server list limits.
 
+The complete relational compiled-query cache key must also distinguish the current context's collection
+parameter translation mode. Preserve the full base key (model/query/async/null/splitting/buffering), adding
+only this missing option in a scoped derived generator. A provider service graph can still be shared by
+contexts with different collection modes; changing service-provider identity is not the cache repair.
+Test the same expression in default/Constant/default and Constant/default/Constant order. Oracle scalar
+string normalization must exclude collection envelopes, especially null collections; EF owns their expansion.
+
 EF.Constant/context Constant use mapping-owned literals. Context Parameter mode can use an inherited Contains
 fallback to scalar IN; explicit EF.Parameter(collection) remains unsupported without a primitive-collection
 translator. Test both boundaries. Text lists need provider-converted Oracle empty/NULL normalization before
 membership compensation; general VALUES roots need their own integer-ordinal and dialect rendering fixes.
 Those, APPLY/collection projections and SUM/AVG/Min/Max promotion/casts remain separate locally feasible work.
 The shipped EF10.0.0 package owners and source-derived gaps are audited in the local query-shapes research.
+
+The local slice passes 30 focused unit and 40 intercepted cases. Full Debug/Release and isolated EF10.0.14
+Release pass 1155 tests, including two deterministic model-eviction cases. Positive model-reference reuse
+uses a test-owned retained cache: EF's shared bounded cache does not guarantee retention. A controlled
+capacity experiment reproduced identity failure with equal keys/shared services; the initial natural failure
+timing was not recaptured. Production caching was not changed to force retention. Independent production
+review and scoped fixture re-review passed. This is local translation/binding/shaping evidence only.
+
+## Planned scalar text collection membership
+
+The next QRY-03 slice covers bare inline/captured Enumerable.Contains and List.Contains over scalar text
+arrays/lists in both modes, including existing provider-text converters and families. Add the existing EF
+string JSON reader/writer metadata as a collection-mapping prerequisite; this does not enable JSON tables.
+MySQL retains base scalar expansion. Oracle expands provider-text IN collection parameters before scalar
+string normalization and base null compensation, so provider-converted empty elements become SQL NULL.
+
+Keep raw model values and complete element mappings on each scalar expression. Empty model text converted
+to nonempty stored text survives; nonempty model values converted to empty stored text become SQL NULL.
+Never normalize before conversion or bind already-converted values through the converter again. Reuse the
+existing scalar classification, including enum-underlying handling and null-converting converter rejection.
+Classification and normal binding can each evaluate a pure converter; exactly-once invocation is not promised.
+
+Use execution-local snapshots/name/mapping caches and fresh scalar parameter entries without mutating caller
+collections or their original dictionary entries. Reuse keys include source identity, element mapping/mode
+and index; one capture under different converters must retain independent bindings. Preserve MultipleParameters
+padding from raw values, safe mapped Constant literals and command SQL cache disabling. EF still owns NULL
+compensation, NOT/CASE/Boolean projections and relational-null differences after normalization.
+
+Characterize empty/null/all-null/duplicate/converted-empty collections, changed captures, bucket boundaries,
+name collisions, hostile literal data, fixed/national/LOB bindings and both modes/null settings. Native
+collation/padding/LOB equality/charset/server limits remain live gates. General VALUES roots and explicit
+EF.Parameter(collection) remain separate locally feasible work, with clear unsupported-shape tests.
 
 ## Arithmetic division and remainder local contract
 
@@ -347,18 +386,32 @@ Run the read-only gate after packing, before the isolated consumer checks:
 
 ```powershell
 pwsh -NoProfile -File tests/OceanBase.EntityFrameworkCore.PackageConsumer/Verify-Package.ps1 `
-    -PackagePath artifacts/checkpoint-numeric-core-20261111/OceanBase.EntityFrameworkCore.10.0.0-checkpoint.numeric-core-20261111.nupkg `
-    -ExpectedVersion 10.0.0-checkpoint.numeric-core-20261111
+    -PackagePath artifacts/checkpoint-membership-20261111/OceanBase.EntityFrameworkCore.10.0.0-checkpoint.membership-20261111.nupkg `
+    -ExpectedVersion 10.0.0-checkpoint.membership-20261111
 ```
 
 The PowerShell 7 script uses .NET ZIP/XML APIs and checks ID/version, the net10.0 assembly and dependency group,
 exact expected dependency ranges, and a nonempty packaged README with matching metadata. It does not build,
-restore, execute provider queries or establish server/runtime compatibility. The current numeric-core package passes;
+restore, execute provider queries or establish server/runtime compatibility. The current membership package passes;
 wrong expected version, the old README-less alias package and the exact-patch README probe fail at their intended
 checks. The hosted e41981e package-content gate passed on Windows/Linux; the current package checks ran locally
 on Windows. Change the path/version for each new pack.
 
-### Current numeric Abs, Sign and Truncate checkpoint (2026-11-11)
+### Current integral membership and relational-shape checkpoint (2026-11-11)
+
+Debug/Release and isolated EF10.0.14 Release pass 1155 tests (885 unit, 268 intercepted pipeline, two project
+consumers). Independent spec/quality and scoped cache-fixture reviews pass. The same baseline-built
+`10.0.0-checkpoint.membership-20261111` nupkg passes both modes at EF10.0.0/10.0.14. Repeated int[] captures
+change between nonempty, empty and padded lengths; the same query across default/Constant contexts keeps
+the selected parameter/literal policy. The preceding numeric-core package fails the new collection mapping.
+Content and package-only graph checks pass; baseline source assets remain EF10.0.0.
+
+Repeat the commands below with `10.0.0-checkpoint.membership-20261111` and
+`artifacts/checkpoint-membership-20261111`. Evidence: `artifacts/local-development/batch3h/`.
+QRY-03/04 remain partial: text/general collections, wider aggregates and actual server execution stay open.
+Hosted Windows/Linux evidence above applies to e41981e, not this source.
+
+### Historical numeric Abs, Sign and Truncate checkpoint (2026-11-11)
 
 Debug/Release and isolated EF10.0.14 Release pass 1083 tests (853 unit, 228 intercepted pipeline, two project
 consumers). Independent spec/quality review passed. The same baseline-built

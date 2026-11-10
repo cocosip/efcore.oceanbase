@@ -42,7 +42,8 @@ namespace OceanBase.EntityFrameworkCore.Query
         }
 
         private static bool IsProviderString(SqlExpression expression)
-            => (expression.TypeMapping?.Converter?.ProviderClrType ?? expression.Type) == typeof(string);
+            => expression.TypeMapping?.ElementTypeMapping is null
+                && (expression.TypeMapping?.Converter?.ProviderClrType ?? expression.Type) == typeof(string);
 
         private SqlExpression Normalize(SqlExpression expression, object? value)
         {

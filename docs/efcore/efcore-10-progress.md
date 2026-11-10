@@ -21,6 +21,30 @@ not later local commits or database integration. Earlier db676ff also passed in
 Run/job/step metadata is saved under artifacts/local-development/. The earlier log archive endpoint returned
 HTTP403 (repository admin rights); no new per-test count or resolved EF patch is inferred from job metadata.
 
+### Integral membership and ordinary relational shapes checkpoint (2026-11-11)
+
+Bare int/int? array/list Contains now uses EF10 scalar expansion with exact element metadata. Oracle scalar
+string normalization excludes collection envelopes. The scoped compiled-query key retains the full relational
+base key and adds current collection mode, fixing reproduced cross-context parameter/literal cache reuse.
+Inherited ordinary/composite/.NET10 left joins, scalar subqueries, Any/All and Count/LongCount are characterized
+without replacing their already-correct services. General VALUES/text collections and wider aggregates remain.
+
+Focused tests pass 30 unit and 40 intercepted cases. Final Debug/Release and isolated EF10.0.14 Release each
+pass **1155 tests** (885 unit, 268 intercepted pipeline, two project consumers). Independent code and scoped
+cache-fixture reviews pass. The same baseline-built `10.0.0-checkpoint.membership-20261111` nupkg passes both
+modes at EF10.0.0/10.0.14; the prior numeric package fails the new captured collection query. Content and
+package-only graph checks pass; baseline source stays EF10.0.0.
+
+An initial isolated-patch model-reference assertion exposed a retention assumption in the test fixture.
+Controlled cache pressure reproduces identity failure despite equal keys/shared services. Positive retention
+now uses a test-owned cache and two explicit-eviction cases verify equivalent rebuilding; every original
+identity/key/connection assertion remains. The original natural failure timing is not proven; no production
+cache change was made to force retention.
+
+Latest package: `artifacts/checkpoint-membership-20261111/OceanBase.EntityFrameworkCore.10.0.0-checkpoint.membership-20261111.nupkg`.
+Evidence: `artifacts/local-development/batch3h/`. Server query results and hosted execution for this source
+remain unverified. Next is scalar text collection membership; the complete local EF10 goal remains active.
+
 ### Numeric Abs, Sign and Truncate checkpoint (2026-11-11)
 
 Twenty-two exact Math/MathF/decimal methods now translate to native ABS/SIGN and MySQL TRUNCATE(x,0)
@@ -33,7 +57,7 @@ two project consumers). Independent spec/quality review passed. The same baselin
 `10.0.0-checkpoint.numeric-core-20261111` nupkg passes both modes at EF10.0.0/10.0.14; the preceding temporal
 package fails the new numeric predicate. Package content and package-only graph checks pass.
 
-Latest package: `artifacts/checkpoint-numeric-core-20261111/OceanBase.EntityFrameworkCore.10.0.0-checkpoint.numeric-core-20261111.nupkg`.
+Historical package: `artifacts/checkpoint-numeric-core-20261111/OceanBase.EntityFrameworkCore.10.0.0-checkpoint.numeric-core-20261111.nupkg`.
 Evidence: `artifacts/local-development/batch3g/`. Native numeric results/domain/overflow/floating families
 and hosted execution for this source remain open. Next is integral membership and ordinary relational shapes;
 broader queries, model/writes/transactions/schema and the overall local EF10 goal remain active.

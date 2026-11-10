@@ -158,6 +158,25 @@ namespace PackageConsumer
                         throw new Exception($"Packed provider did not translate numeric function {function}");
                 }
 
+                int[] membershipValues = [1, 2];
+                var membershipQuery = context.Set<Row>().Where(row => membershipValues.Contains(row.Id));
+                foreach (var values in new[] { new[] { 1, 2 }, Array.Empty<int>(), new[] { 1, 2, 2, 3, 4, 5 }, Array.Empty<int>() })
+                {
+                    membershipValues = values;
+                    var membershipSql = membershipQuery.ToQueryString();
+                    if (!membershipSql.Contains(values.Length == 0 ? "WHERE 0" : " IN (", StringComparison.Ordinal))
+                        throw new Exception("Packed integer membership failed or reused stale collection SQL.");
+                }
+                foreach (var collectionMode in new ParameterTranslationMode?[]
+                    { null, ParameterTranslationMode.Constant, null, ParameterTranslationMode.Constant })
+                {
+                    using var membershipContext = CreateMembershipContext(mode, collectionMode);
+                    var sqlWithMode = MembershipSql(membershipContext, [41, 42]);
+                    var hasParameters = sqlWithMode.Contains(mode == OceanBaseCompatibilityMode.MySql ? "@" : ":", StringComparison.Ordinal);
+                    if (hasParameters != (collectionMode != ParameterTranslationMode.Constant))
+                        throw new Exception("Compiled membership query reused another context's collection mode.");
+                }
+
                 var guidType = context.Model.FindEntityType(typeof(Row))!.FindProperty(nameof(Row.Token))!.GetColumnType();
                 if (guidType != (mode == OceanBaseCompatibilityMode.Oracle ? "RAW(16)" : "CHAR(36)"))
                 {
@@ -345,6 +364,21 @@ namespace PackageConsumer
 
                 Console.WriteLine($"{mode}: packed provider registration, scalar/text/temporal/binary/decimal model, string/null/Boolean SQL and paging passed; EF {typeof(DbContext).Assembly.GetName().Version}.");
             }
+        }
+
+        private static string MembershipSql(ConsumerContext context, int[] values)
+            => context.Set<Row>().Where(row => values.Contains(row.Id)).ToQueryString();
+
+        private static ConsumerContext CreateMembershipContext(OceanBaseCompatibilityMode mode, ParameterTranslationMode? collectionMode)
+        {
+            var builder = new DbContextOptionsBuilder<ConsumerContext>().UseOceanBase("Server=localhost;Database=package_smoke", mode);
+            if (collectionMode.HasValue)
+            {
+                var extension = builder.Options.Extensions.OfType<RelationalOptionsExtension>().Single()
+                    .WithUseParameterizedCollectionMode(collectionMode.Value);
+                ((IDbContextOptionsBuilderInfrastructure)builder).AddOrUpdateExtension(extension);
+            }
+            return new ConsumerContext(builder.Options, mode);
         }
 
         private sealed class ConsumerContext(DbContextOptions<ConsumerContext> options, OceanBaseCompatibilityMode mode) : DbContext(options)

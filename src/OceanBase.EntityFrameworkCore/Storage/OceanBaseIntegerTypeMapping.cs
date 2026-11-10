@@ -6,6 +6,7 @@ using System.Linq.Expressions;
 using System.Reflection;
 using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore.Storage;
+using Microsoft.EntityFrameworkCore.Storage.Json;
 
 namespace OceanBase.EntityFrameworkCore.Storage
 {
@@ -17,11 +18,26 @@ namespace OceanBase.EntityFrameworkCore.Storage
 
         public OceanBaseIntegerTypeMapping(string storeType, DbType dbType, OceanBaseCompatibilityMode mode,
             int? precision = null, int? scale = null, int? size = null, bool fixedLength = false)
-            : this(new RelationalTypeMappingParameters(new CoreTypeMappingParameters(typeof(T)),
+            : this(new RelationalTypeMappingParameters(new CoreTypeMappingParameters(typeof(T),
+                jsonValueReaderWriter: JsonReaderWriter),
                 storeType, StoreTypePostfix.None, dbType, size: size, fixedLength: fixedLength,
                 precision: precision, scale: scale), mode)
         {
         }
+
+        // EF also needs element JSON metadata when expanding a captured collection into scalar parameters.
+        private static JsonValueReaderWriter JsonReaderWriter
+            => typeof(T) == typeof(sbyte) ? JsonSByteReaderWriter.Instance
+                : typeof(T) == typeof(byte) ? JsonByteReaderWriter.Instance
+                : typeof(T) == typeof(short) ? JsonInt16ReaderWriter.Instance
+                : typeof(T) == typeof(ushort) ? JsonUInt16ReaderWriter.Instance
+                : typeof(T) == typeof(int) ? JsonInt32ReaderWriter.Instance
+                : typeof(T) == typeof(uint) ? JsonUInt32ReaderWriter.Instance
+                : typeof(T) == typeof(long) ? JsonInt64ReaderWriter.Instance
+                : typeof(T) == typeof(ulong) ? JsonUInt64ReaderWriter.Instance
+                : typeof(T) == typeof(bool) ? JsonBoolReaderWriter.Instance
+                : typeof(T) == typeof(decimal) ? JsonDecimalReaderWriter.Instance
+                : throw new InvalidOperationException($"Unsupported integer carrier {typeof(T)}.");
 
         private OceanBaseIntegerTypeMapping(RelationalTypeMappingParameters parameters, OceanBaseCompatibilityMode mode,
             bool preserveBareDeclaration = false)

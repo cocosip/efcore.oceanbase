@@ -26,6 +26,229 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
         [InlineData(OceanBaseCompatibilityMode.Oracle, true, false)]
         [InlineData(OceanBaseCompatibilityMode.Oracle, false, true)]
         [InlineData(OceanBaseCompatibilityMode.Oracle, true, true)]
+        public async Task Membership_commands_rebind_current_scalar_values_without_mutating_captured_arrays(
+            OceanBaseCompatibilityMode mode, bool async, bool relationalNulls)
+        {
+            using var table = new DataTable();
+            table.Columns.Add("Id", typeof(object));
+            table.Rows.Add(new OceanBaseDecimal(42m));
+            var commands = new CommandCapture { Results = table };
+            await using var context = CreateContext(mode, commands, relationalNulls);
+            int?[] values = [];
+            var query = context.Set<ArithmeticRow>().Where(row => Enumerable.Contains(values, row.Optional)).Select(row => row.Id);
+            foreach (var current in new int?[][]
+                { [], [2, null, 7], [null, null], [3, 5, 7, 9, 11], [3, 5, 7, 9, 11, 13],
+                    [1, 2, 3, 4, 5, 6, 7, 8, 9, null], [21, 22, 23, 24, 25, 26, 27, 28, 29, 30, null], [], null! })
+            {
+                values = current;
+                var snapshot = current?.ToArray();
+                commands.Sql.Clear();
+                commands.Values.Clear();
+                commands.Inputs.Clear();
+                var rows = async ? await query.ToListAsync() : query.ToList();
+                // Supplied rows prove binding/shaping only; the interceptor does not evaluate membership.
+                Assert.Equal(42, Assert.Single(rows));
+                Assert.Equal(snapshot, current);
+                var sql = Assert.Single(commands.Sql);
+                Assert.DoesNotContain("IN ()", sql);
+                Assert.All(commands.Values, value => Assert.True(value is int or DBNull, $"Unexpected collection parameter: {value?.GetType()}"));
+                foreach (var value in (current ?? []).Where(value => value.HasValue).Select(value => value!.Value).Distinct())
+                    Assert.Contains(value, commands.Values);
+                Assert.All(commands.Values.Where(value => value is int), value => Assert.Contains((int)value!, current!));
+                if (current is null || current.Length == 0) Assert.DoesNotContain(" IN (", sql);
+                if (current is not null && current.Any(value => value.HasValue)) Assert.NotEmpty(commands.Inputs);
+            }
+            int[] converted = [int.MinValue, int.MaxValue];
+            commands.Values.Clear();
+            var convertedQuery = context.Set<ArithmeticRow>().Where(row => Enumerable.Contains(converted, row.Converted)).Select(row => row.Id);
+            _ = async ? await convertedQuery.ToListAsync() : convertedQuery.ToList();
+            Assert.Contains((long)int.MinValue, commands.Values);
+            Assert.Contains((long)int.MaxValue, commands.Values);
+            Assert.All(commands.Values, value => Assert.IsType<long>(value));
+            List<int> list = [17, 19];
+            List<int?> optionalList = [17, null, 19];
+            foreach (var listQuery in new[]
+                { context.Set<ArithmeticRow>().Where(row => list.Contains(row.Value)).Select(row => row.Id),
+                    context.Set<ArithmeticRow>().Where(row => optionalList.Contains(row.Optional)).Select(row => row.Id) })
+            {
+                commands.Values.Clear();
+                _ = async ? await listQuery.ToListAsync() : listQuery.ToList();
+                Assert.Contains(17, commands.Values);
+                Assert.Contains(19, commands.Values);
+                Assert.All(commands.Values.Where(value => value is not DBNull), value => Assert.IsType<int>(value));
+            }
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false, true)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true, true)]
+        public async Task Relational_commands_shape_supplied_nullable_right_and_scalar_subquery_rows(
+            OceanBaseCompatibilityMode mode, bool async, bool relationalNulls)
+        {
+            using var table = new DataTable();
+            table.Columns.Add("Id", typeof(object));
+            table.Columns.Add("Right", typeof(object));
+            table.Rows.Add(new OceanBaseDecimal(42m), DBNull.Value);
+            table.Rows.Add(new OceanBaseDecimal(42m), new OceanBaseDecimal(7m));
+            var commands = new CommandCapture { Results = table };
+            await using var context = CreateContext(mode, commands, relationalNulls);
+            var source = context.Set<ArithmeticRow>();
+            var left = source.LeftJoin(source, a => a.Id, b => b.Value,
+                (a, b) => new { a.Id, Right = (int?)b!.Id });
+            var groupJoin = from a in source
+                            join b in source on a.Id equals b.Value into matches
+                            from b in matches.DefaultIfEmpty()
+                            select new { a.Id, Right = (int?)b.Id };
+            var inner = source.Join(source, a => a.Id, b => b.Value, (a, b) => new { a.Id, Right = (int?)b.Id });
+            var composite = source.Join(source, a => new { a.Id, a.Optional }, b => new { Id = b.Value, b.Optional },
+                (a, b) => new { a.Id, Right = (int?)b.Id });
+            foreach (var (joined, nullableRight) in new[] { (left, true), (groupJoin, true), (inner, false), (composite, false) })
+            {
+                table.Rows[0][1] = nullableRight ? DBNull.Value : new OceanBaseDecimal(7m);
+                var rows = async ? await joined.ToListAsync() : joined.ToList();
+                Assert.Equal(2, rows.Count);
+                Assert.Equal(nullableRight ? null : (int?)7, rows[0].Right);
+                Assert.Equal(7, rows[1].Right);
+                Assert.Contains("JOIN", commands.Sql.Last());
+            }
+            Assert.Contains("LEFT JOIN", commands.Sql[0]);
+            Assert.Contains("LEFT JOIN", commands.Sql[1]);
+            Assert.Contains("INNER JOIN", commands.Sql[2]);
+            Assert.Contains(" AND ", commands.Sql[3]);
+            table.Rows.Clear();
+            table.Columns.RemoveAt(1);
+            table.Rows.Add(DBNull.Value);
+            var scalar = source.Select(a => source.Where(b => b.Value == a.Id).OrderBy(b => b.Id).Select(b => b.Optional).FirstOrDefault());
+            var nullable = async ? await scalar.ToListAsync() : scalar.ToList();
+            Assert.Null(Assert.Single(nullable));
+            Assert.Contains("ORDER BY", commands.Sql.Last());
+            table.Rows.Clear();
+            table.Rows.Add(new OceanBaseDecimal(42m));
+            var membership = source.Where(a => source.Select(b => b.Optional).Contains(a.Optional)).Select(a => a.Id);
+            Assert.Equal(42, Assert.Single(async ? await membership.ToListAsync() : membership.ToList()));
+            Assert.True(commands.Sql.Last().Contains(" IN (", StringComparison.Ordinal)
+                || commands.Sql.Last().Contains("EXISTS (", StringComparison.Ordinal));
+            table.Rows.Clear();
+            var noRows = async ? await left.ToListAsync() : left.ToList();
+            Assert.Empty(noRows);
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false, true)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true, true)]
+        public async Task Root_quantifiers_and_membership_shape_supplied_boolean_and_unknown_results(
+            OceanBaseCompatibilityMode mode, bool async, bool relationalNulls)
+        {
+            using var table = new DataTable();
+            table.Columns.Add("Result", typeof(object));
+            table.Rows.Add(mode == OceanBaseCompatibilityMode.Oracle ? new OceanBaseDecimal(1m) : (object)true);
+            var commands = new CommandCapture { Results = table };
+            await using var context = CreateContext(mode, commands, relationalNulls);
+            var source = context.Set<ArithmeticRow>();
+            Assert.True(async ? await source.AnyAsync(row => row.Value > 3) : source.Any(row => row.Value > 3));
+            Assert.True(async ? await source.AllAsync(row => row.Optional > 3) : source.All(row => row.Optional > 3));
+            Assert.Contains("EXISTS (", commands.Sql[0]);
+            Assert.Contains("NOT EXISTS (", commands.Sql[1]);
+            if (mode == OceanBaseCompatibilityMode.Oracle)
+                Assert.All(commands.Sql, sql => { Assert.Contains("FROM DUAL", sql); Assert.Contains("CASE", sql); });
+            int?[] values = [2, null, 7];
+            table.Rows.Clear();
+            table.Rows.Add(DBNull.Value);
+            var nullableQuery = source.Select(row => (bool?)Enumerable.Contains(values, row.Optional));
+            var nullable = async ? await nullableQuery.ToListAsync() : nullableQuery.ToList();
+            Assert.Null(Assert.Single(nullable));
+            var required = source.Select(row => Enumerable.Contains(values, row.Optional));
+            // DBNull in a required bool projection rejects; synthetic UNKNOWN is not silently changed to false.
+            if (async) await Assert.ThrowsAsync<InvalidOperationException>(() => required.ToListAsync());
+            else Assert.Throws<InvalidOperationException>(() => required.ToList());
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false, true)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true, true)]
+        public async Task Count_commands_shape_supplied_zero_int_long_and_checked_overflow(
+            OceanBaseCompatibilityMode mode, bool async, bool relationalNulls)
+        {
+            using var table = new DataTable();
+            table.Columns.Add("Count", typeof(object));
+            table.Rows.Add(new OceanBaseDecimal(0m));
+            var commands = new CommandCapture { Results = table };
+            await using var context = CreateContext(mode, commands, relationalNulls);
+            var source = context.Set<ArithmeticRow>();
+            Assert.Equal(0, async ? await source.CountAsync() : source.Count());
+            Assert.Equal(0L, async ? await source.LongCountAsync() : source.LongCount());
+            Assert.Equal(0, async ? await source.CountAsync(row => row.Optional > 3) : source.Count(row => row.Optional > 3));
+            Assert.Equal(0L, async ? await source.LongCountAsync(row => row.Optional > 3) : source.LongCount(row => row.Optional > 3));
+            Assert.Equal(0, async ? await source.Select(row => row.Optional).CountAsync() : source.Select(row => row.Optional).Count());
+            Assert.Equal(0, async ? await source.Where(row => row.Id > 3).Select(row => row.Optional).Distinct().CountAsync()
+                : source.Where(row => row.Id > 3).Select(row => row.Optional).Distinct().Count());
+            Assert.All(commands.Sql, sql => { Assert.Contains("COUNT(", sql); Assert.DoesNotContain("COUNT_BIG", sql); });
+            table.Rows.Clear();
+            table.Rows.Add(new OceanBaseDecimal((decimal)int.MaxValue + 1));
+            Assert.Equal((long)int.MaxValue + 1, async ? await source.LongCountAsync() : source.LongCount());
+            if (async) await Assert.ThrowsAsync<OverflowException>(() => source.CountAsync());
+            else Assert.Throws<OverflowException>(() => source.Count());
+            table.Rows.Clear();
+            table.Rows.Add(new OceanBaseDecimal(long.MaxValue));
+            Assert.Equal(long.MaxValue, async ? await source.LongCountAsync() : source.LongCount());
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false, true)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true, true)]
+        public async Task Grouped_counts_keep_fresh_result_mappings_and_supplied_nullable_keys_and_empty_rows(
+            OceanBaseCompatibilityMode mode, bool async, bool relationalNulls)
+        {
+            using var table = new DataTable();
+            foreach (var name in new[] { "Key", "Count", "Long" }) table.Columns.Add(name, typeof(object));
+            table.Rows.Add(DBNull.Value, new OceanBaseDecimal(3m), new OceanBaseDecimal(4m));
+            table.Rows.Add(new OceanBaseDecimal(12m), new OceanBaseDecimal(3m), new OceanBaseDecimal(4m));
+            var commands = new CommandCapture { Results = table };
+            await using var context = CreateContext(mode, commands, relationalNulls);
+            var query = context.Set<CountGroupRow>().GroupBy(row => row.Converted).Where(group => group.Count() > 1)
+                .Select(group => new { group.Key, Count = group.Count(), Long = group.LongCount() });
+            var rows = async ? await query.ToListAsync() : query.ToList();
+            Assert.Null(rows[0].Key);
+            Assert.Equal(6, rows[1].Key);
+            Assert.All(rows, row => { Assert.Equal(3, row.Count); Assert.Equal(4L, row.Long); });
+            Assert.Contains("HAVING COUNT(*) > 1", Assert.Single(commands.Sql));
+            table.Rows.Clear();
+            Assert.Empty(async ? await query.ToListAsync() : query.ToList());
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false, true)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true, true)]
         public async Task Math_commands_preserve_numeric_parameters_converters_and_synthetic_nullable_reads(
             OceanBaseCompatibilityMode mode, bool async, bool relationalNulls)
         {
@@ -1582,6 +1805,8 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
             protected override void OnModelCreating(ModelBuilder modelBuilder)
             {
                 var oracle = mode == OceanBaseCompatibilityMode.Oracle;
+                modelBuilder.Entity<CountGroupRow>().Property(row => row.Converted)
+                    .HasConversion(value => value * 2, value => value / 2);
                 modelBuilder.Entity<ArithmeticRow>().Property(row => row.Converted).HasConversion<long>();
                 modelBuilder.Entity<MathRow>().Property(row => row.Converted).HasConversion<long>();
                 modelBuilder.Entity<MathRow>().Property(row => row.Transformed)
@@ -1669,6 +1894,12 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
         }
 
         private enum RowState { Inactive = 0, Active = 2 }
+
+        private sealed class CountGroupRow
+        {
+            public int Id { get; set; }
+            public int? Converted { get; set; }
+        }
 
         private sealed class ArithmeticRow
         {

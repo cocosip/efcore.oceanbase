@@ -8,6 +8,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.EntityFrameworkCore.Storage;
+using Microsoft.Extensions.Caching.Memory;
 using OceanBase.EntityFrameworkCore.Internal;
 using Xunit;
 
@@ -155,9 +156,13 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
         [InlineData(OceanBaseCompatibilityMode.Oracle)]
         public void Compatible_contexts_reuse_models_and_singleton_services_but_not_connections(OceanBaseCompatibilityMode mode)
         {
-            using var first = CreateCacheContext(mode, "first");
-            using var second = CreateCacheContext(mode, "second");
+            // Model identity needs retained entries; other query tests can fill EF's shared bounded cache.
+            using var cache = new MemoryCache(new MemoryCacheOptions());
+            using var first = CreateCacheContext(mode, "first", cache);
+            using var second = CreateCacheContext(mode, "second", cache);
             Assert.Same(first.Model, second.Model);
+            Assert.Same(cache, first.GetService<IMemoryCache>());
+            Assert.Same(cache, second.GetService<IMemoryCache>());
             Assert.Same(first.GetService<IRelationalTypeMappingSource>(), second.GetService<IRelationalTypeMappingSource>());
             Assert.Same(first.GetService<ISqlGenerationHelper>(), second.GetService<ISqlGenerationHelper>());
             Assert.Same(first.GetService<IModelCacheKeyFactory>(), second.GetService<IModelCacheKeyFactory>());
@@ -185,6 +190,29 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             Assert.Equal("NUMBER(10)", oracle.Model.FindEntityType(typeof(CacheRow))!.FindProperty(nameof(CacheRow.Id))!.GetColumnType());
             Assert.Equal("`row`", mysql.GetService<ISqlGenerationHelper>().DelimitIdentifier("row"));
             Assert.Equal("\"row\"", oracle.GetService<ISqlGenerationHelper>().DelimitIdentifier("row"));
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle)]
+        public void Evicted_models_rebuild_with_equal_keys_and_shared_singleton_services(OceanBaseCompatibilityMode mode)
+        {
+            using var cache = new MemoryCache(new MemoryCacheOptions());
+            using var first = CreateCacheContext(mode, "first", cache);
+            using var second = CreateCacheContext(mode, "second", cache);
+            var firstModel = first.Model;
+            var key = first.GetService<IModelCacheKeyFactory>().Create(first, false);
+            Assert.Same(firstModel, cache.Get<IModel>(key));
+            cache.Remove(key);
+            Assert.False(cache.TryGetValue(key, out _));
+            var secondModel = second.Model;
+            Assert.Same(first.GetService<IMemoryCache>(), second.GetService<IMemoryCache>());
+            Assert.Same(first.GetService<IModelSource>(), second.GetService<IModelSource>());
+            Assert.Same(first.GetService<IRelationalTypeMappingSource>(), second.GetService<IRelationalTypeMappingSource>());
+            Assert.Equal(key, second.GetService<IModelCacheKeyFactory>().Create(second, false));
+            Assert.NotSame(firstModel, secondModel);
+            Assert.Same(secondModel, cache.Get<IModel>(key));
+            Assert.Equal(firstModel.ToDebugString(), secondModel.ToDebugString());
         }
 
         [Theory]
@@ -393,8 +421,12 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
                 .UseOceanBase("Server=localhost;Database=test", mode)
                 .Options;
 
-        private static CacheContext CreateCacheContext(OceanBaseCompatibilityMode mode, string database)
-            => new(new DbContextOptionsBuilder<CacheContext>().UseOceanBase($"Server=localhost;Database={database}", mode).Options);
+        private static CacheContext CreateCacheContext(OceanBaseCompatibilityMode mode, string database, IMemoryCache? cache = null)
+        {
+            var builder = new DbContextOptionsBuilder<CacheContext>().UseOceanBase($"Server=localhost;Database={database}", mode);
+            if (cache is not null) builder.UseMemoryCache(cache);
+            return new CacheContext(builder.Options);
+        }
 
         private sealed class CacheContext(DbContextOptions<CacheContext> options) : DbContext(options)
         {
