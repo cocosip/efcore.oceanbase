@@ -15,6 +15,87 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
     public sealed class BasicRelationalTests
     {
         [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true)]
+        public async Task Query_and_write_apply_temporal_transport_conversions(OceanBaseCompatibilityMode mode, bool async)
+        {
+            var oracle = mode == OceanBaseCompatibilityMode.Oracle;
+            var stamp = new DateTime(2026, 11, 10, 12, 30, 45);
+            var zoned = new DateTimeOffset(stamp, TimeSpan.FromHours(8));
+            using var table = new DataTable();
+            table.Columns.Add("Id", oracle ? typeof(decimal) : typeof(int));
+            table.Columns.Add("Date", typeof(DateTime));
+            table.Columns.Add("Stamp", oracle ? typeof(OceanBaseTimestamp) : typeof(DateTime));
+            table.Columns.Add("Zoned", oracle ? typeof(OceanBaseTimestampWithTimeZone) : typeof(DateTime));
+            table.Columns.Add("Clock", oracle ? typeof(OceanBaseIntervalDayToSecond) : typeof(TimeSpan));
+            table.Columns.Add("Duration", oracle ? typeof(OceanBaseIntervalDayToSecond) : typeof(TimeSpan));
+            table.Columns.Add("OptionalDate", typeof(DateTime));
+            table.Rows.Add(19, new DateTime(2026, 11, 10), oracle ? new OceanBaseTimestamp(stamp) : stamp,
+                oracle ? new OceanBaseTimestampWithTimeZone(zoned) : new DateTime(2026, 11, 10, 4, 30, 45),
+                oracle ? new OceanBaseIntervalDayToSecond(false, 0, 12, 30, 45, leadingPrecision: 1, scale: 7) : new TimeSpan(12, 30, 45),
+                oracle ? new OceanBaseIntervalDayToSecond(true, 2, 3, 4, 5, scale: 7) : -new TimeSpan(2, 3, 4, 5), DBNull.Value);
+            var commands = new CommandCapture { Results = table };
+            await using var context = CreateContext(mode, commands);
+            var query = context.Set<TemporalRow>().Select(row => new
+                { row.Id, row.Date, row.Stamp, row.Zoned, row.Clock, row.Duration, row.OptionalDate });
+
+            var row = Assert.Single(async ? await query.ToListAsync() : query.ToList());
+
+            Assert.Equal(new DateOnly(2026, 11, 10), row.Date);
+            Assert.Equal(stamp, row.Stamp);
+            Assert.Equal(zoned.UtcTicks, row.Zoned.UtcTicks);
+            Assert.Equal(oracle ? TimeSpan.FromHours(8) : TimeSpan.Zero, row.Zoned.Offset);
+            Assert.Equal(new TimeOnly(12, 30, 45), row.Clock);
+            Assert.Equal(-new TimeSpan(2, 3, 4, 5), row.Duration);
+            Assert.Null(row.OptionalDate);
+            context.Add(new TemporalRow { Id = row.Id, Date = row.Date, Stamp = row.Stamp, Zoned = row.Zoned,
+                Clock = row.Clock, Duration = row.Duration });
+            Assert.Equal(1, async ? await context.SaveChangesAsync() : context.SaveChanges());
+            Assert.Contains(commands.Values, value => Equals(value, new DateTime(2026, 11, 10)));
+            Assert.Contains(commands.Values, value => Equals(value, stamp));
+            Assert.Contains(commands.Values, value => Equals(value, DBNull.Value));
+            if (oracle)
+            {
+                Assert.Contains(commands.Values, value => value is OceanBaseIntervalDayToSecond interval && interval.ToTimeSpan() == row.Duration);
+                Assert.Contains(commands.Values, value => value is DateTimeOffset date && date.Offset == TimeSpan.FromHours(8));
+            }
+            else
+            {
+                Assert.Contains(commands.Values, value => Equals(value, new DateTime(2026, 11, 10, 4, 30, 45)));
+                Assert.Contains(commands.Values, value => Equals(value, row.Duration));
+            }
+        }
+
+        [Theory]
+        [InlineData(false, false)]
+        [InlineData(false, true)]
+        [InlineData(true, false)]
+        [InlineData(true, true)]
+        public async Task Oracle_generated_temporal_values_use_exact_public_conversions(bool zoned, bool async)
+        {
+            var stamp = new DateTime(2026, 11, 10, 12, 30, 45).AddTicks(1234567);
+            var date = new DateTimeOffset(stamp, TimeSpan.FromMinutes(-330));
+            var commands = new CommandCapture { OutputValue = zoned ? new OceanBaseTimestampWithTimeZone(date) : new OceanBaseTimestamp(stamp) };
+            await using var context = CreateContext(OceanBaseCompatibilityMode.Oracle, commands);
+            var plainEntity = new GeneratedStamp { Id = 1 };
+            var zonedEntity = new GeneratedZoned { Id = 1 };
+            context.Add(zoned ? (object)zonedEntity : plainEntity);
+
+            Assert.Equal(1, async ? await context.SaveChangesAsync() : context.SaveChanges());
+            if (zoned)
+            {
+                Assert.Equal(date.UtcTicks, zonedEntity.Stamp.UtcTicks);
+                Assert.Equal(date.Offset, zonedEntity.Stamp.Offset);
+            }
+            else
+            {
+                Assert.Equal(stamp, plainEntity.Stamp);
+            }
+        }
+
+        [Theory]
         [InlineData(false, false)]
         [InlineData(false, true)]
         [InlineData(true, false)]
@@ -281,10 +362,38 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
                 modelBuilder.Entity<ScalarRow>().Property(entity => entity.State).HasConversion<int>();
                 modelBuilder.Entity<GeneratedFlag>().Property(entity => entity.Id).ValueGeneratedNever();
                 modelBuilder.Entity<GeneratedFlag>().Property(entity => entity.Enabled).HasComputedColumnSql("1");
+                modelBuilder.Entity<TemporalRow>().Property(entity => entity.Id).ValueGeneratedNever();
+                modelBuilder.Entity<GeneratedStamp>().Property(entity => entity.Id).ValueGeneratedNever();
+                modelBuilder.Entity<GeneratedStamp>().Property(entity => entity.Stamp).HasComputedColumnSql("CURRENT_TIMESTAMP");
+                modelBuilder.Entity<GeneratedZoned>().Property(entity => entity.Id).ValueGeneratedNever();
+                modelBuilder.Entity<GeneratedZoned>().Property(entity => entity.Stamp).HasComputedColumnSql("CURRENT_TIMESTAMP");
             }
         }
 
         private enum RowState { Inactive = 0, Active = 2 }
+
+        private sealed class TemporalRow
+        {
+            public int Id { get; set; }
+            public DateOnly Date { get; set; }
+            public DateTime Stamp { get; set; }
+            public DateTimeOffset Zoned { get; set; }
+            public TimeOnly Clock { get; set; }
+            public TimeSpan Duration { get; set; }
+            public DateOnly? OptionalDate { get; set; }
+        }
+
+        private sealed class GeneratedStamp
+        {
+            public int Id { get; set; }
+            public DateTime Stamp { get; set; }
+        }
+
+        private sealed class GeneratedZoned
+        {
+            public int Id { get; set; }
+            public DateTimeOffset Stamp { get; set; }
+        }
 
         private sealed class GeneratedFlag
         {

@@ -60,6 +60,23 @@ Required test layers are:
 An unavailable database, proxy, TLS or authentication environment is recorded as an unverified boundary; it is
 not converted into a client pass or a client defect.
 
+### Live-test credentials and ownership
+
+The user will provide database access later. Store local live-test connection strings with .NET User Secrets,
+outside the repository, using `ConnectionStrings:OceanBaseMySql` and `ConnectionStrings:OceanBaseOracle`.
+When adding the live-test fixture, assign its project a stable `UserSecretsId` and explicitly load User Secrets
+in test configuration; a test project does not load them automatically. The ID is public metadata, not a secret.
+This is the agreed fixture contract; the current intercepted tests do not load secrets or connect to a server.
+
+Do not put credentials in source, tracked configuration, documentation, command output or test artifacts. Do not
+print secret values or full connection strings when configuring or diagnosing tests. Keep sensitive-data logging
+disabled for live acceptance runs and redact connector errors before recording evidence. Store credentials via a
+local input path that avoids echoing them into tool output or shell history.
+
+Before tests create or delete objects, record the user-authorized database/schema and cleanup scope for each mode.
+Use only test-owned objects within that scope. Until access and scope are provided, live gates remain unverified;
+continue local implementation and tests without treating unavailable infrastructure as a successful acceptance run.
+
 ## Documentation and review
 
 Public behavior, unsupported features and server prerequisites are documented before implementation. A change

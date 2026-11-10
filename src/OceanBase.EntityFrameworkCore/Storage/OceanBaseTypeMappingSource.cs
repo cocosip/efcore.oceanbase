@@ -1,8 +1,10 @@
 using System;
 using System.Data;
 using System.Globalization;
+using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
+using OceanBaseConnector;
 
 namespace OceanBase.EntityFrameworkCore.Storage
 {
@@ -38,11 +40,11 @@ namespace OceanBase.EntityFrameworkCore.Storage
             if (clrType == typeof(decimal)) return FindDecimalMapping(mappingInfo);
             if (clrType == typeof(string)) return FindStringMapping(mappingInfo);
             if (clrType == typeof(byte[])) return new OceanBaseByteArrayTypeMapping(storeTypes.Binary, mappingInfo.Size, _compatibilityMode);
-            if (clrType == typeof(DateTime)) return new DateTimeTypeMapping(storeTypes.DateTime, DbType.DateTime2);
-            if (clrType == typeof(DateTimeOffset)) return new DateTimeOffsetTypeMapping(storeTypes.DateTimeOffset, DbType.DateTimeOffset);
-            if (clrType == typeof(DateOnly)) return new DateOnlyTypeMapping(storeTypes.Date, DbType.Date);
-            if (clrType == typeof(TimeOnly)) return new TimeOnlyTypeMapping(storeTypes.Time, DbType.Time);
-            if (clrType == typeof(TimeSpan)) return new TimeSpanTypeMapping(storeTypes.Time, DbType.Time);
+            if (clrType == typeof(DateTime) || clrType == typeof(DateTimeOffset) || clrType == typeof(DateOnly)
+                || clrType == typeof(TimeOnly) || clrType == typeof(TimeSpan))
+            {
+                return FindTemporalMapping(clrType, mappingInfo);
+            }
             if (clrType == typeof(Guid)) return (RelationalTypeMapping)(oracle
                 ? new OceanBaseByteArrayTypeMapping(storeTypes.Guid, 16, _compatibilityMode)
                     .WithComposedConverter(new GuidToBytesConverter())
@@ -56,6 +58,98 @@ namespace OceanBase.EntityFrameworkCore.Storage
                 : new OceanBaseIntegerTypeMapping<bool>(storeTypes.Boolean, DbType.Boolean));
 
             return base.FindMapping(mappingInfo);
+        }
+
+        private RelationalTypeMapping FindTemporalMapping(Type clrType, in RelationalTypeMappingInfo info)
+        {
+            var oracle = _compatibilityMode == OceanBaseCompatibilityMode.Oracle;
+            var dateOnly = clrType == typeof(DateOnly);
+            var clock = clrType == typeof(TimeOnly);
+            var duration = clock || clrType == typeof(TimeSpan);
+            var zoned = clrType == typeof(DateTimeOffset);
+            var leading = clock ? 1 : 9;
+            var precision = info.Precision ?? (dateOnly ? 0 : oracle ? 7 : 6);
+            var typeName = dateOnly ? "DATE" : duration ? oracle ? "INTERVAL" : "TIME"
+                : oracle ? "TIMESTAMP" : "DATETIME";
+            var storeType = info.StoreTypeName;
+            if (storeType is not null)
+            {
+                var pattern = dateOnly ? @"\ADATE\z"
+                    : duration && oracle ? @"\AINTERVAL\s+DAY(?:\((?<days>\d+)\))?\s+TO\s+SECOND(?:\((?<precision>\d+)\))?\z"
+                    : oracle ? zoned ? @"\ATIMESTAMP(?:\((?<precision>\d+)\))?\s+WITH\s+TIME\s+ZONE\z"
+                        : @"\A(?<type>TIMESTAMP(?:\((?<precision>\d+)\))?|DATE)\z"
+                    : duration ? @"\ATIME(?:\((?<precision>\d+)\))?\z" : @"\ADATETIME(?:\((?<precision>\d+)\))?\z";
+                var match = Regex.Match(storeType.Trim(), pattern, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+                if (!match.Success)
+                {
+                    throw new NotSupportedException($"The store type '{storeType}' is not supported for {clrType.Name} in {_compatibilityMode} mode.");
+                }
+
+                var date = storeType.Trim().Equals("DATE", StringComparison.OrdinalIgnoreCase);
+                if (date) typeName = "DATE";
+                var declaredPrecision = match.Groups["precision"].Success
+                    ? int.Parse(match.Groups["precision"].Value, CultureInfo.InvariantCulture) : (int?)null;
+                if (declaredPrecision is not null && info.Precision is not null && declaredPrecision != info.Precision)
+                {
+                    throw new ArgumentException("The explicit and configured temporal precisions conflict.");
+                }
+
+                precision = declaredPrecision ?? info.Precision ?? (date ? 0 : oracle ? 6 : 0);
+                if (duration && oracle)
+                {
+                    leading = match.Groups["days"].Success ? int.Parse(match.Groups["days"].Value, CultureInfo.InvariantCulture) : 2;
+                }
+
+                if (declaredPrecision is null && info.Precision is not null && !date)
+                {
+                    storeType = null;
+                }
+            }
+
+            if (precision < 0 || precision > (typeName == "DATE" ? 0 : oracle ? 9 : 6) || leading is < 0 or > 9)
+            {
+                throw new ArgumentOutOfRangeException(nameof(info), "The temporal precision is outside the supported store range.");
+            }
+
+            if (info.Scale is not null)
+            {
+                throw new ArgumentException("Temporal fractional seconds use Precision, not a separate Scale facet.");
+            }
+
+            storeType ??= typeName == "DATE" ? "DATE" : duration && oracle ? $"INTERVAL DAY({leading}) TO SECOND({precision})"
+                : $"{typeName}({precision})" + (oracle && zoned ? " WITH TIME ZONE" : string.Empty);
+            if (duration && oracle)
+            {
+                var dayPrecision = (byte)leading;
+                var mapping = new OceanBaseTemporalTypeMapping<OceanBaseIntervalDayToSecond>(storeType, DbType.Object,
+                    precision, _compatibilityMode, dayPrecision);
+                return (RelationalTypeMapping)(clock
+                    ? mapping.WithComposedConverter(new ValueConverter<TimeOnly, OceanBaseIntervalDayToSecond>(
+                        value => OceanBaseTemporalConversions.ToInterval(value.ToTimeSpan()),
+                        value => TimeOnly.FromTimeSpan(value.ToTimeSpan())))
+                    : mapping.WithComposedConverter(new ValueConverter<TimeSpan, OceanBaseIntervalDayToSecond>(
+                        value => OceanBaseTemporalConversions.ToInterval(value), value => value.ToTimeSpan())));
+            }
+
+            if (duration)
+            {
+                var mapping = new OceanBaseTemporalTypeMapping<TimeSpan>(storeType, DbType.Time, precision, _compatibilityMode);
+                return clock ? (RelationalTypeMapping)mapping.WithComposedConverter(new ValueConverter<TimeOnly, TimeSpan>(
+                    value => value.ToTimeSpan(), value => TimeOnly.FromTimeSpan(value))) : mapping;
+            }
+
+            if (oracle && zoned)
+            {
+                return new OceanBaseTemporalTypeMapping<DateTimeOffset>(storeType, DbType.DateTimeOffset, precision, _compatibilityMode);
+            }
+
+            var dateMapping = new OceanBaseTemporalTypeMapping<DateTime>(storeType,
+                typeName == "DATE" ? DbType.Date : DbType.DateTime2, precision, _compatibilityMode);
+            return dateOnly ? (RelationalTypeMapping)dateMapping.WithComposedConverter(new ValueConverter<DateOnly, DateTime>(
+                    value => value.ToDateTime(TimeOnly.MinValue), value => OceanBaseTemporalConversions.ReadDateOnly(value)))
+                : zoned ? (RelationalTypeMapping)dateMapping.WithComposedConverter(new ValueConverter<DateTimeOffset, DateTime>(
+                    value => OceanBaseTemporalConversions.ToUtcDateTime(value), value => OceanBaseTemporalConversions.ReadUtcDateTime(value)))
+                : dateMapping;
         }
 
         private RelationalTypeMapping? FindDecimalMapping(in RelationalTypeMappingInfo info)

@@ -139,6 +139,46 @@ hooks. Direct converter tests and intercepted EF query/write tests cover Oracle-
 MySQL numeric Boolean results; this does not prove wire execution. Temporal types, complete explicit-type/facet
 validation, binary boundaries and the full custom-converter matrix remain open.
 
+## Temporal mapping contract
+
+MAP-05/MAP-06/MAP-07 and UPD-02 cover parameter binding, SQL literals, reader conversion and generated outputs.
+Read the EF10 DateTime/DateTimeOffset/TimeSpan mapping sources and
+[precision guidance](https://learn.microsoft.com/ef/core/modeling/entity-properties#precision-and-scale)
+before implementation. Temporal EF Precision means fractional-second digits; configure the connector's Scale,
+not its numeric Precision. Scale is not an independent EF temporal facet.
+
+| CLR type | MySQL storage and semantics | Oracle storage and semantics |
+| --- | --- | --- |
+| DateTime | DATETIME(6); unzoned, Kind.Unspecified | TIMESTAMP(7); unzoned, Kind.Unspecified |
+| DateTimeOffset | DATETIME(6); normalize the instant to UTC, bind an unspecified DateTime and read offset zero; original offset is not retained | TIMESTAMP(7) WITH TIME ZONE; retain the numeric UTC offset |
+| DateOnly | DATE; convert to/from midnight DateTime | DATE; convert to/from midnight DateTime; reject a non-midnight external value |
+| TimeOnly | TIME(6); convert to/from TimeSpan in [00:00,24:00) | INTERVAL DAY(1) TO SECOND(7); zero-day, non-negative interval; convert through the connector's exact interval value |
+| TimeSpan | TIME(6); signed duration bounded by 838:59:59.999999 | INTERVAL DAY(9) TO SECOND(7); signed duration; checked conversion to/from the connector's exact interval value |
+
+MySQL fractional precision is 0..6; Oracle TIMESTAMP/INTERVAL precision is 0..9, with default 7 preserving CLR
+100ns ticks. DATE has precision zero. Explicit supported declarations preserve their storage semantics and
+unqualified store defaults (MySQL DATETIME/TIME: 0; Oracle TIMESTAMP/INTERVAL seconds: 6, interval days: 2).
+Conflicting explicit/configured precision and unsupported temporal declarations fail clearly. Timezone-less
+DateTime values with Local/UTC Kind and values requiring fractional truncation are rejected consistently for
+parameters and literals. Oracle nanoseconds not exactly representable in a CLR value fail on reading.
+
+The connector 0.2.0 published revision accepts DateTime/DateTimeOffset/TimeSpan for MySQL/Oracle timestamp/TIME
+paths as applicable, but DateOnly/TimeOnly need converters. MySQL does not accept DbType.DateTimeOffset;
+Oracle does not accept DbType.Time. Oracle intervals require OceanBaseIntervalDayToSecond values plus the
+public IntervalDayToSecond parameter type. Provider code must not call internal codecs or change the driver.
+Oracle timestamp/zoned result wrappers require exact public conversions on both query and generated-output paths.
+
+Interval model-to-provider converters create a lossless intermediate value at the connector's maximum precision.
+The mapping validates its current declared precision and configures parameter metadata afterward; a converter
+must not capture a precision that becomes stale when the mapping is cloned. A precision clone updates its SQL
+store declaration and parameter Scale together, while preserving converters and reader hooks.
+
+Acceptance cases include all five CLR types in both modes, default/explicit precision, nulls and boundary values,
+UTC normalization/offset retention, negative and multi-day durations, sub-tick rejection, parameter/literal
+consistency, mapping clones/converters and sync/async EF materialization/writes. Server-specific calendar ranges,
+session behavior and actual wire round trips remain live gates; local parameter acceptance is not proof of server
+acceptance. Zone identity/BC dates/zero dates/LTZ and native nanosecond CLR types are outside this scalar profile.
+
 ## Oracle Boolean search conditions
 
 EF Core Relational 10.0.0 exposes the scoped `IRelationalParameterBasedSqlProcessorFactory` service. Its `Create`

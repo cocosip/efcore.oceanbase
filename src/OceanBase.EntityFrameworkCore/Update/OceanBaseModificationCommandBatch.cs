@@ -228,7 +228,7 @@ namespace OceanBase.EntityFrameworkCore.Update
                 var value = parameter.Value is DBNull ? null : parameter.Value;
                 if (value is not null && !targetType.IsInstanceOfType(value))
                 {
-                    value = OceanBaseNumericConversion.ConvertValue(value, targetType);
+                    value = OceanBaseTemporalConversions.ConvertValue(value, targetType);
                 }
 
                 column.Value = mapping.Converter is { } converter ? converter.ConvertFromProvider(value) : value;

@@ -52,20 +52,21 @@ so that an undocumented feature is not accidentally advertised.
 
 ## Current evidence and blockers
 
-Snapshot: 2026-11-10, `dev` scalar/Boolean checkpoint based on 3dfcdf8. Implementation, tests and this evidence
-record are developed together; the checkpoint commit identifies the tested source. This is not a release result.
+Snapshot: 2026-11-10, `dev` uncommitted temporal work based on 8b0151d, including the mapping clone regression fix.
+Implementation, tests and this evidence record are developed together; this is not a release result or a packed
+temporal checkpoint.
 
 `dotnet test OceanBase.EntityFrameworkCore.slnx --no-restore -m:1 -nr:false` produced:
 
-The same suite also passed with `-c Release` (145 tests per configuration).
+The same suite also passed with `-c Release` (195 tests per configuration).
 
 | Layer | Passed | Failed | Evidence boundary |
 | --- | --- | --- | --- |
-| Unit | 108 | 0 | Options, connection cleanup, mapping/reader/converter hooks, literals and Oracle Boolean SQL; temporal/explicit-type coverage incomplete. |
-| Command pipeline | 36 | 0 | Intercepted before network execution; scalar query/input conversion and exact Oracle generated-number readback; transactions disabled. |
+| Unit | 150 | 0 | Options, connection cleanup, scalar/temporal reader/converter hooks, precision/cloning, literals and Oracle Boolean SQL; full explicit-type/live coverage incomplete. |
+| Command pipeline | 44 | 0 | Intercepted before network execution; scalar/temporal query/input conversion and exact Oracle numeric/temporal generated-output readback; transactions disabled. |
 | Consumer | 1 | 0 | Project reference, not an isolated packed-package consumer. |
-| Packed consumer | Both modes | 0 | Revision 8664692; same baseline-compiled package executes with EF10.0.0 and EF10.0.14; no database execution. |
-| Later-patch Release suite | 145 | 0 | Source compiled/tested against EF10.0.14 in isolated artifacts; separate from baseline-package compatibility. |
+| Packed consumer | Both modes | 0 | Historical revision 8664692; same baseline-compiled package executes with EF10.0.0 and EF10.0.14; current temporal changes not yet packed. |
+| Later-patch Release suite | 195 | 0 | Temporal source compiled/tested against EF10.0.14 in isolated artifacts; separate from baseline-package compatibility. |
 | Live MySQL / Oracle | Not established | Not established | No live provider execution recorded for either mode. |
 | Relational specification | Not established | Not established | No specification test project yet. |
 
@@ -89,6 +90,17 @@ The previous connection-validation disposal failures are fixed and have sync/asy
 Closed supplied/provider-owned connection disposal and invalid replacement preservation are also tested locally.
 This does not establish opened-connection ownership or live transaction behavior.
 
+Temporal coverage adds 42 unit cases and eight intercepted sync/async query/write/generated-output cases.
+The [temporal contract](efcore-10-technical-baseline.md#temporal-mapping-contract) defines all five CLR types,
+precision, timezone and duration rules. Mapping-clone regressions cover changing precision without retaining a
+stale interval converter or SQL declaration. MAP-05/MAP-06/MAP-07 and UPD-02 remain open: live round trips, server
+ranges/session semantics and remaining explicit-type/converter/output cases are not established.
+
+The user will supply live database access later. Follow the
+[live-test credentials and ownership contract](../repository-guidelines.md#live-test-credentials-and-ownership):
+use .NET User Secrets for local connection strings and confirm the test-owned schema/cleanup scope before DDL.
+The live fixture and secret loading are still to be implemented; credentials are not needed for local tests.
+
 Other gaps include large Oracle string LOB query restrictions, remaining scalar/literal semantics and live mapping
 round trips, transactions, database creation and package validation. The [query/update design](efcore-10-query-update-design.md)
 records the current implementation and its limits.
@@ -100,6 +112,8 @@ Existing evidence references used below identify partial coverage, not automatic
 - **UT**: [TypeMappingTests](../../tests/OceanBase.EntityFrameworkCore.UnitTests/TypeMappingTests.cs).
 - **US**: [ScalarMappingTests](../../tests/OceanBase.EntityFrameworkCore.UnitTests/ScalarMappingTests.cs),
   28 passing integer range/reader, Boolean parameter/reader, Guid, literal and converter cases.
+- **UTM**: [TemporalMappingTests](../../tests/OceanBase.EntityFrameworkCore.UnitTests/TemporalMappingTests.cs),
+  42 passing temporal mapping, literal, precision/range, wrapper and clone cases.
 - **UQ**: [SqlGeneratorTests](../../tests/OceanBase.EntityFrameworkCore.UnitTests/SqlGeneratorTests.cs).
 - **FP**: [BasicRelationalTests](../../tests/OceanBase.EntityFrameworkCore.FunctionalTests/BasicRelationalTests.cs),
   intercepted execution only.
@@ -142,9 +156,9 @@ explicitly; silent truncation or lossy fallback is not acceptable.
 | MAP-02 | Decimal precision/scale and float/double round-trip; default decimal storage preserves documented fractional precision. | Required | In progress | In progress | UT decimal defaults/explicit types/parameter facets/bounds; live decimal and float/double coverage missing. |
 | MAP-03 | Unicode/non-Unicode, fixed/variable and bounded/unbounded text honor length and key/index constraints. | Required | In progress | In progress | UT facets/key sizes/LOB fallback; US escaped literals pass; live charset/index/LOB behavior missing. |
 | MAP-04 | Binary/Guid storage and byte order are explicit and round-trip through parameters, literals and generated values. | Required | In progress | In progress | US Guid parameter/literal conversion and FP materialization pass; binary boundaries/generated values/live round trips missing. |
-| MAP-05 | DateTime/DateTimeOffset/DateOnly/TimeOnly/TimeSpan have documented precision, timezone and range semantics. | Required | In progress | In progress | UT DateTime metadata only; temporal round trips missing. |
-| MAP-06 | Explicit store type, size, precision/scale, Unicode/fixed facets and null/DBNull parameter values are honored or rejected clearly. | Required | In progress | In progress | UT decimal/string explicit types and null/output facets; US scalar/converter parameters pass; remaining explicit types missing. |
-| MAP-07 | EF value converters, including ordinary enum-to-integer/string conversions, work in query/update paths. | Required | In progress | In progress | US integer converter hooks and FP enum-to-int/Guid/Boolean query/write cases pass; enum-to-string/custom converters/live cases missing. |
+| MAP-05 | DateTime/DateTimeOffset/DateOnly/TimeOnly/TimeSpan have documented precision, timezone and range semantics. | Required | In progress | In progress | UTM five-type mapping/reader/literal/precision/range/cloning and FP query/write/generated temporal outputs pass; live round trips/server/session semantics missing. |
+| MAP-06 | Explicit store type, size, precision/scale, Unicode/fixed facets and null/DBNull parameter values are honored or rejected clearly. | Required | In progress | In progress | UT decimal/string and UTM temporal declarations/conflicts/precision clones; US/FP scalar/temporal converter parameters pass; remaining explicit types/live cases missing. |
+| MAP-07 | EF value converters, including ordinary enum-to-integer/string conversions, work in query/update paths. | Required | In progress | In progress | US/UTM converter hooks and FP enum-to-int/Guid/Boolean/temporal query/write cases pass; enum-to-string/custom converters/live cases missing. |
 
 ### Next mapping acceptance cases
 
@@ -159,8 +173,9 @@ numeric/Guid design. Complete each case in both modes before closing its parent 
 | `MAP-03`, `MAP-06` | Empty/null text, quotes, backslashes, control and non-ASCII characters through parameters and literals; MySQL backslash-mode independence; Oracle national literals and empty-string behavior. |
 | `MAP-04` | Empty/null/bounded binary; Guid.Empty and a known UUID through parameters, literals and materialization; fixed string/RAW size and documented byte order. |
 | `MAP-06`, `MAP-07` | Explicit type/facets, mapping clones and converter composition preserve provider reader/parameter hooks; test real EF query and tracked-write paths. |
+| `MAP-05`, `MAP-06`, `MAP-07`, `UPD-02` | Follow the technical baseline's temporal contract: five CLR types per mode, fractional precision, timezone rules, signed/ranged durations, exact provider wrappers, nulls, literals, readers and generated outputs. |
 
-The focused US tests cover only part of this table. Decimal/float, temporal, model and live mapping requirements
+The focused US/UTM tests cover only part of this table. Decimal/float, temporal, model and live mapping requirements
 remain open in MAP-02/MAP-05 and the other parent rows; this table must not replace the full inventory.
 
 ## Queries and materialization
@@ -190,7 +205,7 @@ duplicates and mode-specific string semantics.
 | ID | Requirement and acceptance criteria | Priority | MySQL | Oracle | Existing evidence / gap |
 | --- | --- | --- | --- | --- | --- |
 | UPD-01 | Sync/async INSERT binds values, supports explicit keys/default-only inserts and propagates generated keys. | Required | In progress | In progress | FP generated/default-only inserts; server identity generation unverified. |
-| UPD-02 | Generated/default/computed readback uses same connection; MySQL LAST_INSERT_ID/Oracle RETURNING handle null/converted outputs. | Required | In progress | In progress | FP synthetic exact/overflow/fractional numeric and converted Boolean outputs; null/multiple-output and live defaults/computed/transaction cases missing. |
+| UPD-02 | Generated/default/computed readback uses same connection; MySQL LAST_INSERT_ID/Oracle RETURNING handle null/converted outputs. | Required | In progress | In progress | FP synthetic exact/overflow/fractional numeric, converted Boolean and Oracle timestamp/zoned outputs; null/multiple-output and live defaults/computed/transaction cases missing. |
 | UPD-03 | UPDATE/DELETE bind original keys/tokens, including composite keys and nullable concurrency tokens. | Required | In progress | In progress | FP simple int key/token only. |
 | UPD-04 | Stale update/delete throws DbUpdateConcurrencyException with entries; unchanged matched rows succeed in MySQL. | Required | In progress | In progress | FP zero-row update and UO affected-row option rejection; live matched-row/conflict tests missing. |
 | UPD-05 | Multi-entity saves respect dependency order and propagate parent/child keys; unsupported readback shapes reject before DML. | Required | Planned | Planned | Missing graph/unsupported-shape tests. |
@@ -218,10 +233,10 @@ commit/transaction behavior per mode.
 | --- | --- | --- | --- | --- | --- |
 | PKG-01 | Build net10.0 assets against published OceanBaseConnector 0.2.0 with warnings as errors. | Required | Done | Done | Current solution test command builds assets; not a package-content assertion. |
 | PKG-02 | Packed nuspec uses OceanBase.EntityFrameworkCore and EF ranges [10.0.0,11.0.0). | Required | In progress | In progress | Checkpoint nuspec/asset assertions passed; repeatable release package-content gate still needed. |
-| PKG-03 | Isolated packed consumer restores/executes provider API without project/local connector references. | Required | Done | Done | PC Main passes Guid model/Boolean SQL/paging; default consumer has only provider reference, upgrade consumer explicitly requests EF patches. |
-| PKG-04 | Minimum EF10 and selected later available EF10 patch restore/build/test without pinning consumer patch; EF11 cannot satisfy dependencies. | Required | Done | Done | PC same baseline-compiled nupkg runs EF10.0.0/10.0.14; full source Release suite145 passes at10.0.14; inspected nuspec/NuGet parser rejects11.0.0; commands/results in linked package matrix. |
+| PKG-03 | Isolated packed consumer restores/executes provider API without project/local connector references. | Required | In progress | In progress | Historical 8664692 PC passes Guid model/Boolean SQL/paging; repeat with the temporal revision's package. |
+| PKG-04 | Minimum EF10 and selected later available EF10 patch restore/build/test without pinning consumer patch; EF11 cannot satisfy dependencies. | Required | In progress | In progress | Current source Release suite195 passes at10.0.14; historical 8664692 package passes EF10.0.0/10.0.14 and range parser rejects11.0.0; current package matrix pending. |
 | TST-01 | Selected EF relational specification classes pass; exclusions map to checklist IDs and limitations. | Required | Planned | Planned | Specification project/selection absent. |
-| TST-02 | Live core query/write/transaction/schema/scalar suites pass in at least one declared supported environment per mode. | Required | Planned | Planned | No live provider execution recorded. |
+| TST-02 | Live core query/write/transaction/schema/scalar suites pass in at least one declared supported environment per mode. | Required | Planned | Planned | User will supply access later; User Secrets fixture and authorized schema/cleanup scope required; no live provider execution recorded. |
 | REL-01 | Support notes record server/connector/runtime/EF versions, tenant mode, direct/proxy endpoint, transport/options without credentials. | Required | Planned | Planned | Release evidence record missing. |
 | REL-02 | Validated dev checkpoint merges to efcore/10.0; packaging/release checks run on release revision. | Required | In progress | In progress | 8664692 synchronized and locally packed on efcore/10.0; complete release gates remain open. |
 
