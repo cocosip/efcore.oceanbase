@@ -52,7 +52,7 @@ and test it or list it under `Deferred`.
 | Area | Requirement | Priority | Evidence | Status |
 | --- | --- | --- | --- | --- |
 | Connection | Create `OceanBaseConnection` through the public OceanBaseConnector API | Required | Relational connection unit test | Done |
-| Connection | Map provider mode to connector `ExpectedMode` and reject conflicting settings | Required | Connection-string tests for MySQL and Oracle | Planned |
+| Connection | Map provider mode to connector `ExpectedMode` and reject conflicting settings | Required | Connection-string tests for MySQL and Oracle | Done |
 | Connection | Respect caller-owned connections and dispose only provider-owned connections | Required | Ownership and disposal tests | Planned |
 | Execution | Create connector commands and parameters without protocol code in the provider | Required | Command/parameter integration tests | Planned |
 | Execution | Sync and async open, execute, read and close paths use the same mode contract | Required | Functional tests for sync and async paths | Planned |
@@ -66,9 +66,9 @@ and test it or list it under `Deferred`.
 | --- | --- | --- | --- | --- |
 | Model | Entity types, keys, properties, relationships, indexes and owned navigations build normally | Required | Model-building tests | Planned |
 | Model | Value generation metadata is preserved for generated keys | Required | Model and insert tests | Planned |
-| Scalar mapping | Boolean, signed/unsigned integer, floating-point, decimal and `Guid` mappings | Required | Mapping metadata and parameter tests in both modes | Planned |
-| Scalar mapping | Unicode/non-Unicode text, fixed text and binary mappings | Required | Mapping metadata and parameter tests in both modes | Planned |
-| Scalar mapping | `DateTime`, `DateTimeOffset`, `DateOnly`, `TimeOnly` and `TimeSpan` mappings | Required | Mapping metadata and round-trip tests | Planned |
+| Scalar mapping | Boolean, signed/unsigned integer, floating-point, decimal and `Guid` mappings | Required | Mapping metadata and parameter tests in both modes | In progress |
+| Scalar mapping | Unicode/non-Unicode text, fixed text and binary mappings | Required | Mapping metadata and parameter tests in both modes | In progress |
+| Scalar mapping | `DateTime`, `DateTimeOffset`, `DateOnly`, `TimeOnly` and `TimeSpan` mappings | Required | Mapping metadata and round-trip tests | In progress |
 | Scalar mapping | Null values, size, precision, scale and parameter direction are preserved | Required | Parameter creation tests | Planned |
 | Specialized mapping | Enums, spatial, JSON, XML, arrays, LOB locators, OBJECT and REF CURSOR values | Deferred | Design note required before implementation | Deferred |
 
@@ -76,7 +76,7 @@ and test it or list it under `Deferred`.
 
 | Area | Requirement | Priority | Evidence | Status |
 | --- | --- | --- | --- | --- |
-| SQL helper | Quote identifiers according to MySQL backtick and Oracle double-quote rules | Required | Helper tests for reserved and embedded identifiers | Done |
+| SQL helper | Quote identifiers according to MySQL backtick and Oracle double-quote rules | Required | Helper tests for reserved and embedded identifiers | In progress |
 | SQL helper | Generate mode-appropriate parameter names and placeholders | Required | Helper tests for both modes | Done |
 | Query | SELECT, projection, scalar predicates, null checks and parameterization | Required | SQL generator and functional tests | Planned |
 | Query | Ordering, joins, grouping and aggregates | Required | SQL generator and functional tests | Planned |
