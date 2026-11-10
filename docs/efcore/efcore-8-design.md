@@ -7,7 +7,7 @@ Oracle tenant compatibility modes through the existing OceanBaseConnector ADO.NE
 
 ## Package and runtime
 
-- Branch: efcore-8 (created from dev after the design baseline is accepted).
+- Branch: 8.0 (forked from a stable 10.0 release commit).
 - Package: OceanBase.EntityFrameworkCore 8.x.
 - EF dependency: Microsoft.EntityFrameworkCore and Microsoft.EntityFrameworkCore.Relational in the 8.x range.
 - Initial provider asset: net8.0.
@@ -21,7 +21,7 @@ explicit OceanBaseCompatibilityMode value. The mode is included in the EF option
 
 ## First feature profile
 
-The first implementation must cover the normal relational path:
+The compatibility implementation must cover the normal relational path:
 
 - provider registration and IsOceanBase detection;
 - model building for tables, columns, keys, indexes and relationships;
@@ -51,7 +51,6 @@ Oracle modes. A shared implementation is allowed only when the generated SQL and
 
 ## Verification gates
 
-Before publishing 8.x, run provider unit tests, EF relational tests, packed-package consumer tests and every
-selected EF relational specification test class, then the packed-package consumer tests and every available
-MySQL/Oracle live test. The report must separate local results from unavailable server, proxy, TLS,
-authentication and platform evidence.
+Before publishing 8.x, run provider unit tests, EF relational tests, selected EF relational specification test
+classes, packed-package consumer tests and every available MySQL/Oracle live test. The report must separate local
+results from unavailable server, proxy, TLS, authentication and platform evidence.

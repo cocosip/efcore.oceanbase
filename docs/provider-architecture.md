@@ -30,22 +30,34 @@ This prevents a model built for MySQL quoting, type mappings or key generation f
 connection. Automatic server detection may be added later only if the mode is still included in the model cache
 key and every mode-dependent service is safe to resolve at runtime.
 
-## Version isolation
+## Version isolation and branch flow
 
 EF Core provider services use APIs that can change between major releases. The source is therefore maintained in
-long-lived EF Core branches:
+an EF10 mainline and independent compatibility branches:
 
-    dev       -> current integration work
-    efcore-8  -> EF Core 8 provider and 8.x package line
-    efcore-9  -> EF Core 9 provider and 9.x package line
-    efcore-10 -> EF Core 10 provider and 10.x package line
+    dev       -> active EF10 integration work
+    10.0      -> mirrors dev; packaging and release branch for 10.x
+                    \
+                     +-> 8.0  -> EF Core 8 compatibility line
+                     +-> 9.0  -> EF Core 9 compatibility line
+
+The version-line names 8.0, 9.0 and 10.0 follow the convention used by Npgsql. Patch releases use tags and,
+when needed, short-lived hotfix branches such as hotfix/10.0.1.
+
+The normal release flow is:
+
+1. Develop and test on dev.
+2. Merge dev into 10.0 after the shared EF10 test gates pass.
+3. Pack and publish the 10.x package from 10.0.
+4. Fork 8.0 and 9.0 from a stable 10.0 release commit when compatibility work is needed.
+5. Adapt each compatibility branch independently and publish only its matching package line.
 
 The package ID stays OceanBase.EntityFrameworkCore. The package major version and dependency range identify the
-EF Core major. A .NET 9 application can reference the 8.x package and EF Core 8 net8 assets; application TFM and
-EF Core major are intentionally independent.
+EF Core major. Application TFM and EF Core major are intentionally independent.
 
-Shared code is kept in a small project or shared source directory and is backported deliberately. A provider
-branch must remain buildable and testable without compiling another EF Core branch.
+Shared code is kept in a small project or shared source directory. Fixes are backported deliberately with
+cherry-picks or focused merges; a compatibility branch must remain buildable and testable without compiling
+another EF Core branch.
 
 ## Provider layers
 
@@ -65,11 +77,12 @@ appropriate only when the generated SQL and EF contract are demonstrably identic
 ## Release process
 
 1. Read the official EF Core documentation and breaking-change notes for the target major.
-2. Create or update the target branch from the shared baseline.
-3. Port the provider service registrations and compile against the exact EF Core dependency range.
+2. Develop the current implementation on dev.
+3. Merge dev into 10.0 and compile against the exact EF Core 10 dependency range.
 4. Run provider, relational, package-consumer and available live tests for both modes.
-5. Publish OceanBase.EntityFrameworkCore with the matching major version.
-6. Record unverified server, proxy, TLS and runtime boundaries in the branch documentation.
+5. Pack and publish OceanBase.EntityFrameworkCore 10.x from 10.0.
+6. When required, fork 8.0 or 9.0 from that release commit and port the version-local APIs.
+7. Record unverified server, proxy, TLS and runtime boundaries in the branch documentation.
 
-When EF Core 11 is released, create efcore-11, port only the version-local layer, reuse the shared code after
-review, and publish the 11.x package line. Existing 8.x-10.x branches remain independently buildable.
+When EF Core 11 is released, create 11.0, port only the version-local layer, reuse the shared code after review,
+and publish the 11.x package line. Existing 8.0-10.0 branches remain independently buildable.

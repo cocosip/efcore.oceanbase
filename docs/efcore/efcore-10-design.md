@@ -21,7 +21,7 @@ seeding or migration behavior require individual design notes and tests before b
 
 ## Package and runtime
 
-- Branch: efcore-10.
+- Branch: 10.0, kept in sync with dev for packaging and release.
 - Package: OceanBase.EntityFrameworkCore 10.x.
 - EF dependency: the 10.x range only.
 - Initial asset: the runtime target required by EF Core 10.
@@ -36,6 +36,7 @@ implemented in both OceanBase modes and covered by provider tests.
 
 ## Verification gates
 
-Release requires the shared behavioral suite, EF10-specific provider tests, selected EF relational specification
-tests, packed-package consumer tests and the available MySQL/Oracle live matrix. Unsupported server features and
-missing infrastructure remain recorded as verification limits rather than inferred support.
+Release requires dev to be merged into 10.0, followed by the shared behavioral suite, EF10-specific provider
+tests, selected EF relational specification tests, packed-package consumer tests and the available MySQL/Oracle
+live matrix. Unsupported server features and missing infrastructure remain recorded as verification limits rather
+than inferred support.

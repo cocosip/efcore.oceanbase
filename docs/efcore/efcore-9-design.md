@@ -9,9 +9,9 @@ MySQL/Oracle behavior unless EF Core 9 requires a deliberate compatibility chang
 
 1. Read the EF Core 9 what's-new and breaking-change documents listed in official-references.md.
 2. Compile the provider against the exact EF Core 9 dependency range before changing shared code.
-3. Compare every provider service registration and internal API use with the EF Core 8 branch.
-4. Keep EF9-only adapters in the efcore-9 branch. Backport only changes that are EF-independent and tested on the
-   EF8 branch.
+3. Compare every provider service registration and internal API use with the 8.0 branch.
+4. Keep EF9-only adapters in the 9.0 branch. Backport only changes that are EF-independent and tested on the
+   8.0 branch.
 5. Run the same MySQL and Oracle feature profile as EF8 before adding EF9-specific features.
 
 ## Expected implementation boundary
@@ -23,7 +23,7 @@ not inherited automatically from the EF Core release notes.
 
 ## Package and runtime
 
-- Branch: efcore-9.
+- Branch: 9.0 (forked from a stable 10.0 release commit).
 - Package: OceanBase.EntityFrameworkCore 9.x.
 - EF dependency: the 9.x range only.
 - Initial asset: net8.0 if the EF9 support matrix permits it.
@@ -38,6 +38,6 @@ SQL Server-specific features are deferred unless a separate design proves that t
 
 ## Verification gates
 
-The EF9 branch is releasable only when the EF8 behavioral suite passes against the EF9 provider, mode-specific SQL
-tests pass for MySQL and Oracle, selected EF relational specification tests pass, and package-consumer tests prove
-that the 9.x package does not resolve EF8 or EF10 provider dependencies.
+The EF9 branch is releasable only when the shared behavioral suite passes against the EF9 provider, mode-specific
+SQL tests pass for MySQL and Oracle, selected EF relational specification tests pass, and package-consumer tests
+prove that the 9.x package does not resolve EF8 or EF10 provider dependencies.
