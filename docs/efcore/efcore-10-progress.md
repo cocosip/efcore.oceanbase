@@ -11,6 +11,23 @@ each small group. Real database integration/tests and EF8/EF9 adaptation are exp
 [local development plan](efcore-10-local-development-plan.md) tracks the full remaining inventory, including
 an audit of locally feasible deferred families. Finishing one batch does not finish the overall goal.
 
+### Integer division/remainder checkpoint
+
+Integer CLR division now renders MySQL DIV or Oracle one-argument TRUNC; Oracle remainder uses MOD and MySQL
+retains `%`. Classification uses the translated CLR type, including promotions and nullable values, rather than
+the NUMBER declaration. Decimal/Single/Double and fractional casts retain `/`; grouping and existing mappings
+are unchanged. Value-preserving numeric conversion and negative/nullable/captured operands are covered.
+
+Focused tests pass 12 unit and four intercepted cases after RED. Debug/Release and isolated EF10.0.14 Release
+each pass **801 tests** (623 unit, 176 intercepted pipeline, two consumers). Independent review passed. The same
+baseline-built `10.0.0-checkpoint.arithmetic-20261110` package passes both modes on EF10.0.0/10.0.14; the previous
+concat package fails the new arithmetic smoke. Package identity/assets/README/ranges and package-only graph pass.
+
+Latest package: `artifacts/checkpoint-arithmetic-20261110/OceanBase.EntityFrameworkCore.10.0.0-checkpoint.arithmetic-20261110.nupkg`.
+Evidence: `artifacts/local-development/batch3b/`. Synthetic reads prove client generation/binding/reading, not
+server arithmetic/predicate membership, zero-divisor or overflow behavior. Next local work is unary string
+functions/character length and wider query support. The overall goal remains active; no live test/publication.
+
 ### String concatenation and Oracle query-null checkpoint
 
 String addition and fixed Concat overloads now use MySQL CONCAT and Oracle grouped `||`; numeric addition is
@@ -26,7 +43,7 @@ Focused tests pass 33. Debug/Release and isolated EF10.0.14 Release each pass **
 changing Oracle fallback parameters. The previous numeric package fails the new syntax check. The repeatable
 package-content gate and package-only dependency graph pass. These checks do not execute OceanBase functions.
 
-Latest package: `artifacts/checkpoint-concat-20261110/OceanBase.EntityFrameworkCore.10.0.0-checkpoint.concat-20261110.nupkg`.
+Historical concat package: `artifacts/checkpoint-concat-20261110/OceanBase.EntityFrameworkCore.10.0.0-checkpoint.concat-20261110.nupkg`.
 Evidence: `artifacts/local-development/batch3a/`. Next local query work includes integer division/remainder,
 string search/member functions and the wider checklist. The provider remains incomplete.
 

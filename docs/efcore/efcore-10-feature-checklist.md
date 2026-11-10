@@ -55,20 +55,20 @@ so that an undocumented feature is not accidentally advertised.
 Development resumed at the user's request (2026-11-10) on efcore/10.0. See the
 [progress handoff](efcore-10-progress.md) for saved state, remaining work and the exact resume point.
 
-Snapshot: 2026-11-10, `efcore/10.0` string concatenation batch following 5feef06.
+Snapshot: 2026-11-10, `efcore/10.0` integer division/remainder batch following 34cf2fd.
 The same baseline-built package passes both tested EF patches. This is not a release result.
 
 `dotnet test OceanBase.EntityFrameworkCore.slnx --no-restore -m:1 -nr:false` produced:
 
-The expanded suite passed in Debug and Release (785 tests per configuration).
+The expanded suite passed in Debug and Release (801 tests per configuration).
 
 | Layer | Passed | Failed | Evidence boundary |
 | --- | --- | --- | --- |
-| Unit | 611 | 0 | Prior scalar/configuration coverage plus native concat, Oracle empty/null/converter/cache processing and negative translation cases; live coverage incomplete. |
-| Command pipeline | 172 | 0 | Intercepted scalar and string/null queries, materialization, converted writes/original predicates and generated values; transactions disabled. |
+| Unit | 623 | 0 | Prior scalar/configuration/string coverage plus integer division/remainder, promotions, nullable/grouping and fractional controls; live coverage incomplete. |
+| Command pipeline | 176 | 0 | Intercepted scalar/string/arithmetic queries, materialization, converted writes/original predicates and generated values; transactions disabled. |
 | Consumer | 2 | 0 | Both-mode provider detection through a project reference, not an isolated packed-package consumer. |
-| Packed consumer | Both modes | 0 | Same concat-20261110 package passes EF10.0.0/10.0.14, including native concat and changing Oracle fallback parameters plus prior scalar checks; README included; no live execution. |
-| Later-patch Release suite | 785 | 0 | Current source compiled/tested against EF10.0.14 in isolated artifacts. |
+| Packed consumer | Both modes | 0 | Same arithmetic-20261110 package passes EF10.0.0/10.0.14, including integer/fractional division and remainder plus prior string/scalar checks; README included; no live execution. |
+| Later-patch Release suite | 801 | 0 | Current source compiled/tested against EF10.0.14 in isolated artifacts. |
 | Live MySQL / Oracle | Not established | Not established | No live provider execution recorded for either mode. |
 | Relational specification | Not established | Not established | No specification test project yet. |
 
@@ -188,7 +188,7 @@ Existing evidence references used below identify partial coverage, not automatic
   project reference only.
 - **PC**: [Standalone package consumer](../../tests/OceanBase.EntityFrameworkCore.PackageConsumer/Program.cs),
   registration/native floating/explicit Guid/temporal/binary/integer and Boolean model/SQL/paging checks against the
-   latest concat-20261110 local prerelease package, including concat/null-cache checks, integer reader, Oracle aliases and temporal clones;
+   latest arithmetic-20261110 local prerelease package, including integer/fractional division, concat/null-cache checks and prior scalar checks;
   [commands and evidence](efcore-10-query-update-design.md#package-checkpoint-validation).
 
 `Missing` means tests and evidence still need to be added.
@@ -257,7 +257,7 @@ duplicates and mode-specific string semantics.
 | --- | --- | --- | --- | --- | --- |
 | SQL-01 | Escape identifiers, schema qualification and embedded delimiters; Oracle table aliases omit AS and table-free SELECT uses DUAL. | Required | In progress | In progress | UH now covers embedded delimiters, schema/Unicode/empty-name escaping and all builder overloads; UQ aliases pass; table-free/live SQL evidence still incomplete. |
 | SQL-02 | Parameter names/placeholders follow each dialect. | Required | Done | Done | UH Generates_mode_specific_identifiers_and_parameters. |
-| QRY-01 | SELECT/projection, arithmetic/comparison/Boolean predicates and null semantics bind values and materialize nullable/non-null results. | Required | In progress | In progress | UQ Oracle Boolean predicates/CASE/EXISTS/LIKE/nullable NOT and FP scalar conversions pass; FP integer arithmetic/CASE/large comparand and binary comparison regressions pass; full null/operator/live results missing. |
+| QRY-01 | SELECT/projection, arithmetic/comparison/Boolean predicates and null semantics bind values and materialize nullable/non-null results. | Required | In progress | In progress | UQ/FP cover Boolean/string/scalar handling; ArithmeticQueryTests add native integer division/remainder, promotions, nullable/grouping/fractional controls and four intercepted cases. Bitwise/wider operators and live results remain open. |
 | QRY-02 | OrderBy/ThenBy, Distinct, Skip/Take and offset-only queries return correct results, including deterministic paging/empty pages. | Required | In progress | In progress | UQ SQL shape only; live ordering/string/paging missing. |
 | QRY-03 | Inner/left joins, correlated subqueries, Any/All and scalar/collection Contains have verified results or explicit exclusions. | Required | In progress | In progress | UQ simple join only; collection/null/empty cases missing. |
 | QRY-04 | GroupBy aggregates, Count/LongCount, Sum/Average/Min/Max handle empty and nullable inputs correctly. | Required | In progress | In progress | UQ grouped Count shape only. |
@@ -301,9 +301,9 @@ commit/transaction behavior per mode.
 | ID | Requirement and acceptance criteria | Priority | MySQL | Oracle | Existing evidence / gap |
 | --- | --- | --- | --- | --- | --- |
 | PKG-01 | Build net10.0 assets against published OceanBaseConnector 0.2.0 with warnings as errors. | Required | Done | Done | Current solution test command builds assets; not a package-content assertion. |
-| PKG-02 | Packed nuspec uses OceanBase.EntityFrameworkCore and EF ranges [10.0.0,11.0.0). | Required | Done | Done | PackageConsumer/Verify-Package.ps1 passes the concat nupkg identity/net10.0/README/range checks; prior wrong-version, missing-README and exact-patch probes reject as expected. Rerun on every release pack; runtime/live gates are separate. |
-| PKG-03 | Isolated packed consumer restores/executes provider API without project/local connector references. | Required | Done | Done | PC concat-20261110 passes both modes on both selected patches, including native concat, Oracle fallback cache behavior and prior scalar checks; README included; rerun after provider changes. |
-| PKG-04 | Minimum EF10 and selected later available EF10 patch restore/build/test without pinning consumer patch; EF11 cannot satisfy dependencies. | Required | Done | Done | Source Release suite 785 passes at 10.0.14; same baseline-built concat package passes EF10.0.0/10.0.14; nuspec ranges rechecked, prior range parser rejects 11.0.0; rerun after changes. |
+| PKG-02 | Packed nuspec uses OceanBase.EntityFrameworkCore and EF ranges [10.0.0,11.0.0). | Required | Done | Done | PackageConsumer/Verify-Package.ps1 passes the arithmetic nupkg identity/net10.0/README/range checks; prior wrong-version, missing-README and exact-patch probes reject as expected. Rerun on every release pack; runtime/live gates are separate. |
+| PKG-03 | Isolated packed consumer restores/executes provider API without project/local connector references. | Required | Done | Done | PC arithmetic-20261110 passes both modes on both selected patches, including integer/fractional division, remainder and prior string/scalar checks; README included; rerun after provider changes. |
+| PKG-04 | Minimum EF10 and selected later available EF10 patch restore/build/test without pinning consumer patch; EF11 cannot satisfy dependencies. | Required | Done | Done | Source Release suite 801 passes at 10.0.14; same baseline-built arithmetic package passes EF10.0.0/10.0.14; nuspec ranges rechecked, prior range parser rejects 11.0.0; rerun after changes. |
 | TST-01 | Selected EF relational specification classes pass; exclusions map to checklist IDs and limitations. | Required | Planned | Planned | Specification project/selection absent. |
 | TST-02 | Live core query/write/transaction/schema/scalar suites pass in at least one declared supported environment per mode. | Required | Planned | Planned | User will supply access later; User Secrets fixture and authorized schema/cleanup scope required; no live provider execution recorded. |
 | REL-01 | Support notes record server/connector/runtime/EF versions, tenant mode, direct/proxy endpoint, transport/options without credentials. | Required | Planned | Planned | Release evidence record missing. |

@@ -88,9 +88,29 @@ matrix work. Local tests cover constants/parameters/nullable columns, nesting, p
 opposite-mode contexts and sync/async intercepted commands; server collation, lengths, LOBs and result semantics
 still require the postponed live phase.
 
+## Planned unary string function contract
+
+The next QRY-06 function slice will add exact parameterless `ToLower()`, `ToUpper()`, `Trim()`, `TrimStart()`
+and `TrimEnd()` translations, plus the exact `string.Length` member. Use LOWER/UPPER and TRIM/LTRIM/RTRIM in
+both modes; character length uses MySQL CHAR_LENGTH and Oracle LENGTH. The pinned official per-function pages
+and EF10 translator-extension contracts are audited in `artifacts/local-development/query-functions-design.md`.
+
+These operations use database casing, SQL blank-space trimming and database-character counts. They do not
+promise CLR CurrentCulture/invariant casing, the CLR Unicode-whitespace trim set or UTF-16 code-unit length.
+Supplementary characters, NLS/collation, padding and LOB behavior require the postponed live acceptance phase.
+Oracle empty results collapse to NULL, including an all-space trim of a non-null string. Use conservative
+nullable metadata without argument-null propagation, so EF cannot incorrectly replace a function result null
+test with its input's null test. Preserve native empty/null handling around concat, CASE and COALESCE.
+
+Match exact MethodInfo/MemberInfo, retain EF plugins and model DbFunction precedence through the standard
+method/member translator providers, and keep mode/cache isolation. Invariant/culture overloads, trim-char/array,
+search and substring are outside this slice and need negative predicate tests. Top-level client projection
+rules remain unchanged. Custom value converters do not establish arbitrary CLR method equivalence; preserve
+ordinary mapping/parameter behavior and test connected converter cases rather than stripping conversions.
+
 ## Arithmetic division and remainder local contract
 
-The planned QRY-01 arithmetic slice will render integer division using MySQL `DIV` and Oracle one-argument
+The QRY-01 arithmetic slice renders integer division using MySQL `DIV` and Oracle one-argument
 `TRUNC(left / right)`, preserving truncation toward zero. Oracle remainder uses `MOD(left, right)`;
 MySQL retains `%`. Decimal, Single and Double division retains `/`. Integer classification follows the
 translated expression's CLR numeric type, including nullable types and integral promotions, rather than
@@ -215,7 +235,18 @@ restore, execute provider queries or establish server/runtime compatibility. The
 wrong expected version, the old README-less alias package and the exact-patch README probe fail at their intended
 checks. These runs were on Windows; Linux execution remains unverified. Change the path/version for each new pack.
 
-### Current string concatenation checkpoint (2026-11-10)
+### Current arithmetic checkpoint (2026-11-10)
+
+Debug/Release and isolated EF10.0.14 Release each pass 801 tests (623 unit, 176 intercepted pipeline, two project
+consumers). Independent spec/quality review passed. The same baseline-built
+`10.0.0-checkpoint.arithmetic-20261110` nupkg passes both modes at EF10.0.0/10.0.14, including native integer
+division/remainder and preserved decimal division. The previous concat package fails the new arithmetic check.
+The repeatable package-content gate and package-only graph checks pass. No server arithmetic was executed.
+
+Repeat the commands below with `10.0.0-checkpoint.arithmetic-20261110` and `artifacts/checkpoint-arithmetic-20261110`.
+Evidence: `artifacts/local-development/batch3b/`. See the arithmetic contract for overflow/zero-divisor/live limits.
+
+### Historical string concatenation checkpoint (2026-11-10)
 
 Debug/Release and isolated EF10.0.14 Release each pass 785 tests (611 unit, 172 intercepted pipeline, two project
 consumers). Independent review passed. The same baseline-built `10.0.0-checkpoint.concat-20261110` package passes

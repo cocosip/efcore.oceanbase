@@ -1,3 +1,4 @@
+using System;
 using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore.Query;
 using Microsoft.EntityFrameworkCore.Query.SqlExpressions;
@@ -28,8 +29,39 @@ namespace OceanBase.EntityFrameworkCore.Query
                 return sqlBinaryExpression;
             }
 
+            if (_mode == OceanBaseCompatibilityMode.Oracle)
+            {
+                if (IsIntegerDivision(sqlBinaryExpression))
+                {
+                    Sql.Append("TRUNC(");
+                    base.VisitSqlBinary(sqlBinaryExpression);
+                    Sql.Append(")");
+                    return sqlBinaryExpression;
+                }
+
+                if (sqlBinaryExpression.OperatorType == ExpressionType.Modulo)
+                {
+                    Sql.Append("MOD(");
+                    Visit(sqlBinaryExpression.Left);
+                    Sql.Append(", ");
+                    Visit(sqlBinaryExpression.Right);
+                    Sql.Append(")");
+                    return sqlBinaryExpression;
+                }
+            }
+
             return base.VisitSqlBinary(sqlBinaryExpression);
         }
+
+        protected override string GetOperator(SqlBinaryExpression binaryExpression)
+            => _mode == OceanBaseCompatibilityMode.MySql && IsIntegerDivision(binaryExpression)
+                ? " DIV " : base.GetOperator(binaryExpression);
+
+        private static bool IsIntegerDivision(SqlBinaryExpression expression)
+            => expression.OperatorType == ExpressionType.Divide
+                && Type.GetTypeCode(Nullable.GetUnderlyingType(expression.Type) ?? expression.Type)
+                    is TypeCode.SByte or TypeCode.Byte or TypeCode.Int16 or TypeCode.UInt16
+                        or TypeCode.Int32 or TypeCode.UInt32 or TypeCode.Int64 or TypeCode.UInt64;
 
         protected override Expression VisitSqlFunction(SqlFunctionExpression sqlFunctionExpression)
         {

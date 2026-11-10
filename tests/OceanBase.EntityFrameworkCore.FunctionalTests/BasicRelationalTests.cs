@@ -16,6 +16,57 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
     public sealed class BasicRelationalTests
     {
         [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true)]
+        public async Task Arithmetic_commands_bind_divisors_and_materialize_synthetic_numeric_results(
+            OceanBaseCompatibilityMode mode, bool async)
+        {
+            var oracle = mode == OceanBaseCompatibilityMode.Oracle;
+            using var table = new DataTable();
+            table.Columns.Add("Quotient", oracle ? typeof(decimal) : typeof(int));
+            table.Columns.Add("Remainder", oracle ? typeof(decimal) : typeof(int));
+            table.Columns.Add("Optional", oracle ? typeof(decimal) : typeof(int));
+            table.Columns.Add("Converted", oracle ? typeof(decimal) : typeof(long));
+            table.Columns.Add("Fraction", typeof(decimal));
+            // Synthetic values exercise the reader only, not server arithmetic or predicate membership.
+            table.Rows.Add(-2, -1, DBNull.Value, -2L, -2.5m);
+            table.Rows.Add(2, 1, 2, 2L, 2.5m);
+            var commands = new CommandCapture { Results = table };
+            await using var context = CreateContext(mode, commands);
+            var divisor = 3;
+            var query = context.Set<ArithmeticRow>().Where(row => row.Value / divisor != 0)
+                .Select(row => new { Quotient = row.Value / divisor, Remainder = row.Value % divisor,
+                    Optional = row.Optional / divisor, Converted = row.Converted / divisor,
+                    Fraction = row.Fraction / divisor });
+            foreach (var value in new[] { 3, -4 })
+            {
+                divisor = value;
+                commands.Values.Clear();
+                var results = async ? await query.ToListAsync() : query.ToList();
+                Assert.Equal(2, results.Count);
+                Assert.Equal(-2, results[0].Quotient);
+                Assert.Equal(-1, results[0].Remainder);
+                Assert.Null(results[0].Optional);
+                Assert.Equal(-2, results[0].Converted);
+                Assert.Equal(-2.5m, results[0].Fraction);
+                Assert.Equal(2, results[1].Quotient);
+                Assert.Equal(1, results[1].Remainder);
+                Assert.Equal(2, results[1].Optional);
+                Assert.Equal(2, results[1].Converted);
+                Assert.Equal(2.5m, results[1].Fraction);
+                Assert.NotEmpty(commands.Values);
+                Assert.All(commands.Values, parameter => Assert.Equal((decimal)value, Convert.ToDecimal(parameter)));
+                var sql = commands.Sql[^1];
+                Assert.Contains(oracle ? "TRUNC(" : " DIV ", sql);
+                Assert.Contains(oracle ? "MOD(" : " % ", sql);
+                Assert.Contains(" / ", sql);
+                Assert.Contains("WHERE", sql);
+            }
+        }
+
+        [Theory]
         [InlineData(OceanBaseCompatibilityMode.MySql, false, false)]
         [InlineData(OceanBaseCompatibilityMode.MySql, true, false)]
         [InlineData(OceanBaseCompatibilityMode.MySql, false, true)]
@@ -1098,6 +1149,7 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
             protected override void OnModelCreating(ModelBuilder modelBuilder)
             {
                 var oracle = mode == OceanBaseCompatibilityMode.Oracle;
+                modelBuilder.Entity<ArithmeticRow>().Property(row => row.Converted).HasConversion<long>();
                 modelBuilder.Entity<Customer>().ToTable("Customers");
                 modelBuilder.Entity<Customer>().Property(customer => customer.Version).IsConcurrencyToken();
                 modelBuilder.Entity<KeyOnly>().ToTable("Keys");
@@ -1175,6 +1227,15 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
         }
 
         private enum RowState { Inactive = 0, Active = 2 }
+
+        private sealed class ArithmeticRow
+        {
+            public int Id { get; set; }
+            public int Value { get; set; }
+            public int? Optional { get; set; }
+            public int Converted { get; set; }
+            public decimal Fraction { get; set; }
+        }
 
         private sealed class ShortTextRow
         {
@@ -1395,6 +1456,7 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
                 DbCommand command, CommandEventData eventData, InterceptionResult<DbDataReader> result)
             {
                 Sql.Add(command.CommandText);
+                Values.AddRange(command.Parameters.Cast<DbParameter>().Select(parameter => parameter.Value));
                 DecimalInputs.AddRange(command.Parameters.Cast<OceanBaseParameter>()
                     .Where(parameter => parameter.DbType == DbType.Decimal && parameter.Direction == ParameterDirection.Input));
                 StringInputs.AddRange(command.Parameters.Cast<OceanBaseParameter>()

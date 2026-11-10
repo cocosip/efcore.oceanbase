@@ -157,6 +157,27 @@ Do not replace the expression factory or general query pipeline for a SQL-render
 4. Focused RED/GREEN, full Debug/Release, independent review, selected-patch/package checks, documentation
    and scoped commit. QRY-01 remains partial until wider operators and live acceptance pass.
 
+## Batch 3c brief: unary string functions and character length
+
+**Files:** Query method/member translator providers and focused string translators; Internal/OceanBaseOptionsExtension.cs;
+UnitTests/StringFunctionQueryTests.cs; FunctionalTests/BasicRelationalTests.cs. Follow the planned unary string
+contract in the query/update design and pinned research in artifacts/local-development/query-functions-design.md.
+
+1. RED: exact parameterless ToLower/ToUpper/Trim/TrimStart/TrimEnd and string.Length translate in predicates,
+   projections and order/group expressions with mapped columns. Cover nullable inputs, empty/null constants
+   and captured inputs, nested concat, CASE/coalesce, function IS NULL/NOT NULL and both null-semantics options.
+   Oracle all-space trim can produce NULL even from a required column; preserve result null tests.
+2. Register derived RelationalMethodCallTranslatorProvider/RelationalMemberTranslatorProvider with standard
+   AddTranslators, preserving plugins/model DbFunctions and opposite-mode cache separation. Reuse the SQL
+   expression factory/default mapping APIs; no new dependency or general query visitor replacement.
+3. Use exact overload/member matching and conservative nullable metadata. Character length means database
+   characters; trim means SQL blank space; casing means database rules. Reject unsupported culture/Invariant,
+   trim-char/char-array and unrelated same-name members in predicates; preserve allowed client projections.
+   Check bounded/fixed/national text and a connected string converter without discarding conversion metadata.
+4. Add both-mode sync/async intercepted parameter/read checks with synthetic string/nullable int results.
+   Focused RED/GREEN, full Debug/Release, independent review, patch/package evidence and scoped commit.
+   Search/substring, exact UTF-16/Unicode-whitespace guarantees and server results remain separate work.
+
 ## Execution record
 
 - Baseline: 57fd44a, clean efcore/10.0. Prior verified suite: 563 (420 unit, 142 intercepted, one consumer).
@@ -195,6 +216,12 @@ Do not replace the expression factory or general query pipeline for a SQL-render
   Oracle provider-string parameters disable command-SQL caching for native empty/null correctness; pure
   converters preserve raw binding values and null-converting string converters reject explicitly.
   Evidence: artifacts/local-development/batch3a/. Batch 3b arithmetic and wider string/query work remain open.
+- Batch 3b local arithmetic scope complete: unit RED 9/12 and intercepted RED 4/4 failures become 12+4 focused
+  passes. Debug/Release and isolated EF10.0.14 Release pass 801 (623+176+2). Independent review passed.
+  Same baseline-built arithmetic-20261110 package passes both modes on EF10.0.0/10.0.14; preceding concat
+  package fails the arithmetic smoke. Package-content gate and package-only graph pass. Server arithmetic,
+  predicate membership/zero-divisor/overflow gates remain open. Evidence: artifacts/local-development/batch3b/.
+  Next local slice is Batch 3c unary string functions; search/substring/date/numeric/wider query work remains.
 - Remaining Batch 2 scalar work and Batches 3–10 pending. The overall goal remains active.
 - Batch 8 package README slice: use the provider project's README as package-owned documentation and declare
   PackageReadmeFile. Verify archive metadata/content with no-build packing of an already verified isolated

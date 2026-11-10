@@ -63,6 +63,21 @@ namespace PackageConsumer
                     }
                 }
 
+                var arithmeticSql = context.Set<Row>().Select(row => new { Quotient = row.Id / 2, Remainder = row.Id % 2 })
+                    .ToQueryString();
+                if (!arithmeticSql.Contains(mode == OceanBaseCompatibilityMode.MySql ? " DIV " : "TRUNC(", StringComparison.Ordinal)
+                    || !arithmeticSql.Contains(mode == OceanBaseCompatibilityMode.MySql ? " % " : "MOD(", StringComparison.Ordinal))
+                {
+                    throw new Exception("Packed provider used the wrong integer division or remainder dialect.");
+                }
+                var fractionalSql = context.Set<Row>().Select(row => row.Amount / 2m).ToQueryString();
+                if (!fractionalSql.Contains(" / ", StringComparison.Ordinal)
+                    || fractionalSql.Contains("TRUNC(", StringComparison.Ordinal)
+                    || fractionalSql.Contains(" DIV ", StringComparison.Ordinal))
+                {
+                    throw new Exception("Packed provider truncated fractional division.");
+                }
+
                 var guidType = context.Model.FindEntityType(typeof(Row))!.FindProperty(nameof(Row.Token))!.GetColumnType();
                 if (guidType != (mode == OceanBaseCompatibilityMode.Oracle ? "RAW(16)" : "CHAR(36)"))
                 {
