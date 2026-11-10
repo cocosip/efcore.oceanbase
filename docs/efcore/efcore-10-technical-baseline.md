@@ -139,6 +139,28 @@ hooks. Direct converter tests and intercepted EF query/write tests cover Oracle-
 MySQL numeric Boolean results; this does not prove wire execution. Temporal types, complete explicit-type/facet
 validation, binary boundaries and the full custom-converter matrix remain open.
 
+## Explicit Guid storage contract
+
+This MAP-04/MAP-06/MAP-07 slice retains the defaults above and honors an explicit Guid column declaration.
+The EF v10.0.0 GuidToStringConverter, GuidToBytesConverter and mapping-source converter composition, and the
+published connector's prepared string/binary binding were checked before implementation. Reuse the existing
+text/binary mapping implementations and EF converters; do not introduce a second byte-order convention.
+
+| Representation | MySQL | Oracle |
+| --- | --- | --- |
+| Standard hyphenated text, exactly 36 characters | CHAR(36), VARCHAR(36) | CHAR(36), VARCHAR2(36), NCHAR(36), NVARCHAR2(36); CHAR/VARCHAR2 may specify CHAR or BYTE semantics |
+| .NET binary order, exactly 16 bytes | BINARY(16), VARBINARY(16) | RAW(16) |
+
+The explicit declaration controls conversion, DbType, size and fixed/variable metadata. Surrounding whitespace
+and case are accepted. Explicit Unicode/fixed/length facets must agree with the representation; numeric facets,
+other lengths, LOBs and incompatible/cross-mode declarations reject clearly. Without an explicit declaration,
+MySQL keeps CHAR(36) (VARCHAR(36) when fixed-length is explicitly false) and Oracle keeps variable RAW(16).
+Unicode selects string binding for MySQL text; Oracle national types select Unicode, CHAR/VARCHAR2 select ANSI.
+Binary mappings reject a Unicode=true facet. Callers needing another encoding must configure a value converter
+and the corresponding string/byte-array column themselves. Null handling, converter composition and generated
+outputs follow the existing scalar pipeline. Guid ordering, SQL UUID functions, server-generated keys and live
+round trips remain separate acceptance cases; matching the byte representation does not establish their support.
+
 ## Explicit integer and Boolean storage contract
 
 This MAP-01/MAP-06/MAP-07 slice extends the existing checked integer reader contract to physical column types.

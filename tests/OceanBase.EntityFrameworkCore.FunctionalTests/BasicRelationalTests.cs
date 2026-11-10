@@ -15,6 +15,60 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
     public sealed class BasicRelationalTests
     {
         [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true)]
+        public async Task Explicit_Guid_storage_pairs_query_materialization_and_write_conversion(
+            OceanBaseCompatibilityMode mode, bool async)
+        {
+            var token = Guid.Parse("00112233-4455-6677-8899-aabbccddeeff");
+            using var table = new DataTable();
+            table.Columns.Add("Id", mode == OceanBaseCompatibilityMode.Oracle ? typeof(decimal) : typeof(int));
+            table.Columns.Add("Text", typeof(string));
+            table.Columns.Add("Binary", typeof(byte[]));
+            table.Columns.Add("Optional", mode == OceanBaseCompatibilityMode.Oracle ? typeof(string) : typeof(byte[]));
+            table.Rows.Add(7, "00112233-4455-6677-8899-aabbccddeeff",
+                new byte[] { 0x33, 0x22, 0x11, 0, 0x55, 0x44, 0x77, 0x66, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff }, DBNull.Value);
+            var commands = new CommandCapture { Results = table };
+            await using var context = CreateContext(mode, commands);
+            var query = context.Set<GuidStorageRow>().Select(row => new { row.Id, row.Text, row.Binary, row.Optional });
+            var row = Assert.Single(async ? await query.ToListAsync() : query.ToList());
+            Assert.Equal(token, row.Text);
+            Assert.Equal(token, row.Binary);
+            Assert.Null(row.Optional);
+            var sql = context.Set<GuidStorageRow>().Where(row => row.Text == token && row.Binary == token).ToQueryString();
+            Assert.Contains("00112233-4455-6677-8899-aabbccddeeff", sql);
+            Assert.Contains("33221100554477668899AABBCCDDEEFF", sql);
+            context.Add(new GuidStorageRow { Id = row.Id, Text = row.Text, Binary = row.Binary });
+            Assert.Equal(1, async ? await context.SaveChangesAsync() : context.SaveChanges());
+            Assert.Contains("00112233-4455-6677-8899-aabbccddeeff", commands.Values);
+            Assert.Equal(token.ToByteArray(), Assert.Single(commands.Values.OfType<byte[]>()));
+            Assert.Contains(DBNull.Value, commands.Values);
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true)]
+        public async Task Generated_explicit_Guid_outputs_use_the_declared_representation(
+            OceanBaseCompatibilityMode mode, bool async)
+        {
+            var token = Guid.Parse("00112233-4455-6677-8899-aabbccddeeff");
+            object output = mode == OceanBaseCompatibilityMode.Oracle ? token.ToString() : token.ToByteArray();
+            using var table = new DataTable();
+            table.Columns.Add("Data", output.GetType());
+            table.Rows.Add(output);
+            var commands = new CommandCapture { Results = table, OutputValue = output };
+            await using var context = CreateContext(mode, commands);
+            var entity = new GeneratedExplicitGuid { Id = 1 };
+            context.Add(entity);
+            Assert.Equal(1, async ? await context.SaveChangesAsync() : context.SaveChanges());
+            Assert.Equal(token, entity.Data);
+        }
+
+        [Theory]
         [InlineData(OceanBaseCompatibilityMode.MySql)]
         [InlineData(OceanBaseCompatibilityMode.Oracle)]
         public void Query_operands_and_results_are_not_limited_to_integer_column_capacity(OceanBaseCompatibilityMode mode)
@@ -537,10 +591,31 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
                 modelBuilder.Entity<NarrowScalarRow>().Property(entity => entity.State).HasConversion<int>()
                     .HasColumnType(oracle ? "NUMBER(2)" : "TINYINT");
                 modelBuilder.Entity<NarrowScalarRow>().Property(entity => entity.Enabled).HasColumnType(oracle ? "NUMBER(3)" : "BOOLEAN");
+                modelBuilder.Entity<GuidStorageRow>().Property(entity => entity.Id).ValueGeneratedNever();
+                modelBuilder.Entity<GuidStorageRow>().Property(entity => entity.Text).HasColumnType(oracle ? "VARCHAR2(36 CHAR)" : "VARCHAR(36)");
+                modelBuilder.Entity<GuidStorageRow>().Property(entity => entity.Binary).HasColumnType(oracle ? "RAW(16)" : "BINARY(16)");
+                modelBuilder.Entity<GuidStorageRow>().Property(entity => entity.Optional).HasColumnType(oracle ? "NVARCHAR2(36)" : "VARBINARY(16)");
+                modelBuilder.Entity<GeneratedExplicitGuid>().Property(entity => entity.Id).ValueGeneratedNever();
+                modelBuilder.Entity<GeneratedExplicitGuid>().Property(entity => entity.Data)
+                    .HasColumnType(oracle ? "VARCHAR2(36)" : "BINARY(16)").HasComputedColumnSql("NULL");
             }
         }
 
         private enum RowState { Inactive = 0, Active = 2 }
+
+        private sealed class GuidStorageRow
+        {
+            public int Id { get; set; }
+            public Guid Text { get; set; }
+            public Guid Binary { get; set; }
+            public Guid? Optional { get; set; }
+        }
+
+        private sealed class GeneratedExplicitGuid
+        {
+            public int Id { get; set; }
+            public Guid Data { get; set; }
+        }
 
         private sealed class NarrowScalarRow
         {

@@ -2,6 +2,8 @@ using System;
 using System.Data;
 using System.Globalization;
 using System.Text.RegularExpressions;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using OceanBaseConnector;
@@ -19,6 +21,24 @@ namespace OceanBase.EntityFrameworkCore.Storage
             : base(dependencies, relationalDependencies)
         {
             _compatibilityMode = compatibilityMode;
+        }
+
+        public override CoreTypeMapping? FindMapping(IProperty property)
+        {
+            var mapping = base.FindMapping(property);
+            if (mapping is OceanBaseStringTypeMapping or OceanBaseByteArrayTypeMapping)
+            {
+                // EF gives parsed column lengths precedence over property facets when resolving the mapping.
+                foreach (var principal in property.GetPrincipals())
+                {
+                    if (principal.GetMaxLength() is { } size && ((RelationalTypeMapping)mapping).Size != size)
+                    {
+                        throw new ArgumentException("The explicit store length conflicts with its configured size.");
+                    }
+                }
+            }
+
+            return mapping;
         }
 
         protected override RelationalTypeMapping? FindMapping(in RelationalTypeMappingInfo mappingInfo)
@@ -45,11 +65,7 @@ namespace OceanBase.EntityFrameworkCore.Storage
             {
                 return FindTemporalMapping(clrType, mappingInfo);
             }
-            if (clrType == typeof(Guid)) return (RelationalTypeMapping)(oracle
-                ? new OceanBaseByteArrayTypeMapping(storeTypes.Guid, 16, _compatibilityMode)
-                    .WithComposedConverter(new GuidToBytesConverter())
-                : new OceanBaseStringTypeMapping(storeTypes.Guid, DbType.AnsiStringFixedLength, false, 36, true, _compatibilityMode)
-                    .WithComposedConverter(new GuidToStringConverter()));
+            if (clrType == typeof(Guid)) return FindGuidMapping(mappingInfo);
             if (clrType == typeof(double)) return new DoubleTypeMapping(storeTypes.Double, DbType.Double);
             if (clrType == typeof(float)) return new FloatTypeMapping(storeTypes.Float, DbType.Single);
             if (clrType == typeof(bool)) return (RelationalTypeMapping)(oracle
@@ -67,6 +83,44 @@ namespace OceanBase.EntityFrameworkCore.Storage
                 && info.Precision is not null ? "NUMBER" : defaultStoreType);
             return new OceanBaseIntegerTypeMapping<T>(storeType, dbType, _compatibilityMode,
                 info.Precision, info.Scale, info.Size, info.IsFixedLength ?? false);
+        }
+
+        private RelationalTypeMapping FindGuidMapping(in RelationalTypeMappingInfo info)
+        {
+            var oracle = _compatibilityMode == OceanBaseCompatibilityMode.Oracle;
+            var storeType = (info.StoreTypeName ?? (oracle ? "RAW(16)"
+                : info.IsFixedLength == false ? "VARCHAR(36)" : "CHAR(36)")).Trim();
+            var match = Regex.Match(storeType,
+                @"\A(?<type>CHAR|VARCHAR|VARCHAR2|NCHAR|NVARCHAR2|BINARY|VARBINARY|RAW)\s*\(\s*(?<size>\d+)\s*(?<unit>CHAR|BYTE)?\s*\)\z",
+                RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+            if (!match.Success || info.Precision is not null || info.Scale is not null)
+            {
+                throw new ArgumentException("The Guid store declaration or numeric facets are not supported.");
+            }
+
+            var type = match.Groups["type"].Value.ToUpperInvariant();
+            var binary = type is "BINARY" or "VARBINARY" or "RAW";
+            var size = binary ? 16 : 36;
+            var fixedLength = type is "CHAR" or "NCHAR" or "BINARY";
+            var unicode = !binary && (oracle ? type is "NCHAR" or "NVARCHAR2" : info.IsUnicode ?? false);
+            if ((oracle ? type is not ("CHAR" or "VARCHAR2" or "NCHAR" or "NVARCHAR2" or "RAW")
+                    : type is not ("CHAR" or "VARCHAR" or "BINARY" or "VARBINARY"))
+                || !int.TryParse(match.Groups["size"].Value, out var declaredSize) || declaredSize != size
+                || info.Size is not null && info.Size != size
+                || info.IsFixedLength is not null && info.IsFixedLength != fixedLength
+                || info.IsUnicode is not null && info.IsUnicode != unicode
+                || match.Groups["unit"].Success && (!oracle || type is not ("CHAR" or "VARCHAR2")))
+            {
+                throw new ArgumentException("Guid storage requires compatible 36-character text or 16-byte binary facets.");
+            }
+
+            return (RelationalTypeMapping)(binary
+                ? new OceanBaseByteArrayTypeMapping(storeType, size, _compatibilityMode, fixedLength)
+                    .WithComposedConverter(new GuidToBytesConverter())
+                : new OceanBaseStringTypeMapping(storeType,
+                    unicode ? fixedLength ? DbType.StringFixedLength : DbType.String
+                        : fixedLength ? DbType.AnsiStringFixedLength : DbType.AnsiString,
+                    unicode, size, fixedLength, _compatibilityMode).WithComposedConverter(new GuidToStringConverter()));
         }
 
         private RelationalTypeMapping FindBinaryMapping(in RelationalTypeMappingInfo info)
@@ -229,12 +283,6 @@ namespace OceanBase.EntityFrameworkCore.Storage
         {
             var configuredSize = size;
             var name = base.ParseStoreTypeName(storeTypeName, ref unicode, ref size, ref precision, ref scale);
-            if (configuredSize is not null && size != configuredSize
-                && name?.ToUpperInvariant() is "BINARY" or "VARBINARY" or "RAW")
-            {
-                throw new ArgumentException("The explicit binary store length conflicts with its configured size.");
-            }
-
             if (_compatibilityMode == OceanBaseCompatibilityMode.Oracle && storeTypeName is not null
                 && (string.Equals(name, "CHAR", StringComparison.OrdinalIgnoreCase)
                     || string.Equals(name, "VARCHAR2", StringComparison.OrdinalIgnoreCase)))
@@ -251,6 +299,13 @@ namespace OceanBase.EntityFrameworkCore.Storage
                         size = length;
                     }
                 }
+            }
+
+            if (configuredSize is not null && size != configuredSize
+                && name?.Trim().ToUpperInvariant() is "BINARY" or "VARBINARY" or "RAW"
+                    or "CHAR" or "VARCHAR" or "VARCHAR2" or "NCHAR" or "NVARCHAR2")
+            {
+                throw new ArgumentException("The explicit store length conflicts with its configured size.");
             }
 
             return name;
