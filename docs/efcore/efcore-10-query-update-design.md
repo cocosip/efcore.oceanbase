@@ -181,9 +181,9 @@ DateTimeOffset, clocks/Now/UtcNow/Today, fractional parts/Ticks, Date/TimeOfDay/
 parts and Add operations need their own timezone/range/precision/calendar/wrapping contracts. This slice makes
 no server extraction, DATE cast, calendar/zero-date, interval-clock or result-metadata claim without live evidence.
 
-## Planned numeric Abs, Sign and Truncate contract
+## Numeric Abs, Sign and Truncate local contract
 
-The next QRY-07 numeric slice covers twenty-two exact unary static signatures: Math.Abs and Math.Sign for
+The implemented QRY-07 numeric slice covers twenty-two exact unary static signatures: Math.Abs and Math.Sign for
 sbyte/short/int/long/float/double/decimal, MathF.Abs/Sign(float), decimal.Abs/Sign(decimal), and
 Math.Truncate(double/decimal), MathF.Truncate(float), decimal.Truncate(decimal). Both modes use ABS/SIGN;
 MySQL uses TRUNCATE(input, 0), Oracle one-argument TRUNC(input). Match exact method identities and retain
@@ -206,6 +206,29 @@ evidence. Existing non-finite rejection remains; signed-zero bit preservation is
 removes fractions toward zero, without casting or rounding the input. Floor/Ceiling/Round/Log/Pow/Random
 and Min/Max remain separate contracts. Pinned EF v10.0.0 and OceanBase documentation revision
 2a5ae3a23a51729d065cec716508eb26cb064106 are audited in the numeric-core local research artifact.
+
+## Planned ordinary relational shapes and integral membership
+
+The next QRY-03/04 slice characterizes inherited inner/recognized left equijoins, composite numeric keys,
+correlated Any/All, ordered nullable scalar FirstOrDefault, queryable scalar Contains and grouped/ungrouped
+Count/LongCount. Keep ON and WHERE predicates distinct, nullable right projections, projected/root/negated
+EXISTS and Oracle table-free FROM DUAL/Boolean conversion. Count selected nullable values still counts rows;
+COUNT uses fresh int/long results, never SQL Server COUNT_BIG. Empty ungrouped counts and empty GroupBy have
+different result shapes. Intercepted readers verify shaping, not database evaluation.
+
+Bare inline/captured int/int? arrays/lists use EF10's scalar IN expansion and MultipleParameters default.
+Repair only a reproduced element-mapping gap, reusing EF JSON reader/writer metadata without advertising
+mapped JSON collections. Preserve the owning integer mapper's converters, checked readers and query ranges.
+Retain EF padding/cache processing and current capture values across empty/nonempty/all-null/bucket changes.
+Empty/null collection objects follow the inherited empty relational policy; nullable element/item compensation
+and UseRelationalNulls differences are explicit. Do not mutate caller collections or invent server list limits.
+
+EF.Constant/context Constant use mapping-owned literals. Context Parameter mode can use an inherited Contains
+fallback to scalar IN; explicit EF.Parameter(collection) remains unsupported without a primitive-collection
+translator. Test both boundaries. Text lists need provider-converted Oracle empty/NULL normalization before
+membership compensation; general VALUES roots need their own integer-ordinal and dialect rendering fixes.
+Those, APPLY/collection projections and SUM/AVG/Min/Max promotion/casts remain separate locally feasible work.
+The shipped EF10.0.0 package owners and source-derived gaps are audited in the local query-shapes research.
 
 ## Arithmetic division and remainder local contract
 
@@ -324,18 +347,30 @@ Run the read-only gate after packing, before the isolated consumer checks:
 
 ```powershell
 pwsh -NoProfile -File tests/OceanBase.EntityFrameworkCore.PackageConsumer/Verify-Package.ps1 `
-    -PackagePath artifacts/checkpoint-temporal-parts-20261111/OceanBase.EntityFrameworkCore.10.0.0-checkpoint.temporal-parts-20261111.nupkg `
-    -ExpectedVersion 10.0.0-checkpoint.temporal-parts-20261111
+    -PackagePath artifacts/checkpoint-numeric-core-20261111/OceanBase.EntityFrameworkCore.10.0.0-checkpoint.numeric-core-20261111.nupkg `
+    -ExpectedVersion 10.0.0-checkpoint.numeric-core-20261111
 ```
 
 The PowerShell 7 script uses .NET ZIP/XML APIs and checks ID/version, the net10.0 assembly and dependency group,
 exact expected dependency ranges, and a nonempty packaged README with matching metadata. It does not build,
-restore, execute provider queries or establish server/runtime compatibility. The current temporal-parts package passes;
+restore, execute provider queries or establish server/runtime compatibility. The current numeric-core package passes;
 wrong expected version, the old README-less alias package and the exact-patch README probe fail at their intended
 checks. The hosted e41981e package-content gate passed on Windows/Linux; the current package checks ran locally
 on Windows. Change the path/version for each new pack.
 
-### Current ordinary temporal parts checkpoint (2026-11-11)
+### Current numeric Abs, Sign and Truncate checkpoint (2026-11-11)
+
+Debug/Release and isolated EF10.0.14 Release pass 1083 tests (853 unit, 228 intercepted pipeline, two project
+consumers). Independent spec/quality review passed. The same baseline-built
+`10.0.0-checkpoint.numeric-core-20261111` nupkg passes both modes at EF10.0.0/10.0.14, with mapped numeric
+predicates plus prior checks. The preceding temporal-parts package fails the new translations. Content and
+package-only graph checks pass; baseline source assets remain EF10.0.0.
+
+Repeat the commands below with `10.0.0-checkpoint.numeric-core-20261111` and
+`artifacts/checkpoint-numeric-core-20261111`. Evidence: `artifacts/local-development/batch3g/`.
+Native arithmetic/domain/overflow/result families and hosted execution for this source remain open.
+
+### Historical ordinary temporal parts checkpoint (2026-11-11)
 
 Final Debug/Release and isolated EF10.0.14 Release pass 963 tests (745 unit, 216 intercepted pipeline, two
 project consumers), including four test-only review cases added after the initial 959-pass run. Independent code review

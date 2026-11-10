@@ -21,6 +21,23 @@ not later local commits or database integration. Earlier db676ff also passed in
 Run/job/step metadata is saved under artifacts/local-development/. The earlier log archive endpoint returned
 HTTP403 (repository admin rights); no new per-test count or resolved EF patch is inferred from job metadata.
 
+### Numeric Abs, Sign and Truncate checkpoint (2026-11-11)
+
+Twenty-two exact Math/MathF/decimal methods now translate to native ABS/SIGN and MySQL TRUNCATE(x,0)
+or Oracle unary TRUNC. Strict numeric mapping validation preserves operand converters and full existing
+finite ranges; SIGN and precision-zero use independent converter-free int mappings. NULL tests remain.
+
+Genuine RED covered 88 exact-signature/mode/null combinations. Focused GREEN passes 108 unit and 12
+intercepted cases. Debug/Release and isolated EF10.0.14 Release pass **1083 tests** (853 unit, 228 intercepted,
+two project consumers). Independent spec/quality review passed. The same baseline-built
+`10.0.0-checkpoint.numeric-core-20261111` nupkg passes both modes at EF10.0.0/10.0.14; the preceding temporal
+package fails the new numeric predicate. Package content and package-only graph checks pass.
+
+Latest package: `artifacts/checkpoint-numeric-core-20261111/OceanBase.EntityFrameworkCore.10.0.0-checkpoint.numeric-core-20261111.nupkg`.
+Evidence: `artifacts/local-development/batch3g/`. Native numeric results/domain/overflow/floating families
+and hosted execution for this source remain open. Next is integral membership and ordinary relational shapes;
+broader queries, model/writes/transactions/schema and the overall local EF10 goal remain active.
+
 ### Ordinary temporal parts checkpoint (2026-11-11)
 
 Twelve exact members now translate: DateTime.Year/Month/Day/Hour/Minute/Second, DateOnly.Year/Month/Day
@@ -34,7 +51,7 @@ and TimeOnly values/DbType/precision, numeric/binary carrier rejection and repre
 The same baseline-built `10.0.0-checkpoint.temporal-parts-20261111` package passes both modes on EF10.0.0/10.0.14;
 the preceding Substring package fails the new temporal predicate. Content and package-only graph gates pass.
 
-Latest package: `artifacts/checkpoint-temporal-parts-20261111/OceanBase.EntityFrameworkCore.10.0.0-checkpoint.temporal-parts-20261111.nupkg`.
+Historical package: `artifacts/checkpoint-temporal-parts-20261111/OceanBase.EntityFrameworkCore.10.0.0-checkpoint.temporal-parts-20261111.nupkg`.
 Evidence: `artifacts/local-development/batch3f/`. Native extraction/casts/calendar/fractional/interval behavior
 and hosted execution for this source remain open. Clocks/offset/fractional/Add/duration and broader queries
 remain separate work. Next is numeric Abs/Sign/Truncate; the overall EF10 goal remains active.

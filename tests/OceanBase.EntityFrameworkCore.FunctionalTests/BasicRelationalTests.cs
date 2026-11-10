@@ -26,6 +26,100 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
         [InlineData(OceanBaseCompatibilityMode.Oracle, true, false)]
         [InlineData(OceanBaseCompatibilityMode.Oracle, false, true)]
         [InlineData(OceanBaseCompatibilityMode.Oracle, true, true)]
+        public async Task Math_commands_preserve_numeric_parameters_converters_and_synthetic_nullable_reads(
+            OceanBaseCompatibilityMode mode, bool async, bool relationalNulls)
+        {
+            using var table = new DataTable();
+            foreach (var name in new[] { "Abs", "Sign", "Trunc", "Fraction", "Single", "Double", "Optional" })
+                table.Columns.Add(name, name is "Trunc" or "Fraction" ? typeof(decimal) : typeof(OceanBaseDecimal));
+            var singleResult = new OceanBaseDecimal(BigInteger.One, -38);
+            var doubleResult = new OceanBaseDecimal(BigInteger.One, -300);
+            // Synthetic rows prove binding and checked/converter readers, not native arithmetic or membership.
+            table.Rows.Add(new OceanBaseDecimal(int.MaxValue), new OceanBaseDecimal(-1m), -6m,
+                decimal.MaxValue, singleResult, doubleResult, DBNull.Value);
+            table.Rows.Add(new OceanBaseDecimal(21m), new OceanBaseDecimal(0m), 0m,
+                decimal.MinValue, singleResult, doubleResult, new OceanBaseDecimal(7m));
+            var commands = new CommandCapture { Results = table };
+            await using var context = CreateContext(mode, commands, relationalNulls);
+            var comparison = int.MaxValue;
+            var sign = -1;
+            var fraction = -12345.6789m;
+            var single = float.MinValue;
+            var wide = double.MinValue;
+            var longMinimum = long.MinValue;
+            var transformedComparison = 1.23456789m;
+            var query = context.Set<MathRow>().Where(row => Math.Abs(row.Converted) == comparison
+                    && Math.Sign(row.Transformed) == sign && Math.Truncate(row.Decimal + fraction) == fraction
+                    && MathF.Abs(row.Single + single) == single && Math.Abs(row.Double + wide) == wide
+                    && Math.Abs(row.Int64 + longMinimum) == longMinimum
+                    && Math.Truncate(row.Transformed) == transformedComparison)
+                .Select(row => new { Abs = Math.Abs(row.Converted), Sign = Math.Sign(row.Transformed),
+                    Trunc = Math.Truncate(row.Transformed), Fraction = Math.Truncate(row.Decimal),
+                    Single = MathF.Abs(row.Single), Double = Math.Truncate(row.Double),
+                    Optional = (int?)Math.Abs(row.Optional!.Value) });
+            var values = new[] { -12345.6789m, decimal.MinValue, decimal.MaxValue, -0.000000001m };
+            for (var index = 0; index < values.Length; index++)
+            {
+                fraction = values[index];
+                single = new[] { float.MinValue, float.MaxValue, float.Epsilon, -0f }[index];
+                wide = new[] { double.MinValue, double.MaxValue, double.Epsilon, -0d }[index];
+                commands.Inputs.Clear();
+                var rows = async ? await query.ToListAsync() : query.ToList();
+                Assert.Equal(2, rows.Count);
+                Assert.Equal(int.MaxValue, rows[0].Abs);
+                Assert.Equal(-1, rows[0].Sign);
+                Assert.Equal(3m, rows[0].Trunc);
+                Assert.Equal(decimal.MaxValue, rows[0].Fraction);
+                Assert.Equal(1E38f, rows[0].Single);
+                Assert.Equal(1E300d, rows[0].Double);
+                Assert.Null(rows[0].Optional);
+                Assert.Equal(decimal.MinValue, rows[1].Fraction);
+                Assert.Equal(7, rows[1].Optional);
+                Assert.Contains(commands.Inputs, parameter => Equals(parameter.Value, (long)comparison) && parameter.DbType == DbType.Int64);
+                Assert.Contains(commands.Inputs, parameter => Equals(parameter.Value, sign) && parameter.DbType == DbType.Int32);
+                Assert.Contains(commands.Inputs, parameter => Equals(parameter.Value, longMinimum) && parameter.DbType == DbType.Int64);
+                Assert.Contains(commands.Inputs, parameter => Equals(parameter.Value, single) && parameter.DbType == DbType.Single);
+                Assert.Contains(commands.Inputs, parameter => Equals(parameter.Value, wide) && parameter.DbType == DbType.Double);
+                Assert.Contains(commands.Inputs, parameter => Equals(parameter.Value, transformedComparison * -2m)
+                    && parameter.DbType == DbType.Decimal);
+                var operand = Assert.Single(commands.Inputs, parameter => Equals(parameter.Value, fraction));
+                Assert.Equal(DbType.Decimal, operand.DbType);
+                Assert.Equal((byte)0, operand.Precision);
+                Assert.Null(operand.DecimalScale);
+                Assert.Equal(decimal.GetBits(fraction), decimal.GetBits((decimal)operand.Value!));
+                Assert.Contains("ABS(", commands.Sql[^1]);
+                Assert.Contains("SIGN(", commands.Sql[^1]);
+                Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? "TRUNCATE(" : "TRUNC(", commands.Sql[^1]);
+            }
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true)]
+        public async Task Math_projected_integer_overflow_keeps_existing_checked_reader(OceanBaseCompatibilityMode mode, bool async)
+        {
+            using var table = new DataTable();
+            table.Columns.Add("Abs", typeof(OceanBaseDecimal));
+            table.Rows.Add(new OceanBaseDecimal((decimal)int.MaxValue + 1));
+            var commands = new CommandCapture { Results = table };
+            await using var context = CreateContext(mode, commands);
+            var query = context.Set<MathRow>().Where(row => Math.Abs(row.Id) >= 0).Select(row => Math.Abs(row.Id));
+            if (async) await Assert.ThrowsAsync<OverflowException>(() => query.ToListAsync());
+            else Assert.Throws<OverflowException>(() => query.ToList());
+            Assert.Contains("ABS(", Assert.Single(commands.Sql));
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false, true)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true, true)]
         public async Task Temporal_parts_bind_integer_comparisons_and_read_synthetic_results(
             OceanBaseCompatibilityMode mode, bool async, bool relationalNulls)
         {
@@ -1489,6 +1583,10 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
             {
                 var oracle = mode == OceanBaseCompatibilityMode.Oracle;
                 modelBuilder.Entity<ArithmeticRow>().Property(row => row.Converted).HasConversion<long>();
+                modelBuilder.Entity<MathRow>().Property(row => row.Converted).HasConversion<long>();
+                modelBuilder.Entity<MathRow>().Property(row => row.Transformed)
+                    .HasConversion(value => value * -2m, value => value / -2m).HasPrecision(5, 2);
+                modelBuilder.Entity<MathRow>().Property(row => row.Decimal).HasPrecision(5, 2);
                 modelBuilder.Entity<Customer>().ToTable("Customers");
                 modelBuilder.Entity<Customer>().Property(customer => customer.Version).IsConcurrencyToken();
                 modelBuilder.Entity<KeyOnly>().ToTable("Keys");
@@ -1579,6 +1677,18 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
             public int? Optional { get; set; }
             public int Converted { get; set; }
             public decimal Fraction { get; set; }
+        }
+
+        private sealed class MathRow
+        {
+            public int Id { get; set; }
+            public long Int64 { get; set; }
+            public int? Optional { get; set; }
+            public int Converted { get; set; }
+            public decimal Transformed { get; set; }
+            public decimal Decimal { get; set; }
+            public float Single { get; set; }
+            public double Double { get; set; }
         }
 
         private sealed class ShortTextRow

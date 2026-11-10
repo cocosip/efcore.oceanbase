@@ -281,6 +281,24 @@ The planned numeric contract in query/update design defines the exact twenty-two
 4. Focused GREEN, full Debug/Release, independent code/docs review, isolated later-patch and same-package
    consumer/content gates, then scoped commit. No new dependency, generator, visitor or public configuration.
 
+## Batch 3h brief: integral membership and ordinary relational shapes
+
+**Files:** Storage/OceanBaseIntegerTypeMapping.cs only for a reproduced metadata repair;
+UnitTests/RelationalShapeQueryTests.cs (new) and FunctionalTests/BasicRelationalTests.cs.
+The planned relational-shape contract in query/update design defines this bounded QRY-03/04 slice.
+
+1. Characterize ordinary inner/left equijoins, composite numeric keys, ON/WHERE placement, correlated/root/
+   projected Any/All, ordered nullable scalar FirstOrDefault and queryable scalar Contains in both modes.
+2. Reproduce and repair captured int/int? array/list mapping for bare Contains, reusing EF's element JSON
+   metadata and scalar parameter expansion. Preserve converters/readers/ranges and distinguish default,
+   Constant, context Parameter fallback and unsupported explicit EF.Parameter(collection).
+3. Cover empty/null/all-null/duplicate collections, nullable items/negation/projections, both null settings,
+   repeated changed captures and padding bucket boundaries without mutating caller arrays or stale SQL.
+4. Characterize Count/LongCount grouped/ungrouped/predicate/HAVING/distinct/nullable cases. Add sync/async
+   intercepted current parameter/nullable-right/int/long/overflow reads, clearly labeled as supplied results.
+5. Focused/full tests, independent code/docs review, selected-patch and same-package gates, then scoped commit.
+   Text lists, general VALUES, APPLY, SUM/AVG/Min/Max promotion and actual server results stay separate work.
+
 ## Execution record
 
 - Baseline: 57fd44a, clean efcore/10.0. Prior verified suite: 563 (420 unit, 142 intercepted, one consumer).
@@ -385,6 +403,17 @@ The planned numeric contract in query/update design defines the exact twenty-two
   prior Substring package fails the new member predicate. Content gate and package-only graph pass.
   Evidence: artifacts/local-development/batch3f/. Native extraction/casts/calendar/interval and current hosted
   execution remain open. Next is Batch 3g numeric Abs/Sign/Truncate; the complete local EF10 goal stays active.
+- Batch 3f committed as 9f595ed after final 963-pass suites, code/fix/docs approval and package gates. No push.
+  Batch 3g starts from this checkpoint using the exact twenty-two-method numeric contract.
+- Batch 3g local numeric scope complete: exact 22 Abs/Sign/Truncate signatures, strict mapping validation,
+  compatible source/result converters, independent SIGN/precision int and full existing finite ranges.
+  Genuine RED 88 missing translations; focused GREEN 108 unit+12 intercepted. Full Debug/Release and isolated
+  EF10.0.14 Release each pass 1083 (853+228+2). Independent spec/quality review approved without findings.
+  Same baseline-built numeric-core-20261111 nupkg passes both modes on EF10.0.0/10.0.14; preceding temporal
+  package fails the new numeric predicate. Content gate and package-only graph pass; baseline assets stay
+  EF10.0.0. Evidence: artifacts/local-development/batch3g/. Native arithmetic/domain/overflow/result families
+  and current hosted execution remain open. Next is Batch 3h integral membership/ordinary relational shapes;
+  wider local work remains active. Development resumed after the user's pause; no push or publication.
 - Line-ending recheck: git ls-files --eol reports no CRLF/mixed index text. Existing working CRLF files remain
   safe under the repository attributes; do not reset local edits or change global core.autocrlf to refresh them.
 - Remaining Batch 2 scalar work and Batches 3–10 pending. The overall goal remains active.
