@@ -50,11 +50,12 @@ semantics are identical; mode-specific SQL and mappings stay explicit.
 Create a consumer test that references only the packed provider and connector packages, configures a DbContext with
 UseOceanBase, and asserts that the provider invariant is OceanBase.EntityFrameworkCore.
 
-- [ ] Step 2: Run the smoke test to verify the project boundary is missing.
+- [ ] Step 2: Run the smoke test to verify the provider API boundary is still missing.
 
 Run: dotnet test tests/OceanBase.EntityFrameworkCore.ConsumerTests/OceanBase.EntityFrameworkCore.ConsumerTests.csproj
 
-Expected: FAIL because the provider project and UseOceanBase API do not exist.
+Expected: FAIL because the provider project exists but the UseOceanBase, mode, and provider-check APIs are
+not implemented until Task 2.
 
 - [ ] Step 3: Create the solution, central package files and provider project.
 
@@ -62,11 +63,13 @@ Target net10.0, enable nullable, disable implicit usings, treat warnings as erro
 EF Core Relational 10, and reference OceanBaseConnector through its public package boundary. Add the unit and
 consumer test projects to the solution.
 
-- [ ] Step 4: Run restore and build.
+- [ ] Step 4: Run restore and build for the completed Task 1 projects.
 
-Run: dotnet build OceanBase.EntityFrameworkCore.slnx
+Run: dotnet build src/OceanBase.EntityFrameworkCore/OceanBase.EntityFrameworkCore.csproj
+and `dotnet build tests/OceanBase.EntityFrameworkCore.UnitTests/OceanBase.EntityFrameworkCore.UnitTests.csproj`.
 
-Expected: PASS with the provider and test projects restored against EF Core 10.
+Expected: PASS with the provider and unit-test projects restored against EF Core 10. The consumer project remains
+the intentional RED test until Task 2 adds the provider configuration API.
 
 ### Task 2: Add options, mode selection and model-cache identity
 
