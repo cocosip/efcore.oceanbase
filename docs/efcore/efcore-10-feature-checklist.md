@@ -41,7 +41,7 @@ and test it or list it under `Deferred`.
 | --- | --- | --- | --- | --- |
 | Configuration | `UseOceanBase` accepts a connection string and an existing `DbConnection` | Required | Unit tests for both overloads and both modes | Done |
 | Configuration | MySQL and Oracle compatibility mode is explicit and validated | Required | Unit tests for valid and invalid modes | Done |
-| Configuration | `Database.IsOceanBase()` and provider invariant identify the provider | Required | Consumer test through the real EF service graph | In progress |
+| Configuration | `Database.IsOceanBase()` and provider invariant identify the provider | Required | Consumer test through the real EF service graph | Done |
 | Configuration | MySQL and Oracle mode participate in service-provider and model-cache identity | Required | Distinct cache-key tests | Done |
 | Diagnostics | Provider logging definitions and debug information are registered | Required | Options/debug-info tests and build with warnings as errors | Done |
 | Packaging | Package ID is `OceanBase.EntityFrameworkCore` and the EF dependency range is bounded to 10.x | Required | Pack and isolated consumer restore | In progress |
@@ -51,14 +51,14 @@ and test it or list it under `Deferred`.
 
 | Area | Requirement | Priority | Evidence | Status |
 | --- | --- | --- | --- | --- |
-| Connection | Create `OceanBaseConnection` through the public OceanBaseConnector API | Required | Relational connection unit test | In progress |
+| Connection | Create `OceanBaseConnection` through the public OceanBaseConnector API | Required | Relational connection unit test | Done |
 | Connection | Map provider mode to connector `ExpectedMode` and reject conflicting settings | Required | Connection-string tests for MySQL and Oracle | Planned |
 | Connection | Respect caller-owned connections and dispose only provider-owned connections | Required | Ownership and disposal tests | Planned |
 | Execution | Create connector commands and parameters without protocol code in the provider | Required | Command/parameter integration tests | Planned |
 | Execution | Sync and async open, execute, read and close paths use the same mode contract | Required | Functional tests for sync and async paths | Planned |
 | Transactions | Begin, commit, rollback and use-existing-transaction work through the connector | Required | Functional transaction tests | Planned |
 | Transactions | Cancellation and command timeout are passed to the connector | Required | Cancellation/timeout tests where the connector exposes the behavior | Planned |
-| Relational services | Register `IRelationalConnection`, `ISqlGenerationHelper` and `IRelationalTypeMappingSource` | Required | Consumer service-resolution test | In progress |
+| Relational services | Register `IRelationalConnection`, `ISqlGenerationHelper` and `IRelationalTypeMappingSource` | Required | Consumer service-resolution test | Done |
 
 ## Model and scalar type mapping
 
@@ -76,8 +76,8 @@ and test it or list it under `Deferred`.
 
 | Area | Requirement | Priority | Evidence | Status |
 | --- | --- | --- | --- | --- |
-| SQL helper | Quote identifiers according to MySQL backtick and Oracle double-quote rules | Required | Helper tests for reserved and embedded identifiers | In progress |
-| SQL helper | Generate mode-appropriate parameter names and placeholders | Required | Helper tests for both modes | In progress |
+| SQL helper | Quote identifiers according to MySQL backtick and Oracle double-quote rules | Required | Helper tests for reserved and embedded identifiers | Done |
+| SQL helper | Generate mode-appropriate parameter names and placeholders | Required | Helper tests for both modes | Done |
 | Query | SELECT, projection, scalar predicates, null checks and parameterization | Required | SQL generator and functional tests | Planned |
 | Query | Ordering, joins, grouping and aggregates | Required | SQL generator and functional tests | Planned |
 | Query | Paging with `Skip`/`Take` using syntax supported by both modes | Required | SQL generator tests for both modes | Planned |
