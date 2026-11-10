@@ -163,6 +163,22 @@ Still required for Task 4 and release:
 
 ## Package checkpoint validation
 
+### Repeatable package content gate
+
+Run the read-only gate after packing, before the isolated consumer checks:
+
+```powershell
+pwsh -NoProfile -File tests/OceanBase.EntityFrameworkCore.PackageConsumer/Verify-Package.ps1 `
+    -PackagePath artifacts/checkpoint-numeric-20261110/OceanBase.EntityFrameworkCore.10.0.0-checkpoint.numeric-20261110.nupkg `
+    -ExpectedVersion 10.0.0-checkpoint.numeric-20261110
+```
+
+The PowerShell 7 script uses .NET ZIP/XML APIs and checks ID/version, the net10.0 assembly and dependency group,
+exact expected dependency ranges, and a nonempty packaged README with matching metadata. It does not build,
+restore, execute provider queries or establish server/runtime compatibility. The current numeric package passes;
+wrong expected version, the old README-less alias package and the exact-patch README probe fail at their intended
+checks. These runs were on Windows; Linux execution remains unverified. Change the path/version for each new pack.
+
 ### Current exact integer normalization checkpoint (2026-11-10)
 
 Debug/Release on EF10.0.0 and isolated Release on EF10.0.14 each pass 752 tests (590 unit, 160 intercepted

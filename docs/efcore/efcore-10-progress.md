@@ -91,6 +91,11 @@ after later provider changes. The preceding alias/text packages remain immutable
 The isolated README probe uses exact EF10.0.14 override dependencies and is only a packaging check; bounded
 dependency-range and consumer compatibility evidence comes from the full-source checkpoints above. Independent review passed.
 
+The package consumer now owns `Verify-Package.ps1`, a read-only PowerShell 7 content gate reusable in local/CI
+commands. Current numeric package identity/net10.0/README/ranges pass; wrong-version, missing-README and exact-patch
+probes reject as intended. This verifies the artifact structure, separately from compilation, consumers or live
+server tests. Windows execution is verified; no Linux/CI execution is claimed.
+
 Git line endings are now governed by `.gitattributes` (a2bbe5f): automatic text uses LF, batch scripts CRLF.
 Attribute checks and normalization under core.autocrlf=true/false/input passed; existing index blobs were already LF.
 

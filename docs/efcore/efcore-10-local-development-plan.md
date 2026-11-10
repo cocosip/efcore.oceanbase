@@ -178,3 +178,10 @@ FunctionalTests/BasicRelationalTests.cs. Follow the concatenation contract in th
   Archive metadata/exact content and SHA-256 equality with the verified assembly pass; pack no longer reports a
   missing README. Evidence: artifacts/local-development/package-readme/. Independent review passed. The isolated
   probe has exact EF10.0.14 dependencies; it does not replace bounded-range alias package/consumer evidence.
+- Batch 8 package content gate: add PackageConsumer/Verify-Package.ps1 using only PowerShell/.NET ZIP/XML APIs.
+  Inputs are an existing nupkg and expected version. Assert provider identity, net10.0 assembly/framework,
+  README metadata/nonempty content and exactly the three expected dependency ranges. Verify a valid current
+  package plus wrong-version, missing-README and exact-patch probes fail for the intended reason. This read-only
+  gate neither builds nor executes a provider or changes the independent source/consumer/live gates.
+  Current numeric package passes; wrong-version, old missing-README and exact-patch probes fail at their intended
+  checks on Windows PowerShell 7. Independent spec/quality review passed; Linux execution unverified.
