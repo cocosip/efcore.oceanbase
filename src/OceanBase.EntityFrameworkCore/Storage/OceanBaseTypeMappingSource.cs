@@ -49,14 +49,19 @@ namespace OceanBase.EntityFrameworkCore.Storage
                 }
             }
 
-            if (mapping is OceanBaseDecimalTypeMapping decimalMapping)
+            if (mapping is OceanBaseDecimalTypeMapping or OceanBaseIntegerTypeMapping<sbyte> or OceanBaseIntegerTypeMapping<byte>
+                or OceanBaseIntegerTypeMapping<short> or OceanBaseIntegerTypeMapping<ushort>
+                or OceanBaseIntegerTypeMapping<int> or OceanBaseIntegerTypeMapping<uint>
+                or OceanBaseIntegerTypeMapping<long> or OceanBaseIntegerTypeMapping<ulong>
+                or OceanBaseIntegerTypeMapping<bool> or OceanBaseIntegerTypeMapping<decimal>)
             {
+                var numericMapping = (RelationalTypeMapping)mapping;
                 foreach (var principal in property.GetPrincipals())
                 {
-                    if (principal.GetPrecision() is { } precision && decimalMapping.Precision != precision
-                        || principal.GetScale() is { } scale && decimalMapping.Scale != scale)
+                    if (principal.GetPrecision() is { } precision && numericMapping.Precision != precision
+                        || principal.GetScale() is { } scale && numericMapping.Scale != scale)
                     {
-                        throw new ArgumentException("The explicit decimal declaration conflicts with its configured precision or scale.");
+                        throw new ArgumentException("The explicit numeric declaration conflicts with its configured precision or scale.");
                     }
                 }
             }

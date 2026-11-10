@@ -703,6 +703,46 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
         }
 
         [Theory]
+        [InlineData(false, false, false)]
+        [InlineData(false, false, true)]
+        [InlineData(false, true, false)]
+        [InlineData(false, true, true)]
+        [InlineData(true, false, false)]
+        [InlineData(true, false, true)]
+        [InlineData(true, true, false)]
+        [InlineData(true, true, true)]
+        public async Task Oracle_generated_integer_and_enum_outputs_reject_floating_fractions(bool single, bool converted, bool async)
+        {
+            var commands = new CommandCapture { OutputValue = single ? (object)1.5f : 1.5d };
+            await using var context = CreateContext(OceanBaseCompatibilityMode.Oracle, commands);
+            if (converted) context.Add(new GeneratedState { Id = 1 });
+            else context.Add(new KeyOnly());
+            var exception = async ? await Assert.ThrowsAsync<DbUpdateException>(() => context.SaveChangesAsync())
+                : Assert.Throws<DbUpdateException>(() => context.SaveChanges());
+            Assert.IsType<InvalidCastException>(exception.InnerException);
+            Assert.Single(commands.Sql);
+        }
+
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public async Task Oracle_generated_integer_and_enum_outputs_accept_exact_floating_values(bool async)
+        {
+            foreach (var value in new object[] { 2d, 2f })
+            {
+                var commands = new CommandCapture { OutputValue = value };
+                await using var context = CreateContext(OceanBaseCompatibilityMode.Oracle, commands);
+                var entity = new GeneratedState { Id = 1 };
+                var key = new KeyOnly();
+                context.Add(entity);
+                context.Add(key);
+                Assert.Equal(2, async ? await context.SaveChangesAsync() : context.SaveChanges());
+                Assert.Equal(RowState.Active, entity.State);
+                Assert.Equal(2, key.Id);
+            }
+        }
+
+        [Theory]
         [InlineData(false, false)]
         [InlineData(false, true)]
         [InlineData(true, false)]
@@ -756,13 +796,14 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
             table.Columns.Add("Count", oracle ? typeof(decimal) : typeof(uint));
             table.Columns.Add("Enabled", oracle ? typeof(decimal) : typeof(long));
             table.Columns.Add("OptionalCount", oracle ? typeof(decimal) : typeof(int));
+            table.Columns.Add("OptionalFlag", oracle ? typeof(decimal) : typeof(long));
             table.Columns.Add("State", oracle ? typeof(decimal) : typeof(int));
             table.Columns.Add("Token", oracle ? typeof(byte[]) : typeof(string));
-            table.Rows.Add(17, uint.MaxValue, 1, DBNull.Value, 2, oracle ? token.ToByteArray() : token.ToString());
+            table.Rows.Add(17, uint.MaxValue, 1, DBNull.Value, DBNull.Value, 2, oracle ? token.ToByteArray() : token.ToString());
             var commands = new CommandCapture { Results = table };
             await using var context = CreateContext(mode, commands);
             var query = context.Set<ScalarRow>().Select(row => new
-                { row.Id, row.Count, row.Enabled, row.OptionalCount, row.State, row.Token });
+                { row.Id, row.Count, row.Enabled, row.OptionalCount, row.OptionalFlag, row.State, row.Token });
 
             var row = Assert.Single(async ? await query.ToListAsync() : query.ToList());
 
@@ -770,6 +811,7 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
             Assert.Equal(uint.MaxValue, row.Count);
             Assert.True(row.Enabled);
             Assert.Null(row.OptionalCount);
+            Assert.Null(row.OptionalFlag);
             Assert.Equal(RowState.Active, row.State);
             Assert.Equal(token, row.Token);
             context.Add(new ScalarRow { Id = row.Id, Count = row.Count, Enabled = row.Enabled, State = row.State, Token = row.Token });
@@ -954,6 +996,8 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
                 modelBuilder.Entity<ScalarRow>().Property(entity => entity.State).HasConversion<int>();
                 modelBuilder.Entity<GeneratedFlag>().Property(entity => entity.Id).ValueGeneratedNever();
                 modelBuilder.Entity<GeneratedFlag>().Property(entity => entity.Enabled).HasComputedColumnSql("1");
+                modelBuilder.Entity<GeneratedState>().Property(entity => entity.Id).ValueGeneratedNever();
+                modelBuilder.Entity<GeneratedState>().Property(entity => entity.State).HasConversion<int>().HasComputedColumnSql("2");
                 modelBuilder.Entity<TemporalRow>().Property(entity => entity.Id).ValueGeneratedNever();
                 modelBuilder.Entity<GeneratedStamp>().Property(entity => entity.Id).ValueGeneratedNever();
                 modelBuilder.Entity<GeneratedStamp>().Property(entity => entity.Stamp).HasComputedColumnSql("CURRENT_TIMESTAMP");
@@ -1150,12 +1194,19 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
             public bool Enabled { get; set; }
         }
 
+        private sealed class GeneratedState
+        {
+            public int Id { get; set; }
+            public RowState State { get; set; }
+        }
+
         private sealed class ScalarRow
         {
             public int Id { get; set; }
             public uint Count { get; set; }
             public bool Enabled { get; set; }
             public int? OptionalCount { get; set; }
+            public bool? OptionalFlag { get; set; }
             public RowState State { get; set; }
             public Guid Token { get; set; }
         }

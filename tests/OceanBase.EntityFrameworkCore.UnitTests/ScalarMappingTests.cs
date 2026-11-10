@@ -51,6 +51,56 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
         }
 
         [Theory]
+        [MemberData(nameof(IntegerCases))]
+        public void Floating_integer_reads_require_exact_in_range_values(
+            OceanBaseCompatibilityMode mode, Type type, object minimum, object maximum, string storeType)
+        {
+            using var context = CreateContext(mode);
+            var mapping = context.GetService<IRelationalTypeMappingSource>().FindMapping(type, storeType)!;
+            foreach (var fraction in new object[] { 1.5d, 1.5f, -0.5d, -0.5f, double.Epsilon, float.Epsilon })
+            {
+                Assert.Throws<InvalidCastException>(() => Read(mapping, fraction));
+            }
+
+            foreach (var exact in new object[] { 5d, 5f })
+            {
+                var result = Read(mapping, exact);
+                Assert.IsType(type, result);
+                Assert.Equal(5m, Convert.ToDecimal(result));
+            }
+
+            Assert.Equal(minimum, Read(mapping, Convert.ToSingle(minimum)));
+            Assert.Equal(minimum, Read(mapping, Convert.ToDouble(minimum)));
+
+            var outside = Convert.ToDouble(maximum) + 1d;
+            foreach (var value in new object[] { outside, (float)outside, double.NaN, double.PositiveInfinity,
+                double.NegativeInfinity, float.NaN, float.PositiveInfinity, float.NegativeInfinity })
+            {
+                Assert.Throws<OverflowException>(() => Read(mapping, value));
+            }
+        }
+
+        [Theory]
+        [MemberData(nameof(IntegerCases))]
+        public void Nullable_integer_mappings_keep_endpoints_exact_and_null_parameters_unset(
+            OceanBaseCompatibilityMode mode, Type type, object minimum, object maximum, string storeType)
+        {
+            using var context = CreateContext(mode);
+            var nullableType = typeof(Nullable<>).MakeGenericType(type);
+            var mapping = context.GetService<IRelationalTypeMappingSource>().FindMapping(nullableType)!;
+            Assert.Equal(storeType, mapping.StoreType);
+            using var command = new OceanBaseCommand();
+            foreach (var value in new[] { minimum, maximum })
+            {
+                Assert.Equal(value, mapping.CreateParameter(command, "endpoint", value, nullable: true).Value);
+                Assert.Equal(value, Read(mapping, new OceanBaseDecimal(Convert.ToDecimal(value))));
+            }
+
+            Assert.Equal(DBNull.Value, mapping.CreateParameter(command, "null", null, nullable: true).Value);
+            Assert.Null(mapping.CreateParameter(command, "output", null, direction: ParameterDirection.Output).Value);
+        }
+
+        [Theory]
         [InlineData(OceanBaseCompatibilityMode.MySql)]
         [InlineData(OceanBaseCompatibilityMode.Oracle)]
         public void Integer_reading_rejects_fraction_and_overflow(OceanBaseCompatibilityMode mode)
@@ -72,6 +122,10 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             using var command = new OceanBaseCommand();
 
             Assert.Equal(DayOfWeek.Friday, Read(mapping, new OceanBaseDecimal(5m)));
+            Assert.Equal(DayOfWeek.Friday, Read(mapping, 5d));
+            Assert.Equal(DayOfWeek.Friday, Read(mapping, 5f));
+            Assert.Throws<InvalidCastException>(() => Read(mapping, 1.5d));
+            Assert.Throws<InvalidCastException>(() => Read(mapping, 1.5f));
             Assert.Equal(5, mapping.CreateParameter(command, "day", DayOfWeek.Friday).Value);
             Assert.Equal(DBNull.Value, mapping.CreateParameter(command, "day", null, nullable: true).Value);
         }
@@ -114,6 +168,10 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
                 Assert.Equal(36, parameter.Size);
                 Assert.Equal(guid.ToString(), parameter.Value);
             }
+
+            var empty = mapping.CreateParameter(command, "empty", Guid.Empty);
+            Assert.Equal(Guid.Empty, Read(mapping, empty.Value!));
+            Assert.Equal(DBNull.Value, mapping.CreateParameter(command, "null", null, nullable: true).Value);
         }
 
         [Theory]
@@ -125,6 +183,13 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             var mapping = context.GetService<IRelationalTypeMappingSource>().FindMapping(typeof(bool))!;
             using var command = new OceanBaseCommand();
             var parameter = mapping.CreateParameter(command, "value", true);
+            Assert.Equal(mode == OceanBaseCompatibilityMode.Oracle ? (object)0m : false,
+                mapping.CreateParameter(command, "false", false).Value);
+            var nullableMapping = context.GetService<IRelationalTypeMappingSource>().FindMapping(typeof(bool?))!;
+            Assert.Equal(DBNull.Value, nullableMapping.CreateParameter(command, "null", null, nullable: true).Value);
+            Assert.False(Assert.IsType<bool>(Read(mapping, false)));
+            Assert.False(Assert.IsType<bool>(Read(mapping, 0m)));
+            Assert.False(Assert.IsType<bool>(Read(mapping, new OceanBaseDecimal(0m))));
             if (mode == OceanBaseCompatibilityMode.Oracle)
             {
                 Assert.Equal(DbType.Decimal, parameter.DbType);

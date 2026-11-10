@@ -1,6 +1,7 @@
 using System;
 using System.Data;
 using System.Linq;
+using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Storage;
@@ -127,6 +128,16 @@ namespace PackageConsumer
                 }
 
                 var source = context.GetService<IRelationalTypeMappingSource>();
+                var integerMapping = source.FindMapping(typeof(int))!;
+                foreach (var fraction in new object[] { 1.5f, 1.5d })
+                {
+                    var fractionalReadRejected = false;
+                    var read = integerMapping.CustomizeDataReaderExpression(Expression.Constant(fraction, typeof(object)));
+                    try { Expression.Lambda<Func<int>>(read).Compile()(); }
+                    catch (InvalidCastException) { fractionalReadRejected = true; }
+                    if (!fractionalReadRejected) throw new Exception("A floating database fraction was rounded to an integer.");
+                }
+
                 var temporalFacetRejected = false;
                 try { source.FindMapping(typeof(DateTime), null, size: 3); }
                 catch (ArgumentException) { temporalFacetRejected = true; }

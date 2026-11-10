@@ -119,6 +119,26 @@ if a property-facet regression actually fails. Keep the existing type profile an
 4. Focused RED/GREEN, full Debug/Release, independent review and scoped commit. Repeat current package/selected
    patch evidence after the scalar production changes before completing Batch 2 locally.
 
+## Batch 3a brief: string concatenation and query boundaries
+
+**Files:** Query/OceanBaseQuerySqlGenerator.cs; scoped query/parameter processor code only when regression
+evidence requires it; UnitTests/SqlGeneratorTests.cs (or a focused StringQueryTests.cs);
+FunctionalTests/BasicRelationalTests.cs. Follow the concatenation contract in the query/update design.
+
+1. RED: C# string addition and fixed Concat(2/3/4 strings) use native syntax, numeric addition remains `+`.
+   Cover nested/constant/parameter/nullable columns, both modes, predicates/projections and independent contexts.
+2. Fix SQL generation while retaining MySQL null protection. Probe Oracle nullable projections and null-sensitive
+   predicates against the documented native empty/NULL result rule; fix incorrect nullable metadata or reject a
+   specific unsupported shape explicitly. A SQL-shape pass must not hide a known nullability optimization bug.
+   RED includes concat IS NULL/IS NOT NULL, one/both nullable inputs, concat comparisons/NOT, nested Concat,
+   COALESCE to a nonempty fallback and to empty, and the same query with nonempty/empty/null captured parameters,
+   under both null-semantics settings. Correct this before EF's nullability optimization; changing a binary
+   expression's nullable flag alone is insufficient because EF may decompose its null test as operand OR.
+3. Characterize equality/inequality/string Equals, default/relational null semantics, negative StringComparison
+   and custom predicates, and allowed top-level client projections. Reuse EF behavior where it is correct.
+4. Add sync/async intercepted parameter/materialization evidence, full Debug/Release, independent review and
+   scoped commit. QRY-06 stays partial; later search/member/substring/case/trim slices still need their own matrix.
+
 ## Execution record
 
 - Baseline: 57fd44a, clean efcore/10.0. Prior verified suite: 563 (420 unit, 142 intercepted, one consumer).
@@ -141,7 +161,16 @@ if a property-facet regression actually fails. Keep the existing type profile an
   Release passes 706. The same baseline-built temporal2-20261110 package passes both modes at EF10.0.0/10.0.14;
   README, identity, assets, bounded ranges and package-only consumer graph inspected. The initial temporal probe
   predates review fixes and is not current completion evidence. No publication or database connection occurred.
-- Batch 2c: next local scalar slice; not yet implemented. Evidence for 2b: artifacts/local-development/batch2b/.
+- Batch 2c local scope complete: finite floating fractions reject integer reads/generated keys and enums;
+  four confirmed Oracle property precision conflicts now reject through the shared numeric property check.
+  Focused 116 unit and ten pipeline pass; Debug/Release and isolated EF10.0.14 Release each pass 752 (590+160+2).
+  Independent review passed. Same baseline-built numeric-20261110 nupkg passes both modes on both selected patches;
+  previous temporal2 package fails the new reader smoke. Package identity/assets/README/ranges and package-only
+  graph inspected. Evidence: artifacts/local-development/batch2c/. No live connection/publication.
+- Scalar audit note: connector 0.2.0 nuspec revision 4734781a7028aea990af7a832ca7d251a2055556
+  OceanBaseDataReader.GetDecimal/GetFieldValue already handles OceanBaseDecimal.ToDecimal; reuse that reader
+  path rather than inventing a second transport. Byte/session/calendar/LOB/wire gates remain external evidence.
+- Batch 3a: next local slice; supported string-function/operator matrices and later batches remain pending.
 - Remaining Batch 2 scalar work and Batches 3–10 pending. The overall goal remains active.
 - Batch 8 package README slice: use the provider project's README as package-owned documentation and declare
   PackageReadmeFile. Verify archive metadata/content with no-build packing of an already verified isolated

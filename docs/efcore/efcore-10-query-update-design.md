@@ -51,6 +51,33 @@ in the [technical baseline](efcore-10-technical-baseline.md). Larger Oracle stri
 generating an order or group operation over LOB storage does not establish valid execution. Live mapping and query
 evidence remains required before advertising support.
 
+## String concatenation local contract
+
+The next QRY-01/QRY-06/QRY-11 slice fixes string addition and the fixed two/three/four-string Concat overloads.
+EF10 StringMethodTranslator produces string SqlBinary Add; the base SQL generator emits `+`, which is not this
+provider's concatenation syntax. Preserve numeric addition. MySQL emits `CONCAT(left, right)` and Oracle emits
+`left || right`, with nested grouping and type mappings preserved. Keep EF's null-as-empty protection for MySQL;
+rewriting before nullability processing must not accidentally discard that protection.
+
+Sources: EF Core v10.0.0 StringMethodTranslator, QuerySqlGenerator and SqlNullabilityProcessor, and OceanBase
+documentation revision `2a5ae3a23a51729d065cec716508eb26cb064106`:
+[MySQL CONCAT](https://github.com/oceanbase/oceanbase-doc/blob/2a5ae3a23a51729d065cec716508eb26cb064106/en-US/700.reference/500.sql-reference/100.sql-syntax/200.common-tenant-of-mysql-mode/400.functions-of-mysql-mode/200.single-row-functions-of-mysql-mode/200.string-functions-of-mysql-mode/700.concat-of-mysql-mode.md),
+[Oracle concatenation](https://github.com/oceanbase/oceanbase-doc/blob/2a5ae3a23a51729d065cec716508eb26cb064106/en-US/700.reference/500.sql-reference/100.sql-syntax/300.common-tenant-of-oracle-mode/400.operator-of-oracle-mode/400.concatenate-operators-of-oracle-mode.md).
+These sources define generated SQL, not live acceptance.
+
+Oracle treats zero-length strings as NULL; concatenating two NULL strings yields NULL, while a non-null operand
+survives concatenation with NULL. Exact CLR empty-string result equivalence is not promised. Test nullable
+projections and null-sensitive predicates explicitly: do not inherit a proven-wrong non-nullability assumption
+from EF's generic Add processing. Any unsupported null-sensitive shape must fail clearly rather than silently
+folding a potentially-null database result to a constant. Keep the Oracle Boolean condition conversion in place.
+
+Characterize existing string equality/inequality and Equals overloads through real EF SQL. Comparison uses
+database collation semantics; StringComparison/culture overloads remain unsupported predicates. Preserve allowed
+top-level client projections. Array/object/IEnumerable Concat overloads and the rest of QRY-06 remain separate
+matrix work. Local tests cover constants/parameters/nullable columns, nesting, projection/predicate use,
+opposite-mode contexts and sync/async intercepted commands; server collation, lengths, LOBs and result semantics
+still require the postponed live phase.
+
 ## Tracked writes
 
 A modification batch contains one row operation. This permits command-level affected-row checks and keeps the
@@ -136,7 +163,18 @@ Still required for Task 4 and release:
 
 ## Package checkpoint validation
 
-### Current temporal facet/clone checkpoint (2026-11-10)
+### Current exact integer normalization checkpoint (2026-11-10)
+
+Debug/Release on EF10.0.0 and isolated Release on EF10.0.14 each pass 752 tests (590 unit, 160 intercepted
+pipeline, two project consumers). The same baseline-built `10.0.0-checkpoint.numeric-20261110` nupkg passes both
+modes on both selected patches, including rejection of Single/Double fractions in integer reader customization.
+The preceding temporal2 package fails that smoke check. Independent review passed. Package identity, net10.0,
+README, connector version, bounded EF ranges and package-only consumer dependencies were inspected.
+
+Repeat the commands below with `10.0.0-checkpoint.numeric-20261110` and `artifacts/checkpoint-numeric-20261110`.
+Logs: `artifacts/local-development/batch2c/`. Wider queries/release gates and all live acceptance remain open.
+
+### Historical temporal facet/clone checkpoint (2026-11-10)
 
 Debug/Release on EF10.0.0 and isolated Release on EF10.0.14 each pass 706 tests (554 unit, 150 intercepted
 pipeline, two project consumers). The same baseline-built `10.0.0-checkpoint.temporal2-20261110` nupkg passes

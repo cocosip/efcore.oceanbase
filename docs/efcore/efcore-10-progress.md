@@ -57,9 +57,29 @@ the exact EF API. Expanded consumers fail against the earlier alias/unfinished t
 same new `10.0.0-checkpoint.temporal2-20261110` package on EF10.0.0/10.0.14, both modes. Package-only dependencies,
 nuspec identity/ranges, net10.0 assembly and included README were inspected. No live database claim or publication.
 
-Latest package: `artifacts/checkpoint-temporal2-20261110/OceanBase.EntityFrameworkCore.10.0.0-checkpoint.temporal2-20261110.nupkg`.
+Historical temporal package: `artifacts/checkpoint-temporal2-20261110/OceanBase.EntityFrameworkCore.10.0.0-checkpoint.temporal2-20261110.nupkg`.
 Evidence: `artifacts/local-development/batch2b/`. The first temporal probe predates review fixes and is not current
 evidence. Next local scalar work is exact integer normalization and the remaining characterization cells.
+
+### Exact integer normalization checkpoint
+
+Finite Single/Double fractions now reject before conversion to any of the eight integer CLR types. Exact integral
+values, checked ranges and non-finite failures retain existing behavior; floating CLR targets are unchanged.
+Reader and generated key/enum propagation share this normalization. Property precision/scale validation now also
+covers integer/Boolean mappings; four Oracle property conflicts reproduced before the fix. Nullable endpoints,
+Boolean false/null and Guid.Empty use the existing scalar/EF pipeline helpers.
+
+Focused unit tests pass 116 and generated-output tests pass ten after RED. Debug/Release and isolated EF10.0.14
+Release each pass **752 tests** (590 unit, 160 intercepted pipeline, two project consumers). Independent review
+passed. The same baseline-built `10.0.0-checkpoint.numeric-20261110` package passes both modes at EF10.0.0/10.0.14;
+the preceding temporal2 package fails the new floating-fraction reader check. Identity/net10.0/README/ranges and
+the package-only graph were inspected. No live database execution or publication.
+
+Latest package: `artifacts/checkpoint-numeric-20261110/OceanBase.EntityFrameworkCore.10.0.0-checkpoint.numeric-20261110.nupkg`.
+Evidence: `artifacts/local-development/batch2c/`. Before string work, the published connector source was checked
+at its nuspec revision: GetDecimal explicitly converts OceanBaseDecimal through ToDecimal, so no duplicate
+provider decimal-reader transport is justified. Live decimal/wire behavior remains open. Next local work is
+string concatenation/nullability and then the wider query translation inventory; scalar release gates remain open.
 
 ### Package README preparation
 
@@ -150,7 +170,7 @@ mapping limits are a profile, not a comprehensive OceanBase type-support claim.
 Continue in this order:
 
 1. Recheck efcore/10.0/worktree state and read the checklist plus this handoff.
-2. Finish remaining local scalar gaps, starting with exact integer normalization, before broadening query claims.
+2. Continue the documented local query slices after the scalar checkpoint; audit newly exposed scalar gaps as needed.
 3. Define per-mode text/byte/session acceptance fixtures when live access is supplied. Cover empty/NULL,
    supplementary characters, trailing spaces, byte capacity and ordinary LOB values; preserve query transport.
 4. Finish opened-connection ownership, diagnostics and cancellation, followed by the wider query/update/transaction

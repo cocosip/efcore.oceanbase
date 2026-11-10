@@ -15,7 +15,13 @@ namespace OceanBase.EntityFrameworkCore.Storage
 
             var integer = Type.GetTypeCode(targetType) is TypeCode.SByte or TypeCode.Byte or TypeCode.Int16
                 or TypeCode.UInt16 or TypeCode.Int32 or TypeCode.UInt32 or TypeCode.Int64 or TypeCode.UInt64;
-            if (integer && value is decimal fraction && decimal.Truncate(fraction) != fraction)
+            if (integer && (value switch
+                {
+                    decimal fraction => decimal.Truncate(fraction) != fraction,
+                    double fraction => double.IsFinite(fraction) && Math.Truncate(fraction) != fraction,
+                    float fraction => float.IsFinite(fraction) && MathF.Truncate(fraction) != fraction,
+                    _ => false
+                }))
             {
                 throw new InvalidCastException("A fractional database value cannot be read as an integer.");
             }

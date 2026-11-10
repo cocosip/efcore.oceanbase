@@ -2,6 +2,7 @@ using System;
 using System.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using OceanBase.EntityFrameworkCore.Storage;
@@ -118,6 +119,22 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             Assert.Equal((byte)5, clone.CreateParameter(command, "value", null, direction: ParameterDirection.Output).Precision);
             Assert.ThrowsAny<ArgumentException>(() => source.FindMapping(typeof(int), "NUMBER(4)", precision: 3));
             Assert.ThrowsAny<ArgumentException>(() => clone.WithPrecisionAndScale(5, 1));
+        }
+
+        [Theory]
+        [InlineData(typeof(int), "NUMBER(4)")]
+        [InlineData(typeof(int), "NUMBER(4,0)")]
+        [InlineData(typeof(long), "DECIMAL(4,0)")]
+        [InlineData(typeof(bool), "NUMERIC(4)")]
+        public void Oracle_integer_property_precision_must_match_the_explicit_declaration(Type type, string storeType)
+        {
+            using var context = CreateContext(OceanBaseCompatibilityMode.Oracle);
+            var source = context.GetService<IRelationalTypeMappingSource>();
+            var property = new ModelBuilder().Entity("IntegerFacet").Property(type, "Value")
+                .HasColumnType(storeType).HasPrecision(3).Metadata;
+            Assert.ThrowsAny<ArgumentException>(() => source.FindMapping((IProperty)property));
+            property.SetPrecision(4);
+            Assert.Equal(4, source.FindMapping((IProperty)property)!.Precision);
         }
 
         [Theory]
