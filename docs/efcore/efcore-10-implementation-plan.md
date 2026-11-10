@@ -23,7 +23,7 @@ update MySQL and Oracle statuses independently. Generated SQL and intercepted te
 
 | Task | Checklist IDs | Remaining acceptance work |
 | --- | --- | --- |
-| 1: Package boundary | PKG-01 through PKG-04 | Historical fbb33ea package passes both patches; current explicit-integer package validation and release package-content gate remain. |
+| 1: Package boundary | PKG-01 through PKG-04 | 3ab2345 package passes both selected patches; repeatable release package-content gate remains. |
 | 2: Configuration | CFG-01 through CFG-04 | Negative cases, both-mode service graph and actual cache behavior. |
 | 3: Connection and mappings | CON-01 through CON-05, SQL-01/02, MOD-01 through MOD-03, MAP-01 through MAP-07 | Closed-connection cleanup/facets/scalar/temporal/binary conversion/precision/length hooks have tests; opened ownership, remaining explicit types and live round trips remain. |
 | 4: Runtime and schema | DIA-01/02, QRY-01 through QRY-11, UPD-01 through UPD-05, TXN-01 through TXN-03, SCH-01 through SCH-03 | Live query/write/transaction evidence and schema implementation; incomplete. |
@@ -35,10 +35,11 @@ do not complete mappings.
 
 Before further production changes, use the checklist's **Before starting a feature** record to enumerate concrete
 cases for the selected IDs. The **Next mapping acceptance cases** table defines the immediate scalar work;
-its initial failing tests are the RED baseline. Explicit integer/Boolean work based on e8b5baa passes 317 tests
+its initial failing tests are the RED baseline. Explicit integer/Boolean revision 3ab2345 passes 317 tests
 in Debug and Release (244 unit, 72 intercepted pipeline, one project consumer), including 48 new integer unit cases,
 eight explicit-column pipeline cases and four query/write regression cases. The source Release suite also passes
-on EF10.0.14; the new package matrix is pending. This is partial acceptance, not Task 3/4 completion or live evidence.
+on EF10.0.14; the same baseline-built package passes both modes on EF10.0.0 and EF10.0.14. This is partial acceptance,
+not Task 3/4 completion or live evidence.
 
 ## Global Constraints
 
