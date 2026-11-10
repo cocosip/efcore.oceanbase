@@ -52,8 +52,8 @@ so that an undocumented feature is not accidentally advertised.
 
 ## Current evidence and blockers
 
-Snapshot: 2026-11-10, `dev` decimal declaration/query/write changes following f645608.
-Source suites pass; the changed source still requires new package validation. This is not a release result.
+Snapshot: 2026-11-10, `dev` decimal declaration/query/write implementation and consumer revision 3365ad9.
+The same baseline-built package passes both tested EF patches. This is not a release result.
 
 `dotnet test OceanBase.EntityFrameworkCore.slnx --no-restore -m:1 -nr:false` produced:
 
@@ -64,7 +64,7 @@ The expanded suite passed in Debug and Release (498 tests per configuration).
 | Unit | 375 | 0 | Options, connection cleanup, scalar/temporal/binary/native floating/decimal converter hooks, explicit declarations/facets/clones, literals and Oracle Boolean SQL; full explicit-type/live coverage incomplete. |
 | Command pipeline | 122 | 0 | Intercepted before network execution; scalar/temporal/binary/Guid/floating/decimal query/input conversion, converted write bounds and synthetic generated-output readback; transactions disabled. |
 | Consumer | 1 | 0 | Project reference, not an isolated packed-package consumer. |
-| Packed consumer | Both modes | 0 | Revision f645608; same baseline-built package passes EF10.0.0/10.0.14 in both modes, including narrow-column temporal query comparands; no live execution. |
+| Packed consumer | Both modes | 0 | Revision 3365ad9; same baseline-built package passes EF10.0.0/10.0.14 in both modes, including decimal query precision independent of column capacity; no live execution. |
 | Later-patch Release suite | 498 | 0 | Current decimal source compiled/tested against EF10.0.14 in isolated artifacts; separate from baseline-package compatibility. |
 | Live MySQL / Oracle | Not established | Not established | No live provider execution recorded for either mode. |
 | Relational specification | Not established | Not established | No specification test project yet. |
@@ -139,6 +139,12 @@ The live fixture and secret loading are still to be implemented; credentials are
 Other gaps include large Oracle string LOB query restrictions, remaining scalar/literal semantics and live mapping
 round trips, transactions, database creation and package validation. The [query/update design](efcore-10-query-update-design.md)
 records the current implementation and its limits.
+
+Decimal declaration/query/write validation adds 36 UD and 12 FP cases. Of the initial 31 unit cases, 27
+failed before implementation; review added two failing direct bare-UNSIGNED clone regressions before their fix.
+Queries retain value-inferred precision/scale; only actual converted writes check physical capacity and rounding.
+Output-only metadata retains declared facets. The expanded package consumer failed on f645608 and passes on
+3365ad9 at both tested EF patches. Unqualified Oracle alias defaults and live server behavior remain open.
 
 Existing evidence references used below identify partial coverage, not automatic satisfaction of a row:
 
@@ -282,8 +288,8 @@ commit/transaction behavior per mode.
 | --- | --- | --- | --- | --- | --- |
 | PKG-01 | Build net10.0 assets against published OceanBaseConnector 0.2.0 with warnings as errors. | Required | Done | Done | Current solution test command builds assets; not a package-content assertion. |
 | PKG-02 | Packed nuspec uses OceanBase.EntityFrameworkCore and EF ranges [10.0.0,11.0.0). | Required | In progress | In progress | Checkpoint nuspec/asset assertions passed; repeatable release package-content gate still needed. |
-| PKG-03 | Isolated packed consumer restores/executes provider API without project/local connector references. | Required | In progress | In progress | Historical PC at f645608 passes; decimal source changes require a newly built package and expanded consumer. |
-| PKG-04 | Minimum EF10 and selected later available EF10 patch restore/build/test without pinning consumer patch; EF11 cannot satisfy dependencies. | Required | In progress | In progress | Source Release suite 498 passes at 10.0.14; current decimal source still needs the same baseline-built package tested on EF10.0.0/10.0.14. |
+| PKG-03 | Isolated packed consumer restores/executes provider API without project/local connector references. | Required | Done | Done | PC at 3365ad9 passes both modes on both selected patches, including decimal query transport; rerun after provider changes. |
+| PKG-04 | Minimum EF10 and selected later available EF10 patch restore/build/test without pinning consumer patch; EF11 cannot satisfy dependencies. | Required | Done | Done | Source Release suite 498 passes at 10.0.14; same 3365ad9 baseline-built package passes EF10.0.0/10.0.14; nuspec ranges rechecked, prior range parser rejects 11.0.0; rerun after changes. |
 | TST-01 | Selected EF relational specification classes pass; exclusions map to checklist IDs and limitations. | Required | Planned | Planned | Specification project/selection absent. |
 | TST-02 | Live core query/write/transaction/schema/scalar suites pass in at least one declared supported environment per mode. | Required | Planned | Planned | User will supply access later; User Secrets fixture and authorized schema/cleanup scope required; no live provider execution recorded. |
 | REL-01 | Support notes record server/connector/runtime/EF versions, tenant mode, direct/proxy endpoint, transport/options without credentials. | Required | Planned | Planned | Release evidence record missing. |
