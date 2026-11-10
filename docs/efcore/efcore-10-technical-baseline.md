@@ -15,8 +15,10 @@ smaller than a complete EF Core feature catalog.
 - ADO.NET dependency: the public OceanBaseConnector package APIs.
 - Public package: OceanBase.EntityFrameworkCore 10.x.
 
-EF Core 10 requires .NET 10 to build and run. Restore resolves the highest available EF Core 10 patch inside the
-range; the first consumer test records the resolved SDK, runtime, EF Core patch, provider package and connector.
+EF Core 10 requires .NET 10 to build and run. NuGet normally selects the lowest applicable version inside a bounded
+range, unless a consumer dependency requires a higher version. A range permits consumer patch upgrades; it does not
+automatically test those upgrades. The package-consumer gate must record the SDK, runtime, resolved EF Core patch,
+provider package and connector.
 
 ## Provider entry points
 
@@ -67,6 +69,47 @@ The MySQL and Oracle paths must have separate tests for:
 
 Common code is allowed only where both modes produce the same SQL and result semantics. A mode check based only
 on the connection string is insufficient when the EF model cache can reuse a model.
+
+## Connection validation and mapping checkpoint
+
+The following contracts were checked against EF Core Relational 10.0.0 sources and the published
+OceanBaseConnector 0.2.0 public API:
+
+- [RelationalConnection lifecycle](https://github.com/dotnet/efcore/blob/v10.0.0/src/EFCore.Relational/Storage/RelationalConnection.cs).
+- [DecimalTypeMapping](https://github.com/dotnet/efcore/blob/v10.0.0/src/EFCore.Relational/Storage/DecimalTypeMapping.cs)
+  and [StringTypeMapping](https://github.com/dotnet/efcore/blob/v10.0.0/src/EFCore.Relational/Storage/StringTypeMapping.cs).
+- [Property types, length and precision](https://learn.microsoft.com/ef/core/modeling/entity-properties).
+
+`RelationalConnection` reads `DbConnection` during disposal/reset. The provider therefore validates caller-supplied
+connections during construction, replacements before assignment, created connection strings before allocation,
+and existing connections before each sync/async open. A getter does not revalidate a rejected connection during
+cleanup. Failed replacement validation preserves the previous connection. EF's base implementation retains
+ownership and disposal behavior. Connection interceptors must not replace connector connections with incompatible
+implementations; validation before opening also covers intercepted creation.
+
+| Mapping facet | MySQL contract | Oracle contract |
+| --- | --- | --- |
+| Default decimal | DECIMAL(65,30), enough integer/fractional capacity for CLR decimal values | Unqualified NUMBER, allowing connector value-based precision/scale inference |
+| Configured decimal | Precision 1..65; scale 0..30 and no greater than precision | Precision 1..38; scale -84..127, including scale greater than precision |
+| Precision without scale | Scale defaults to zero | Scale defaults to zero |
+| Explicit decimal type | DECIMAL/NUMERIC declarations are preserved; unqualified type uses store defaults (10,0) | NUMBER/DECIMAL/NUMERIC declarations are preserved |
+| Default string | LONGTEXT; bounded VARCHAR(255) for a key/index | NVARCHAR2(2000); bounded NVARCHAR2(255) for a key/index |
+| Bounded variable string | VARCHAR(n) up to 16383 characters, otherwise LONGTEXT | NVARCHAR2(n) up to 2000; non-Unicode VARCHAR2(n CHAR) up to 4000, otherwise NCLOB/CLOB |
+| Fixed string | CHAR(n), at most 255 | NCHAR(n), at most 1000; non-Unicode CHAR(n CHAR), at most 2000 |
+| String parameter facets | DbType reflects Unicode/fixed length; Size is set explicitly | Same metadata contract; CHAR/BYTE units in explicit store declarations preserve Size |
+
+Decimal mappings explicitly configure parameter Precision and the connector's DecimalScale, because the generic
+EF mapping does not set these parameter facets. DecimalScale preserves Oracle negative scales through the public
+connector API; values that require rounding remain subject to connector validation. String mappings explicitly set
+parameter Size. Cloning retains these provider parameter hooks. Input null becomes DBNull; output-only parameters
+retain their unset value, direction and facets until execution.
+
+The text limits are conservative mapping choices, not a guarantee of every charset/server byte limit. MySQL
+Unicode depends on the configured tenant/column character set; the Unicode flag does not configure that charset.
+Oracle CHAR/BYTE declarations retain their explicit storage semantics. Large Oracle strings still use LOB storage,
+which restricts ordering/grouping. Live charset, byte-limit, decimal round-trip and LOB execution tests remain open.
+Scalar SQL literals, Boolean/Guid/temporal behavior, remaining explicit store types and value converters also remain
+open acceptance work; this checkpoint does not close the entire MAP category.
 
 ## Test entry points
 

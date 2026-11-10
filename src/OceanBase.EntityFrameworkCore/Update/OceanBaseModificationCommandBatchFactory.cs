@@ -1,11 +1,20 @@
-using System;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Update;
 
-namespace OceanBase.EntityFrameworkCore.Update;
-
-// shortcut: update SQL is implemented in Task 4; fail before any write can be attempted.
-internal sealed class OceanBaseModificationCommandBatchFactory : IModificationCommandBatchFactory
+namespace OceanBase.EntityFrameworkCore.Update
 {
-    public ModificationCommandBatch Create()
-        => throw new NotSupportedException("OceanBase update SQL is not implemented yet.");
+    internal sealed class OceanBaseModificationCommandBatchFactory : IModificationCommandBatchFactory
+    {
+        private readonly ModificationCommandBatchFactoryDependencies _dependencies;
+        private readonly OceanBaseCompatibilityMode _mode;
+
+        public OceanBaseModificationCommandBatchFactory(
+            ModificationCommandBatchFactoryDependencies dependencies, IDbContextOptions options)
+        {
+            _dependencies = dependencies;
+            _mode = options.FindExtension<Internal.OceanBaseOptionsExtension>()!.CompatibilityMode;
+        }
+
+        public ModificationCommandBatch Create() => new OceanBaseModificationCommandBatch(_dependencies, _mode);
+    }
 }

@@ -3,11 +3,14 @@ using System.Collections.Generic;
 using System.Data.Common;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Metadata.Conventions.Infrastructure;
+using Microsoft.EntityFrameworkCore.Query;
 using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.EntityFrameworkCore.Update;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.DependencyInjection.Extensions;
 using OceanBase.EntityFrameworkCore.Storage;
+using OceanBase.EntityFrameworkCore.Metadata.Conventions;
+using OceanBase.EntityFrameworkCore.Query;
 using OceanBase.EntityFrameworkCore.Update;
 
 namespace OceanBase.EntityFrameworkCore.Internal
@@ -85,26 +88,37 @@ namespace OceanBase.EntityFrameworkCore.Internal
 
         public override void ApplyServices(IServiceCollection services)
         {
-            new EntityFrameworkRelationalServicesBuilder(services)
+            var builder = new EntityFrameworkRelationalServicesBuilder(services)
                 .TryAdd<LoggingDefinitions, OceanBaseLoggingDefinitions>()
                 .TryAdd<IDatabaseProvider, DatabaseProvider<OceanBaseOptionsExtension>>()
+                .TryAdd<IProviderConventionSetBuilder, OceanBaseConventionSetBuilder>()
+                .TryAdd<IModelRuntimeInitializer, RelationalModelRuntimeInitializer>()
+                .TryAdd<IModelCustomizer, RelationalModelCustomizer>()
+                .TryAdd<IModelValidator, RelationalModelValidator>()
                 .TryAdd<IRelationalConnection, OceanBaseRelationalConnection>()
-                .TryAdd<IModificationCommandBatchFactory, OceanBaseModificationCommandBatchFactory>()
-                .TryAddCoreServices();
+                .TryAdd<IModificationCommandBatchFactory, OceanBaseModificationCommandBatchFactory>();
 
-            services.TryAddSingleton<ISqlGenerationHelper>(serviceProvider =>
+            builder.TryAdd<ISqlGenerationHelper>(serviceProvider =>
                 new OceanBaseSqlGenerationHelper(
                     serviceProvider.GetRequiredService<RelationalSqlGenerationHelperDependencies>(),
                     CompatibilityMode));
-            services.TryAddSingleton<IRelationalTypeMappingSource>(serviceProvider =>
+            builder.TryAdd<IUpdateSqlGenerator>(serviceProvider =>
+                new OceanBaseUpdateSqlGenerator(
+                    serviceProvider.GetRequiredService<UpdateSqlGeneratorDependencies>(), CompatibilityMode));
+            builder.TryAdd<IQuerySqlGeneratorFactory>(serviceProvider =>
+                new OceanBaseQuerySqlGeneratorFactory(
+                    serviceProvider.GetRequiredService<QuerySqlGeneratorDependencies>(), CompatibilityMode));
+            builder.TryAdd<IRelationalTypeMappingSource>(serviceProvider =>
                 new OceanBaseTypeMappingSource(
                     serviceProvider.GetRequiredService<TypeMappingSourceDependencies>(),
                     serviceProvider.GetRequiredService<RelationalTypeMappingSourceDependencies>(),
                     CompatibilityMode));
-            services.TryAddSingleton<IModelCacheKeyFactory>(serviceProvider =>
+            builder.TryAdd<IModelCacheKeyFactory>(serviceProvider =>
                 new OceanBaseModelCacheKeyFactory(
                     serviceProvider.GetRequiredService<ModelCacheKeyFactoryDependencies>(),
                     CompatibilityMode));
+
+            builder.TryAddCoreServices();
         }
     }
 }

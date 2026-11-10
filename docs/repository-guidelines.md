@@ -54,7 +54,8 @@ Required test layers are:
 2. EF relational tests for query, update, transaction and model behavior.
 3. EF Core relational specification tests, extended with provider fixtures and SQL assertions where useful.
 4. Package-consumer tests using only the packed provider and connector packages.
-5. Optional live tests against MySQL and Oracle compatibility tenants.
+5. Required live tests for claimed runtime features against at least one declared supported environment in each
+   MySQL and Oracle mode. Additional proxy, TLS, HA and server-version environments extend the evidence matrix.
 
 An unavailable database, proxy, TLS or authentication environment is recorded as an unverified boundary; it is
 not converted into a client pass or a client defect.
@@ -64,6 +65,10 @@ not converted into a client pass or a client defect.
 Public behavior, unsupported features and server prerequisites are documented before implementation. A change
 that affects more than one EF Core branch must update the shared design document and each affected branch's
 compatibility notes.
+
+Use docs/efcore/efcore-10-feature-checklist.md as the EF10 acceptance inventory. Name affected feature IDs before
+development and update their criteria, tests and per-mode evidence together. Add missing features to the inventory
+before implementation. Inherited EF behavior, generated SQL and intercepted commands are not live server proof.
 
 Before merging a feature, review the generated SQL, parameter names, identifier quoting, null semantics,
 identity/key retrieval, transaction behavior and cancellation behavior for both compatibility modes.

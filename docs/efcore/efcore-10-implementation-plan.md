@@ -15,6 +15,24 @@ semantics are identical; mode-specific SQL and mappings stay explicit.
 **Acceptance checklist:** docs/efcore/efcore-10-feature-checklist.md. A task is complete only when the affected
 checklist rows, implementation, tests and package impact are updated together.
 
+## Acceptance map and current state
+
+The feature checklist is the release authority. Task checkboxes describe work steps, not proof that all features
+in a category are supported. Before starting a step, name its checklist IDs and required evidence; after it,
+update MySQL and Oracle statuses independently. Generated SQL and intercepted tests do not close live gates.
+
+| Task | Checklist IDs | Remaining acceptance work |
+| --- | --- | --- |
+| 1: Package boundary | PKG-01 through PKG-04 | Packed consumer and EF10 patch-resolution matrix. |
+| 2: Configuration | CFG-01 through CFG-04 | Negative cases, both-mode service graph and actual cache behavior. |
+| 3: Connection and mappings | CON-01 through CON-05, SQL-01/02, MOD-01 through MOD-03, MAP-01 through MAP-07 | Cleanup regression, ownership, facets and scalar round trips; incomplete. |
+| 4: Runtime and schema | DIA-01/02, QRY-01 through QRY-11, UPD-01 through UPD-05, TXN-01 through TXN-03, SCH-01 through SCH-03 | Live query/write/transaction evidence and schema implementation; incomplete. |
+| 5: Release evidence | PKG-02 through PKG-04, TST-01/02, REL-01/02 | Specification tests, isolated package and supported-environment records. |
+
+The connection-disposal regressions have local regression coverage. Finish Task 3 acceptance, including live
+ownership and complete scalar semantics, before expanding Task 4 support claims. Passing metadata tests alone
+do not complete mappings.
+
 ## Global Constraints
 
 - The release branch is efcore/10.0 and is merged from dev after tests pass.
@@ -110,6 +128,9 @@ Expected: PASS, with no warnings and distinct cache keys for MySQL and Oracle.
 
 ### Task 3: Implement relational connection, SQL helper and scalar mappings
 
+Task 3 is incomplete. Connection cleanup, closed-connection ownership and string/decimal facets have local tests;
+opened-connection behavior, remaining scalar semantics and live round trips still need CON/MOD/MAP evidence.
+
 **Files:**
 - Create: src/OceanBase.EntityFrameworkCore/Storage/OceanBaseRelationalConnection.cs
 - Create: src/OceanBase.EntityFrameworkCore/Storage/OceanBaseSqlGenerationHelper.cs
@@ -133,16 +154,20 @@ Run: dotnet test tests/OceanBase.EntityFrameworkCore.UnitTests/OceanBase.EntityF
 
 Expected: FAIL because the relational services are missing.
 
-- [x] Step 3: Implement the relational connection, SQL helper and mappings.
+- [ ] Step 3: Implement the relational connection, SQL helper and mappings.
 
 Use the exact EF10 service contracts and lifetimes. Delegate opening, commands, parameters and transactions to
 OceanBaseConnector. Keep mode-specific quoting and parameter rules in explicit branches.
 
-- [x] Step 4: Run focused tests and build.
+- [ ] Step 4: Run focused tests and build.
 
 Expected: PASS with both mode mapping suites and no direct protocol code in the provider.
 
 ### Task 4: Implement query and update SQL for the first vertical slice
+
+Runtime implementation and test boundaries are recorded in
+[the query and update design](efcore-10-query-update-design.md). Query SQL and intercepted sync/async command tests
+are present. Database creation, live generated keys and transaction verification are still open; Task 4 is incomplete.
 
 **Files:**
 - Create: src/OceanBase.EntityFrameworkCore/Query/OceanBaseQuerySqlGenerator.cs

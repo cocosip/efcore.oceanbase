@@ -2,15 +2,15 @@
 
 ## Goal
 
-Port the provider to EF Core 10 as an independent release line while retaining the same explicit MySQL/Oracle
-mode contract and the tested relational behavior of earlier branches.
+Implement EF Core 10 first on dev with an independent efcore/10.0 release line and explicit MySQL/Oracle modes.
+EF8/EF9 compatibility branches adapt a tested EF10 baseline later; they are not existing implementation evidence.
 
 ## Porting rules
 
 1. Read the EF Core 10 what's-new and breaking-change documents listed in official-references.md.
 2. Compile against the exact EF Core 10 dependency range and target the runtime required by EF Core 10.
 3. Treat all EF Core internal service APIs as version-local; do not copy EF8/EF9 constructor signatures blindly.
-4. Port the shared behavioral tests first, then add EF10-specific features only with a documented support claim.
+4. Establish the shared behavioral tests first, then add EF10-specific features only with a documented support claim.
 5. Keep MySQL and Oracle SQL generation and type semantics independently verifiable.
 
 ## Expected implementation boundary
@@ -19,8 +19,9 @@ The release acceptance boundary is maintained in [the EF Core 10 feature checkli
 That checklist is the source of truth for feature status and completion evidence; this document explains the design
 constraints behind the boundary.
 
-The port preserves provider registration, explicit compatibility mode, model-cache identity, scalar mappings,
-basic relational queries, updates, generated keys and transactions. EF10 features such as new query operators,
+The initial release requires provider registration, explicit compatibility mode, model-cache identity, scalar
+mappings, basic relational queries, updates, generated keys and transactions. These are acceptance targets,
+not claims of current implementation. EF10 features such as new query operators,
 seeding or migration behavior require individual design notes and tests before being advertised.
 
 ## Package and runtime
