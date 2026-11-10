@@ -421,7 +421,22 @@ NULL behavior and Oracle first-argument coercion remain server semantics; no CLR
 claim. Baseline package SQL probe confirms the missing translations and both EF array shapes. Brief and
 evidence: artifacts/local-development/batch3o/.
 
+## Batch3p brief: exact decimal Round
+
+Add all eight exact decimal `Math.Round` and `decimal.Round` overloads with constant digits and
+midpoint rules. Use the existing method translator provider, exact decimal truncation and remainder
+tests, and a result-only decimal reader that preserves the input mapping and converter. Exercise
+both modes, ties, directed modes, 0 and 28 digits, invalid/runtime arguments and command shaping.
+Floating point overloads and runtime argument semantics remain separate local work.
+Batch brief and local evidence: `artifacts/local-development/batch3p/`.
+
 ## Execution record
+
+- Batch3p translates eight exact decimal Round overloads, supports five constant rules and digits
+  0..28, and keeps input mappings and checked decimal result shaping. Debug, Release and isolated
+  EF Core 10.0.14 each pass 1768; the same `decimal-round-20261111` package passes both modes and
+  patches, including Round predicates that the previous package rejects. Native decimal result
+  behavior remains a live gate; floating point Round and runtime arguments remain local work.
 
 - Batch3o adds scalar numeric extrema translation, preserves nested operands and result mapping, and
   snapshots extracted numeric extrema arrays for ordinary query cache keys. Focused tests pass 43 unit and

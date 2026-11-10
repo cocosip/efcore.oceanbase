@@ -985,6 +985,50 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
 
         [Theory]
         [InlineData(OceanBaseCompatibilityMode.MySql, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true)]
+        public async Task Decimal_round_commands_bind_current_values_and_read_checked_nullable_results(
+            OceanBaseCompatibilityMode mode, bool async)
+        {
+            using var table = new DataTable();
+            table.Columns.Add("Rounded", typeof(object));
+            table.Columns.Add("Optional", typeof(object));
+            table.Rows.Add(new OceanBaseDecimal(6m), DBNull.Value);
+            table.Rows.Add(14d, 2m);
+            var commands = new CommandCapture { Results = table };
+            await using var context = CreateContext(mode, commands);
+            var comparison = 0m;
+            var query = context.Set<FloorCeilingRow>()
+                .Where(row => Math.Round(row.Transformed, 2) > comparison)
+                .OrderBy(row => decimal.Round(row.Decimal, 1, MidpointRounding.ToPositiveInfinity))
+                .Select(row => new
+                {
+                    Rounded = Math.Round(row.Transformed, 2, MidpointRounding.AwayFromZero),
+                    Optional = (decimal?)decimal.Round(row.Optional!.Value, MidpointRounding.ToZero)
+                });
+            foreach (var value in new[] { 1.234567m, 4.567891m })
+            {
+                comparison = value;
+                commands.Inputs.Clear();
+                var rows = async ? await query.ToListAsync() : query.ToList();
+                Assert.Equal(2m, rows[0].Rounded);
+                Assert.Null(rows[0].Optional);
+                Assert.Equal(-2m, rows[1].Rounded);
+                Assert.Equal(2m, rows[1].Optional);
+                Assert.Contains(commands.Inputs, p => Equals(p.Value, comparison * -2m + 10m)
+                    && p.DbType == DbType.Decimal && p.Precision == 0 && p.DecimalScale == null);
+                var sql = commands.Sql[^1];
+                Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? "TRUNCATE(" : "TRUNC(", sql);
+                Assert.Contains("ORDER BY", sql);
+                Assert.Contains(" >= ", sql);
+            }
+            table.Rows.Clear();
+            table.Rows.Add(new OceanBaseDecimal(BigInteger.One, 29), DBNull.Value);
+            if (async) await Assert.ThrowsAsync<OverflowException>(() => query.ToListAsync());
+            else Assert.Throws<OverflowException>(() => query.ToList());
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false)]
         [InlineData(OceanBaseCompatibilityMode.MySql, true)]
         [InlineData(OceanBaseCompatibilityMode.Oracle, false)]
         [InlineData(OceanBaseCompatibilityMode.Oracle, true)]

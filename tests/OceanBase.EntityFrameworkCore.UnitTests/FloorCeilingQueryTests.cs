@@ -322,7 +322,7 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             [
                 typeof(double).GetMethod("Floor", [typeof(double)])!,
                 typeof(float).GetMethod("Ceiling", [typeof(float)])!,
-                typeof(Math).GetMethod("Round", [typeof(decimal)])!,
+                typeof(Math).GetMethod("Round", [typeof(double)])!,
                 typeof(Math).GetMethod("Log", [typeof(double)])!,
                 typeof(Math).GetMethod("Pow", [typeof(double), typeof(double)])!,
                 typeof(FloorCeilingQueryTests).GetMethod(nameof(Floor), BindingFlags.NonPublic | BindingFlags.Static)!

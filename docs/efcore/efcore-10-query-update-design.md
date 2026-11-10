@@ -282,6 +282,25 @@ expands the current constant values in order. Concurrent mutation during compila
 an existing explicit compiled delegate are outside this contract. Runtime parameter array shapes remain
 unsupported; the local checks cover SQL, cache keys, binding and supplied reader values.
 
+## Exact decimal Round local contract
+
+`Math.Round` and `decimal.Round` each have four decimal overloads. Omitted digits mean zero; an
+omitted midpoint rule means `ToEven`. Accept constant digits from 0 through 28 and all five
+`MidpointRounding` values. Dynamic arguments and invalid constants fail server translation;
+floating point overloads have a separate contract. EF's normal top-level client evaluation still applies.
+
+The exact decimal SQL uses TRUNCATE in MySQL mode and TRUNC in Oracle mode. It uses an exact decimal
+quantum for the requested scale and compares twice the absolute remainder to the quantum. This avoids
+scaling the original operand or requiring a 29-place CLR decimal literal. At a tie, `ToEven` adjusts
+only an odd retained digit; `AwayFromZero` adjusts every tie. The directed rules adjust only for the
+selected sign when a remainder exists, and `ToZero` returns the truncated value. A NULL operand remains
+NULL. Syntax constants use independent mappings; results retain the decimal reader and inverse converter.
+Translation requires a provider decimal mapping with a decimal carrier. A decimal-to-decimal converter
+must leave NULL unchanged; rounding is then applied to the stored decimal.
+
+The local contract covers translation, binding and supplied reader values. Native decimal operator
+precision, return metadata, NULL and numeric boundary results still need both modes of OceanBase.
+
 ## Numeric aggregates local contract
 
 The numeric aggregate service adds exact Sum/Average selector and scalar identities for int/long/float/
@@ -570,8 +589,8 @@ Run the read-only gate after packing, before the isolated consumer checks:
 
 ```powershell
 pwsh -NoProfile -File tests/OceanBase.EntityFrameworkCore.PackageConsumer/Verify-Package.ps1 `
-    -PackagePath artifacts/checkpoint-extrema-20261111/OceanBase.EntityFrameworkCore.10.0.0-checkpoint.extrema-20261111.nupkg `
-    -ExpectedVersion 10.0.0-checkpoint.extrema-20261111
+    -PackagePath artifacts/checkpoint-decimal-round-20261111/OceanBase.EntityFrameworkCore.10.0.0-checkpoint.decimal-round-20261111.nupkg `
+    -ExpectedVersion 10.0.0-checkpoint.decimal-round-20261111
 ```
 
 The PowerShell 7 script uses .NET ZIP/XML APIs and checks ID/version, the net10.0 assembly and dependency group,
@@ -581,7 +600,16 @@ wrong expected version, the old README-less alias package and the exact-patch RE
 checks. The hosted e41981e package-content gate passed on Windows/Linux; the current package checks ran locally
 on Windows. Change the path/version for each new pack.
 
-### Current scalar numeric extrema checkpoint (2026-11-11)
+### Current decimal Round checkpoint (2026-11-11)
+
+Debug, Release and isolated EF Core 10.0.14 Release each pass 1768 tests (1406 unit, 360 intercepted,
+two project consumers). The same `10.0.0-checkpoint.decimal-round-20261111` package passes both modes
+with EF Core 10.0.0 and 10.0.14, covering default ties-to-even, 28 digits with AwayFromZero and
+ToZero predicates. The previous package fails the new translation. Content, package-only graph,
+baseline assembly identity and unchanged baseline assets pass. Native decimal arithmetic and
+NULL/metadata behavior remain live gates.
+
+### Historical scalar numeric extrema checkpoint (2026-11-11)
 
 Debug, Release and isolated EF Core 10.0.14 Release each pass 1760 tests (1400 unit, 358 intercepted,
 two project consumers). The same `10.0.0-checkpoint.extrema-20261111` package passes both compatibility

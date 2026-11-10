@@ -360,6 +360,22 @@ namespace PackageConsumer
                         throw new Exception("Packed extrema reused stale captured values: " + capturedSql);
                 }
 
+                var roundEven = context.Set<Row>().Where(row => Math.Round(row.Amount, 2) > 0m).ToQueryString();
+                var roundAway = context.Set<Row>().Where(row =>
+                    decimal.Round(row.Amount, 28, MidpointRounding.AwayFromZero) > 0m).ToQueryString();
+                var roundZero = context.Set<Row>().Where(row =>
+                    decimal.Round(row.Amount, 3, MidpointRounding.ToZero) > 0m).ToQueryString();
+                var truncate = mode == OceanBaseCompatibilityMode.MySql ? "TRUNCATE(" : "TRUNC(";
+                if (!roundEven.Contains(truncate, StringComparison.Ordinal) || !roundEven.Contains(", 2)", StringComparison.Ordinal)
+                    || !roundEven.Contains(" OR ", StringComparison.Ordinal) || !roundEven.Contains("0.02", StringComparison.Ordinal))
+                    throw new Exception("Packed decimal Round lost the even midpoint check: " + roundEven);
+                if (!roundAway.Contains(truncate, StringComparison.Ordinal) || !roundAway.Contains(", 28)", StringComparison.Ordinal)
+                    || !roundAway.Contains(" >= ", StringComparison.Ordinal))
+                    throw new Exception("Packed decimal Round lost the away-from-zero midpoint check: " + roundAway);
+                if (!roundZero.Contains(truncate, StringComparison.Ordinal) || !roundZero.Contains(", 3)", StringComparison.Ordinal)
+                    || roundZero.Contains("CASE", StringComparison.Ordinal))
+                    throw new Exception("Packed decimal Round lost direct truncation toward zero: " + roundZero);
+
                 var guidType = context.Model.FindEntityType(typeof(Row))!.FindProperty(nameof(Row.Token))!.GetColumnType();
                 if (guidType != (mode == OceanBaseCompatibilityMode.Oracle ? "RAW(16)" : "CHAR(36)"))
                 {

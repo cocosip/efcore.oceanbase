@@ -21,7 +21,25 @@ not later local commits or database integration. Earlier db676ff also passed in
 Run/job/step metadata is saved under artifacts/local-development/. The earlier log archive endpoint returned
 HTTP403 (repository admin rights); no new per-test count or resolved EF patch is inferred from job metadata.
 
-### Scalar numeric extrema checkpoint (2026-11-11)
+### Decimal Round checkpoint (2026-11-11)
+
+Eight exact `Math.Round` and `decimal.Round` overloads now translate with constant digits from 0
+through 28 and all five midpoint rules. The provider emits explicit decimal operations for both modes,
+preserves NULL, and shapes results through the checked decimal reader with the original converter.
+Runtime digits/rules and floating point overloads remain open.
+
+Debug, Release and isolated EF Core 10.0.14 Release each passed **1768 tests** (1406 unit, 360 intercepted,
+two project consumers), with zero failures or skips. The same `decimal-round-20261111` package passes
+both modes on EF Core 10.0.0 and 10.0.14. The previous package fails the new Round predicate. Package
+contents, dependency graph, assembly identity and unchanged baseline assets were checked. Independent
+source review passed.
+
+Latest package: `artifacts/checkpoint-decimal-round-20261111/OceanBase.EntityFrameworkCore.10.0.0-checkpoint.decimal-round-20261111.nupkg`.
+Evidence: `artifacts/local-development/batch3p/`. The local checks establish SQL translation, binding
+and shaping; native decimal precision, result metadata and computation remain live gates.
+EF Core 10 local work remains active. Live database testing and EF Core 8/9 remain postponed.
+
+### Historical scalar numeric extrema checkpoint (2026-11-11)
 
 The provider translates 26 `Math`/`MathF`/`decimal` Min/Max overloads and numeric
 `EF.Functions.Least`/`Greatest`. It preserves operand order, nesting and the first operand's result
@@ -34,7 +52,7 @@ cases passed. Debug, Release and isolated EF Core 10.0.14 Release each passed **
 passed both compatibility modes with EF Core 10.0.0 and 10.0.14. Package contents, package-only dependency
 graph, baseline DLL identity and unchanged baseline assets were verified. Independent source review passed.
 
-Latest package: `artifacts/checkpoint-extrema-20261111/OceanBase.EntityFrameworkCore.10.0.0-checkpoint.extrema-20261111.nupkg`.
+Package: `artifacts/checkpoint-extrema-20261111/OceanBase.EntityFrameworkCore.10.0.0-checkpoint.extrema-20261111.nupkg`.
 Evidence: `artifacts/local-development/batch3o/`. Local tests verify SQL, cache, binding and supplied reader
 values. Native NULL behavior, mixed numeric coercion, result metadata and numeric edge cases still require
 OceanBase execution. `Round`, wider query coverage, and model, write, transaction and schema work remain
