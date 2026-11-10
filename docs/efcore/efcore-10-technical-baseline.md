@@ -99,9 +99,11 @@ implementations; validation before opening also covers intercepted creation.
 | Fixed string | CHAR(n), at most 255 | NCHAR(n), at most 1000; non-Unicode CHAR(n CHAR), at most 2000 |
 | String parameter facets | DbType reflects Unicode/fixed length; Size is set explicitly | Same metadata contract; CHAR/BYTE units in explicit store declarations preserve Size |
 
-Decimal mappings explicitly configure parameter Precision and the connector's DecimalScale, because the generic
-EF mapping does not set these parameter facets. DecimalScale preserves Oracle negative scales through the public
-connector API; values that require rounding remain subject to connector validation. String mappings explicitly set
+Decimal input parameters use value-inferred precision/scale, independently of the column: EF propagates column
+mappings into comparisons, CASE branches and arithmetic. Only output-only parameters retain declared Precision
+and the connector's DecimalScale (including Oracle negative scales). Actual current DML values are checked after
+conversion through IOceanBaseWriteValidation, rejecting precision overflow or rounding before command execution.
+String mappings explicitly set
 parameter Size. Cloning retains these provider parameter hooks. Input null becomes DBNull; output-only parameters
 retain their unset value, direction and facets until execution.
 
@@ -111,6 +113,29 @@ Oracle CHAR/BYTE declarations retain their explicit storage semantics. Large Ora
 which restricts ordering/grouping. Live charset, byte-limit, decimal round-trip and LOB execution tests remain open.
 Scalar SQL literals, Boolean/Guid/temporal behavior, remaining explicit store types and value converters also remain
 open acceptance work; this checkpoint does not close the entire MAP category.
+
+### Decimal declarations and exact write contract
+
+Scope: MAP-02/06/07, QRY-01 and UPD-02 for CLR decimal and converter-backed decimal properties. Read EF10
+DecimalTypeMapping/RelationalTypeMappingSource and published connector 0.2.0 at
+4734781a7028aea990af7a832ca7d251a2055556 (PreparedParameters.WriteDecimal and DecimalCodec.Constrain).
+The server documentation baseline is 2a5ae3a23a51729d065cec716508eb26cb064106 (V4.3.5), specifically
+[MySQL fixed-point types](https://github.com/oceanbase/oceanbase-doc/blob/2a5ae3a23a51729d065cec716508eb26cb064106/en-US/700.reference/500.sql-reference/100.sql-syntax/200.common-tenant-of-mysql-mode/100.basic-elements-of-mysql-mode/100.data-type-of-mysql-mode/200.numeric-of-mysql-mode/300.fixed-point-type-of-mysql-mode.md)
+and Oracle NUMBER. Server rounding is deliberately rejected for tracked writes to avoid silent loss.
+
+- MySQL DECIMAL/NUMERIC support `(p)`, `(p,s)` and optional UNSIGNED; bare declarations default to (10,0).
+  Defaults without explicit storage remain DECIMAL(65,30). Oracle NUMBER supports `(p)` and `(p,s)`; bare NUMBER
+  retains value inference. Explicit DECIMAL/NUMERIC precision declarations use the same fixed-point constraints.
+- Full declarations must parse; unsupported suffixes, cross-mode types, conflicting property facets and size or
+  fixed-length facets reject. Changing clone precision/scale updates its declaration while preserving converters.
+- Query inputs, InputOutput inputs and literals retain every CLR decimal digit even for narrow column mappings.
+  Column limits apply only to actual converted current writes; predicate/original values remain unrestricted.
+- Exact checks use coefficient/scale arithmetic, including negative scales and scales greater than precision;
+  trailing fractional zeroes are accepted. Nulls pass. Nonzero remainders and coefficient overflow reject.
+- Acceptance: DecimalMappingTests cover declarations, property conflicts, clones, nulls, unsigned bounds,
+  negative/high scales and decimal extrema. Intercepted EF query/write tests and package consumers exercise the
+  connected paths. Live decimal reads, server coercion/rounding, generated values and mode-specific alias defaults
+  remain required evidence; this slice does not close MAP-02 or release readiness.
 
 ## Numeric and Guid reading contract
 

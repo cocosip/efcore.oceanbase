@@ -19,6 +19,66 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
         [InlineData(OceanBaseCompatibilityMode.MySql, true)]
         [InlineData(OceanBaseCompatibilityMode.Oracle, false)]
         [InlineData(OceanBaseCompatibilityMode.Oracle, true)]
+        public async Task Decimal_queries_keep_comparands_and_converted_writes_check_physical_precision(
+            OceanBaseCompatibilityMode mode, bool async)
+        {
+            using var table = new DataTable();
+            table.Columns.Add("Value", typeof(decimal));
+            table.Columns.Add("Converted", typeof(decimal));
+            table.Columns.Add("Optional", typeof(decimal));
+            table.Rows.Add(999.99m, 2.5m, DBNull.Value);
+            var commands = new CommandCapture { Results = table };
+            await using var context = CreateContext(mode, commands);
+            var boundary = decimal.MaxValue;
+            var query = context.Set<DecimalRow>().Where(row => row.Value < boundary)
+                .Select(row => new { row.Value, row.Converted, row.Optional });
+            var result = Assert.Single(async ? await query.ToListAsync() : query.ToList());
+            Assert.Equal(999.99m, result.Value);
+            Assert.Equal(1.25m, result.Converted);
+            Assert.Null(result.Optional);
+            var operand = Assert.Single(commands.DecimalInputs);
+            Assert.Equal(boundary, operand.Value);
+            Assert.Equal((byte)0, operand.Precision);
+            Assert.Null(operand.DecimalScale);
+            Assert.Contains("79228162514264337593543950335.0", context.Set<DecimalRow>()
+                .Select(row => row.Value == 1m ? decimal.MaxValue : row.Value).ToQueryString());
+            context.Add(new DecimalRow { Id = 1, Value = 999.9900m, Converted = 1.25m });
+            Assert.Equal(1, async ? await context.SaveChangesAsync() : context.SaveChanges());
+            Assert.Contains(2.5m, commands.Values);
+            Assert.All(commands.DecimalInputs, parameter =>
+            {
+                Assert.Equal((byte)0, parameter.Precision);
+                Assert.Null(parameter.DecimalScale);
+            });
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false, true)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true, true)]
+        public async Task Decimal_invalid_writes_reject_before_command_execution(
+            OceanBaseCompatibilityMode mode, bool converted, bool async)
+        {
+            var commands = new CommandCapture();
+            await using var context = CreateContext(mode, commands);
+            context.Add(new DecimalRow { Id = 1, Value = converted ? 1m : 0.001m,
+                Converted = converted ? 500m : 1m });
+            var exception = async ? await Assert.ThrowsAsync<DbUpdateException>(() => context.SaveChangesAsync())
+                : Assert.Throws<DbUpdateException>(() => context.SaveChanges());
+            Assert.IsAssignableFrom<ArgumentException>(exception.InnerException);
+            Assert.Empty(commands.Sql);
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true)]
         public async Task Temporal_query_comparands_keep_transport_precision_independent_of_columns(
             OceanBaseCompatibilityMode mode, bool async)
         {
@@ -759,10 +819,23 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
                 modelBuilder.Entity<NarrowTemporalRow>().Property(entity => entity.Duration)
                     .HasColumnType(oracle ? "INTERVAL DAY(1) TO SECOND(3)" : "TIME(3)");
                 modelBuilder.Entity<NarrowTemporalRow>().Property(entity => entity.Date).HasColumnType(oracle ? "DATE" : "DATETIME(0)");
+                modelBuilder.Entity<DecimalRow>().Property(entity => entity.Id).ValueGeneratedNever();
+                modelBuilder.Entity<DecimalRow>().Property(entity => entity.Value).HasColumnType(oracle ? "NUMBER(5,2)" : "DECIMAL(5,2)");
+                modelBuilder.Entity<DecimalRow>().Property(entity => entity.Converted)
+                    .HasConversion(value => value * 2m, value => value / 2m).HasPrecision(5, 2);
+                modelBuilder.Entity<DecimalRow>().Property(entity => entity.Optional).HasPrecision(5, 2);
             }
         }
 
         private enum RowState { Inactive = 0, Active = 2 }
+
+        private sealed class DecimalRow
+        {
+            public int Id { get; set; }
+            public decimal Value { get; set; }
+            public decimal Converted { get; set; }
+            public decimal? Optional { get; set; }
+        }
 
         private sealed class NarrowTemporalRow
         {
@@ -906,6 +979,7 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
         {
             public List<string> Sql { get; } = [];
             public List<object?> Values { get; } = [];
+            public List<OceanBaseParameter> DecimalInputs { get; } = [];
             public int AffectedRows { get; init; } = 1;
             public DataTable? Results { get; init; }
             public object OutputValue { get; init; } = 42m;
@@ -913,6 +987,8 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
             public override InterceptionResult<int> NonQueryExecuting(DbCommand command, CommandEventData eventData, InterceptionResult<int> result)
             {
                 Sql.Add(command.CommandText);
+                DecimalInputs.AddRange(command.Parameters.Cast<OceanBaseParameter>()
+                    .Where(parameter => parameter.DbType == DbType.Decimal && parameter.Direction == ParameterDirection.Input));
                 foreach (DbParameter parameter in command.Parameters)
                 {
                     if (parameter.Direction == ParameterDirection.Output)
@@ -937,6 +1013,8 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
                 DbCommand command, CommandEventData eventData, InterceptionResult<DbDataReader> result)
             {
                 Sql.Add(command.CommandText);
+                DecimalInputs.AddRange(command.Parameters.Cast<OceanBaseParameter>()
+                    .Where(parameter => parameter.DbType == DbType.Decimal && parameter.Direction == ParameterDirection.Input));
                 if (Results is not null)
                 {
                     return InterceptionResult<DbDataReader>.SuppressWithResult(Results.CreateDataReader());

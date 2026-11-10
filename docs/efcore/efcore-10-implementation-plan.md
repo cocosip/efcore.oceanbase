@@ -139,6 +139,10 @@ Expected: PASS, with no warnings and distinct cache keys for MySQL and Oracle.
 
 Task 3 is incomplete. Connection cleanup, closed-connection ownership and string/decimal facets have local tests;
 opened-connection behavior, remaining scalar semantics and live round trips still need CON/MOD/MAP evidence.
+The decimal slice adds full declaration parsing, property precision/scale conflict checks, converter-preserving
+clones and exact DML-only write validation. Query inputs infer precision/scale from their value independently of
+column capacity; output-only metadata retains physical facets. Decimal alias defaults and live round trips remain
+open, along with remaining string contracts and the wider mapping inventory.
 
 **Files:**
 - Create: src/OceanBase.EntityFrameworkCore/Storage/OceanBaseRelationalConnection.cs

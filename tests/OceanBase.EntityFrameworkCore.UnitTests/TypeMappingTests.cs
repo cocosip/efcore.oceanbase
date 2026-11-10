@@ -81,14 +81,14 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             var mapping = context.GetService<IRelationalTypeMappingSource>().FindMapping(
                 typeof(decimal), storeTypeName: null, precision: 18, scale: 6)!;
             using var command = new OceanBaseConnector.OceanBaseCommand();
-            var parameter = mapping.CreateParameter(command, "value", 123.456789m);
+            var parameter = mapping.CreateParameter(command, "value", null, direction: ParameterDirection.Output);
 
             Assert.Equal(storeType, mapping.StoreType);
             Assert.Equal(18, mapping.Precision);
             Assert.Equal(6, mapping.Scale);
             Assert.Equal((byte)18, parameter.Precision);
             Assert.Equal((byte)6, parameter.Scale);
-            Assert.Equal(123.456789m, parameter.Value);
+            Assert.Equal(123.456789m, mapping.CreateParameter(command, "input", 123.456789m).Value);
         }
 
         [Theory]
@@ -99,7 +99,7 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             using var context = CreateContext(mode);
             var mapping = context.GetService<IRelationalTypeMappingSource>().FindMapping(typeof(decimal), storeType)!;
             using var command = new OceanBaseConnector.OceanBaseCommand();
-            var parameter = mapping.CreateParameter(command, "value", 12.3456m);
+            var parameter = mapping.CreateParameter(command, "value", null, direction: ParameterDirection.Output);
 
             Assert.Equal(storeType, mapping.StoreType);
             Assert.Equal((byte)20, parameter.Precision);
@@ -177,10 +177,13 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             var mapping = context.GetService<IRelationalTypeMappingSource>().FindMapping(
                 typeof(decimal), null, precision: precision, scale: scale)!;
             using var command = new OceanBaseConnector.OceanBaseCommand();
-            var parameter = (OceanBaseConnector.OceanBaseParameter)mapping.CreateParameter(command, "value", (decimal)value);
+            var parameter = (OceanBaseConnector.OceanBaseParameter)mapping.CreateParameter(command, "value", null,
+                direction: ParameterDirection.Output);
 
             Assert.Equal($"NUMBER({precision},{scale})", mapping.StoreType);
             Assert.Equal(scale, parameter.DecimalScale);
+            Assert.IsAssignableFrom<OceanBase.EntityFrameworkCore.Storage.IOceanBaseWriteValidation>(mapping)
+                .ValidateWriteValue((decimal)value);
         }
 
         [Theory]

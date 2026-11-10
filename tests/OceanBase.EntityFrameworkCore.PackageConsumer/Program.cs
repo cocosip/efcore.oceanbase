@@ -2,6 +2,8 @@ using System;
 using System.Linq;
 using Microsoft.EntityFrameworkCore;
 using OceanBase.EntityFrameworkCore;
+using OceanBaseCommand = OceanBaseConnector.OceanBaseCommand;
+using OceanBaseParameter = OceanBaseConnector.OceanBaseParameter;
 
 namespace PackageConsumer
 {
@@ -102,7 +104,17 @@ namespace PackageConsumer
                     throw new Exception("Temporal query comparands lost fractional precision.");
                 }
 
-                Console.WriteLine($"{mode}: packed provider registration, scalar/temporal/binary model, Boolean SQL and paging passed; EF {typeof(DbContext).Assembly.GetName().Version}.");
+                var amountMapping = rowType.FindProperty(nameof(Row.Amount))!.GetRelationalTypeMapping();
+                using var command = new OceanBaseCommand();
+                var amountParameter = (OceanBaseParameter)amountMapping.CreateParameter(command, "boundary", decimal.MaxValue);
+                if (amountMapping.Precision != 5 || amountMapping.Scale != 2
+                    || amountParameter.Precision != 0 || amountParameter.DecimalScale is not null
+                    || !Equals(amountParameter.Value, decimal.MaxValue))
+                {
+                    throw new Exception("Decimal query transport inherited physical column precision.");
+                }
+
+                Console.WriteLine($"{mode}: packed provider registration, scalar/temporal/binary/decimal model, Boolean SQL and paging passed; EF {typeof(DbContext).Assembly.GetName().Version}.");
             }
         }
 
@@ -117,6 +129,7 @@ namespace PackageConsumer
                 modelBuilder.Entity<Row>().Property(row => row.Amplitude).HasColumnType(mode == OceanBaseCompatibilityMode.Oracle ? "BINARY_FLOAT" : "FLOAT(24)");
                 modelBuilder.Entity<Row>().Property(row => row.Wide).HasColumnType(mode == OceanBaseCompatibilityMode.Oracle ? "BINARY_DOUBLE" : "DOUBLE PRECISION");
                 modelBuilder.Entity<Row>().Property(row => row.NarrowStamp).HasPrecision(3);
+                modelBuilder.Entity<Row>().Property(row => row.Amount).HasPrecision(5, 2);
                 modelBuilder.Entity<Row>().Property(row => row.NarrowDuration)
                     .HasColumnType(mode == OceanBaseCompatibilityMode.Oracle ? "INTERVAL DAY(1) TO SECOND(3)" : "TIME(3)");
             }
@@ -140,6 +153,7 @@ namespace PackageConsumer
             public double Amplitude { get; set; }
             public float Wide { get; set; }
             public DateTime NarrowStamp { get; set; }
+            public decimal Amount { get; set; }
             public TimeSpan NarrowDuration { get; set; }
         }
     }

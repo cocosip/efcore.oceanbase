@@ -49,6 +49,18 @@ namespace OceanBase.EntityFrameworkCore.Storage
                 }
             }
 
+            if (mapping is OceanBaseDecimalTypeMapping decimalMapping)
+            {
+                foreach (var principal in property.GetPrincipals())
+                {
+                    if (principal.GetPrecision() is { } precision && decimalMapping.Precision != precision
+                        || principal.GetScale() is { } scale && decimalMapping.Scale != scale)
+                    {
+                        throw new ArgumentException("The explicit decimal declaration conflicts with its configured precision or scale.");
+                    }
+                }
+            }
+
             return mapping;
         }
 
@@ -262,40 +274,16 @@ namespace OceanBase.EntityFrameworkCore.Storage
         {
             var oracle = _compatibilityMode == OceanBaseCompatibilityMode.Oracle;
             var storeType = info.StoreTypeName;
-            var typeName = info.StoreTypeNameBase?.ToUpperInvariant();
-            if (typeName is not null && (oracle ? typeName != "NUMBER" && typeName != "DECIMAL" && typeName != "NUMERIC"
-                    : typeName != "DECIMAL" && typeName != "NUMERIC"))
-            {
-                return null;
-            }
-
             var precision = info.Precision;
             var scale = info.Scale;
-            if (!oracle)
+            if (storeType is null && !oracle)
             {
-                precision ??= storeType is not null ? 10 : 65;
-                scale ??= info.Precision is not null || storeType is not null ? 0 : 30;
-            }
-            else if (precision is not null || scale is not null)
-            {
-                precision ??= 38;
-                scale ??= 0;
+                precision ??= 65;
+                scale ??= info.Precision is null ? 30 : 0;
             }
 
-            if (precision is < 1 || precision > (oracle ? 38 : 65))
-            {
-                throw new ArgumentOutOfRangeException(nameof(info), "Decimal precision is outside the supported store range.");
-            }
-
-            if (scale < (oracle ? -84 : 0) || scale > (oracle ? 127 : 30) || !oracle && scale > precision)
-            {
-                throw new ArgumentOutOfRangeException(nameof(info), "Decimal scale is outside the supported store range.");
-            }
-
-            storeType ??= precision is { } digits
-                ? string.Create(CultureInfo.InvariantCulture, $"{(oracle ? "NUMBER" : "DECIMAL")}({digits},{scale})")
-                : "NUMBER";
-            return new OceanBaseDecimalTypeMapping(storeType, precision, scale);
+            storeType ??= oracle ? "NUMBER" : "DECIMAL";
+            return new OceanBaseDecimalTypeMapping(storeType, precision, scale, info.Size, info.IsFixedLength ?? false, _compatibilityMode);
         }
 
         protected override string? ParseStoreTypeName(
@@ -303,7 +291,24 @@ namespace OceanBase.EntityFrameworkCore.Storage
         {
             var configuredSize = size;
             var configuredPrecision = precision;
+            var configuredScale = scale;
             var name = base.ParseStoreTypeName(storeTypeName, ref unicode, ref size, ref precision, ref scale);
+            if (name?.Trim().ToUpperInvariant() is "NUMBER" or "DECIMAL" or "NUMERIC"
+                && storeTypeName?.Contains('(') == true)
+            {
+                if (!storeTypeName.Contains(','))
+                {
+                    precision = size;
+                    scale = 0;
+                    size = configuredSize;
+                }
+
+                if (configuredPrecision is not null && precision != configuredPrecision
+                    || configuredScale is not null && scale != configuredScale)
+                {
+                    throw new ArgumentException("The explicit decimal declaration conflicts with its configured precision or scale.");
+                }
+            }
             if (_compatibilityMode == OceanBaseCompatibilityMode.MySql
                 && name?.Equals("FLOAT", StringComparison.OrdinalIgnoreCase) == true
                 && storeTypeName?.Contains('(') == true && !storeTypeName.Contains(','))
