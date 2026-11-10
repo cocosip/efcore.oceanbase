@@ -2,6 +2,7 @@ using System;
 using System.Data;
 using System.Globalization;
 using System.Linq.Expressions;
+using System.Numerics;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
@@ -230,6 +231,129 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
                 Assert.Equal(value, mapping.CreateParameter(command, "value", value).Value);
                 Assert.Equal(value, Read(mapping, value));
                 Assert.IsAssignableFrom<IOceanBaseWriteValidation>(mapping).ValidateWriteValue(value);
+            }
+        }
+
+        [Theory]
+        [InlineData("1", -30, 1E30f)]
+        [InlineData("-1", -30, -1E30f)]
+        [InlineData("12345678901234567890123456789012345678", 38, 0.123456789f)]
+        [InlineData("-12345678901234567890123456789012345678", 38, -0.123456789f)]
+        [InlineData("1", 40, 1E-40f)]
+        [InlineData("-1", 40, -1E-40f)]
+        [InlineData("1", 45, float.Epsilon)]
+        [InlineData("-1", 45, -float.Epsilon)]
+        [InlineData("1", 46, 0f)]
+        [InlineData("-1", 46, -0f)]
+        [InlineData("1", int.MaxValue, 0f)]
+        [InlineData("-1", int.MaxValue, -0f)]
+        [InlineData("0", int.MaxValue, 0f)]
+        [InlineData("0", int.MinValue, 0f)]
+        [InlineData("340282346638528859811704183484516925440", 0, float.MaxValue)]
+        [InlineData("-340282346638528859811704183484516925440", 0, -float.MaxValue)]
+        public void Exact_decimal_readers_round_directly_to_Single(string coefficient, int scale, float expected)
+        {
+            foreach (var mode in new[] { OceanBaseCompatibilityMode.MySql, OceanBaseCompatibilityMode.Oracle })
+            {
+                using var context = CreateContext(mode);
+                var mapping = context.GetService<IRelationalTypeMappingSource>().FindMapping(typeof(float))!;
+                var value = new OceanBaseDecimal(BigInteger.Parse(coefficient, CultureInfo.InvariantCulture), scale);
+                Assert.Equal(BitConverter.SingleToInt32Bits(expected), BitConverter.SingleToInt32Bits((float)Read(mapping, value)));
+                var composed = (RelationalTypeMapping)mapping.WithComposedConverter(
+                    new ValueConverter<FloatValue, float>(value => value.Value, value => new FloatValue(value)));
+                Assert.Equal(BitConverter.SingleToInt32Bits(expected),
+                    BitConverter.SingleToInt32Bits(((FloatValue)Read(composed, value)).Value));
+            }
+        }
+
+        [Theory]
+        [InlineData("1", -30, 1E30d)]
+        [InlineData("-1", -30, -1E30d)]
+        [InlineData("12345678901234567890123456789012345678", 38, 0.12345678901234568d)]
+        [InlineData("-12345678901234567890123456789012345678", 38, -0.12345678901234568d)]
+        [InlineData("1", 40, 1E-40d)]
+        [InlineData("-1", 40, -1E-40d)]
+        [InlineData("5", 324, double.Epsilon)]
+        [InlineData("-5", 324, -double.Epsilon)]
+        [InlineData("1", 324, 0d)]
+        [InlineData("-1", 324, -0d)]
+        [InlineData("1", int.MaxValue, 0d)]
+        [InlineData("-1", int.MaxValue, -0d)]
+        [InlineData("0", int.MaxValue, 0d)]
+        [InlineData("0", int.MinValue, 0d)]
+        [InlineData("17976931348623157", -292, double.MaxValue)]
+        [InlineData("-17976931348623157", -292, -double.MaxValue)]
+        public void Exact_decimal_readers_round_directly_to_Double(string coefficient, int scale, double expected)
+        {
+            foreach (var mode in new[] { OceanBaseCompatibilityMode.MySql, OceanBaseCompatibilityMode.Oracle })
+            {
+                using var context = CreateContext(mode);
+                var mapping = context.GetService<IRelationalTypeMappingSource>().FindMapping(typeof(double))!;
+                var value = new OceanBaseDecimal(BigInteger.Parse(coefficient, CultureInfo.InvariantCulture), scale);
+                Assert.Equal(BitConverter.DoubleToInt64Bits(expected), BitConverter.DoubleToInt64Bits((double)Read(mapping, value)));
+            }
+        }
+
+        [Fact]
+        public void Exact_decimal_Single_midpoint_does_not_round_through_Double()
+        {
+            using var context = CreateContext(OceanBaseCompatibilityMode.Oracle);
+            var mapping = context.GetService<IRelationalTypeMappingSource>().FindMapping(typeof(float))!;
+            var coefficient = BigInteger.Pow(10, 60) + BigInteger.Pow(5, 24) * BigInteger.Pow(10, 36) + 1;
+            var value = new OceanBaseDecimal(coefficient, 60);
+            Assert.Equal(0x3f800001, BitConverter.SingleToInt32Bits((float)Read(mapping, value)));
+            Assert.Equal(0x3f800000, BitConverter.SingleToInt32Bits((float)double.Parse(value.ToString(), CultureInfo.InvariantCulture)));
+        }
+
+        [Theory]
+        [InlineData(typeof(float))]
+        [InlineData(typeof(double))]
+        public void Exact_decimal_floating_readers_use_invariant_culture(Type type)
+        {
+            using var context = CreateContext(OceanBaseCompatibilityMode.Oracle);
+            var mapping = context.GetService<IRelationalTypeMappingSource>().FindMapping(type)!;
+            var priorCulture = CultureInfo.CurrentCulture;
+            try
+            {
+                CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo("fr-FR");
+                Assert.Equal(1.25d, Convert.ToDouble(Read(mapping, new OceanBaseDecimal(1.25m)), CultureInfo.InvariantCulture));
+            }
+            finally { CultureInfo.CurrentCulture = priorCulture; }
+        }
+
+        [Theory]
+        [InlineData(typeof(float), -39)]
+        [InlineData(typeof(float), int.MinValue)]
+        [InlineData(typeof(double), -309)]
+        [InlineData(typeof(double), int.MinValue)]
+        public void Finite_exact_decimal_target_overflow_rejects(Type type, int scale)
+        {
+            using var context = CreateContext(OceanBaseCompatibilityMode.Oracle);
+            var mapping = context.GetService<IRelationalTypeMappingSource>().FindMapping(type)!;
+            foreach (var coefficient in new[] { BigInteger.One, -BigInteger.One })
+            {
+                var value = new OceanBaseDecimal(coefficient, scale);
+                Assert.Throws<OverflowException>(() => Read(mapping, value));
+                if (type == typeof(float))
+                {
+                    var composed = (RelationalTypeMapping)mapping.WithComposedConverter(
+                        new ValueConverter<FloatValue, float>(value => value.Value, value => new FloatValue(value)));
+                    Assert.Throws<OverflowException>(() => Read(composed, value));
+                }
+            }
+        }
+
+        [Theory]
+        [InlineData(typeof(float))]
+        [InlineData(typeof(double))]
+        public void Native_non_finite_readers_remain_supported(Type type)
+        {
+            using var context = CreateContext(OceanBaseCompatibilityMode.Oracle);
+            var mapping = context.GetService<IRelationalTypeMappingSource>().FindMapping(type)!;
+            foreach (var value in new[] { double.NaN, double.PositiveInfinity, double.NegativeInfinity })
+            {
+                Assert.Equal(value, Convert.ToDouble(Read(mapping, value), CultureInfo.InvariantCulture));
+                Assert.Equal(value, Convert.ToDouble(Read(mapping, (float)value), CultureInfo.InvariantCulture));
             }
         }
 

@@ -10,6 +10,21 @@ namespace OceanBase.EntityFrameworkCore.Storage
         {
             if (value is OceanBaseDecimal number)
             {
+                // Parse at the target precision: decimal is bounded and Single via Double can round twice.
+                if (targetType == typeof(float))
+                {
+                    var single = float.Parse(number.ToString(), NumberStyles.Float, CultureInfo.InvariantCulture);
+                    return float.IsFinite(single) ? single
+                        : throw new OverflowException("The database value is outside the CLR Single range.");
+                }
+
+                if (targetType == typeof(double))
+                {
+                    var converted = double.Parse(number.ToString(), NumberStyles.Float, CultureInfo.InvariantCulture);
+                    return double.IsFinite(converted) ? converted
+                        : throw new OverflowException("The database value is outside the CLR Double range.");
+                }
+
                 value = number.ToDecimal();
             }
 

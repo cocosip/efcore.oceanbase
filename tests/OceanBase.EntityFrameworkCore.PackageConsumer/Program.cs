@@ -2,11 +2,13 @@ using System;
 using System.Data;
 using System.Linq;
 using System.Linq.Expressions;
+using System.Numerics;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Storage;
 using OceanBase.EntityFrameworkCore;
 using OceanBaseCommand = OceanBaseConnector.OceanBaseCommand;
+using OceanBaseDecimal = OceanBaseConnector.OceanBaseDecimal;
 using OceanBaseParameter = OceanBaseConnector.OceanBaseParameter;
 
 namespace PackageConsumer
@@ -194,6 +196,21 @@ namespace PackageConsumer
                     try { Expression.Lambda<Func<int>>(read).Compile()(); }
                     catch (InvalidCastException) { fractionalReadRejected = true; }
                     if (!fractionalReadRejected) throw new Exception("A floating database fraction was rounded to an integer.");
+                }
+
+                var midpoint = new OceanBaseDecimal(1.000000059604644775390625m);
+                var aboveMidpoint = new OceanBaseDecimal(midpoint.Coefficient * BigInteger.Pow(10, 36) + 1, 60);
+                var singleRead = source.FindMapping(typeof(float))!.CustomizeDataReaderExpression(
+                    Expression.Constant(aboveMidpoint, typeof(object)));
+                if (BitConverter.SingleToInt32Bits(Expression.Lambda<Func<float>>(singleRead).Compile()()) != 0x3f800001)
+                {
+                    throw new Exception("Wide decimal normalization lost direct Single rounding.");
+                }
+                var doubleRead = source.FindMapping(typeof(double))!.CustomizeDataReaderExpression(
+                    Expression.Constant(new OceanBaseDecimal(BigInteger.One, -30), typeof(object)));
+                if (Expression.Lambda<Func<double>>(doubleRead).Compile()() != 1E30d)
+                {
+                    throw new Exception("Wide decimal normalization overflowed before Double conversion.");
                 }
 
                 var temporalFacetRejected = false;

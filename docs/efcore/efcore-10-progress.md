@@ -11,6 +11,23 @@ each small group. Real database integration/tests and EF8/EF9 adaptation are exp
 [local development plan](efcore-10-local-development-plan.md) tracks the full remaining inventory, including
 an audit of locally feasible deferred families. Finishing one batch does not finish the overall goal.
 
+### Wide exact decimal to floating checkpoint (2026-11-11)
+
+Batch 2d fixes the confirmed shared normalization overflow: OceanBaseDecimal values parse directly as Single
+or Double using the public invariant connector representation. Direct Single rounding avoids a Double
+intermediate; finite-to-infinity conversion rejects. Exact integer/decimal and native non-finite paths remain.
+
+RED reproduced 29 unit and eight intercepted failures. Final Debug/Release and isolated EF10.0.14 Release
+each pass **882 tests** (688 unit, 192 intercepted pipeline, two consumers). Independent spec/quality review
+passed. The same baseline-built `10.0.0-checkpoint.wide-decimal-20261111` package passes both modes on
+EF10.0.0/10.0.14, including exact Single midpoint bits 0x3f800001 and a wide Double read. The previous unary
+package fails the new reader smoke. Package content and package-only graph checks pass.
+
+Latest package: `artifacts/checkpoint-wide-decimal-20261111/OceanBase.EntityFrameworkCore.10.0.0-checkpoint.wide-decimal-20261111.nupkg`.
+Evidence: `artifacts/local-development/batch2d/`. This proves normalization of synthetic wrapper values;
+no new NUMBER-backed storage, live database, Linux or hosted CI acceptance is claimed. Next is Batch 3d search;
+the full EF10 goal remains active.
+
 ### Unary string functions/character-length checkpoint (2026-11-11)
 
 Exact parameterless ToLower/ToUpper/Trim/TrimStart/TrimEnd and string.Length now translate through derived EF
@@ -24,10 +41,10 @@ consumers). Independent review passed. The same baseline-built `10.0.0-checkpoin
 both modes at EF10.0.0/10.0.14; the preceding arithmetic package fails the unary predicate. Package-content and
 package-only graph checks pass. No live database, Linux or hosted CI run occurred.
 
-Latest package: `artifacts/checkpoint-unary-20261111/OceanBase.EntityFrameworkCore.10.0.0-checkpoint.unary-20261111.nupkg`.
+Historical package: `artifacts/checkpoint-unary-20261111/OceanBase.EntityFrameworkCore.10.0.0-checkpoint.unary-20261111.nupkg`.
 Evidence: `artifacts/local-development/batch3c/`. Native casing/space/character semantics do not promise exact CLR
-culture/Unicode-whitespace/UTF-16 behavior. Next is the confirmed Batch 2d wide-decimal floating-reader fix,
-followed by Batch 3d search and wider query work. The goal remains active.
+culture/Unicode-whitespace/UTF-16 behavior. The wide-decimal follow-up is recorded above; search and wider
+query work remain open. The goal remains active.
 
 ### Integer division/remainder checkpoint
 

@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Data;
 using System.Data.Common;
 using System.Linq;
+using System.Globalization;
+using System.Numerics;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
@@ -543,6 +545,47 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
         }
 
         [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true)]
+        public async Task Exact_decimal_floating_columns_materialize_through_composed_readers(
+            OceanBaseCompatibilityMode mode, bool async)
+        {
+            using var table = new DataTable();
+            table.Columns.Add("Id", typeof(int));
+            foreach (var name in new[] { "Narrow", "Wide", "Converted", "Optional" })
+                table.Columns.Add(name, typeof(OceanBaseDecimal));
+            var cases = new (string Coefficient, int Scale, float Single, double Double)[]
+            {
+                ("1", -30, 1E30f, 1E30d),
+                ("12345678901234567890123456789012345678", 38, 0.123456789f, 0.12345678901234568d),
+                ("1", 40, 1E-40f, 1E-40d),
+                ("-1", 40, -1E-40f, -1E-40d),
+                ("-1", int.MaxValue, -0f, -0d),
+                ("0", int.MinValue, 0f, 0d)
+            };
+            for (var i = 0; i < cases.Length; i++)
+            {
+                var value = new OceanBaseDecimal(BigInteger.Parse(cases[i].Coefficient, CultureInfo.InvariantCulture), cases[i].Scale);
+                table.Rows.Add(i + 1, value, value, value, value);
+            }
+            var commands = new CommandCapture { Results = table };
+            await using var context = CreateContext(mode, commands);
+            var query = context.Set<FloatingRow>().OrderBy(row => row.Id)
+                .Select(row => new { row.Id, row.Narrow, row.Wide, row.Converted, row.Optional });
+            var rows = async ? await query.ToListAsync() : query.ToList();
+            Assert.Equal(cases.Length, rows.Count);
+            for (var i = 0; i < cases.Length; i++)
+            {
+                Assert.Equal(BitConverter.DoubleToInt64Bits(cases[i].Double), BitConverter.DoubleToInt64Bits(rows[i].Narrow));
+                Assert.Equal(BitConverter.SingleToInt32Bits(cases[i].Single), BitConverter.SingleToInt32Bits(rows[i].Wide));
+                Assert.Equal(BitConverter.DoubleToInt64Bits(cases[i].Double / 2), BitConverter.DoubleToInt64Bits(rows[i].Converted));
+                Assert.Equal(BitConverter.DoubleToInt64Bits(cases[i].Double), BitConverter.DoubleToInt64Bits(rows[i].Optional!.Value));
+            }
+        }
+
+        [Theory]
         [InlineData(OceanBaseCompatibilityMode.MySql)]
         [InlineData(OceanBaseCompatibilityMode.Oracle)]
         public void Floating_query_operands_do_not_inherit_column_capacity(OceanBaseCompatibilityMode mode)
@@ -592,8 +635,10 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
         {
             var output = overflow ? double.MaxValue : 1.25d;
             using var table = new DataTable();
+            table.Columns.Add("Converted", typeof(double));
             table.Columns.Add("Value", typeof(double));
-            table.Rows.Add(output);
+            table.Columns.Add("Wide", typeof(double));
+            table.Rows.Add(output, output, output);
             var commands = new CommandCapture { Results = table, OutputValue = output };
             await using var context = CreateContext(mode, commands);
             var entity = new GeneratedFloating { Id = 1 };
@@ -608,6 +653,52 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
             {
                 Assert.Equal(1, async ? await context.SaveChangesAsync() : context.SaveChanges());
                 Assert.Equal(1.25f, entity.Value);
+                Assert.Equal(1.25d, entity.Wide);
+                Assert.Equal(0.625d, entity.Converted);
+            }
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true)]
+        public async Task Exact_decimal_generated_floating_outputs_round_and_reject_overflow(
+            OceanBaseCompatibilityMode mode, bool async)
+        {
+            foreach (var item in new (string Coefficient, int Scale, float Single, double Double)[]
+            {
+                ("1", -30, 1E30f, 1E30d),
+                ("12345678901234567890123456789012345678", 38, 0.123456789f, 0.12345678901234568d),
+                ("-1", 40, -1E-40f, -1E-40d),
+                ("-1", int.MaxValue, -0f, -0d),
+                ("0", int.MinValue, 0f, 0d),
+                ("1", -39, float.PositiveInfinity, 1E39d),
+                ("-1", int.MinValue, float.NegativeInfinity, double.NegativeInfinity)
+            })
+            {
+                var output = new OceanBaseDecimal(BigInteger.Parse(item.Coefficient, CultureInfo.InvariantCulture), item.Scale);
+                using var table = new DataTable();
+                foreach (var name in new[] { "Converted", "Value", "Wide" })
+                    table.Columns.Add(name, typeof(OceanBaseDecimal));
+                table.Rows.Add(output, output, output);
+                var commands = new CommandCapture { Results = table, OutputValue = output };
+                await using var context = CreateContext(mode, commands);
+                var entity = new GeneratedFloating { Id = 1 };
+                context.Add(entity);
+                if (float.IsInfinity(item.Single))
+                {
+                    var exception = async ? await Assert.ThrowsAsync<DbUpdateException>(() => context.SaveChangesAsync())
+                        : Assert.Throws<DbUpdateException>(() => context.SaveChanges());
+                    Assert.IsType<OverflowException>(exception.InnerException);
+                }
+                else
+                {
+                    Assert.Equal(1, async ? await context.SaveChangesAsync() : context.SaveChanges());
+                    Assert.Equal(BitConverter.SingleToInt32Bits(item.Single), BitConverter.SingleToInt32Bits(entity.Value));
+                    Assert.Equal(BitConverter.DoubleToInt64Bits(item.Double), BitConverter.DoubleToInt64Bits(entity.Wide));
+                    Assert.Equal(BitConverter.DoubleToInt64Bits(item.Double / 2), BitConverter.DoubleToInt64Bits(entity.Converted));
+                }
             }
         }
 
@@ -1251,6 +1342,9 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
                 modelBuilder.Entity<GeneratedFloating>().Property(entity => entity.Id).ValueGeneratedNever();
                 modelBuilder.Entity<GeneratedFloating>().Property(entity => entity.Value)
                     .HasColumnType(oracle ? "BINARY_DOUBLE" : "DOUBLE").HasComputedColumnSql("NULL");
+                modelBuilder.Entity<GeneratedFloating>().Property(entity => entity.Wide).HasComputedColumnSql("NULL");
+                modelBuilder.Entity<GeneratedFloating>().Property(entity => entity.Converted)
+                    .HasConversion(value => value * 2d, value => value / 2d).HasComputedColumnSql("NULL");
                 modelBuilder.Entity<NarrowTemporalRow>().Property(entity => entity.Id).ValueGeneratedNever();
                 modelBuilder.Entity<NarrowTemporalRow>().Property(entity => entity.Stamp).HasPrecision(3);
                 modelBuilder.Entity<NarrowTemporalRow>().Property(entity => entity.Zoned).HasPrecision(3);
@@ -1350,6 +1444,8 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
         {
             public int Id { get; set; }
             public float Value { get; set; }
+            public double Wide { get; set; }
+            public double Converted { get; set; }
         }
 
         private sealed class GuidStorageRow

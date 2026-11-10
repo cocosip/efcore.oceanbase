@@ -253,12 +253,13 @@ database value that would overflow CLR float must throw rather than materializin
 reader values are preserved, following the connector. Parameters and literals reject NaN/infinity: the pinned
 server documentation does not support these input constants. Output-only parameters retain their direction.
 
-Planned numeric-normalization follow-up: finite OceanBaseDecimal reader/generated values targeting Single or
-Double must not be forced through CLR decimal first. The published connector's exact ToDecimal rejects both
+Finite OceanBaseDecimal reader/generated values targeting Single or Double parse directly at the requested
+IEEE precision, without passing through CLR decimal or converting Single through Double. The exact midpoint
+1 + 2^-24 + 10^-60 rounds to Single bits 0x3f800001. The published connector's exact ToDecimal rejects both
 large finite magnitudes and precision beyond decimal's range, although a floating target can represent their
-rounded values. Use only public connector representation and invariant BCL numeric conversion; preserve exact
-decimal/integer paths. Floating conversion may round or underflow according to the target IEEE format, but a
-finite value whose target conversion becomes infinity must reject. Existing native non-finite reader behavior
+rounded values. Normalization uses the public invariant connector representation and BCL parsers; exact
+decimal/integer paths remain unchanged. Floating conversion may round or underflow according to the target
+IEEE format, but a finite value whose target conversion becomes infinity must reject. Native non-finite reader behavior
 and float/double narrowing checks remain unchanged. This is normalization, not new NUMBER-backed storage support.
 
 Apply physical 32-bit capacity and UNSIGNED checks only to converted values actually written by SaveChanges;

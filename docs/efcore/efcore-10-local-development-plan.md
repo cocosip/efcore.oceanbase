@@ -194,6 +194,8 @@ FunctionalTests/BasicRelationalTests.cs. Do not add new store mappings, converte
 2. Fix the shared conversion boundary using public connector APIs/BCL. Round directly to the requested IEEE
    target; avoid a float-via-double double-rounding path. Finite conversion to infinity rejects. Preserve exact
    integer/fraction/range and decimal semantics, existing native non-finite reader behavior and narrowing checks.
+   Include an exact Single midpoint regression: 1 + 2^-24 + 10^-60 must round to the next float above 1,
+   whereas converting through Double first can incorrectly round to 1. Assert the expected target bits/value.
 3. Add intercepted sync/async floating reads and generated outputs with synthetic wrapper values, reusing
    existing helpers. These prove shared normalization rather than new wire/server type claims.
 4. Focused RED/GREEN, full Debug/Release, independent review, patch/package gates, progress and scoped commit.
@@ -267,14 +269,21 @@ and FunctionalTests/BasicRelationalTests.cs. The planned search contract in quer
   OceanBaseDecimal.ToDecimal before selecting float/double. A package-only probe against arithmetic-20261110
   reproduces six overflows for representable target values (1E30, 38-digit fraction, 1E-40). The published
   connector revision confirms invariant bounded scientific ToString is available. Queue Batch 2d after 3c;
-  no production fix or passing evidence is claimed yet.
+  this historical reproduction is resolved by Batch 2d below.
 - Batch 3c unary functions/Length local scope complete: focused 24 unit + eight intercepted pass after RED,
   including four lowercase/whitespace Oracle LOB return-family failures. Debug/Release and isolated EF10.0.14
   Release pass 833 (647+184+2). Independent review passed. Same baseline-built unary-20261111 package passes
   both modes on EF10.0.0/10.0.14; the previous arithmetic package fails the new unary predicate. Repeatable
   package-content gate and package-only graph pass. Evidence: artifacts/local-development/batch3c/.
   Native casing/SQL-space trim/database-character semantics and converter/live limits are documented.
-  Next is Batch 2d normalization, then Batch 3d search; the full goal remains active.
+  Batch 2d normalization follows below, then Batch 3d search; the full goal remains active.
+- Batch 2d local scope complete: shared OceanBaseDecimal normalization parses directly at Single/Double
+  precision, rejects finite-to-infinity conversion and preserves exact/native paths. RED 29 unit + eight
+  intercepted failures; final Debug/Release and isolated EF10.0.14 Release pass 882 (688+192+2). Independent
+  spec/quality review passed. Same baseline-built wide-decimal-20261111 package passes both modes on
+  EF10.0.0/10.0.14; previous unary package fails the new Single midpoint smoke. Content gate and package-only
+  graph pass. Evidence: artifacts/local-development/batch2d/. No new storage/live/platform claim.
+  Next is Batch 3d search; the overall goal remains active.
 - Remaining Batch 2 scalar work and Batches 3–10 pending. The overall goal remains active.
 - Batch 8 package README slice: use the provider project's README as package-owned documentation and declare
   PackageReadmeFile. Verify archive metadata/content with no-build packing of an already verified isolated

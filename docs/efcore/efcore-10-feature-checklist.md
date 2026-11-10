@@ -55,20 +55,20 @@ so that an undocumented feature is not accidentally advertised.
 Development resumed at the user's request (2026-11-10) on efcore/10.0. See the
 [progress handoff](efcore-10-progress.md) for saved state, remaining work and the exact resume point.
 
-Snapshot: 2026-11-11, `efcore/10.0` unary string-function batch following ee21972.
+Snapshot: 2026-11-11, `efcore/10.0` wide-decimal floating follow-up after db676ff.
 The same baseline-built package passes both tested EF patches. This is not a release result.
 
 `dotnet test OceanBase.EntityFrameworkCore.slnx --no-restore -m:1 -nr:false` produced:
 
-The expanded suite passed in Debug and Release (833 tests per configuration).
+The expanded suite passed in Debug and Release (882 tests per configuration).
 
 | Layer | Passed | Failed | Evidence boundary |
 | --- | --- | --- | --- |
-| Unit | 647 | 0 | Prior coverage plus unary string functions/character length, scoped translator/plugin precedence, nullability, converter and LOB return families; live coverage incomplete. |
-| Command pipeline | 184 | 0 | Intercepted scalar/string/arithmetic queries and unary function binding/nullable reads, writes and generated values; transactions disabled. |
+| Unit | 688 | 0 | Prior coverage plus wide exact decimal normalization to Single/Double, direct midpoint rounding, range/scale/culture/converter cases; live coverage incomplete. |
+| Command pipeline | 192 | 0 | Prior queries/writes plus synthetic wide exact decimal floating reads/generated outputs in both modes, sync/async; transactions disabled. |
 | Consumer | 2 | 0 | Both-mode provider detection through a project reference, not an isolated packed-package consumer. |
-| Packed consumer | Both modes | 0 | Same unary-20261111 package passes EF10.0.0/10.0.14, including five unary string methods/character length plus prior string/arithmetic/scalar checks; README included; no live execution. |
-| Later-patch Release suite | 833 | 0 | Current source compiled/tested against EF10.0.14 in isolated artifacts. |
+| Packed consumer | Both modes | 0 | Same wide-decimal-20261111 package passes EF10.0.0/10.0.14, including direct Single midpoint/wide Double reads and prior checks; README included; no live execution. |
+| Later-patch Release suite | 882 | 0 | Current source compiled/tested against EF10.0.14 in isolated artifacts. |
 | Live MySQL / Oracle | Not established | Not established | No live provider execution recorded for either mode. |
 | Relational specification | Not established | Not established | No specification test project yet. |
 
@@ -127,10 +127,11 @@ and finite overflow rejection. Independent review found a clone size facet erase
 a RED-to-GREEN regression now preserves it for validation. Live rounding/subnormal/negative-zero/arithmetic,
 remaining decimal-backed floating declarations and session-dependent REAL remain required open cases.
 
-A package-only probe also confirms six local OceanBaseDecimal-to-Single/Double reader failures: values such
-as 1E30, a 38-digit fraction and 1E-40 overflow because normalization first requires an exact CLR decimal.
-These values should round to finite floating results. The local plan queues Batch 2d to fix the shared boundary;
-existing passing totals do not include that pending regression. No new store mapping is implied.
+Batch 2d closes the reproduced OceanBaseDecimal-to-Single/Double normalization gap: wide magnitude/precision
+and tiny values parse directly at target precision instead of overflowing exact CLR decimal first. Forty-one
+unit and eight intercepted cases cover range/scale/culture, direct Single midpoint rounding, converter readers
+and generated outputs. Exact integer/decimal and native non-finite paths remain intact. The previous unary
+package fails the new smoke; the current package passes both selected patches. No new store mapping is implied.
 
 Temporal query transport is independent of physical write precision. Ten new UTQ cases initially failed; input
 parameters, input-output values and literals now retain transport precision and Oracle interval leading width,
@@ -193,7 +194,7 @@ Existing evidence references used below identify partial coverage, not automatic
   project reference only.
 - **PC**: [Standalone package consumer](../../tests/OceanBase.EntityFrameworkCore.PackageConsumer/Program.cs),
   registration/native floating/explicit Guid/temporal/binary/integer and Boolean model/SQL/paging checks against the
-   latest unary-20261111 local prerelease package, including unary string functions/character length and prior arithmetic/string/scalar checks;
+  latest wide-decimal-20261111 local prerelease package, including direct floating normalization and prior checks;
   [commands and evidence](efcore-10-query-update-design.md#package-checkpoint-validation).
 
 `Missing` means tests and evidence still need to be added.
@@ -226,7 +227,7 @@ explicitly; silent truncation or lossy fallback is not acceptable.
 | MOD-02 | Required/optional relationships, owned references/collections and shadow properties preserve model and CRUD behavior. | Required | Planned | Planned | Missing. |
 | MOD-03 | Generated/default/computed metadata, explicit names and schema settings produce supported SQL or validation errors. | Required | In progress | In progress | FP generated integer key only; complete generation/schema contract missing. |
 | MAP-01 | Boolean and signed/unsigned integers bind/round-trip in documented ranges; predicates use valid Boolean SQL. | Required | In progress | In progress | US/UI all-eight nullable endpoints, decimal/finite-floating fraction rejection, numeric property facets and Boolean false/null binding pass; FP exact key/enum outputs and scalar Boolean cells pass. Full Boolean operators/null SQL and all live evidence remain open. |
-| MAP-02 | Decimal precision/scale and float/double round-trip; default decimal storage preserves documented fractional precision. | Required | In progress | In progress | UT/UD decimal declarations/exact write bounds/query transport/clones, Oracle bare DECIMAL/NUMERIC (38,0) and NUMBER independence pass; UF/FP native floating and decimal paths pass. Decimal-backed float/REAL promotion and all live coverage remain open. |
+| MAP-02 | Decimal precision/scale and float/double round-trip; default decimal storage preserves documented fractional precision. | Required | In progress | In progress | UT/UD decimal declarations/exact write bounds/query transport/clones and alias independence pass; UF/FP native floating and direct wide OceanBaseDecimal normalization/Single midpoint/range/scale/converter paths pass. Decimal-backed storage/REAL promotion and all live coverage remain open. |
 | MAP-03 | Unicode/non-Unicode, fixed/variable and bounded/unbounded text honor length and key/index constraints. | Required | In progress | In progress | UT/UX complete supported declarations, character bounds, Unicode, LOB index rejection and FP converted writes pass; BYTE/charset/index/padding/LOB live behavior missing. |
 | MAP-04 | Binary/Guid storage and byte order are explicit and round-trip through parameters, literals and generated values. | Required | In progress | In progress | UB/UG declarations/length/facets/null/composition and FP explicit Guid text/binary query/write/generated outputs pass locally; Oracle empty-BLOB transport, padding, large BLOB semantics and all live round trips remain open. |
 | MAP-05 | DateTime/DateTimeOffset/DateOnly/TimeOnly/TimeSpan have documented precision, timezone and range semantics. | Required | In progress | In progress | UTM/UTQ five-type mapping/reader/literal/precision/range, actual facet/property and transport-family/DbType/postfix clone validation pass; FP query/write/generated outputs pass. Query input remains lossless; all live calendar/coercion/session evidence remains open. |
@@ -306,9 +307,9 @@ commit/transaction behavior per mode.
 | ID | Requirement and acceptance criteria | Priority | MySQL | Oracle | Existing evidence / gap |
 | --- | --- | --- | --- | --- | --- |
 | PKG-01 | Build net10.0 assets against published OceanBaseConnector 0.2.0 with warnings as errors. | Required | Done | Done | Current solution test command builds assets; not a package-content assertion. |
-| PKG-02 | Packed nuspec uses OceanBase.EntityFrameworkCore and EF ranges [10.0.0,11.0.0). | Required | Done | Done | PackageConsumer/Verify-Package.ps1 passes the unary nupkg identity/net10.0/README/range checks; prior wrong-version, missing-README and exact-patch probes reject as expected. Rerun on every release pack; runtime/live gates are separate. |
-| PKG-03 | Isolated packed consumer restores/executes provider API without project/local connector references. | Required | Done | Done | PC unary-20261111 passes both modes on both selected patches, including native unary string/Length translations and prior arithmetic/string/scalar checks; README included; rerun after provider changes. |
-| PKG-04 | Minimum EF10 and selected later available EF10 patch restore/build/test without pinning consumer patch; EF11 cannot satisfy dependencies. | Required | Done | Done | Source Release suite 833 passes at 10.0.14; same baseline-built unary package passes EF10.0.0/10.0.14; nuspec ranges rechecked, prior range parser rejects 11.0.0; rerun after changes. |
+| PKG-02 | Packed nuspec uses OceanBase.EntityFrameworkCore and EF ranges [10.0.0,11.0.0). | Required | Done | Done | PackageConsumer/Verify-Package.ps1 passes current wide-decimal nupkg identity/net10.0/README/ranges; prior negative probes reject as expected. Rerun on every release pack; runtime/live gates are separate. |
+| PKG-03 | Isolated packed consumer restores/executes provider API without project/local connector references. | Required | Done | Done | PC wide-decimal-20261111 passes both modes on both selected patches, including direct Single midpoint/wide Double reads and prior checks; package-only graph inspected; rerun after changes. |
+| PKG-04 | Minimum EF10 and selected later available EF10 patch restore/build/test without pinning consumer patch; EF11 cannot satisfy dependencies. | Required | Done | Done | Source Release suite 882 passes at 10.0.14; same baseline-built wide-decimal package passes EF10.0.0/10.0.14; nuspec ranges rechecked, prior range parser rejects 11.0.0; rerun after changes. |
 | TST-01 | Selected EF relational specification classes pass; exclusions map to checklist IDs and limitations. | Required | Planned | Planned | Specification project/selection absent. |
 | TST-02 | Live core query/write/transaction/schema/scalar suites pass in at least one declared supported environment per mode. | Required | Planned | Planned | User will supply access later; User Secrets fixture and authorized schema/cleanup scope required; no live provider execution recorded. |
 | REL-01 | Support notes record server/connector/runtime/EF versions, tenant mode, direct/proxy endpoint, transport/options without credentials. | Required | Planned | Planned | Release evidence record missing. |

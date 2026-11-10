@@ -250,17 +250,29 @@ Run the read-only gate after packing, before the isolated consumer checks:
 
 ```powershell
 pwsh -NoProfile -File tests/OceanBase.EntityFrameworkCore.PackageConsumer/Verify-Package.ps1 `
-    -PackagePath artifacts/checkpoint-numeric-20261110/OceanBase.EntityFrameworkCore.10.0.0-checkpoint.numeric-20261110.nupkg `
-    -ExpectedVersion 10.0.0-checkpoint.numeric-20261110
+    -PackagePath artifacts/checkpoint-wide-decimal-20261111/OceanBase.EntityFrameworkCore.10.0.0-checkpoint.wide-decimal-20261111.nupkg `
+    -ExpectedVersion 10.0.0-checkpoint.wide-decimal-20261111
 ```
 
 The PowerShell 7 script uses .NET ZIP/XML APIs and checks ID/version, the net10.0 assembly and dependency group,
 exact expected dependency ranges, and a nonempty packaged README with matching metadata. It does not build,
-restore, execute provider queries or establish server/runtime compatibility. The current numeric package passes;
+restore, execute provider queries or establish server/runtime compatibility. The current wide-decimal package passes;
 wrong expected version, the old README-less alias package and the exact-patch README probe fail at their intended
 checks. These runs were on Windows; Linux execution remains unverified. Change the path/version for each new pack.
 
-### Current unary string-function checkpoint (2026-11-11)
+### Current wide-decimal floating checkpoint (2026-11-11)
+
+Debug/Release and isolated EF10.0.14 Release pass 882 tests (688 unit, 192 intercepted pipeline, two project
+consumers). Independent spec/quality review passed. The same baseline-built
+`10.0.0-checkpoint.wide-decimal-20261111` package passes both modes on EF10.0.0/10.0.14, including direct
+Single midpoint rounding (bits 0x3f800001) and a wide Double reader value. The preceding unary package fails
+the new reader smoke. Package-content and package-only dependency checks pass.
+
+Repeat the commands below with `10.0.0-checkpoint.wide-decimal-20261111` and
+`artifacts/checkpoint-wide-decimal-20261111`. Evidence: `artifacts/local-development/batch2d/`.
+This uses synthetic connector wrapper values and establishes no new store mapping or server/platform behavior.
+
+### Historical unary string-function checkpoint (2026-11-11)
 
 Debug/Release and isolated EF10.0.14 Release pass 833 tests (647 unit, 184 intercepted pipeline, two project
 consumers). Independent spec/quality review passed. The same baseline-built `10.0.0-checkpoint.unary-20261111`
@@ -270,8 +282,8 @@ graph checks pass. No server function, cross-platform or hosted CI run was perfo
 
 Repeat the commands below with `10.0.0-checkpoint.unary-20261111` and `artifacts/checkpoint-unary-20261111`.
 Evidence: `artifacts/local-development/batch3c/`. Native casing, SQL-space trim, database-character units,
-converter/LOB execution and live results retain the limits above. The separately reproduced wide-decimal
-floating-reader gap remains queued in Batch 2d; this checkpoint does not claim that pending regression passes.
+converter/LOB execution and live results retain the limits above. This historical checkpoint predates the
+wide-decimal floating-reader fix recorded above.
 
 ### Historical arithmetic checkpoint (2026-11-10)
 
