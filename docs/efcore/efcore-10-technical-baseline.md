@@ -46,6 +46,7 @@ verified against the 10.x assemblies before each task:
 | SQL helpers | ISqlGenerationHelper | Quote identifiers and create parameter names per mode. |
 | Type mapping | IRelationalTypeMappingSource | Map common CLR and OceanBase scalar types. |
 | Query SQL | IQuerySqlGeneratorFactory and provider query generator | Emit mode-correct SELECT, predicates, joins and paging. |
+| Boolean SQL | IRelationalParameterBasedSqlProcessorFactory / RelationalParameterBasedSqlProcessor | Convert Oracle conditions and numeric Boolean projections after parameter/nullability processing. |
 | Updates | IUpdateSqlGenerator and modification-command batch services | Emit INSERT, UPDATE and DELETE with parameters. |
 | Key retrieval | Generated-value and result-column mapping services | Read database-generated keys without assuming SQL Server OUTPUT. |
 | Database | IRelationalDatabaseCreator | Implement connection/database existence and EnsureCreated boundaries. |
@@ -110,6 +111,56 @@ Oracle CHAR/BYTE declarations retain their explicit storage semantics. Large Ora
 which restricts ordering/grouping. Live charset, byte-limit, decimal round-trip and LOB execution tests remain open.
 Scalar SQL literals, Boolean/Guid/temporal behavior, remaining explicit store types and value converters also remain
 open acceptance work; this checkpoint does not close the entire MAP category.
+
+## Numeric and Guid reading contract
+
+OceanBaseConnector 0.2.0 identifies source revision 4734781a7028aea990af7a832ca7d251a2055556 in its nuspec.
+Its typed reader methods cast primitive values rather than generally converting numeric types. Oracle NUMBER
+results are decimal or OceanBaseDecimal, so an integer mapping cannot assume GetInt32/GetInt64 succeeds.
+Integer mappings must read the provider value, convert with range checks, and reject fractional values rather
+than silently rounding. Oracle generated output propagation uses the same normalization/conversion before
+applying the property's converter. MySQL's signed/unsigned integer storage must preserve the CLR range. Boolean reading
+must accept the connector's Boolean and numeric result forms, independently of the tiny-integer reader option.
+
+Guid storage is explicit: MySQL CHAR(36) uses the standard hyphenated string representation; Oracle RAW(16)
+uses the built-in EF GuidToBytesConverter, which follows Guid.ToByteArray .NET serialization order. This does
+not imply compatibility with an external application's alternative UUID byte order. Parameter and result
+conversion must be paired. Oracle binary literals use HEXTORAW, not the MySQL X'...' form.
+
+String SQL literals must preserve quotes and backslashes regardless of MySQL NO_BACKSLASH_ESCAPES. A hazardous
+MySQL string can be represented by UTF-8 hex conversion rather than a mode-dependent backslash escape. Oracle
+national-character literals use the N prefix. Parameters remain the preferred path for runtime values.
+
+These are implementation acceptance contracts; their live round-trip gates remain open until server tests pass.
+
+The scalar checkpoint implements all eight integer mappings with range-checked provider-value reading, and
+composes EF's built-in converters for Guid and Oracle Boolean values. Mapping clones retain dialect and parameter
+hooks. Direct converter tests and intercepted EF query/write tests cover Oracle-shaped decimal values and
+MySQL numeric Boolean results; this does not prove wire execution. Temporal types, complete explicit-type/facet
+validation, binary boundaries and the full custom-converter matrix remain open.
+
+## Oracle Boolean search conditions
+
+EF Core Relational 10.0.0 exposes the scoped `IRelationalParameterBasedSqlProcessorFactory` service. Its `Create`
+method receives `RelationalParameterBasedSqlProcessorParameters`; the processor constructor receives dependencies
+and those parameters. Override `Process(Expression, ParametersCacheDecorator)`, call base processing first, then
+convert the Oracle expression tree. The obsolete `Optimize` API is not used.
+
+Oracle NUMBER(1) values and SQL conditions have different contexts. Predicates/HAVING/join conditions and searched
+CASE tests require conditions; projected/ordered/grouped values and comparison operands require scalar values.
+Comparisons, logical operators, EXISTS, IN, LIKE and null tests are conditions. Scalar Boolean predicates compare
+against 1. Projected conditions use `CASE WHEN condition THEN 1 WHEN NOT condition THEN 0 ELSE NULL END`, preserving
+UNKNOWN for nullable Boolean expressions. MySQL retains base processing and numeric Boolean SQL semantics.
+
+The nullable-negation regression uses an actual nullable Boolean expression. In contrast, casting the C# result
+of `nullableInt > 0` to bool? does not request lifted-to-null comparison semantics: that CLR comparison returns
+false when the operand is null. Tests must preserve that difference.
+
+Verified references: [EF10 processor](https://github.com/dotnet/efcore/blob/v10.0.0/src/EFCore.Relational/Query/RelationalParameterBasedSqlProcessor.cs)
+and [SQL Server's context-conversion example](https://github.com/dotnet/efcore/blob/v10.0.0/src/EFCore.SqlServer/Query/Internal/SearchConditionConverter.cs).
+The provider has no SQL Server package dependency and does not use its bitwise optimizations. Eight local SQL
+cases cover numeric predicates, comparisons/NOT/EXISTS/LIKE projections, nesting, CASE tests and nullable NOT.
+These cases do not close the complete Boolean/null-semantics or live query gate.
 
 ## Test entry points
 

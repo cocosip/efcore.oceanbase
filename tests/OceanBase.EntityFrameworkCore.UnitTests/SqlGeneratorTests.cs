@@ -10,6 +10,51 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
     public sealed class SqlGeneratorTests
     {
         [Theory]
+        [InlineData(0, "WHERE \"c\".\"Enabled\" = 1")]
+        [InlineData(1, "CASE")]
+        [InlineData(2, "CASE")]
+        [InlineData(3, "\"Enabled\" = 1")]
+        [InlineData(4, "WHEN \"c\".\"Enabled\" = 1")]
+        [InlineData(5, "CASE")]
+        [InlineData(6, "CASE")]
+        public void Oracle_converts_between_numeric_Boolean_values_and_conditions(int scenario, string expected)
+        {
+            using var context = new TestContext(new DbContextOptionsBuilder<TestContext>()
+                .UseOceanBase("Server=localhost;Database=test", OceanBaseCompatibilityMode.Oracle).Options);
+            IQueryable query = scenario switch
+            {
+                0 => context.Customers.Where(customer => customer.Enabled),
+                1 => context.Customers.Select(customer => customer.Id > 0),
+                2 => context.Customers.Select(customer => !customer.Enabled),
+                3 => context.Customers.Where(customer => customer.Enabled && (customer.Id > 0 || !customer.Enabled)),
+                4 => context.Customers.Select(customer => customer.Enabled ? 10 : 20),
+                5 => context.Customers.Select(customer => context.Customers.Any(other => other.Id == customer.Id)),
+                _ => context.Customers.Select(customer => EF.Functions.Like(customer.Name, "A%"))
+            };
+
+            Assert.Contains(expected, query.ToQueryString());
+        }
+
+        [Fact]
+        public void Oracle_nullable_Boolean_negation_projection_preserves_unknown()
+        {
+            var builder = new DbContextOptionsBuilder<TestContext>()
+                .UseOceanBase("Server=localhost;Database=test", OceanBaseCompatibilityMode.Oracle);
+            ((IDbContextOptionsBuilderInfrastructure)builder).AddOrUpdateExtension(
+                builder.Options.Extensions.OfType<RelationalOptionsExtension>().Single().WithUseRelationalNulls(true));
+            using var context = new TestContext(builder.Options);
+
+            var sql = context.Customers.Select(customer => !customer.OptionalFlag).ToQueryString();
+
+            Assert.Contains("CASE", sql);
+            Assert.Contains("THEN 1", sql);
+            Assert.True(sql.Contains("THEN 0", System.StringComparison.Ordinal), sql);
+            Assert.DoesNotContain("ELSE 0", sql);
+            Assert.True(!sql.Contains("ELSE", System.StringComparison.Ordinal)
+                || sql.Contains("ELSE NULL", System.StringComparison.Ordinal), sql);
+        }
+
+        [Theory]
         [InlineData(OceanBaseCompatibilityMode.MySql, "`Customers`", "LIMIT")]
         [InlineData(OceanBaseCompatibilityMode.Oracle, "\"Customers\"", "OFFSET")]
         public void Generates_mode_specific_select_sql(
@@ -108,6 +153,9 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
         private sealed class Customer
         {
             public int Id { get; set; }
+            public int? OptionalId { get; set; }
+            public bool Enabled { get; set; }
+            public bool? OptionalFlag { get; set; }
             public string Name { get; set; } = string.Empty;
         }
     }

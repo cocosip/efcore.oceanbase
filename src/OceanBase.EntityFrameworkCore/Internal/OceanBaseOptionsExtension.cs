@@ -108,6 +108,9 @@ namespace OceanBase.EntityFrameworkCore.Internal
             builder.TryAdd<IQuerySqlGeneratorFactory>(serviceProvider =>
                 new OceanBaseQuerySqlGeneratorFactory(
                     serviceProvider.GetRequiredService<QuerySqlGeneratorDependencies>(), CompatibilityMode));
+            builder.TryAdd<IRelationalParameterBasedSqlProcessorFactory>(serviceProvider =>
+                new OceanBaseParameterBasedSqlProcessorFactory(
+                    serviceProvider.GetRequiredService<RelationalParameterBasedSqlProcessorDependencies>(), CompatibilityMode));
             builder.TryAdd<IRelationalTypeMappingSource>(serviceProvider =>
                 new OceanBaseTypeMappingSource(
                     serviceProvider.GetRequiredService<TypeMappingSourceDependencies>(),

@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Data;
 using System.Data.Common;
-using System.Globalization;
 using System.Linq;
 using System.Text;
 using System.Threading;
@@ -13,6 +12,7 @@ using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.EntityFrameworkCore.Update;
 using OceanBaseConnector;
+using OceanBase.EntityFrameworkCore.Storage;
 
 namespace OceanBase.EntityFrameworkCore.Update
 {
@@ -228,7 +228,7 @@ namespace OceanBase.EntityFrameworkCore.Update
                 var value = parameter.Value is DBNull ? null : parameter.Value;
                 if (value is not null && !targetType.IsInstanceOfType(value))
                 {
-                    value = Convert.ChangeType(value, targetType, CultureInfo.InvariantCulture);
+                    value = OceanBaseNumericConversion.ConvertValue(value, targetType);
                 }
 
                 column.Value = mapping.Converter is { } converter ? converter.ConvertFromProvider(value) : value;

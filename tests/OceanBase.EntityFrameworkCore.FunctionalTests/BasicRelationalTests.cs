@@ -7,12 +7,115 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
+using OceanBaseConnector;
 using Xunit;
 
 namespace OceanBase.EntityFrameworkCore.FunctionalTests
 {
     public sealed class BasicRelationalTests
     {
+        [Theory]
+        [InlineData(false, false)]
+        [InlineData(false, true)]
+        [InlineData(true, false)]
+        [InlineData(true, true)]
+        public async Task Oracle_generated_keys_accept_exact_connector_numbers(bool exactNumber, bool async)
+        {
+            var commands = new CommandCapture { OutputValue = exactNumber ? new OceanBaseDecimal(42m) : 42m };
+            await using var context = CreateContext(OceanBaseCompatibilityMode.Oracle, commands);
+            var entity = new KeyOnly();
+            context.Add(entity);
+
+            Assert.Equal(1, async ? await context.SaveChangesAsync() : context.SaveChanges());
+            Assert.Equal(42, entity.Id);
+        }
+
+        [Theory]
+        [InlineData(false, false)]
+        [InlineData(false, true)]
+        [InlineData(true, false)]
+        [InlineData(true, true)]
+        public async Task Oracle_generated_integer_keys_reject_fraction_and_overflow(bool overflow, bool async)
+        {
+            var commands = new CommandCapture { OutputValue = overflow ? (decimal)int.MaxValue + 1 : 1.5m };
+            await using var context = CreateContext(OceanBaseCompatibilityMode.Oracle, commands);
+            context.Add(new KeyOnly());
+
+            var exception = async
+                ? await Assert.ThrowsAsync<DbUpdateException>(() => context.SaveChangesAsync())
+                : Assert.Throws<DbUpdateException>(() => context.SaveChanges());
+
+            if (overflow)
+            {
+                Assert.IsType<OverflowException>(exception.InnerException);
+            }
+            else
+            {
+                Assert.IsType<InvalidCastException>(exception.InnerException);
+            }
+        }
+
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public async Task Oracle_generated_Boolean_values_apply_converter_after_numeric_normalization(bool async)
+        {
+            var commands = new CommandCapture { OutputValue = new OceanBaseDecimal(1m) };
+            await using var context = CreateContext(OceanBaseCompatibilityMode.Oracle, commands);
+            var entity = new GeneratedFlag { Id = 5 };
+            context.Add(entity);
+
+            Assert.Equal(1, async ? await context.SaveChangesAsync() : context.SaveChanges());
+            Assert.True(entity.Enabled);
+            Assert.Contains(commands.Sql, sql => sql.Contains("RETURNING \"Enabled\"", StringComparison.Ordinal));
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true)]
+        public async Task Query_and_write_apply_scalar_converters(OceanBaseCompatibilityMode mode, bool async)
+        {
+            var oracle = mode == OceanBaseCompatibilityMode.Oracle;
+            var token = Guid.Parse("00112233-4455-6677-8899-aabbccddeeff");
+            using var table = new DataTable();
+            table.Columns.Add("Id", oracle ? typeof(decimal) : typeof(int));
+            table.Columns.Add("Count", oracle ? typeof(decimal) : typeof(uint));
+            table.Columns.Add("Enabled", oracle ? typeof(decimal) : typeof(long));
+            table.Columns.Add("OptionalCount", oracle ? typeof(decimal) : typeof(int));
+            table.Columns.Add("State", oracle ? typeof(decimal) : typeof(int));
+            table.Columns.Add("Token", oracle ? typeof(byte[]) : typeof(string));
+            table.Rows.Add(17, uint.MaxValue, 1, DBNull.Value, 2, oracle ? token.ToByteArray() : token.ToString());
+            var commands = new CommandCapture { Results = table };
+            await using var context = CreateContext(mode, commands);
+            var query = context.Set<ScalarRow>().Select(row => new
+                { row.Id, row.Count, row.Enabled, row.OptionalCount, row.State, row.Token });
+
+            var row = Assert.Single(async ? await query.ToListAsync() : query.ToList());
+
+            Assert.Equal(17, row.Id);
+            Assert.Equal(uint.MaxValue, row.Count);
+            Assert.True(row.Enabled);
+            Assert.Null(row.OptionalCount);
+            Assert.Equal(RowState.Active, row.State);
+            Assert.Equal(token, row.Token);
+            context.Add(new ScalarRow { Id = row.Id, Count = row.Count, Enabled = row.Enabled, State = row.State, Token = row.Token });
+            Assert.Equal(1, async ? await context.SaveChangesAsync() : context.SaveChanges());
+            Assert.Contains(commands.Values, value => Equals(value, uint.MaxValue));
+            Assert.Contains(commands.Values, value => Equals(value, 2));
+            Assert.Contains(commands.Values, value => Equals(value, oracle ? 1m : (object)true));
+            Assert.Contains(commands.Values, value => Equals(value, DBNull.Value));
+            if (oracle)
+            {
+                Assert.Contains(commands.Values, value => value is byte[] bytes && bytes.SequenceEqual(token.ToByteArray()));
+            }
+            else
+            {
+                Assert.Contains(token.ToString(), commands.Values);
+            }
+        }
+
         [Theory]
         [InlineData(OceanBaseCompatibilityMode.MySql, false)]
         [InlineData(OceanBaseCompatibilityMode.MySql, true)]
@@ -174,7 +277,29 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
                 modelBuilder.Entity<KeyOnly>().ToTable("Keys");
                 modelBuilder.Entity<StringDefaultKey>().Property(entity => entity.Id).HasDefaultValueSql("UUID()");
                 modelBuilder.Entity<NumericDefaultKey>().Property(entity => entity.Id).HasDefaultValueSql("123");
+                modelBuilder.Entity<ScalarRow>().Property(entity => entity.Id).ValueGeneratedNever();
+                modelBuilder.Entity<ScalarRow>().Property(entity => entity.State).HasConversion<int>();
+                modelBuilder.Entity<GeneratedFlag>().Property(entity => entity.Id).ValueGeneratedNever();
+                modelBuilder.Entity<GeneratedFlag>().Property(entity => entity.Enabled).HasComputedColumnSql("1");
             }
+        }
+
+        private enum RowState { Inactive = 0, Active = 2 }
+
+        private sealed class GeneratedFlag
+        {
+            public int Id { get; set; }
+            public bool Enabled { get; set; }
+        }
+
+        private sealed class ScalarRow
+        {
+            public int Id { get; set; }
+            public uint Count { get; set; }
+            public bool Enabled { get; set; }
+            public int? OptionalCount { get; set; }
+            public RowState State { get; set; }
+            public Guid Token { get; set; }
         }
 
         private sealed class Customer
@@ -214,6 +339,8 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
             public List<string> Sql { get; } = [];
             public List<object?> Values { get; } = [];
             public int AffectedRows { get; init; } = 1;
+            public DataTable? Results { get; init; }
+            public object OutputValue { get; init; } = 42m;
 
             public override InterceptionResult<int> NonQueryExecuting(DbCommand command, CommandEventData eventData, InterceptionResult<int> result)
             {
@@ -223,7 +350,7 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
                     if (parameter.Direction == ParameterDirection.Output)
                     {
                         // Oracle numeric outputs may be returned as decimal by the connector.
-                        parameter.Value = 42m;
+                        parameter.Value = OutputValue;
                     }
                     else
                     {
@@ -242,6 +369,11 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
                 DbCommand command, CommandEventData eventData, InterceptionResult<DbDataReader> result)
             {
                 Sql.Add(command.CommandText);
+                if (Results is not null)
+                {
+                    return InterceptionResult<DbDataReader>.SuppressWithResult(Results.CreateDataReader());
+                }
+
                 var table = new DataTable();
                 table.Columns.Add("Id", typeof(int));
                 table.Rows.Add(42);

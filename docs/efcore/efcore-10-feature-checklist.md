@@ -27,23 +27,62 @@ A `Done` row must record test methods, command/result and tested revision for ea
 require live server evidence; pure configuration, metadata and SQL helper contracts can be proved locally.
 One scalar type, operator or happy path cannot establish completion of its entire category.
 
+## Before starting a feature
+
+Use this checklist as the single inventory. Keep implementation details in the linked design/technical baseline
+and execution steps in the implementation plan; do not maintain a second, conflicting support list.
+
+Before writing production code, expand the affected row in its design document using this record:
+
+| Field | Required content |
+| --- | --- |
+| Feature IDs and scope | Exact APIs, CLR/store types, operators and overloads included; explicit exclusions. |
+| Version contracts | Official documentation and exact EF/connector source version; affected services and lifetimes. |
+| MySQL / Oracle behavior | Storage, SQL and observable results per mode, including any deliberate difference. |
+| Acceptance cases | Normal, null/empty, boundary and unsupported inputs; expected result or exception for each. |
+| Verification | Named tests at unit, real EF pipeline, live and package layers as applicable. |
+| Evidence | Mode, tested revision, command, result and environment; distinguish planned tests from passing tests. |
+| Remaining gaps | Unimplemented cases, failing tests, missing environments and their release impact. |
+
+An aggregate row stays open until every included case meets its acceptance criteria. A passing mapping metadata
+test cannot substitute for reader conversion, parameter binding or a required live round trip. A new regression
+reopens the affected status even when an older checkpoint passed. Before merging, update this inventory and the
+affected design together. Before release, compare the public API/support notes against required and deferred rows
+so that an undocumented feature is not accidentally advertised.
+
 ## Current evidence and blockers
 
-Snapshot: 2026-11-10, `dev` development checkpoint based on 844ec7a. The reviewed implementation and this
-evidence record are committed together; this is not a release result.
+Snapshot: 2026-11-10, `dev` scalar/Boolean checkpoint based on 3dfcdf8. Implementation, tests and this evidence
+record are developed together; the checkpoint commit identifies the tested source. This is not a release result.
 
 `dotnet test OceanBase.EntityFrameworkCore.slnx --no-restore -m:1 -nr:false` produced:
 
-The same suite also passed with `-c Release` after the generated-key review fix (95 tests per configuration).
+The same suite also passed with `-c Release` (145 tests per configuration).
 
 | Layer | Passed | Failed | Evidence boundary |
 | --- | --- | --- | --- |
-| Unit | 72 | 0 | Options, connection rejection/cleanup, string/decimal facets and generated SQL; incomplete scalar coverage. |
-| Command pipeline | 22 | 0 | Commands intercepted before network execution; transactions disabled; unsupported MySQL keys reject before DML. |
+| Unit | 108 | 0 | Options, connection cleanup, mapping/reader/converter hooks, literals and Oracle Boolean SQL; temporal/explicit-type coverage incomplete. |
+| Command pipeline | 36 | 0 | Intercepted before network execution; scalar query/input conversion and exact Oracle generated-number readback; transactions disabled. |
 | Consumer | 1 | 0 | Project reference, not an isolated packed-package consumer. |
-| Packed consumer | Both modes | 0 | Separate package restore and executable checks; no ProjectReference or network/database execution. |
+| Historical packed consumer | Both modes | 0 | Revision 2a02bc8; separate package restore/executable checks; current scalar checkpoint not packed yet. |
 | Live MySQL / Oracle | Not established | Not established | No live provider execution recorded for either mode. |
 | Relational specification | Not established | Not established | No specification test project yet. |
+
+Focused scalar run:
+
+`dotnet test tests/OceanBase.EntityFrameworkCore.UnitTests/OceanBase.EntityFrameworkCore.UnitTests.csproj --no-restore -m:1 -nr:false --filter FullyQualifiedName~ScalarMappingTests`
+
+Initial RED result: 24 tests, 2 passed, 22 failed, none skipped. After implementation and additional exact-number
+and converter-composition cases, all 28 scalar tests pass. Oracle SQL coverage adds eight cases; the initial
+projection tests failed before the search-condition processor was implemented. Full Debug/Release results above
+include both suites. MAP-01/MAP-03/MAP-04/MAP-06/MAP-07 and QRY-01 remain `In progress`, because their wider
+acceptance criteria and live gates are not complete. The previous 95-test checkpoint remains historical evidence.
+
+Independent review found generated Oracle output values bypassed exact integer reading: fractional decimals could
+round and OceanBaseDecimal outputs failed conversion. Output propagation now shares numeric normalization and
+checked integral conversion with the reader path. Ten sync/async cases cover exact decimal/OceanBaseDecimal
+keys, fractional/overflow rejection and generated Boolean converter outputs. These are intercepted results,
+not evidence that an OceanBase server executes the generated SQL.
 
 The previous connection-validation disposal failures are fixed and have sync/async mutation regression coverage.
 Closed supplied/provider-owned connection disposal and invalid replacement preservation are also tested locally.
@@ -58,6 +97,8 @@ Existing evidence references used below identify partial coverage, not automatic
 - **UO**: [OptionsTests](../../tests/OceanBase.EntityFrameworkCore.UnitTests/OptionsTests.cs).
 - **UH**: [SqlGenerationHelperTests](../../tests/OceanBase.EntityFrameworkCore.UnitTests/SqlGenerationHelperTests.cs).
 - **UT**: [TypeMappingTests](../../tests/OceanBase.EntityFrameworkCore.UnitTests/TypeMappingTests.cs).
+- **US**: [ScalarMappingTests](../../tests/OceanBase.EntityFrameworkCore.UnitTests/ScalarMappingTests.cs),
+  28 passing integer range/reader, Boolean parameter/reader, Guid, literal and converter cases.
 - **UQ**: [SqlGeneratorTests](../../tests/OceanBase.EntityFrameworkCore.UnitTests/SqlGeneratorTests.cs).
 - **FP**: [BasicRelationalTests](../../tests/OceanBase.EntityFrameworkCore.FunctionalTests/BasicRelationalTests.cs),
   intercepted execution only.
@@ -96,13 +137,30 @@ explicitly; silent truncation or lossy fallback is not acceptable.
 | MOD-01 | Relational conventions initialize tables, primary/composite/alternate keys, foreign keys and indexes. | Required | In progress | In progress | UQ/FP simple models; composite/relationship metadata tests missing. |
 | MOD-02 | Required/optional relationships, owned references/collections and shadow properties preserve model and CRUD behavior. | Required | Planned | Planned | Missing. |
 | MOD-03 | Generated/default/computed metadata, explicit names and schema settings produce supported SQL or validation errors. | Required | In progress | In progress | FP generated integer key only; complete generation/schema contract missing. |
-| MAP-01 | Boolean and signed/unsigned integers bind/round-trip in documented ranges; predicates use valid Boolean SQL. | Required | In progress | In progress | UT int/long metadata; remaining types, boundaries and Boolean execution missing. |
+| MAP-01 | Boolean and signed/unsigned integers bind/round-trip in documented ranges; predicates use valid Boolean SQL. | Required | In progress | In progress | US integer boundaries/reader forms/Boolean binding pass; UQ Oracle conditions/projections and FP converters pass; full Boolean/live matrix missing. |
 | MAP-02 | Decimal precision/scale and float/double round-trip; default decimal storage preserves documented fractional precision. | Required | In progress | In progress | UT decimal defaults/explicit types/parameter facets/bounds; live decimal and float/double coverage missing. |
-| MAP-03 | Unicode/non-Unicode, fixed/variable and bounded/unbounded text honor length and key/index constraints. | Required | In progress | In progress | UT text facets, key sizes and LOB fallback; live charset/index/LOB behavior missing. |
-| MAP-04 | Binary/Guid storage and byte order are explicit and round-trip through parameters, literals and generated values. | Required | In progress | In progress | UT binary metadata; Guid conversion and boundaries missing. |
+| MAP-03 | Unicode/non-Unicode, fixed/variable and bounded/unbounded text honor length and key/index constraints. | Required | In progress | In progress | UT facets/key sizes/LOB fallback; US escaped literals pass; live charset/index/LOB behavior missing. |
+| MAP-04 | Binary/Guid storage and byte order are explicit and round-trip through parameters, literals and generated values. | Required | In progress | In progress | US Guid parameter/literal conversion and FP materialization pass; binary boundaries/generated values/live round trips missing. |
 | MAP-05 | DateTime/DateTimeOffset/DateOnly/TimeOnly/TimeSpan have documented precision, timezone and range semantics. | Required | In progress | In progress | UT DateTime metadata only; temporal round trips missing. |
-| MAP-06 | Explicit store type, size, precision/scale, Unicode/fixed facets and null/DBNull parameter values are honored or rejected clearly. | Required | In progress | In progress | UT decimal/string explicit types and null/output facets; remaining scalar types missing. |
-| MAP-07 | EF value converters, including ordinary enum-to-integer/string conversions, work in query/update paths. | Required | Planned | Planned | Missing; distinct from native enum store types. |
+| MAP-06 | Explicit store type, size, precision/scale, Unicode/fixed facets and null/DBNull parameter values are honored or rejected clearly. | Required | In progress | In progress | UT decimal/string explicit types and null/output facets; US scalar/converter parameters pass; remaining explicit types missing. |
+| MAP-07 | EF value converters, including ordinary enum-to-integer/string conversions, work in query/update paths. | Required | In progress | In progress | US integer converter hooks and FP enum-to-int/Guid/Boolean query/write cases pass; enum-to-string/custom converters/live cases missing. |
+
+### Next mapping acceptance cases
+
+These cases refine existing requirements; they do not add features or establish support. The
+[technical baseline](efcore-10-technical-baseline.md#numeric-and-guid-reading-contract) records the current
+numeric/Guid design. Complete each case in both modes before closing its parent row.
+
+| Parent IDs | Concrete cases still required |
+| --- | --- |
+| `MAP-01` | All eight integer CLR types at minimum/maximum and nullable values; native MySQL and decimal/OceanBaseDecimal Oracle reader forms; fractional and overflow rejection. |
+| `MAP-01`, `QRY-01` | Boolean true/false/null binding and reading; Boolean columns, comparisons, NOT/AND/OR, CASE and EXISTS in predicates and projections; SQL three-valued null behavior. |
+| `MAP-03`, `MAP-06` | Empty/null text, quotes, backslashes, control and non-ASCII characters through parameters and literals; MySQL backslash-mode independence; Oracle national literals and empty-string behavior. |
+| `MAP-04` | Empty/null/bounded binary; Guid.Empty and a known UUID through parameters, literals and materialization; fixed string/RAW size and documented byte order. |
+| `MAP-06`, `MAP-07` | Explicit type/facets, mapping clones and converter composition preserve provider reader/parameter hooks; test real EF query and tracked-write paths. |
+
+The focused US tests cover only part of this table. Decimal/float, temporal, model and live mapping requirements
+remain open in MAP-02/MAP-05 and the other parent rows; this table must not replace the full inventory.
 
 ## Queries and materialization
 
@@ -114,7 +172,7 @@ duplicates and mode-specific string semantics.
 | --- | --- | --- | --- | --- | --- |
 | SQL-01 | Escape identifiers, schema qualification and embedded delimiters; Oracle table aliases omit AS and table-free SELECT uses DUAL. | Required | In progress | In progress | UH reserved name/UQ aliases; embedded delimiters/schema cases missing. |
 | SQL-02 | Parameter names/placeholders follow each dialect. | Required | Done | Done | UH Generates_mode_specific_identifiers_and_parameters. |
-| QRY-01 | SELECT/projection, arithmetic/comparison/Boolean predicates and null semantics bind values and materialize nullable/non-null results. | Required | In progress | In progress | UQ/FP scalar projection; broader predicates/live results missing. |
+| QRY-01 | SELECT/projection, arithmetic/comparison/Boolean predicates and null semantics bind values and materialize nullable/non-null results. | Required | In progress | In progress | UQ Oracle Boolean predicates/CASE/EXISTS/LIKE/nullable NOT and FP scalar conversions pass; arithmetic/full null/live results missing. |
 | QRY-02 | OrderBy/ThenBy, Distinct, Skip/Take and offset-only queries return correct results, including deterministic paging/empty pages. | Required | In progress | In progress | UQ SQL shape only; live ordering/string/paging missing. |
 | QRY-03 | Inner/left joins, correlated subqueries, Any/All and scalar/collection Contains have verified results or explicit exclusions. | Required | In progress | In progress | UQ simple join only; collection/null/empty cases missing. |
 | QRY-04 | GroupBy aggregates, Count/LongCount, Sum/Average/Min/Max handle empty and nullable inputs correctly. | Required | In progress | In progress | UQ grouped Count shape only. |
@@ -131,7 +189,7 @@ duplicates and mode-specific string semantics.
 | ID | Requirement and acceptance criteria | Priority | MySQL | Oracle | Existing evidence / gap |
 | --- | --- | --- | --- | --- | --- |
 | UPD-01 | Sync/async INSERT binds values, supports explicit keys/default-only inserts and propagates generated keys. | Required | In progress | In progress | FP generated/default-only inserts; server identity generation unverified. |
-| UPD-02 | Generated/default/computed readback uses same connection; MySQL LAST_INSERT_ID/Oracle RETURNING handle null/converted outputs. | Required | In progress | In progress | FP synthetic outputs; live defaults/computed values/transactions missing. |
+| UPD-02 | Generated/default/computed readback uses same connection; MySQL LAST_INSERT_ID/Oracle RETURNING handle null/converted outputs. | Required | In progress | In progress | FP synthetic exact/overflow/fractional numeric and converted Boolean outputs; null/multiple-output and live defaults/computed/transaction cases missing. |
 | UPD-03 | UPDATE/DELETE bind original keys/tokens, including composite keys and nullable concurrency tokens. | Required | In progress | In progress | FP simple int key/token only. |
 | UPD-04 | Stale update/delete throws DbUpdateConcurrencyException with entries; unchanged matched rows succeed in MySQL. | Required | In progress | In progress | FP zero-row update and UO affected-row option rejection; live matched-row/conflict tests missing. |
 | UPD-05 | Multi-entity saves respect dependency order and propagate parent/child keys; unsupported readback shapes reject before DML. | Required | Planned | Planned | Missing graph/unsupported-shape tests. |

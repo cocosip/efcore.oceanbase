@@ -2,6 +2,7 @@ using System;
 using System.Data;
 using System.Globalization;
 using Microsoft.EntityFrameworkCore.Storage;
+using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 namespace OceanBase.EntityFrameworkCore.Storage
 {
@@ -24,21 +25,35 @@ namespace OceanBase.EntityFrameworkCore.Storage
                 ? Nullable.GetUnderlyingType(declaredType) ?? declaredType
                 : null;
             var storeTypes = OceanBaseTypeMappings.For(_compatibilityMode);
+            var oracle = _compatibilityMode == OceanBaseCompatibilityMode.Oracle;
 
-            if (clrType == typeof(int)) return new IntTypeMapping(storeTypes.Integer, DbType.Int32);
-            if (clrType == typeof(long)) return new LongTypeMapping(storeTypes.Long, DbType.Int64);
+            if (clrType == typeof(sbyte)) return new OceanBaseIntegerTypeMapping<sbyte>(oracle ? "NUMBER(3)" : "TINYINT", DbType.SByte);
+            if (clrType == typeof(byte)) return new OceanBaseIntegerTypeMapping<byte>(oracle ? "NUMBER(3)" : "TINYINT UNSIGNED", DbType.Byte);
+            if (clrType == typeof(short)) return new OceanBaseIntegerTypeMapping<short>(oracle ? "NUMBER(5)" : "SMALLINT", DbType.Int16);
+            if (clrType == typeof(ushort)) return new OceanBaseIntegerTypeMapping<ushort>(oracle ? "NUMBER(5)" : "SMALLINT UNSIGNED", DbType.UInt16);
+            if (clrType == typeof(int)) return new OceanBaseIntegerTypeMapping<int>(storeTypes.Integer, DbType.Int32);
+            if (clrType == typeof(uint)) return new OceanBaseIntegerTypeMapping<uint>(oracle ? "NUMBER(10)" : "INT UNSIGNED", DbType.UInt32);
+            if (clrType == typeof(long)) return new OceanBaseIntegerTypeMapping<long>(storeTypes.Long, DbType.Int64);
+            if (clrType == typeof(ulong)) return new OceanBaseIntegerTypeMapping<ulong>(oracle ? "NUMBER(20)" : "BIGINT UNSIGNED", DbType.UInt64);
             if (clrType == typeof(decimal)) return FindDecimalMapping(mappingInfo);
             if (clrType == typeof(string)) return FindStringMapping(mappingInfo);
-            if (clrType == typeof(byte[])) return new ByteArrayTypeMapping(storeTypes.Binary, DbType.Binary, mappingInfo.Size);
+            if (clrType == typeof(byte[])) return new OceanBaseByteArrayTypeMapping(storeTypes.Binary, mappingInfo.Size, _compatibilityMode);
             if (clrType == typeof(DateTime)) return new DateTimeTypeMapping(storeTypes.DateTime, DbType.DateTime2);
             if (clrType == typeof(DateTimeOffset)) return new DateTimeOffsetTypeMapping(storeTypes.DateTimeOffset, DbType.DateTimeOffset);
             if (clrType == typeof(DateOnly)) return new DateOnlyTypeMapping(storeTypes.Date, DbType.Date);
             if (clrType == typeof(TimeOnly)) return new TimeOnlyTypeMapping(storeTypes.Time, DbType.Time);
             if (clrType == typeof(TimeSpan)) return new TimeSpanTypeMapping(storeTypes.Time, DbType.Time);
-            if (clrType == typeof(Guid)) return new GuidTypeMapping(storeTypes.Guid, DbType.Guid);
+            if (clrType == typeof(Guid)) return (RelationalTypeMapping)(oracle
+                ? new OceanBaseByteArrayTypeMapping(storeTypes.Guid, 16, _compatibilityMode)
+                    .WithComposedConverter(new GuidToBytesConverter())
+                : new OceanBaseStringTypeMapping(storeTypes.Guid, DbType.AnsiStringFixedLength, false, 36, true, _compatibilityMode)
+                    .WithComposedConverter(new GuidToStringConverter()));
             if (clrType == typeof(double)) return new DoubleTypeMapping(storeTypes.Double, DbType.Double);
             if (clrType == typeof(float)) return new FloatTypeMapping(storeTypes.Float, DbType.Single);
-            if (clrType == typeof(bool)) return new BoolTypeMapping(storeTypes.Boolean, DbType.Boolean);
+            if (clrType == typeof(bool)) return (RelationalTypeMapping)(oracle
+                ? new OceanBaseDecimalTypeMapping(storeTypes.Boolean, 1, 0)
+                    .WithComposedConverter(new BoolToZeroOneConverter<decimal>())
+                : new OceanBaseIntegerTypeMapping<bool>(storeTypes.Boolean, DbType.Boolean));
 
             return base.FindMapping(mappingInfo);
         }
@@ -165,7 +180,7 @@ namespace OceanBase.EntityFrameworkCore.Storage
 
             var dbType = unicode ? fixedLength ? DbType.StringFixedLength : DbType.String
                 : fixedLength ? DbType.AnsiStringFixedLength : DbType.AnsiString;
-            return new OceanBaseStringTypeMapping(storeType, dbType, unicode, size, fixedLength);
+            return new OceanBaseStringTypeMapping(storeType, dbType, unicode, size, fixedLength, _compatibilityMode);
         }
     }
 }

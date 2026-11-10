@@ -23,15 +23,21 @@ update MySQL and Oracle statuses independently. Generated SQL and intercepted te
 
 | Task | Checklist IDs | Remaining acceptance work |
 | --- | --- | --- |
-| 1: Package boundary | PKG-01 through PKG-04 | Packed consumer and EF10 patch-resolution matrix. |
+| 1: Package boundary | PKG-01 through PKG-04 | Isolated packed consumer passed at 2a02bc8; repeatable package-content gate and EF10 patch-resolution matrix remain. |
 | 2: Configuration | CFG-01 through CFG-04 | Negative cases, both-mode service graph and actual cache behavior. |
-| 3: Connection and mappings | CON-01 through CON-05, SQL-01/02, MOD-01 through MOD-03, MAP-01 through MAP-07 | Cleanup regression, ownership, facets and scalar round trips; incomplete. |
+| 3: Connection and mappings | CON-01 through CON-05, SQL-01/02, MOD-01 through MOD-03, MAP-01 through MAP-07 | Closed-connection cleanup/facets/scalar reader hooks have tests; opened ownership, temporal/explicit-type contracts and live round trips remain. |
 | 4: Runtime and schema | DIA-01/02, QRY-01 through QRY-11, UPD-01 through UPD-05, TXN-01 through TXN-03, SCH-01 through SCH-03 | Live query/write/transaction evidence and schema implementation; incomplete. |
-| 5: Release evidence | PKG-02 through PKG-04, TST-01/02, REL-01/02 | Specification tests, isolated package and supported-environment records. |
+| 5: Release evidence | PKG-02 through PKG-04, TST-01/02, REL-01/02 | Specification tests, release-revision package/patch validation and supported-environment records. |
 
 The connection-disposal regressions have local regression coverage. Finish Task 3 acceptance, including live
 ownership and complete scalar semantics, before expanding Task 4 support claims. Passing metadata tests alone
 do not complete mappings.
+
+Before further production changes, use the checklist's **Before starting a feature** record to enumerate concrete
+cases for the selected IDs. The **Next mapping acceptance cases** table defines the immediate scalar work;
+its initial failing tests are the RED baseline. The scalar/Boolean checkpoint now passes 145 tests in Debug
+and Release, including four intercepted query/write converter and ten Oracle generated-output cases. This is
+partial acceptance, not Task 3/4 completion or live server evidence.
 
 ## Global Constraints
 
