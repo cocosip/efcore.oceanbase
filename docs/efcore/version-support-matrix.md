@@ -5,14 +5,16 @@ The provider package version identifies the EF Core major. The application targe
 | Application TFM | EF Core | Provider package | Provider asset | Status |
 | --- | --- | --- | --- | --- |
 | net8.0 | 8.x | OceanBase.EntityFrameworkCore 8.x | net8.0 | First target |
-| net9.0 | 8.x | OceanBase.EntityFrameworkCore 8.x | net8.0 | Must be tested as a supported runtime combination |
+| net9.0 | 8.x | OceanBase.EntityFrameworkCore 8.x | net8.0 | Requires explicit runtime verification |
 | net9.0 | 9.x | OceanBase.EntityFrameworkCore 9.x | net8.0 | Later target |
-| net10.0 | 8.x | OceanBase.EntityFrameworkCore 8.x | net8.0 | Allowed when EF Core 8 support matrix permits it |
+| net10.0 | 8.x | OceanBase.EntityFrameworkCore 8.x | net8.0 | Requires explicit runtime verification |
 | net10.0 | 10.x | OceanBase.EntityFrameworkCore 10.x | net10.0 | Later target |
-| net9.0 | 10.x | OceanBase.EntityFrameworkCore 10.x | net10.0 | Unsupported when the runtime cannot load the asset |
+| net9.0 | 10.x | OceanBase.EntityFrameworkCore 10.x | net10.0 | Unsupported; EF Core 10 requires .NET 10 |
 
-The table is a planning matrix, not a compatibility guarantee. Each release must verify the exact SDK, runtime,
-EF Core patch level, provider package and connector package used by the test.
+EF Core 8 requires .NET 8 to build and run according to its official release documentation. EF Core 9 targets
+.NET 8 and can be used with .NET 8 or .NET 9. EF Core 10 requires .NET 10 to build and run. The table is a
+planning matrix, not a compatibility guarantee; each release must verify the exact SDK, runtime, EF Core patch
+level, provider package and connector package used by the test.
 
 ## Dependency rule
 

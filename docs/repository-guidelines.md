@@ -49,8 +49,9 @@ Required test layers are:
 
 1. Provider unit tests for options, mode selection, mappings and SQL fragments.
 2. EF relational tests for query, update, transaction and model behavior.
-3. Package-consumer tests using only the packed provider and connector packages.
-4. Optional live tests against MySQL and Oracle compatibility tenants.
+3. EF Core relational specification tests, extended with provider fixtures and SQL assertions where useful.
+4. Package-consumer tests using only the packed provider and connector packages.
+5. Optional live tests against MySQL and Oracle compatibility tenants.
 
 An unavailable database, proxy, TLS or authentication environment is recorded as an unverified boundary; it is
 not converted into a client pass or a client defect.
@@ -71,6 +72,6 @@ identity/key retrieval, transaction behavior and cancellation behavior for both 
 - A branch is compiled against exactly one EF Core major version.
 - All branches publish the package ID OceanBase.EntityFrameworkCore; the package major version identifies
   the EF Core major (8.x, 9.x, 10.x, 11.x).
-- Use Gitmoji Conventional Commits, for example: feat(efcore8): add relational options registration.
+- Use Gitmoji Conventional Commits, for example: ✨ feat(efcore8): add relational options registration.
 - A release requires passing unit tests, package-consumer tests and the documented compatibility checks for the
   target branch. Live evidence is reported separately from local validation.

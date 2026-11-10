@@ -27,9 +27,17 @@ not inherited automatically from the EF Core release notes.
 - Package: OceanBase.EntityFrameworkCore 9.x.
 - EF dependency: the 9.x range only.
 - Initial asset: net8.0 if the EF9 support matrix permits it.
+- EF9 targets .NET 8 and can be used with .NET 8 or .NET 9.
+
+## EF9 release review
+
+The EF9 documentation highlights AOT and pre-compiled queries, LINQ and SQL translation changes, migrations,
+model-building changes and SQL Server-specific additions. A feature is included only after its provider contract
+is understood and its SQL/result behavior is verified for both OceanBase modes. AOT, pre-compiled queries and
+SQL Server-specific features are deferred unless a separate design proves that they apply to OceanBase.
 
 ## Verification gates
 
 The EF9 branch is releasable only when the EF8 behavioral suite passes against the EF9 provider, mode-specific SQL
-tests pass for MySQL and Oracle, and package-consumer tests prove that the 9.x package does not resolve EF8 or EF10
-provider dependencies.
+tests pass for MySQL and Oracle, selected EF relational specification tests pass, and package-consumer tests prove
+that the 9.x package does not resolve EF8 or EF10 provider dependencies.

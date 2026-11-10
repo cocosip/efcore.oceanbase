@@ -25,9 +25,17 @@ seeding or migration behavior require individual design notes and tests before b
 - Package: OceanBase.EntityFrameworkCore 10.x.
 - EF dependency: the 10.x range only.
 - Initial asset: the runtime target required by EF Core 10.
+- EF10 requires .NET 10 to build and run.
+
+## EF10 release review
+
+The EF10 documentation highlights complex-type improvements, LINQ and SQL translation changes, ExecuteUpdate
+support for relational JSON columns, named query filters, a regular lambda for ExecuteUpdateAsync and security
+related logging changes. These are compatibility review items. They are not advertised until the feature can be
+implemented in both OceanBase modes and covered by provider tests.
 
 ## Verification gates
 
-Release requires the shared behavioral suite, EF10-specific provider tests, packed-package consumer tests and the
-available MySQL/Oracle live matrix. Unsupported server features and missing infrastructure remain recorded as
-verification limits rather than inferred support.
+Release requires the shared behavioral suite, EF10-specific provider tests, selected EF relational specification
+tests, packed-package consumer tests and the available MySQL/Oracle live matrix. Unsupported server features and
+missing infrastructure remain recorded as verification limits rather than inferred support.

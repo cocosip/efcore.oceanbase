@@ -10,6 +10,7 @@ any feature it implements.
 - [Database providers](https://learn.microsoft.com/ef/core/providers/)
 - [EF Core breaking changes](https://learn.microsoft.com/ef/core/what-is-new/breaking-changes)
 - [EF Core testing](https://learn.microsoft.com/ef/core/testing/)
+- [Relational specification tests package](https://www.nuget.org/packages/Microsoft.EntityFrameworkCore.Relational.Specification.Tests)
 
 ## Version references
 
@@ -22,3 +23,6 @@ any feature it implements.
 
 The provider does not claim support for a feature merely because EF Core exposes it. The feature must also be
 expressible in OceanBase MySQL and Oracle compatibility modes and be covered by provider tests.
+
+The provider-writing guidance recommends extending the EF Core specification tests published as NuGet packages.
+Each branch must record the selected test classes and any intentional exclusions.

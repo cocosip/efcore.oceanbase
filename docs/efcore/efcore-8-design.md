@@ -11,7 +11,8 @@ Oracle tenant compatibility modes through the existing OceanBaseConnector ADO.NE
 - Package: OceanBase.EntityFrameworkCore 8.x.
 - EF dependency: Microsoft.EntityFrameworkCore and Microsoft.EntityFrameworkCore.Relational in the 8.x range.
 - Initial provider asset: net8.0.
-- The package must remain usable by an application targeting net9.0 when the EF Core/runtime support matrix permits it.
+- EF8 requires .NET 8 to build and run. A later application TFM is a separate compatibility test and is not
+  promised by the package merely because the net8.0 asset can be referenced.
 
 ## Public configuration
 
@@ -34,6 +35,14 @@ The first implementation must cover the normal relational path:
 Migrations, reverse engineering, provider-specific JSON/LOB/OBJECT/REF CURSOR APIs and advanced batching are
 separate milestones. They must not be implied by the first package's basic CRUD support.
 
+## EF8 release review
+
+The EF8 documentation highlights complex types, primitive collections, JSON column mapping, raw SQL for unmapped
+types, lazy-loading improvements, ExecuteUpdate/ExecuteDelete improvements, better IN queries, pending-model
+change checks, sentinel values for database defaults and RETURNING/OUTPUT configuration. These are review items,
+not automatic support claims. Each feature is either covered by the first feature profile or explicitly deferred
+until OceanBase SQL and MySQL/Oracle result semantics are tested.
+
 ## Mode-specific contracts
 
 The branch must test and document identifier quoting, parameter naming, pagination, Boolean representation,
@@ -43,5 +52,6 @@ Oracle modes. A shared implementation is allowed only when the generated SQL and
 ## Verification gates
 
 Before publishing 8.x, run provider unit tests, EF relational tests, packed-package consumer tests and every
-available MySQL/Oracle live test. The report must separate local results from unavailable server, proxy, TLS,
+selected EF relational specification test class, then the packed-package consumer tests and every available
+MySQL/Oracle live test. The report must separate local results from unavailable server, proxy, TLS,
 authentication and platform evidence.
