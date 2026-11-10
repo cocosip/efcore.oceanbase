@@ -4,6 +4,7 @@ using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Storage;
+using OceanBase.EntityFrameworkCore.Storage;
 using OceanBaseConnector;
 using Xunit;
 
@@ -37,7 +38,9 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             if (mode == OceanBaseCompatibilityMode.Oracle && (type == typeof(TimeOnly) || type == typeof(TimeSpan)))
             {
                 Assert.Equal(OceanBaseDbType.IntervalDayToSecond, ((OceanBaseParameter)parameter).OceanBaseDbType);
-                Assert.Equal(type == typeof(TimeOnly) ? 1 : 9, parameter.Precision);
+                Assert.Equal((byte)9, parameter.Precision);
+                Assert.Equal(type == typeof(TimeOnly) ? 1 : 9,
+                    mapping.CreateParameter(command, "output", null, direction: ParameterDirection.Output).Precision);
             }
         }
 
@@ -162,9 +165,11 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             var date = new DateTime(2026, 11, 10);
 
             Assert.Equal(storeType, mapping.StoreType);
-            Assert.Equal(3, mapping.CreateParameter(command, "date", date).Scale);
-            Assert.Throws<ArgumentException>(() => mapping.CreateParameter(command, "date", date.AddTicks(1)));
-            Assert.Throws<ArgumentException>(() => mapping.GenerateSqlLiteral(date.AddTicks(1)));
+            Assert.Equal(mode == OceanBaseCompatibilityMode.MySql ? 6 : 7, mapping.CreateParameter(command, "date", date).Scale);
+            Assert.Equal(date.AddTicks(10), mapping.CreateParameter(command, "date", date.AddTicks(10)).Value);
+            Assert.NotEmpty(mapping.GenerateSqlLiteral(date.AddTicks(10)));
+            Assert.Throws<ArgumentException>(() => Assert.IsAssignableFrom<IOceanBaseWriteValidation>(mapping)
+                .ValidateWriteValue(date.AddTicks(10)));
         }
 
         [Theory]
@@ -209,10 +214,14 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
 
             Assert.Equal(storeType, mapping.StoreType);
             Assert.Equal(precision, mapping.Precision);
-            Assert.Equal(precision, mapping.CreateParameter(command, "value", null, nullable: true).Scale);
+            Assert.Equal(Math.Max(precision, mode == OceanBaseCompatibilityMode.MySql ? 6 : 7),
+                mapping.CreateParameter(command, "value", null, nullable: true).Scale);
+            var output = mapping.CreateParameter(command, "output", null, direction: ParameterDirection.Output);
+            Assert.Equal(precision, output.Scale);
             if (type == typeof(TimeSpan) && mode == OceanBaseCompatibilityMode.Oracle)
             {
-                Assert.Equal(precision == 9 ? 3 : 2, mapping.CreateParameter(command, "value", null).Precision);
+                Assert.Equal((byte)9, mapping.CreateParameter(command, "value", null).Precision);
+                Assert.Equal(precision == 9 ? 3 : 2, output.Precision);
             }
         }
 
@@ -247,7 +256,10 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             Assert.Throws<OverflowException>(() => Read(mapping,
                 new OceanBaseIntervalDayToSecond(false, 0, 0, 0, 0, 1)));
             var narrow = context.GetService<IRelationalTypeMappingSource>().FindMapping(typeof(TimeSpan), "INTERVAL DAY TO SECOND")!;
-            Assert.Throws<ArgumentOutOfRangeException>(() => narrow.CreateParameter(command, "duration", TimeSpan.FromDays(100)));
+            Assert.Equal(TimeSpan.FromDays(100), Assert.IsType<OceanBaseIntervalDayToSecond>(
+                narrow.CreateParameter(command, "duration", TimeSpan.FromDays(100)).Value).ToTimeSpan());
+            Assert.Throws<ArgumentOutOfRangeException>(() => Assert.IsAssignableFrom<IOceanBaseWriteValidation>(narrow)
+                .ValidateWriteValue(TimeSpan.FromDays(100)));
         }
 
         [Fact]
@@ -279,7 +291,8 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             Assert.Equal(TimeSpan.FromTicks(1), Assert.IsType<OceanBaseIntervalDayToSecond>(parameter.Value).ToTimeSpan());
             Assert.Contains(".0000001'", mapping.GenerateSqlLiteral(value));
             var reduced = mapping.WithPrecisionAndScale(0, null);
-            Assert.Throws<ArgumentException>(() => reduced.CreateParameter(command, "value", value));
+            Assert.NotNull(reduced.CreateParameter(command, "value", value).Value);
+            Assert.Throws<ArgumentException>(() => Assert.IsAssignableFrom<IOceanBaseWriteValidation>(reduced).ValidateWriteValue(value));
         }
 
         [Theory]

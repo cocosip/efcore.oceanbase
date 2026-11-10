@@ -62,11 +62,15 @@ retains EF command diagnostics, interceptors, configured timeout and transaction
 carry the type mapping and current or original value selected by EF's column modification metadata.
 
 Before executing DML, the batch validates the current value of each `IsWrite` column whose mapping implements
-the internal write-validation contract. Integer precision/native-width, floating width/unsigned and binary column-length checks run after
+the internal write-validation contract. Integer precision/native-width, floating width/unsigned, temporal precision/
+interval leading width and binary column-length checks run after
 value conversion and fail as `DbUpdateException` with the original validation error. This check applies to actual
 writes; original key/concurrency values used only in predicates must not inherit a physical write bound.
 General parameter/literal generation also serves queries, where an arithmetic operand, CASE branch or comparand
 can exceed a column's capacity. Query parameter binding retains transport checks such as Oracle empty binary input.
+Temporal inputs/literals use lossless transport precision and Oracle interval leading width, while output-only
+parameters retain declared column metadata. Oracle DateTime DATE comparands use timestamp transport;
+DateOnly retains midnight DATE semantics. See the [temporal contract](efcore-10-technical-baseline.md#temporal-mapping-contract).
 
 | Mode | Generated-value path | Transaction requirement |
 | --- | --- | --- |

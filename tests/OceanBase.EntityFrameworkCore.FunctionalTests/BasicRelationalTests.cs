@@ -19,6 +19,52 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
         [InlineData(OceanBaseCompatibilityMode.MySql, true)]
         [InlineData(OceanBaseCompatibilityMode.Oracle, false)]
         [InlineData(OceanBaseCompatibilityMode.Oracle, true)]
+        public async Task Temporal_query_comparands_keep_transport_precision_independent_of_columns(
+            OceanBaseCompatibilityMode mode, bool async)
+        {
+            var oracle = mode == OceanBaseCompatibilityMode.Oracle;
+            var stamp = new DateTime(2026, 11, 10, 12, 0, 0).AddTicks(1234560);
+            var zoned = new DateTimeOffset(stamp, TimeSpan.FromHours(8));
+            var clock = new TimeOnly(stamp.Ticks % TimeSpan.TicksPerDay);
+            var duration = TimeSpan.FromDays(oracle ? 100 : 1).Add(TimeSpan.FromTicks(1234560));
+            var commands = new CommandCapture { Results = new DataTable() };
+            using var results = commands.Results;
+            results.Columns.Add("Id", oracle ? typeof(decimal) : typeof(int));
+            results.Rows.Add(1);
+            await using var context = CreateContext(mode, commands);
+            var query = context.Set<NarrowTemporalRow>().Where(row => row.Stamp < stamp && row.Zoned < zoned
+                && row.Clock < clock && row.Duration < duration && row.Date < stamp).Select(row => row.Id);
+            var sql = query.ToQueryString();
+            Assert.Contains(".123456", sql);
+            Assert.Contains(".123456", context.Set<NarrowTemporalRow>().Select(row => row.Stamp < new DateTime(2026, 11, 10, 12, 0, 0).AddTicks(1234560)).ToQueryString());
+            Assert.Equal(1, Assert.Single(async ? await query.ToListAsync() : query.ToList()));
+            context.Add(new NarrowTemporalRow { Id = 2, Stamp = new DateTime(2026, 11, 10),
+                Date = new DateTime(2026, 11, 10), Zoned = new DateTimeOffset(2026, 11, 10, 0, 0, 0, TimeSpan.Zero) });
+            Assert.Equal(1, async ? await context.SaveChangesAsync() : context.SaveChanges());
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true)]
+        public async Task Temporal_column_precision_still_rejects_lossy_writes_before_execution(
+            OceanBaseCompatibilityMode mode, bool async)
+        {
+            var commands = new CommandCapture();
+            await using var context = CreateContext(mode, commands);
+            context.Add(new NarrowTemporalRow { Id = 1, Stamp = new DateTime(2026, 11, 10).AddTicks(10) });
+            var exception = async ? await Assert.ThrowsAsync<DbUpdateException>(() => context.SaveChangesAsync())
+                : Assert.Throws<DbUpdateException>(() => context.SaveChanges());
+            Assert.IsType<ArgumentException>(exception.InnerException);
+            Assert.Empty(commands.Sql);
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true)]
         public async Task Floating_columns_materialize_alternate_widths_and_keep_CLR_write_binding(
             OceanBaseCompatibilityMode mode, bool async)
         {
@@ -706,10 +752,27 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
                 modelBuilder.Entity<GeneratedFloating>().Property(entity => entity.Id).ValueGeneratedNever();
                 modelBuilder.Entity<GeneratedFloating>().Property(entity => entity.Value)
                     .HasColumnType(oracle ? "BINARY_DOUBLE" : "DOUBLE").HasComputedColumnSql("NULL");
+                modelBuilder.Entity<NarrowTemporalRow>().Property(entity => entity.Id).ValueGeneratedNever();
+                modelBuilder.Entity<NarrowTemporalRow>().Property(entity => entity.Stamp).HasPrecision(3);
+                modelBuilder.Entity<NarrowTemporalRow>().Property(entity => entity.Zoned).HasPrecision(3);
+                modelBuilder.Entity<NarrowTemporalRow>().Property(entity => entity.Clock).HasPrecision(3);
+                modelBuilder.Entity<NarrowTemporalRow>().Property(entity => entity.Duration)
+                    .HasColumnType(oracle ? "INTERVAL DAY(1) TO SECOND(3)" : "TIME(3)");
+                modelBuilder.Entity<NarrowTemporalRow>().Property(entity => entity.Date).HasColumnType(oracle ? "DATE" : "DATETIME(0)");
             }
         }
 
         private enum RowState { Inactive = 0, Active = 2 }
+
+        private sealed class NarrowTemporalRow
+        {
+            public int Id { get; set; }
+            public DateTime Stamp { get; set; }
+            public DateTime Date { get; set; }
+            public DateTimeOffset Zoned { get; set; }
+            public TimeOnly Clock { get; set; }
+            public TimeSpan Duration { get; set; }
+        }
 
         private sealed class FloatingRow
         {

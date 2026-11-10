@@ -9,11 +9,17 @@ using OceanBaseConnector;
 
 namespace OceanBase.EntityFrameworkCore.Storage
 {
-    internal sealed class OceanBaseTemporalTypeMapping<T> : RelationalTypeMapping where T : struct
+    internal sealed class OceanBaseTemporalTypeMapping<T> : RelationalTypeMapping, IOceanBaseWriteValidation where T : struct
     {
         private const long MaximumMySqlTimeTicks = (838 * 3600L + 59 * 60 + 59) * TimeSpan.TicksPerSecond + 9999990;
         private readonly OceanBaseCompatibilityMode _mode;
         private readonly byte _leadingPrecision;
+
+        private bool DateOnlyTransport => DbType == System.Data.DbType.Date
+            && (_mode == OceanBaseCompatibilityMode.MySql || Converter?.ModelClrType == typeof(DateOnly));
+
+        private int TransportPrecision => DateOnlyTransport ? 0 : Math.Max(Precision ?? 0,
+            _mode == OceanBaseCompatibilityMode.MySql ? 6 : 7);
 
         public OceanBaseTemporalTypeMapping(string storeType, DbType dbType, int precision,
             OceanBaseCompatibilityMode mode, byte leadingPrecision = 0)
@@ -69,22 +75,33 @@ namespace OceanBase.EntityFrameworkCore.Storage
 
         protected override void ConfigureParameter(DbParameter parameter)
         {
-            parameter.Scale = checked((byte)(Precision ?? 0));
+            var input = parameter.Direction is ParameterDirection.Input or ParameterDirection.InputOutput;
+            parameter.Scale = checked((byte)(input ? TransportPrecision : Precision ?? 0));
+            if (input && DbType == System.Data.DbType.Date && !DateOnlyTransport)
+            {
+                parameter.DbType = System.Data.DbType.DateTime2;
+            }
             if (typeof(T) == typeof(OceanBaseIntervalDayToSecond))
             {
                 ((OceanBaseParameter)parameter).OceanBaseDbType = OceanBaseDbType.IntervalDayToSecond;
-                parameter.Precision = _leadingPrecision;
+                parameter.Precision = input ? (byte)9 : _leadingPrecision;
             }
 
-            if (parameter.Direction is ParameterDirection.Input or ParameterDirection.InputOutput
-                && parameter.Value is { } value && value is not DBNull)
+            if (input && parameter.Value is { } value && value is not DBNull)
             {
-                Validate(value);
+                Validate(value, write: false);
             }
         }
 
-        private void Validate(object value)
+        public void ValidateWriteValue(object? value)
         {
+            if (Converter is { } converter) value = converter.ConvertToProvider(value);
+            if (value is not null and not DBNull) Validate(value, write: true);
+        }
+
+        private void Validate(object value, bool write)
+        {
+            var precision = write ? Precision ?? 0 : TransportPrecision;
             long ticks;
             switch (value)
             {
@@ -94,7 +111,7 @@ namespace OceanBase.EntityFrameworkCore.Storage
                         throw new ArgumentException("Unzoned date/time values require DateTimeKind.Unspecified.");
                     }
 
-                    if (_mode == OceanBaseCompatibilityMode.MySql && DbType == System.Data.DbType.Date && date.TimeOfDay != TimeSpan.Zero)
+                    if (DateOnlyTransport && date.TimeOfDay != TimeSpan.Zero)
                     {
                         throw new ArgumentException("A DATE cannot retain a time component.");
                     }
@@ -114,13 +131,13 @@ namespace OceanBase.EntityFrameworkCore.Storage
                     break;
                 case OceanBaseIntervalDayToSecond interval:
                     _ = new OceanBaseIntervalDayToSecond(interval.IsNegative, interval.Days, interval.Hours, interval.Minutes,
-                        interval.Seconds, interval.Nanosecond, _leadingPrecision, checked((byte)(Precision ?? 0)));
+                        interval.Seconds, interval.Nanosecond, write ? _leadingPrecision : (byte)9, checked((byte)precision));
                     return;
                 default:
                     throw new ArgumentException("The temporal parameter has an incompatible provider value.");
             }
 
-            if (Precision is < 7 && ticks % (long)Math.Pow(10, 7 - Precision.Value) != 0)
+            if (precision < 7 && ticks % (long)Math.Pow(10, 7 - precision) != 0)
             {
                 throw new ArgumentException("The temporal precision would require truncation.");
             }
@@ -128,7 +145,7 @@ namespace OceanBase.EntityFrameworkCore.Storage
 
         private string Fraction(long ticks)
         {
-            var precision = Precision ?? 0;
+            var precision = TransportPrecision;
             return precision == 0 ? string.Empty
                 : "." + Math.Abs(ticks % TimeSpan.TicksPerSecond).ToString("D7", CultureInfo.InvariantCulture)
                     .PadRight(precision, '0')[..precision];
@@ -136,11 +153,11 @@ namespace OceanBase.EntityFrameworkCore.Storage
 
         protected override string GenerateNonNullSqlLiteral(object value)
         {
-            Validate(value);
+            Validate(value, write: false);
             switch (value)
             {
                 case DateTime date:
-                    if (DbType == System.Data.DbType.Date)
+                    if (DateOnlyTransport)
                     {
                         return _mode == OceanBaseCompatibilityMode.Oracle
                             ? $"TO_DATE('{date.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture)}', 'YYYY-MM-DD HH24:MI:SS')"
@@ -149,7 +166,7 @@ namespace OceanBase.EntityFrameworkCore.Storage
 
                     return $"TIMESTAMP '{date.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture)}{Fraction(date.Ticks)}'";
                 case DateTimeOffset date:
-                    var format = "YYYY-MM-DD HH24:MI:SS" + (Precision > 0 ? $".FF{Precision}" : string.Empty) + " TZH:TZM";
+                    var format = "YYYY-MM-DD HH24:MI:SS" + (TransportPrecision > 0 ? $".FF{TransportPrecision}" : string.Empty) + " TZH:TZM";
                     return $"TO_TIMESTAMP_TZ('{date.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture)}{Fraction(date.Ticks)} {date.ToString("zzz", CultureInfo.InvariantCulture)}', '{format}')";
                 case TimeSpan time:
                     var sign = time < TimeSpan.Zero ? "-" : string.Empty;
@@ -157,8 +174,8 @@ namespace OceanBase.EntityFrameworkCore.Storage
                         $"TIME '{sign}{Math.Abs(time.Days) * 24 + Math.Abs(time.Hours):00}:{Math.Abs(time.Minutes):00}:{Math.Abs(time.Seconds):00}{Fraction(time.Ticks)}'");
                 case OceanBaseIntervalDayToSecond interval:
                     var exact = new OceanBaseIntervalDayToSecond(interval.IsNegative, interval.Days, interval.Hours, interval.Minutes,
-                        interval.Seconds, interval.Nanosecond, _leadingPrecision, checked((byte)(Precision ?? 0)));
-                    return $"INTERVAL '{exact}' DAY({_leadingPrecision}) TO SECOND({Precision})";
+                        interval.Seconds, interval.Nanosecond, 9, checked((byte)TransportPrecision));
+                    return $"INTERVAL '{exact}' DAY(9) TO SECOND({TransportPrecision})";
                 default:
                     throw new ArgumentException("The temporal literal has an incompatible provider value.");
             }

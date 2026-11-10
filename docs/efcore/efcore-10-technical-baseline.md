@@ -288,8 +288,21 @@ MySQL fractional precision is 0..6; Oracle TIMESTAMP/INTERVAL precision is 0..9,
 100ns ticks. DATE has precision zero. Explicit supported declarations preserve their storage semantics and
 unqualified store defaults (MySQL DATETIME/TIME: 0; Oracle TIMESTAMP/INTERVAL seconds: 6, interval days: 2).
 Conflicting explicit/configured precision and unsupported temporal declarations fail clearly. Timezone-less
-DateTime values with Local/UTC Kind and values requiring fractional truncation are rejected consistently for
-parameters and literals. Oracle nanoseconds not exactly representable in a CLR value fail on reading.
+DateTime values with Local/UTC Kind reject consistently. Oracle nanoseconds not exactly representable in a CLR
+value fail on reading.
+
+Column precision and interval leading precision constrain values actually written by SaveChanges, after value
+conversion, using the same IsWrite validation contract as numeric/binary mappings. They must not constrain query
+comparands or CASE branches. General input parameters and literals preserve at least MySQL microseconds (6 digits)
+or Oracle CLR ticks (7 digits); an Oracle declaration at precision 8/9 retains that higher metadata precision.
+Oracle interval query transport uses leading precision 9, independently of a narrower column. Output-only
+parameters retain declared column precision/leading metadata. MySQL submicrosecond values and durations beyond
+the native TIME range still reject as transport limits. No implicit rounding/truncation is introduced.
+
+For a DateTime mapped to Oracle DATE, query parameters use timestamp transport and literals use TIMESTAMP so
+fractional comparands remain exact; actual DATE writes still reject fractions. DateOnly retains midnight DATE
+transport/literals. An input-output parameter uses query transport because its input must remain exact. Parameter
+and literal generation cannot infer that a value is an actual column write; only the update batch can.
 
 The connector 0.2.0 published revision accepts DateTime/DateTimeOffset/TimeSpan for MySQL/Oracle timestamp/TIME
 paths as applicable, but DateOnly/TimeOnly need converters. MySQL does not accept DbType.DateTimeOffset;
@@ -298,9 +311,10 @@ public IntervalDayToSecond parameter type. Provider code must not call internal 
 Oracle timestamp/zoned result wrappers require exact public conversions on both query and generated-output paths.
 
 Interval model-to-provider converters create a lossless intermediate value at the connector's maximum precision.
-The mapping validates its current declared precision and configures parameter metadata afterward; a converter
+The mapping validates its current declared precision at the write boundary; a converter
 must not capture a precision that becomes stale when the mapping is cloned. A precision clone updates its SQL
-store declaration and parameter Scale together, while preserving converters and reader hooks.
+store declaration and output parameter Scale together, while preserving converters and reader hooks. Input
+parameter Scale remains wide enough for query values even after a clone reduces column precision.
 
 Acceptance cases include all five CLR types in both modes, default/explicit precision, nulls and boundary values,
 UTC normalization/offset retention, negative and multi-day durations, sub-tick rejection, parameter/literal

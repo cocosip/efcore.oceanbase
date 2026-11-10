@@ -92,6 +92,16 @@ namespace PackageConsumer
                     throw new Exception("Floating-point literal used the wrong representation.");
                 }
 
+                var temporalBoundary = new DateTime(2026, 11, 10, 12, 0, 0).AddTicks(1234560);
+                var durationBoundary = TimeSpan.FromDays(mode == OceanBaseCompatibilityMode.Oracle ? 100 : 1)
+                    .Add(TimeSpan.FromTicks(1234560));
+                var temporalSql = context.Set<Row>().Where(row => row.NarrowStamp < temporalBoundary
+                    && row.NarrowDuration < durationBoundary).Select(row => row.Id).ToQueryString();
+                if (!temporalSql.Contains(".123456", StringComparison.Ordinal))
+                {
+                    throw new Exception("Temporal query comparands lost fractional precision.");
+                }
+
                 Console.WriteLine($"{mode}: packed provider registration, scalar/temporal/binary model, Boolean SQL and paging passed; EF {typeof(DbContext).Assembly.GetName().Version}.");
             }
         }
@@ -106,6 +116,9 @@ namespace PackageConsumer
                 modelBuilder.Entity<Row>().Property(row => row.ExplicitToken).HasColumnType(mode == OceanBaseCompatibilityMode.Oracle ? "VARCHAR2(36)" : "BINARY(16)");
                 modelBuilder.Entity<Row>().Property(row => row.Amplitude).HasColumnType(mode == OceanBaseCompatibilityMode.Oracle ? "BINARY_FLOAT" : "FLOAT(24)");
                 modelBuilder.Entity<Row>().Property(row => row.Wide).HasColumnType(mode == OceanBaseCompatibilityMode.Oracle ? "BINARY_DOUBLE" : "DOUBLE PRECISION");
+                modelBuilder.Entity<Row>().Property(row => row.NarrowStamp).HasPrecision(3);
+                modelBuilder.Entity<Row>().Property(row => row.NarrowDuration)
+                    .HasColumnType(mode == OceanBaseCompatibilityMode.Oracle ? "INTERVAL DAY(1) TO SECOND(3)" : "TIME(3)");
             }
         }
 
@@ -126,6 +139,8 @@ namespace PackageConsumer
             public long Count { get; set; }
             public double Amplitude { get; set; }
             public float Wide { get; set; }
+            public DateTime NarrowStamp { get; set; }
+            public TimeSpan NarrowDuration { get; set; }
         }
     }
 }
