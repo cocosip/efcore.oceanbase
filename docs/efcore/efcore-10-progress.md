@@ -21,7 +21,26 @@ not later local commits or database integration. Earlier db676ff also passed in
 Run/job/step metadata is saved under artifacts/local-development/. The earlier log archive endpoint returned
 HTTP403 (repository admin rights); no new per-test count or resolved EF patch is inferred from job metadata.
 
-### Numeric aggregate checkpoint (2026-11-11)
+### Scalar numeric extrema checkpoint (2026-11-11)
+
+The provider translates 26 `Math`/`MathF`/`decimal` Min/Max overloads and numeric
+`EF.Functions.Least`/`Greatest`. It preserves operand order, nesting and the first operand's result
+mapping. A singleton returns its mapped operand. Ordinary queries use a snapshot in the cache key,
+so captured array changes produce current SQL even when the array's structural hash stays the same.
+
+Missing translation and stale SQL were reproduced locally; after the fixes, 43 unit and six intercepted
+cases passed. Debug, Release and isolated EF Core 10.0.14 Release each passed **1760 tests** (1400 unit,
+358 intercepted, two project consumers), with zero failures or skips. The same `extrema-20261111` package
+passed both compatibility modes with EF Core 10.0.0 and 10.0.14. Package contents, package-only dependency
+graph, baseline DLL identity and unchanged baseline assets were verified. Independent source review passed.
+
+Latest package: `artifacts/checkpoint-extrema-20261111/OceanBase.EntityFrameworkCore.10.0.0-checkpoint.extrema-20261111.nupkg`.
+Evidence: `artifacts/local-development/batch3o/`. Local tests verify SQL, cache, binding and supplied reader
+values. Native NULL behavior, mixed numeric coercion, result metadata and numeric edge cases still require
+OceanBase execution. `Round`, wider query coverage, and model, write, transaction and schema work remain
+in the local plan. Real database integration and EF Core 8/9 remain postponed.
+
+### Historical numeric aggregate checkpoint (2026-11-11)
 
 Exact numeric Sum/Average and generic numeric Min/Max now use native aggregate translation through the
 provider aggregate service, retaining plugin priority and filtered CASE/DISTINCT ordering. AVG keeps its
@@ -42,7 +61,7 @@ names, neutral Single results, filtered DISTINCT/HAVING/order and prior checks. 
 package fails the new aggregate assertion. Content/package-only graph, packed/baseline DLL identity and
 unchanged baseline EF10.0.0 assets pass. Independent source review passes with no actionable findings.
 
-Latest package: `artifacts/checkpoint-aggregates-20261111/OceanBase.EntityFrameworkCore.10.0.0-checkpoint.aggregates-20261111.nupkg`.
+Package: `artifacts/checkpoint-aggregates-20261111/OceanBase.EntityFrameworkCore.10.0.0-checkpoint.aggregates-20261111.nupkg`.
 Evidence: `artifacts/local-development/batch3n/`. Supplied results establish command/shaper/reader behavior,
 not native aggregate calculation or server grouping/empty results. Actual accumulator precision, return
 metadata, CASE/COALESCE types, casts/rounding/overflow remain live gates. Wider temporal/math/collection

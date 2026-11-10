@@ -18,6 +18,88 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
     public sealed class BasicRelationalTests
     {
         [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true)]
+        public async Task ScalarExtrema_captured_arrays_refresh_colliding_keys_and_revert(
+            OceanBaseCompatibilityMode mode, bool async)
+        {
+            using var table = new DataTable();
+            table.Columns.Add("Id", typeof(int));
+            table.Rows.Add(1);
+            var commands = new CommandCapture { Results = table };
+            await using var context = CreateContext(mode, commands);
+            int?[] captured = [101, 2, 3, 4, 5, 6, 7, 8, 9];
+            var query = context.Set<NumericAggregateRow>().Where(r => EF.Functions.Least(captured) < r.Id).Select(r => r.Id);
+            foreach (var value in new int?[] { 101, 202, null, 101 })
+            {
+                captured[0] = value; // EF's structural hash uses only the last eight elements.
+                Assert.Equal(1, Assert.Single(async ? await query.ToListAsync() : query.ToList()));
+                var literal = value?.ToString(CultureInfo.InvariantCulture) ?? "NULL";
+                Assert.Contains($"LEAST({literal}, 2, 3, 4, 5, 6, 7, 8, 9)", commands.Sql[^1]);
+            }
+            captured = [17, 22];
+            Assert.Equal(1, Assert.Single(async ? await query.ToListAsync() : query.ToList()));
+            Assert.Contains("LEAST(17, 22)", commands.Sql[^1]);
+            Assert.Empty(commands.Values);
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true, false)]
+        public async Task ScalarExtrema_native_rows_use_first_carrier_converter_and_current_bindings(
+            OceanBaseCompatibilityMode mode, bool async, bool relationalNulls)
+        {
+            using var table = new DataTable();
+            foreach (var name in new[] { "Decimal", "Single", "Integral", "Nullable", "Reversed" })
+                table.Columns.Add(name, typeof(object));
+            table.Rows.Add(11.5d, 13f, new OceanBaseDecimal(21m), DBNull.Value, new OceanBaseDecimal(-7.5m));
+            var commands = new CommandCapture { Results = table };
+            await using var context = CreateContext(mode, commands, relationalNulls);
+            decimal limit = 2;
+            var rows = context.Set<NumericAggregateRow>();
+            var query = rows.Where(r => Math.Max(limit, r.Decimal) > 0).OrderBy(r => r.Id).Select(r => new
+            {
+                Decimal = Math.Min(r.Decimal, r.Cross),
+                Single = Math.Max(r.Cross, r.Decimal),
+                Integral = EF.Functions.Greatest(r.Offset, r.Id),
+                Nullable = EF.Functions.Least(r.Optional, r.Id),
+                Reversed = Math.Min(r.Reversed, r.Decimal)
+            });
+            foreach (var threshold in new[] { 2m, 7m })
+            {
+                limit = threshold;
+                commands.Values.Clear();
+                var row = Assert.Single(async ? await query.ToListAsync() : query.ToList());
+                Assert.Equal(1.5m, row.Decimal);
+                Assert.Equal(3m, row.Single);
+                Assert.Equal(11, row.Integral);
+                Assert.Null(row.Nullable);
+                Assert.Equal(3.75m, row.Reversed);
+                Assert.Contains(threshold + 10m, commands.Values);
+                var sql = commands.Sql[^1];
+                Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? "GREATEST(@" : "GREATEST(:", sql);
+                Assert.Contains("CAST(GREATEST(", sql);
+                Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? " AS FLOAT)" : " AS BINARY_FLOAT)", sql);
+                Assert.DoesNotContain("LEAST(CAST(", sql);
+            }
+
+            using var invalid = new DataTable();
+            invalid.Columns.Add("Value", typeof(object));
+            var invalidCommands = new CommandCapture { Results = invalid };
+            await using var invalidContext = CreateContext(mode, invalidCommands, relationalNulls);
+            var integral = invalidContext.Set<NumericAggregateRow>().Select(r => Math.Min(r.Id, r.Offset));
+            invalid.Rows.Add(new OceanBaseDecimal((decimal)int.MaxValue + 1));
+            if (async) await Assert.ThrowsAsync<OverflowException>(() => integral.ToListAsync());
+            else Assert.Throws<OverflowException>(() => integral.ToList());
+            invalid.Rows.Clear();
+            invalid.Rows.Add(new OceanBaseDecimal(1.5m));
+            if (async) await Assert.ThrowsAsync<InvalidCastException>(() => integral.ToListAsync());
+            else Assert.Throws<InvalidCastException>(() => integral.ToList());
+        }
+
+        [Theory]
         [InlineData(OceanBaseCompatibilityMode.MySql, false, false)]
         [InlineData(OceanBaseCompatibilityMode.MySql, true, false)]
         [InlineData(OceanBaseCompatibilityMode.MySql, false, true)]

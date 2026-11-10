@@ -407,7 +407,28 @@ metadata/accumulation/rounding remain live gates. Detailed brief/provenance/evid
 artifacts/local-development/batch3n/. Local source/patch/package gates and independent source review pass.
 The overall local EF10 goal remains active.
 
+## Batch3o brief: scalar numeric extrema
+
+Translate exact Math/MathF/decimal Min/Max and numeric EF.Functions Least/Greatest through the relational
+SQL visitor. Preserve nested calls, existing operand mappings, operand order and the first result converter.
+Use native LEAST/GREATEST for two or more arguments and identity for one. Both row-dependent inline
+arguments and extracted numeric constant arrays are supported. Snapshot these arrays in the ordinary query
+cache key so a caller can change a capture between executions without reusing old SQL. Do not promise
+refresh within an explicit compiled delegate or concurrent mutation during query compilation.
+
+Reuse the fixed Single result cast, result-only decimal reader and checked numeric mappings. Native
+NULL behavior and Oracle first-argument coercion remain server semantics; no CLR floating-point parity
+claim. Baseline package SQL probe confirms the missing translations and both EF array shapes. Brief and
+evidence: artifacts/local-development/batch3o/.
+
 ## Execution record
+
+- Batch3o adds scalar numeric extrema translation, preserves nested operands and result mapping, and
+  snapshots extracted numeric extrema arrays for ordinary query cache keys. Focused tests pass 43 unit and
+  six intercepted cases, including same-hash mutation and reversion. Debug, Release and isolated 10.0.14
+  Release each pass 1760 tests (1400 unit, 358 intercepted, two project consumers); the same baseline-built
+  `extrema-20261111` package passes both modes and EF patches. Content, graph, DLL and baseline asset checks
+  pass. Independent source review passed. Native computation remains a live gate. See `artifacts/local-development/batch3o/`.
 
 - Batch3n native numeric aggregates: initial8 native-AVG/wide-Single RED failures and a focused Oracle
   synthetic-zero literal RED become279 numeric unit/16 intercepted passes. New aggregate service preserves

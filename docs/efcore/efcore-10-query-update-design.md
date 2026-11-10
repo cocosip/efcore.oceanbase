@@ -204,7 +204,7 @@ Do not add an artificial int32/decimal/2^53/BIGINT input limit or convert approx
 Projected out-of-range results retain checked reading; server predicates and overflow timing need live
 evidence. Existing non-finite rejection remains; signed-zero bit preservation is not promised. Truncation
 removes fractions toward zero, without casting or rounding the input. Floor/Ceiling have the local contract
-below; Round/Random and scalar Math.Min/Max remain separate contracts. Pinned EF v10.0.0 and OceanBase documentation revision
+below; Round/Random remain separate contracts. Pinned EF v10.0.0 and OceanBase documentation revision
 2a5ae3a23a51729d065cec716508eb26cb064106 are audited in the numeric-core local research artifact.
 
 ## Numeric Floor and Ceiling local contract
@@ -259,6 +259,28 @@ explicitly reject. Integral-provider results retain checked fractional/range rej
 Local tests cover exact server predicates, order/HAVING, null/composition, independent converters, physical
 width profiles and supplied-reader conversion. Native function metadata/calculation, quotient precision,
 Single casts, domain NULL/warnings/errors, overflow/underflow and subnormal behavior remain live gates.
+
+## Scalar numeric extrema local contract
+
+Translate 26 exact Math/MathF/decimal Min/Max identities and numeric nullable/nonnullable
+EF.Functions Least/Greatest. The relational SQL visitor owns these calls and retains Math nesting,
+including when EF forwards a MathF or decimal call. A singleton returns its mapped operand; an empty
+or null array cannot translate. Two or more values use native LEAST/GREATEST in argument order.
+
+Only unmapped arguments inherit the first suitable mapping. Retain each mapped argument and let the first
+argument own the result decoder. Use the existing result-only decimal reader and fixed Single result cast
+where applicable. The stored comparison uses each operand's converter; SQL ordering may differ from model
+ordering under an arbitrary converter. Oracle documents implicit conversion to the first argument's type.
+Do not flatten nested calls, reorder arguments or force a common SQL cast. Native NULL behavior is retained;
+SQL tests preserve null checks without asserting Oracle's live result, mixed numeric coercion or CLR NaN,
+signed-zero and floating-point parity.
+
+EF extracts fully evaluatable inline lists and captured arrays as constants. Numeric extrema snapshot
+these arrays in the ordinary compiled-query cache key so a later execution can see changed values even
+when their structural hash is unchanged. Row-dependent inline lists remain expression trees. SQL translation
+expands the current constant values in order. Concurrent mutation during compilation and refresh within
+an existing explicit compiled delegate are outside this contract. Runtime parameter array shapes remain
+unsupported; the local checks cover SQL, cache keys, binding and supplied reader values.
 
 ## Numeric aggregates local contract
 
@@ -548,8 +570,8 @@ Run the read-only gate after packing, before the isolated consumer checks:
 
 ```powershell
 pwsh -NoProfile -File tests/OceanBase.EntityFrameworkCore.PackageConsumer/Verify-Package.ps1 `
-    -PackagePath artifacts/checkpoint-aggregates-20261111/OceanBase.EntityFrameworkCore.10.0.0-checkpoint.aggregates-20261111.nupkg `
-    -ExpectedVersion 10.0.0-checkpoint.aggregates-20261111
+    -PackagePath artifacts/checkpoint-extrema-20261111/OceanBase.EntityFrameworkCore.10.0.0-checkpoint.extrema-20261111.nupkg `
+    -ExpectedVersion 10.0.0-checkpoint.extrema-20261111
 ```
 
 The PowerShell 7 script uses .NET ZIP/XML APIs and checks ID/version, the net10.0 assembly and dependency group,
@@ -559,7 +581,16 @@ wrong expected version, the old README-less alias package and the exact-patch RE
 checks. The hosted e41981e package-content gate passed on Windows/Linux; the current package checks ran locally
 on Windows. Change the path/version for each new pack.
 
-### Current numeric aggregate checkpoint (2026-11-11)
+### Current scalar numeric extrema checkpoint (2026-11-11)
+
+Debug, Release and isolated EF Core 10.0.14 Release each pass 1760 tests (1400 unit, 358 intercepted,
+two project consumers). The same `10.0.0-checkpoint.extrema-20261111` package passes both compatibility
+modes at EF Core 10.0.0 and 10.0.14. The consumer checks native scalar extrema, fixed Single result casts,
+and captured array mutation and reversion, as well as the prior aggregate and other contracts. Package content,
+package-only dependency graph, baseline assembly identity and unchanged baseline assets pass. Native result
+typing, NULL handling, coercion and numeric edge behavior remain live gates.
+
+### Historical numeric aggregate checkpoint (2026-11-11)
 
 Full Debug/Release and isolated EF10.0.14 Release each pass1711 (1357 unit, 352 intercepted pipeline, two
 project consumers). Focused279 numeric aggregate unit/16 intercepted cases and prior numeric/shape regressions
