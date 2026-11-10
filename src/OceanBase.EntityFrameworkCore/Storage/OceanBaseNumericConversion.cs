@@ -20,6 +20,16 @@ namespace OceanBase.EntityFrameworkCore.Storage
                 throw new InvalidCastException("A fractional database value cannot be read as an integer.");
             }
 
+            if (targetType == typeof(float) && value is double wide)
+            {
+                if (double.IsFinite(wide) && (wide > float.MaxValue || wide < -float.MaxValue))
+                {
+                    throw new OverflowException("The database value is outside the CLR Single range.");
+                }
+
+                return (float)wide;
+            }
+
             return targetType.IsInstanceOfType(value) ? value : Convert.ChangeType(value, targetType, CultureInfo.InvariantCulture);
         }
     }

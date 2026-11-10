@@ -19,6 +19,106 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
         [InlineData(OceanBaseCompatibilityMode.MySql, true)]
         [InlineData(OceanBaseCompatibilityMode.Oracle, false)]
         [InlineData(OceanBaseCompatibilityMode.Oracle, true)]
+        public async Task Floating_columns_materialize_alternate_widths_and_keep_CLR_write_binding(
+            OceanBaseCompatibilityMode mode, bool async)
+        {
+            using var table = new DataTable();
+            table.Columns.Add("Id", mode == OceanBaseCompatibilityMode.Oracle ? typeof(decimal) : typeof(int));
+            table.Columns.Add("Narrow", typeof(float));
+            table.Columns.Add("Wide", typeof(double));
+            table.Columns.Add("Converted", typeof(float));
+            table.Columns.Add("Optional", typeof(double));
+            table.Rows.Add(9, 1.25f, 1.25d, 2.5f, DBNull.Value);
+            var commands = new CommandCapture { Results = table };
+            await using var context = CreateContext(mode, commands);
+            var query = context.Set<FloatingRow>().Select(row => new { row.Id, row.Narrow, row.Wide, row.Converted, row.Optional });
+            var row = Assert.Single(async ? await query.ToListAsync() : query.ToList());
+            Assert.Equal(1.25d, row.Narrow);
+            Assert.Equal(1.25f, row.Wide);
+            Assert.Equal(1.25d, row.Converted);
+            Assert.Null(row.Optional);
+            context.Add(new FloatingRow { Id = row.Id, Narrow = row.Narrow, Wide = row.Wide, Converted = row.Converted });
+            Assert.Equal(1, async ? await context.SaveChangesAsync() : context.SaveChanges());
+            Assert.Contains(1.25d, commands.Values);
+            Assert.Contains(1.25f, commands.Values);
+            Assert.Contains(2.5d, commands.Values);
+            Assert.Contains(DBNull.Value, commands.Values);
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle)]
+        public void Floating_query_operands_do_not_inherit_column_capacity(OceanBaseCompatibilityMode mode)
+        {
+            using var context = CreateContext(mode, new CommandCapture());
+            var limit = double.MaxValue;
+            var rows = context.Set<FloatingRow>();
+            Assert.Contains("1.7976931348623157E+308", rows.Where(row => row.Narrow < limit).ToQueryString());
+            Assert.Contains("1.7976931348623157E+308", rows.Select(row => row.Narrow + double.MaxValue).ToQueryString());
+            Assert.Contains("1.7976931348623157E+308", rows.Select(row => row.Narrow == 1 ? double.MaxValue : row.Narrow).ToQueryString());
+            Assert.Contains("-1", rows.Where(row => row.Narrow < -1d).ToQueryString());
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false, true)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true, true)]
+        public async Task Narrow_floating_write_checks_converted_values_before_execution(
+            OceanBaseCompatibilityMode mode, bool converted, bool async)
+        {
+            var commands = new CommandCapture();
+            await using var context = CreateContext(mode, commands);
+            context.Add(new FloatingRow { Id = 1, Narrow = converted ? 1 : double.MaxValue,
+                Converted = converted ? double.MaxValue / 2 : 1 });
+            var exception = async ? await Assert.ThrowsAsync<DbUpdateException>(() => context.SaveChangesAsync())
+                : Assert.Throws<DbUpdateException>(() => context.SaveChanges());
+            Assert.IsType<ArgumentOutOfRangeException>(exception.InnerException);
+            Assert.Empty(commands.Sql);
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false, true)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true, true)]
+        public async Task Generated_floating_outputs_convert_width_and_reject_finite_overflow(
+            OceanBaseCompatibilityMode mode, bool overflow, bool async)
+        {
+            var output = overflow ? double.MaxValue : 1.25d;
+            using var table = new DataTable();
+            table.Columns.Add("Value", typeof(double));
+            table.Rows.Add(output);
+            var commands = new CommandCapture { Results = table, OutputValue = output };
+            await using var context = CreateContext(mode, commands);
+            var entity = new GeneratedFloating { Id = 1 };
+            context.Add(entity);
+            if (overflow)
+            {
+                var exception = async ? await Assert.ThrowsAsync<DbUpdateException>(() => context.SaveChangesAsync())
+                    : Assert.Throws<DbUpdateException>(() => context.SaveChanges());
+                Assert.IsType<OverflowException>(exception.InnerException);
+            }
+            else
+            {
+                Assert.Equal(1, async ? await context.SaveChangesAsync() : context.SaveChanges());
+                Assert.Equal(1.25f, entity.Value);
+            }
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true)]
         public async Task Explicit_Guid_storage_pairs_query_materialization_and_write_conversion(
             OceanBaseCompatibilityMode mode, bool async)
         {
@@ -598,10 +698,33 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
                 modelBuilder.Entity<GeneratedExplicitGuid>().Property(entity => entity.Id).ValueGeneratedNever();
                 modelBuilder.Entity<GeneratedExplicitGuid>().Property(entity => entity.Data)
                     .HasColumnType(oracle ? "VARCHAR2(36)" : "BINARY(16)").HasComputedColumnSql("NULL");
+                modelBuilder.Entity<FloatingRow>().Property(entity => entity.Id).ValueGeneratedNever();
+                modelBuilder.Entity<FloatingRow>().Property(entity => entity.Narrow).HasColumnType(oracle ? "BINARY_FLOAT" : "FLOAT(24) UNSIGNED");
+                modelBuilder.Entity<FloatingRow>().Property(entity => entity.Wide).HasColumnType(oracle ? "BINARY_DOUBLE" : "DOUBLE PRECISION");
+                modelBuilder.Entity<FloatingRow>().Property(entity => entity.Converted)
+                    .HasConversion(value => value * 2d, value => value / 2d).HasColumnType(oracle ? "BINARY_FLOAT" : "FLOAT");
+                modelBuilder.Entity<GeneratedFloating>().Property(entity => entity.Id).ValueGeneratedNever();
+                modelBuilder.Entity<GeneratedFloating>().Property(entity => entity.Value)
+                    .HasColumnType(oracle ? "BINARY_DOUBLE" : "DOUBLE").HasComputedColumnSql("NULL");
             }
         }
 
         private enum RowState { Inactive = 0, Active = 2 }
+
+        private sealed class FloatingRow
+        {
+            public int Id { get; set; }
+            public double Narrow { get; set; }
+            public float Wide { get; set; }
+            public double Converted { get; set; }
+            public double? Optional { get; set; }
+        }
+
+        private sealed class GeneratedFloating
+        {
+            public int Id { get; set; }
+            public float Value { get; set; }
+        }
 
         private sealed class GuidStorageRow
         {

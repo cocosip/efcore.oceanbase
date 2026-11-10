@@ -17,7 +17,8 @@ namespace PackageConsumer
                 if (!context.Database.IsOceanBase()) throw new Exception("Provider registration failed.");
                 var sql = context.Set<Row>().Where(row => row.Enabled).OrderBy(row => row.Id).Skip(1).Take(2)
                     .Select(row => new { row.Name, row.Token, row.ExplicitToken, row.OccurredAt, row.OffsetAt, row.Day,
-                        row.Clock, row.Duration, row.Payload, row.LargePayload, row.Count, Positive = row.Id > 0 }).ToQueryString();
+                        row.Clock, row.Duration, row.Payload, row.LargePayload, row.Count, row.Amplitude, row.Wide,
+                        Positive = row.Id > 0 }).ToQueryString();
                 var paging = mode == OceanBaseCompatibilityMode.MySql ? "LIMIT" : "FETCH NEXT";
                 if (!sql.Contains(paging, StringComparison.Ordinal)) throw new Exception("Wrong query dialect.");
                 if (mode == OceanBaseCompatibilityMode.Oracle && !sql.Contains("CASE", StringComparison.Ordinal))
@@ -77,6 +78,20 @@ namespace PackageConsumer
                     throw new Exception("Explicit integer/Boolean store types were not preserved by their mappings.");
                 }
 
+                if (rowType.FindProperty(nameof(Row.Amplitude))!.GetRelationalTypeMapping().StoreType
+                        != (mode == OceanBaseCompatibilityMode.Oracle ? "BINARY_FLOAT" : "FLOAT(24)")
+                    || rowType.FindProperty(nameof(Row.Wide))!.GetRelationalTypeMapping().StoreType
+                        != (mode == OceanBaseCompatibilityMode.Oracle ? "BINARY_DOUBLE" : "DOUBLE PRECISION"))
+                {
+                    throw new Exception("Explicit floating-point store types were not preserved by their mappings.");
+                }
+
+                var floatingSql = context.Set<Row>().Select(row => row.Amplitude + 0.1d).ToQueryString();
+                if (!floatingSql.Contains(mode == OceanBaseCompatibilityMode.Oracle ? "0.1D" : "0.1E0", StringComparison.Ordinal))
+                {
+                    throw new Exception("Floating-point literal used the wrong representation.");
+                }
+
                 Console.WriteLine($"{mode}: packed provider registration, scalar/temporal/binary model, Boolean SQL and paging passed; EF {typeof(DbContext).Assembly.GetName().Version}.");
             }
         }
@@ -89,6 +104,8 @@ namespace PackageConsumer
                 modelBuilder.Entity<Row>().Property(row => row.Count).HasColumnType(mode == OceanBaseCompatibilityMode.Oracle ? "NUMBER(3)" : "MEDIUMINT");
                 modelBuilder.Entity<Row>().Property(row => row.Enabled).HasColumnType(mode == OceanBaseCompatibilityMode.Oracle ? "NUMBER(3)" : "BOOLEAN");
                 modelBuilder.Entity<Row>().Property(row => row.ExplicitToken).HasColumnType(mode == OceanBaseCompatibilityMode.Oracle ? "VARCHAR2(36)" : "BINARY(16)");
+                modelBuilder.Entity<Row>().Property(row => row.Amplitude).HasColumnType(mode == OceanBaseCompatibilityMode.Oracle ? "BINARY_FLOAT" : "FLOAT(24)");
+                modelBuilder.Entity<Row>().Property(row => row.Wide).HasColumnType(mode == OceanBaseCompatibilityMode.Oracle ? "BINARY_DOUBLE" : "DOUBLE PRECISION");
             }
         }
 
@@ -107,6 +124,8 @@ namespace PackageConsumer
             public byte[] Payload { get; set; } = [];
             public byte[]? LargePayload { get; set; }
             public long Count { get; set; }
+            public double Amplitude { get; set; }
+            public float Wide { get; set; }
         }
     }
 }

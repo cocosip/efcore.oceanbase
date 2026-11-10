@@ -139,6 +139,40 @@ hooks. Direct converter tests and intercepted EF query/write tests cover Oracle-
 MySQL numeric Boolean results; this does not prove wire execution. Temporal types, complete explicit-type/facet
 validation, binary boundaries and the full custom-converter matrix remain open.
 
+## Binary floating-point storage contract
+
+This MAP-02/MAP-06/MAP-07/UPD-02 slice covers CLR float/double and native binary floating-point columns.
+Read EF v10.0.0 FloatTypeMapping/DoubleTypeMapping, mapping-info parsing and reader customization, and published
+connector 0.2.0 prepared Single/Double binding and exact typed reader casts before implementation. OceanBase
+documentation remains pinned to 2a5ae3a23a51729d065cec716508eb26cb064106 (V4.3.5):
+[MySQL floating types](https://github.com/oceanbase/oceanbase-doc/blob/2a5ae3a23a51729d065cec716508eb26cb064106/en-US/700.reference/500.sql-reference/100.sql-syntax/200.common-tenant-of-mysql-mode/100.basic-elements-of-mysql-mode/100.data-type-of-mysql-mode/200.numeric-of-mysql-mode/400.floating-point-type-of-mysql-mode.md),
+[Oracle floating types](https://github.com/oceanbase/oceanbase-doc/blob/2a5ae3a23a51729d065cec716508eb26cb064106/en-US/700.reference/500.sql-reference/100.sql-syntax/300.common-tenant-of-oracle-mode/300.basic-elements-of-oracle-mode/100.built-in-data-types-of-oracle-mode/300.numeric-data-type-of-oracle-mode/400.floating-point-number-of-oracle-mode.md),
+and [Oracle numeric literals](https://github.com/oceanbase/oceanbase-doc/blob/2a5ae3a23a51729d065cec716508eb26cb064106/en-US/700.reference/500.sql-reference/100.sql-syntax/300.common-tenant-of-oracle-mode/300.basic-elements-of-oracle-mode/300.literal-of-oracle-mode/300.numeric-literal-of-oracle-mode.md).
+
+| Contract | MySQL | Oracle |
+| --- | --- | --- |
+| Defaults | float -> FLOAT; double -> DOUBLE | float -> BINARY_FLOAT; double -> BINARY_DOUBLE |
+| Explicit native storage for either CLR type | FLOAT, FLOAT(p), DOUBLE, DOUBLE PRECISION; optional UNSIGNED | BINARY_FLOAT, BINARY_DOUBLE |
+| Precision | FLOAT(p), p=0..24 chooses 32-bit, p=25..53 chooses 64-bit; HasPrecision(p) selects FLOAT(p), including a bare explicit FLOAT declaration | Native binary precision is intrinsic; configured precision/scale reject |
+| Other facets | Declared/configured precision must agree; size/fixed-length/scale reject | Size/fixed-length reject |
+| Literals | Invariant round-trip double representation with exponent, including exact widening of a CLR float | Invariant round-trip representation with F (CLR float) or D (CLR double) suffix |
+
+The provider retains Single/Double parameter binding according to the CLR provider type, independently of column
+width. GetValue plus checked numeric conversion handles server float/double reader shapes, including converter
+composition and generated outputs. IEEE rounding during explicit float/double conversion is expected; a finite
+database value that would overflow CLR float must throw rather than materializing infinity. Existing non-finite
+reader values are preserved, following the connector. Parameters and literals reject NaN/infinity: the pinned
+server documentation does not support these input constants. Output-only parameters retain their direction.
+
+Apply physical 32-bit capacity and UNSIGNED checks only to converted values actually written by SaveChanges;
+finite query operands/arithmetic/CASE results may exceed a column's capacity or be negative. Never narrow query
+parameters to the column type. Finite values within capacity may round when an explicitly narrower column stores
+them. Clone precision changes update FLOAT(p) and capacity together. FLOAT(M,D), ZEROFILL, session-dependent REAL,
+Oracle NUMBER-backed FLOAT and decimal-backed storage require separate contracts and currently reject clearly.
+Custom converters can target supported decimal storage when that is intended. MySQL/Oracle live boundaries,
+subnormal preservation, Oracle normalization of negative zero, server arithmetic and comparisons remain required
+open acceptance cases; client parameter/reader tests do not prove those server behaviors.
+
 ## Explicit Guid storage contract
 
 This MAP-04/MAP-06/MAP-07 slice retains the defaults above and honors an explicit Guid column declaration.

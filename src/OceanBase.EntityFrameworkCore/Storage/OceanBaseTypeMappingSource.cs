@@ -38,6 +38,17 @@ namespace OceanBase.EntityFrameworkCore.Storage
                 }
             }
 
+            if (mapping is OceanBaseFloatingPointTypeMapping<float> or OceanBaseFloatingPointTypeMapping<double>)
+            {
+                foreach (var principal in property.GetPrincipals())
+                {
+                    if (principal.GetPrecision() is { } precision && ((RelationalTypeMapping)mapping).Precision != precision)
+                    {
+                        throw new ArgumentException("The explicit FLOAT precision conflicts with its configured precision.");
+                    }
+                }
+            }
+
             return mapping;
         }
 
@@ -66,14 +77,23 @@ namespace OceanBase.EntityFrameworkCore.Storage
                 return FindTemporalMapping(clrType, mappingInfo);
             }
             if (clrType == typeof(Guid)) return FindGuidMapping(mappingInfo);
-            if (clrType == typeof(double)) return new DoubleTypeMapping(storeTypes.Double, DbType.Double);
-            if (clrType == typeof(float)) return new FloatTypeMapping(storeTypes.Float, DbType.Single);
+            if (clrType == typeof(double)) return FindFloatingPointMapping<double>(mappingInfo, storeTypes.Double);
+            if (clrType == typeof(float)) return FindFloatingPointMapping<float>(mappingInfo, storeTypes.Float);
             if (clrType == typeof(bool)) return (RelationalTypeMapping)(oracle
                 ? FindIntegerMapping<decimal>(mappingInfo, storeTypes.Boolean, DbType.Decimal)
                     .WithComposedConverter(new BoolToZeroOneConverter<decimal>())
                 : FindIntegerMapping<bool>(mappingInfo, storeTypes.Boolean, DbType.Boolean));
 
             return base.FindMapping(mappingInfo);
+        }
+
+        private RelationalTypeMapping FindFloatingPointMapping<T>(in RelationalTypeMappingInfo info, string defaultStoreType)
+            where T : struct, IConvertible
+        {
+            var storeType = info.StoreTypeName ?? (_compatibilityMode == OceanBaseCompatibilityMode.MySql
+                && info.Precision is { } precision ? $"FLOAT({precision})" : defaultStoreType);
+            return new OceanBaseFloatingPointTypeMapping<T>(storeType, _compatibilityMode,
+                info.Precision, info.Scale, info.Size, info.IsFixedLength ?? false);
         }
 
         private RelationalTypeMapping FindIntegerMapping<T>(in RelationalTypeMappingInfo info, string defaultStoreType, DbType dbType)
@@ -282,7 +302,20 @@ namespace OceanBase.EntityFrameworkCore.Storage
             string? storeTypeName, ref bool? unicode, ref int? size, ref int? precision, ref int? scale)
         {
             var configuredSize = size;
+            var configuredPrecision = precision;
             var name = base.ParseStoreTypeName(storeTypeName, ref unicode, ref size, ref precision, ref scale);
+            if (_compatibilityMode == OceanBaseCompatibilityMode.MySql
+                && name?.Equals("FLOAT", StringComparison.OrdinalIgnoreCase) == true
+                && storeTypeName?.Contains('(') == true && !storeTypeName.Contains(','))
+            {
+                if (configuredPrecision is not null && size != configuredPrecision)
+                {
+                    throw new ArgumentException("The explicit FLOAT precision conflicts with its configured precision.");
+                }
+
+                precision = size;
+                size = configuredSize;
+            }
             if (_compatibilityMode == OceanBaseCompatibilityMode.Oracle && storeTypeName is not null
                 && (string.Equals(name, "CHAR", StringComparison.OrdinalIgnoreCase)
                     || string.Equals(name, "VARCHAR2", StringComparison.OrdinalIgnoreCase)))
