@@ -5,6 +5,7 @@ using System.Data.Common;
 using System.Text;
 using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore.Storage;
+using Microsoft.EntityFrameworkCore.Storage.Json;
 using OceanBaseConnector;
 
 namespace OceanBase.EntityFrameworkCore.Storage
@@ -15,7 +16,8 @@ namespace OceanBase.EntityFrameworkCore.Storage
 
         public OceanBaseStringTypeMapping(string storeType, DbType dbType, bool unicode, int? size, bool fixedLength,
             OceanBaseCompatibilityMode mode)
-            : this(new RelationalTypeMappingParameters(new CoreTypeMappingParameters(typeof(string)),
+            : this(new RelationalTypeMappingParameters(new CoreTypeMappingParameters(typeof(string),
+                jsonValueReaderWriter: JsonStringReaderWriter.Instance),
                 storeType, StoreTypePostfix.None, dbType, unicode, size, fixedLength), mode)
         {
         }

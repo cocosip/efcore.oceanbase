@@ -26,6 +26,156 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
         [InlineData(OceanBaseCompatibilityMode.Oracle, true, false)]
         [InlineData(OceanBaseCompatibilityMode.Oracle, false, true)]
         [InlineData(OceanBaseCompatibilityMode.Oracle, true, true)]
+        public async Task Text_membership_commands_rebind_raw_captures_and_keep_converters_separate(
+            OceanBaseCompatibilityMode mode, bool async, bool relationalNulls)
+        {
+            using var table = new DataTable();
+            table.Columns.Add("Id", typeof(object));
+            table.Rows.Add(new OceanBaseDecimal(42m));
+            var commands = new CommandCapture { Results = table };
+            await using var context = CreateContext(mode, commands, relationalNulls);
+            string?[] values = [];
+            var query = context.Set<TextMembershipRow>().Where(row => values.Contains(row.Suffix)
+                || values.Contains(row.EmptyConverted) || values.Contains(row.Preserved)).Select(row => row.Id);
+            List<string?[]> captures = [[], ["", "empty", null, "x"], [null, null], ["", "empty"], [], null!];
+            foreach (var size in new[] { 5, 6, 10, 11, 150, 151 })
+            {
+                foreach (var last in new string?[] { null, "empty" })
+                {
+                    var capture = Enumerable.Range(0, size).Select(index => (string?)index.ToString()).ToArray();
+                    capture[1] = "empty";
+                    capture[^1] = last;
+                    captures.Add(capture);
+                }
+            }
+            foreach (var capture in captures)
+            {
+                values = capture;
+                var snapshot = capture?.ToArray();
+                commands.Sql.Clear();
+                commands.Values.Clear();
+                commands.Inputs.Clear();
+                var rows = async ? await query.ToListAsync() : query.ToList();
+                // Supplied rows establish binding and materialization, not SQL membership results.
+                Assert.Equal(42, Assert.Single(rows));
+                Assert.Equal(snapshot, capture);
+                var sql = Assert.Single(commands.Sql);
+                Assert.DoesNotContain("IN ()", sql);
+                Assert.All(commands.Values, value => Assert.True(value is string or DBNull));
+                var expected = (capture ?? []).Where(value => value is not null)
+                    .SelectMany(value => new[] { value + "!", value == "empty" ? "" : value, value })
+                    .Where(value => mode != OceanBaseCompatibilityMode.Oracle || value != "").Distinct().ToArray();
+                foreach (var value in expected) Assert.Contains(value, commands.Values);
+                Assert.All(commands.Values.Where(value => value is string), value => Assert.Contains((string)value!, expected));
+                Assert.DoesNotContain(commands.Values, value => value is string text && text.EndsWith("!!", StringComparison.Ordinal));
+                if (capture is null || capture.Length == 0) Assert.Empty(commands.Inputs);
+            }
+
+            var list = new List<string?> { "", "empty", "list" };
+            var listSnapshot = list.ToArray();
+            commands.Values.Clear();
+            var listQuery = context.Set<TextMembershipRow>().Where(row => list.Contains(row.Suffix)).Select(row => row.Id);
+            _ = async ? await listQuery.ToListAsync() : listQuery.ToList();
+            Assert.Equal(listSnapshot, list);
+            Assert.Contains("!", commands.Values);
+            Assert.Contains("empty!", commands.Values);
+            Assert.Contains("list!", commands.Values);
+
+            int[] numbers = [0, 17, 23];
+            RowState[] states = [RowState.Inactive, RowState.Active];
+            commands.Values.Clear();
+            var converted = context.Set<TextMembershipRow>().Where(row => numbers.Contains(row.Number) && states.Contains(row.State)).Select(row => row.Id);
+            _ = async ? await converted.ToListAsync() : converted.ToList();
+            foreach (var value in new[] { "0", "17", "23", "Inactive", "Active" }) Assert.Contains(value, commands.Values);
+            Assert.All(commands.Values, value => Assert.IsType<string>(value));
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true)]
+        public async Task Text_membership_commands_preserve_text_family_metadata_and_nontext_carriers(
+            OceanBaseCompatibilityMode mode, bool async)
+        {
+            var commands = new CommandCapture();
+            await using var context = CreateContext(mode, commands);
+            string[] values = ["海", "river"];
+            foreach (var property in new[] { nameof(TextMembershipRow.Text), nameof(TextMembershipRow.Fixed),
+                nameof(TextMembershipRow.National), nameof(TextMembershipRow.Lob), nameof(TextMembershipRow.NationalLob) })
+            {
+                commands.Inputs.Clear();
+                var query = context.Set<TextMembershipRow>().Where(row => values.Contains(EF.Property<string>(row, property))).Select(row => row.Id);
+                _ = async ? await query.ToListAsync() : query.ToList();
+                var mapping = (Microsoft.EntityFrameworkCore.Storage.RelationalTypeMapping)context.Model.FindEntityType(typeof(TextMembershipRow))!
+                    .FindProperty(property)!.GetTypeMapping();
+                using var command = new OceanBaseCommand();
+                var prototype = (OceanBaseParameter)mapping.CreateParameter(command, "prototype", "海");
+                Assert.Equal(2, commands.Inputs.Count);
+                Assert.All(commands.Inputs, parameter =>
+                {
+                    Assert.Equal(prototype.DbType, parameter.DbType);
+                    Assert.Equal(prototype.OceanBaseDbType, parameter.OceanBaseDbType);
+                    Assert.True(parameter.Size >= ((string)parameter.Value!).Length);
+                });
+                Assert.Contains(commands.Inputs, parameter => Equals(parameter.Value, "海"));
+                Assert.Contains(commands.Inputs, parameter => Equals(parameter.Value, "river"));
+            }
+
+            string[] hex = ["0A", "0B"];
+            commands.Values.Clear();
+            var binary = context.Set<TextMembershipRow>().Where(row => hex.Contains(row.Binary)).Select(row => row.Id);
+            _ = async ? await binary.ToListAsync() : binary.ToList();
+            Assert.All(commands.Values, value => Assert.IsType<byte[]>(value));
+            Assert.Contains(commands.Values, value => value is byte[] bytes && bytes.SequenceEqual(new byte[] { 10 }));
+            Assert.Contains(commands.Values, value => value is byte[] bytes && bytes.SequenceEqual(new byte[] { 11 }));
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false, true)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true, true)]
+        public async Task Text_membership_reads_supplied_boolean_and_nullable_results_without_evaluating_SQL(
+            OceanBaseCompatibilityMode mode, bool async, bool relationalNulls)
+        {
+            using var table = new DataTable();
+            table.Columns.Add("Match", typeof(object));
+            table.Columns.Add("Negated", typeof(object));
+            table.Columns.Add("Choice", typeof(object));
+            table.Rows.Add(mode == OceanBaseCompatibilityMode.Oracle ? 1m : (object)true,
+                mode == OceanBaseCompatibilityMode.Oracle ? 0m : (object)false, new OceanBaseDecimal(7m));
+            var commands = new CommandCapture { Results = table };
+            await using var context = CreateContext(mode, commands, relationalNulls);
+            string?[] values = ["", null, "present"];
+            var query = context.Set<TextMembershipRow>().Select(row => new { Match = values.Contains(row.Text),
+                Negated = !values.Contains(row.Text), Choice = values.Contains(row.Text) ? 7 : 9 });
+            var row = Assert.Single(async ? await query.ToListAsync() : query.ToList());
+            Assert.True(row.Match);
+            Assert.False(row.Negated);
+            Assert.Equal(7, row.Choice);
+            Assert.Contains("CASE", Assert.Single(commands.Sql));
+            table.Rows.Clear();
+            table.Columns.Remove("Negated");
+            table.Columns.Remove("Choice");
+            table.Rows.Add(DBNull.Value);
+            var nullable = context.Set<TextMembershipRow>().Select(row => (bool?)values.Contains(row.Text));
+            Assert.Null(Assert.Single(async ? await nullable.ToListAsync() : nullable.ToList()));
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false, true)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true, true)]
         public async Task Membership_commands_rebind_current_scalar_values_without_mutating_captured_arrays(
             OceanBaseCompatibilityMode mode, bool async, bool relationalNulls)
         {
@@ -1805,6 +1955,20 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
             protected override void OnModelCreating(ModelBuilder modelBuilder)
             {
                 var oracle = mode == OceanBaseCompatibilityMode.Oracle;
+                modelBuilder.Entity<TextMembershipRow>().Property(row => row.Text).HasMaxLength(8);
+                modelBuilder.Entity<TextMembershipRow>().Property(row => row.Suffix)
+                    .HasConversion(value => value + "!", value => value);
+                modelBuilder.Entity<TextMembershipRow>().Property(row => row.EmptyConverted)
+                    .HasConversion(value => value == "empty" ? "" : value, value => value);
+                modelBuilder.Entity<TextMembershipRow>().Property(row => row.Preserved).HasConversion(value => value, value => value);
+                modelBuilder.Entity<TextMembershipRow>().Property(row => row.Fixed).HasColumnType("CHAR(8)");
+                modelBuilder.Entity<TextMembershipRow>().Property(row => row.National).HasColumnType(oracle ? "NVARCHAR2(8)" : "VARCHAR(8)");
+                modelBuilder.Entity<TextMembershipRow>().Property(row => row.Lob).HasColumnType(oracle ? "CLOB" : "TEXT");
+                modelBuilder.Entity<TextMembershipRow>().Property(row => row.NationalLob).HasColumnType(oracle ? "NCLOB" : "LONGTEXT");
+                modelBuilder.Entity<TextMembershipRow>().Property(row => row.Number).HasConversion<string>();
+                modelBuilder.Entity<TextMembershipRow>().Property(row => row.State).HasConversion<string>();
+                modelBuilder.Entity<TextMembershipRow>().Property(row => row.Binary)
+                    .HasConversion(value => Convert.FromHexString(value), value => Convert.ToHexString(value));
                 modelBuilder.Entity<CountGroupRow>().Property(row => row.Converted)
                     .HasConversion(value => value * 2, value => value / 2);
                 modelBuilder.Entity<ArithmeticRow>().Property(row => row.Converted).HasConversion<long>();
@@ -2108,6 +2272,22 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
             public override ValueTask<InterceptionResult> ConnectionOpeningAsync(
                 DbConnection connection, ConnectionEventData eventData, InterceptionResult result, CancellationToken cancellationToken = default)
                 => ValueTask.FromResult(InterceptionResult.Suppress());
+        }
+
+        private sealed class TextMembershipRow
+        {
+            public int Id { get; set; }
+            public string? Text { get; set; }
+            public string? Suffix { get; set; }
+            public string? EmptyConverted { get; set; }
+            public string? Preserved { get; set; }
+            public string? Fixed { get; set; }
+            public string? National { get; set; }
+            public string? Lob { get; set; }
+            public string? NationalLob { get; set; }
+            public int Number { get; set; }
+            public RowState State { get; set; }
+            public string Binary { get; set; } = "";
         }
 
         private sealed class CommandCapture : DbCommandInterceptor

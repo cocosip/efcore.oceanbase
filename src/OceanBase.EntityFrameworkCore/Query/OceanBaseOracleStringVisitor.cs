@@ -2,6 +2,7 @@ using System;
 using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore.Query;
 using Microsoft.EntityFrameworkCore.Query.SqlExpressions;
+using Microsoft.EntityFrameworkCore.Storage;
 
 namespace OceanBase.EntityFrameworkCore.Query
 {
@@ -42,8 +43,11 @@ namespace OceanBase.EntityFrameworkCore.Query
         }
 
         private static bool IsProviderString(SqlExpression expression)
-            => expression.TypeMapping?.ElementTypeMapping is null
-                && (expression.TypeMapping?.Converter?.ProviderClrType ?? expression.Type) == typeof(string);
+            => expression.TypeMapping is { } mapping ? IsProviderString(mapping) : expression.Type == typeof(string);
+
+        internal static bool IsProviderString(RelationalTypeMapping mapping)
+            => mapping.ElementTypeMapping is null
+                && (mapping.Converter?.ProviderClrType ?? mapping.ClrType) == typeof(string);
 
         private SqlExpression Normalize(SqlExpression expression, object? value)
         {

@@ -19,6 +19,8 @@ namespace OceanBase.EntityFrameworkCore.Query
             {
                 if (mode == OceanBaseCompatibilityMode.Oracle)
                 {
+                    queryExpression = new OceanBaseCollectionParameterExpandingVisitor(
+                        Dependencies.SqlExpressionFactory, Parameters, parametersDecorator).Visit(queryExpression);
                     queryExpression = new OceanBaseOracleStringVisitor(Dependencies.SqlExpressionFactory, parametersDecorator)
                         .Visit(queryExpression);
                 }

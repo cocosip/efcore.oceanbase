@@ -177,6 +177,30 @@ namespace PackageConsumer
                         throw new Exception("Compiled membership query reused another context's collection mode.");
                 }
 
+                string?[] textMembershipValues = ["one", "two"];
+                var textMembershipQuery = context.Set<Row>()
+                    .Where(row => Enumerable.Contains(textMembershipValues, row.SearchText));
+                foreach (var values in new string?[][]
+                    { ["one", "two"], [], ["a", "b", "c", "d", "e", "f"], [null, ""], ["", "again"], [] })
+                {
+                    textMembershipValues = values;
+                    var textMembershipSql = textMembershipQuery.ToQueryString();
+                    var predicate = textMembershipSql[textMembershipSql.IndexOf("WHERE ", StringComparison.Ordinal)..];
+                    if (values.Length == 0 && !textMembershipSql.Contains("WHERE 0", StringComparison.Ordinal))
+                        throw new Exception("Packed text membership reused a nonempty collection shape.");
+                    if (values.Any(value => mode == OceanBaseCompatibilityMode.MySql ? value is not null : !string.IsNullOrEmpty(value))
+                        && !predicate.Contains(" IN (", StringComparison.Ordinal)
+                        && !predicate.Contains(mode == OceanBaseCompatibilityMode.MySql ? "`SearchText` = " : "\"SearchText\" = ", StringComparison.Ordinal))
+                        throw new Exception("Packed text membership reused an empty or all-null collection shape.");
+                    if (mode == OceanBaseCompatibilityMode.Oracle && values.Length == 2 && values.All(string.IsNullOrEmpty))
+                    {
+                        if (!predicate.Contains("IS NULL", StringComparison.Ordinal)
+                            || predicate.Contains(" IN (", StringComparison.Ordinal)
+                            || predicate.Contains(" = ", StringComparison.Ordinal))
+                            throw new Exception("Oracle text membership did not normalize empty elements before null compensation.");
+                    }
+                }
+
                 var guidType = context.Model.FindEntityType(typeof(Row))!.FindProperty(nameof(Row.Token))!.GetColumnType();
                 if (guidType != (mode == OceanBaseCompatibilityMode.Oracle ? "RAW(16)" : "CHAR(36)"))
                 {

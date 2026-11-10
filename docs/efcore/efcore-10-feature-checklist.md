@@ -54,7 +54,7 @@ so that an undocumented feature is not accidentally advertised.
 
 An open row is not automatically waiting for a database. Track the remaining work explicitly:
 
-- **Local implementation or coverage:** text membership/general VALUES roots, wider functions/aggregates,
+- **Local implementation or coverage:** general VALUES roots, wider functions/aggregates,
   model/materialization/Include/filter contracts, writes/transactions and the missing database creator still
   have locally feasible work. No live connection is needed to continue those implementation and pipeline tests.
 - **Live validation:** implemented mappings and SQL still need OceanBase round trips and execution in both
@@ -66,21 +66,20 @@ An open row is not automatically waiting for a database. Track the remaining wor
 Development resumed at the user's request (2026-11-10) on efcore/10.0. See the
 [progress handoff](efcore-10-progress.md) for saved state, remaining work and the exact resume point.
 
-Snapshot: 2026-11-11, `efcore/10.0` integral membership/ordinary relational shapes after a98e27b;
-independent spec/quality and cache-fixture re-review passed.
+Snapshot: 2026-11-11, `efcore/10.0` scalar text membership after 1b14513; independent spec/quality review passed.
 The same baseline-built package passes both tested EF patches. This is not a release result.
 
 `dotnet test OceanBase.EntityFrameworkCore.slnx --no-restore -m:1 -nr:false` produced:
 
-The expanded suite passed in Debug and Release (1155 tests per configuration).
+The expanded suite passed in Debug and Release (1200 tests per configuration).
 
 | Layer | Passed | Failed | Evidence boundary |
 | --- | --- | --- | --- |
-| Unit | 885 | 0 | Prior coverage plus 30 integral membership/relational-shape cases and two deterministic cache-eviction cases; live coverage incomplete. |
-| Command pipeline | 268 | 0 | Prior queries/writes plus 40 membership/joins/subqueries/quantifiers/count binding and supplied reader cases, sync/async; transactions disabled. |
+| Unit | 910 | 0 | Prior coverage plus 25 text membership/mapping/converter/snapshot/cache/padding/null-policy cases; live coverage incomplete. |
+| Command pipeline | 288 | 0 | Prior queries/writes plus 20 text membership current-capture/converter/national-type and supplied Boolean/nullable reader cases, sync/async; transactions disabled. |
 | Consumer | 2 | 0 | Both-mode provider detection through a project reference, not an isolated packed-package consumer. |
-| Packed consumer | Both modes | 0 | Same membership-20261111 package passes EF10.0.0/10.0.14, changed collection captures and collection-mode cache separation plus prior checks; README included; no live execution. |
-| Later-patch Release suite | 1155 | 0 | Current source passes EF10.0.14 in isolated artifacts. |
+| Packed consumer | Both modes | 0 | Same text-membership-20261111 package passes EF10.0.0/10.0.14, changed text captures and Oracle provider-empty compensation plus prior checks; README included; no live execution. |
+| Later-patch Release suite | 1200 | 0 | Current source passes EF10.0.14 in isolated artifacts. |
 | Hosted Windows/Linux CI | Both jobs succeeded | 0 failed steps | Run 42865290840 at e41981e: restore, Release test, pack and content gate succeeded; later commits require their own hosted evidence. |
 | Live MySQL / Oracle | Not established | Not established | No live provider execution recorded for either mode. |
 | Relational specification | Not established | Not established | No specification test project yet. |
@@ -203,14 +202,16 @@ Existing evidence references used below identify partial coverage, not automatic
 - **UQ**: [SqlGeneratorTests](../../tests/OceanBase.EntityFrameworkCore.UnitTests/SqlGeneratorTests.cs).
 - **URS**: [RelationalShapeQueryTests](../../tests/OceanBase.EntityFrameworkCore.UnitTests/RelationalShapeQueryTests.cs),
   30 both-mode integral membership/mapping/cache-mode/ordinary join/subquery/quantifier/count cases.
+- **UTC**: [TextCollectionQueryTests](../../tests/OceanBase.EntityFrameworkCore.UnitTests/TextCollectionQueryTests.cs),
+  25 text membership/converter/mapping/current-value/NULL/padding/snapshot/cache/name-reuse cases.
 - **FP**: [BasicRelationalTests](../../tests/OceanBase.EntityFrameworkCore.FunctionalTests/BasicRelationalTests.cs),
   intercepted execution only.
 - **CP**: [ProviderConfigurationTests](../../tests/OceanBase.EntityFrameworkCore.ConsumerTests/ProviderConfigurationTests.cs),
   project reference only.
 - **PC**: [Standalone package consumer](../../tests/OceanBase.EntityFrameworkCore.PackageConsumer/Program.cs),
   registration/native floating/explicit Guid/temporal/binary/integer and Boolean model/SQL/paging checks against the
-  latest membership-20261111 local prerelease package, including repeated collection captures and context
-  collection-mode cache separation, native numeric predicates and prior checks;
+  latest text-membership-20261111 local prerelease package, including repeated integral/text captures,
+  Oracle provider-empty membership, context collection-mode cache separation and prior checks;
   [commands and evidence](efcore-10-query-update-design.md#package-checkpoint-validation).
 
 `Missing` means tests and evidence still need to be added.
@@ -281,7 +282,7 @@ duplicates and mode-specific string semantics.
 | SQL-02 | Parameter names/placeholders follow each dialect. | Required | Done | Done | UH Generates_mode_specific_identifiers_and_parameters. |
 | QRY-01 | SELECT/projection, arithmetic/comparison/Boolean predicates and null semantics bind values and materialize nullable/non-null results. | Required | In progress | In progress | UQ/FP cover Boolean/string/scalar handling; ArithmeticQueryTests add native integer division/remainder, promotions, nullable/grouping/fractional controls and four intercepted cases. Bitwise/wider operators and live results remain open. |
 | QRY-02 | OrderBy/ThenBy, Distinct, Skip/Take and offset-only queries return correct results, including deterministic paging/empty pages. | Required | In progress | In progress | UQ SQL shape only; live ordering/string/paging missing. |
-| QRY-03 | Inner/left joins, correlated subqueries, Any/All and scalar/collection Contains have verified results or explicit exclusions. | Required | In progress | In progress | URS/FP cover ordinary/composite/recognized and .NET10 left joins, scalar subqueries, Any/All and bare int/int? collection Contains with null/empty/current captures; PC checks collection-mode cache separation. Text/general VALUES and wider shapes remain local work; actual server results remain open. |
+| QRY-03 | Inner/left joins, correlated subqueries, Any/All and scalar/collection Contains have verified results or explicit exclusions. | Required | In progress | In progress | URS/UTC/FP cover ordinary/composite/.NET10 left joins, scalar subqueries, Any/All and bare int/int?/text collection Contains with current captures, provider conversion, NULL/empty and policy modes; PC checks cache separation and text normalization. General VALUES/other collection families and wider shapes remain local work; actual server results remain open. |
 | QRY-04 | GroupBy aggregates, Count/LongCount, Sum/Average/Min/Max handle empty and nullable inputs correctly. | Required | In progress | In progress | URS/FP cover grouped/ungrouped/predicate/HAVING/distinct/nullable Count/LongCount, fresh int/long mappings and supplied zero/no-row/wrapper/overflow reads. Sum/Average/Min/Max promotion and real aggregate execution remain open. |
 | QRY-05 | First/Single/default variants enforce cardinality; entity/scalar async materialization matches sync. | Required | In progress | In progress | FP ToList scalar only; entity/cardinality cases missing. |
 | QRY-06 | String translations have a supported-overload matrix: equality, Contains, StartsWith/EndsWith, length, substring, case and trim. | Required | In progress | In progress | Exact local equality/concat, unary/Length, search and both Substring arities have unit/FP coverage. Safe long origin/mapping/converter/null cases and computed Oracle NULL needles pass. Live collation/character/space/padding/LOB results and NCLOB capability remain open; native semantics/unsupported overloads are explicit. |

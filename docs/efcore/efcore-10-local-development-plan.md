@@ -317,6 +317,22 @@ The planned text-collection contract in query/update design is authoritative.
    selected-patch/same-package gates and commit. General VALUES/explicit parameter transport and native
    collation/LOB/charset/actual membership remain separate work and acceptance gates.
 
+## Batch3j brief: captured integral collection roots
+
+**Files:** existing collection-parameter visitor/processor as needed, OceanBaseQuerySqlGenerator.cs,
+UnitTests/CollectionRootQueryTests.cs (new) and FunctionalTests/BasicRelationalTests.cs.
+The planned captured-root contract in query/update design defines this bounded follow-up.
+
+1. Reproduce general captured int/int? root failures through real EF queries, then expand VALUES before
+   the base IntTypeMapping cast. Reuse execution-local snapshots/names/mappings without membership padding.
+2. Render SELECT/UNION ALL SELECT with Oracle DUAL per arm, quoted aliases, retained/pruned ordinals and
+   legal lossless signed integer typing. Empty captured roots have typed zero rows, not a fake NULL row.
+3. Cover arrays/lists, native int/int-to-long converters, null/empty/duplicates/all-null/current captures,
+   filter/project/order/composed membership/count/any/join shapes, both modes/null settings and policy modes.
+4. Add intercepted sync/async binding/checked reader cases, focused/full tests, independent review and
+   selected-patch/same-package gates. Originally empty inline/general text/other carriers stay explicit
+   local follow-ups; native coercion/cardinality/order/results remain live gates. Not dispatched yet.
+
 ## Execution record
 
 - Baseline: 57fd44a, clean efcore/10.0. Prior verified suite: 563 (420 unit, 142 intercepted, one consumer).
@@ -457,6 +473,28 @@ The planned text-collection contract in query/update design is authoritative.
   while the preceding numeric package fails the new captured collection mapping. Content/package-only graph
   pass; baseline assets remain EF10.0.0. Evidence: artifacts/local-development/batch3h/. QRY-03/04 stay partial;
   actual server results/current hosted execution remain open. Next is Batch3i scalar text membership.
+- Batch3h committed as 1b14513 after production/fix/docs approval, 1155-pass source gates and both selected
+  same-package consumers. Final staged check removed only trailing blank lines from the new test file;
+  no behavioral change or extra suite rerun. Clean efcore/10.0 before Batch3i; no push or publication.
+- Batch3i started from 1b14513 with a fresh implementer and exclusive provider-build ownership. Previous
+  membership package fails the new string collection consumer before SQL generation (missing element
+  mapping). Metadata-only repair then exposes Oracle converted-empty expansion, so this is local missing
+  behavior rather than a live-environment blocker. Default NULL compensation and relational UNKNOWN remain
+  distinct contracts. Final acceptance is pending; no current-source package or completion claimed.
+- Batch3i source gates: 25 focused unit/20 intercepted pass; full Debug/Release and isolated EF10.0.14
+  Release pass 1200 (910+288+2), zero failures/skips. Exact metadata repair and Oracle pre-expansion retain
+  raw values/mappings/converters, per-execution state, collision-safe names and padding before normalization.
+  Same baseline-built text-membership-20261111 package passes both modes on EF10.0.0/10.0.14, including changed
+  captures and all-provider-null Oracle compensation. Content/package-only graph pass; baseline assets stay
+  EF10.0.0. Evidence: artifacts/local-development/batch3i/. Independent source spec/quality review approves
+  without findings; final docs/consumer review and commit acceptance remain pending.
+- Batch3i consumer fix round1/5: docs pass, but nonempty captures need a positive comparison-arm assertion
+  after empty/all-provider-null transitions. Original implementer owns the consumer-only correction and
+  covering same-package checks. Production source stays approved; no repeated full suite or repack required.
+- Batch3i fix round1/5 complete (one addressed, zero open): comparison-arm assertion now names SearchText,
+  rejects stale false/IS NULL-only predicates and preserves MySQL empty versus Oracle NULL semantics. Same
+  unchanged package passes both patches/modes; provider DLL/package hashes unchanged. Scoped independent
+  spec/quality re-review approves with no new findings. Local slice ready for commit; next is planned Batch3j.
 - Line-ending recheck: git ls-files --eol reports no CRLF/mixed index text. Existing working CRLF files remain
   safe under the repository attributes; do not reset local edits or change global core.autocrlf to refresh them.
 - Remaining Batch 2 scalar work and Batches 3–10 pending. The overall goal remains active.

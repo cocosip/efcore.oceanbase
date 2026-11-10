@@ -21,6 +21,25 @@ not later local commits or database integration. Earlier db676ff also passed in
 Run/job/step metadata is saved under artifacts/local-development/. The earlier log archive endpoint returned
 HTTP403 (repository admin rights); no new per-test count or resolved EF patch is inferred from job metadata.
 
+### Scalar text collection membership checkpoint (2026-11-11)
+
+Bare inline/captured text array/list Contains now has EF's element JSON metadata. Oracle expands provider-text
+IN parameters before the existing scalar normalizer and EF null processing, retaining raw model values,
+converter/mapping identity, safe names, per-execution snapshots and raw-value padding. MySQL keeps inherited
+expansion. Provider-empty and model-empty-after-suffix remain distinct; default compensation and native
+relational UNKNOWN are separate policies. No JSON SQL transport or general VALUES support is implied.
+
+Focused tests pass 25 unit and 20 intercepted cases. Debug/Release and isolated EF10.0.14 Release each pass
+**1200 tests** (910 unit, 288 intercepted pipeline, two project consumers). The same baseline-built
+`10.0.0-checkpoint.text-membership-20261111` nupkg passes both modes at EF10.0.0/10.0.14; the preceding package
+fails the new string collection mapping. Content/package-only graph gates pass; baseline assets stay EF10.0.0.
+Independent source and docs/consumer reviews passed; the consumer assertion follow-up passed scoped re-review.
+
+Latest package: `artifacts/checkpoint-text-membership-20261111/OceanBase.EntityFrameworkCore.10.0.0-checkpoint.text-membership-20261111.nupkg`.
+Evidence: `artifacts/local-development/batch3i/`. Native collation/padding/LOB equality/charset/results and
+current hosted execution remain unverified. Next is captured integral general collection roots/nonempty inline
+roots. Originally empty inline roots and general text/other carriers remain local work; the EF10 goal stays active.
+
 ### Integral membership and ordinary relational shapes checkpoint (2026-11-11)
 
 Bare int/int? array/list Contains now uses EF10 scalar expansion with exact element metadata. Oracle scalar
@@ -41,9 +60,9 @@ now uses a test-owned cache and two explicit-eviction cases verify equivalent re
 identity/key/connection assertion remains. The original natural failure timing is not proven; no production
 cache change was made to force retention.
 
-Latest package: `artifacts/checkpoint-membership-20261111/OceanBase.EntityFrameworkCore.10.0.0-checkpoint.membership-20261111.nupkg`.
-Evidence: `artifacts/local-development/batch3h/`. Server query results and hosted execution for this source
-remain unverified. Next is scalar text collection membership; the complete local EF10 goal remains active.
+Historical package: `artifacts/checkpoint-membership-20261111/OceanBase.EntityFrameworkCore.10.0.0-checkpoint.membership-20261111.nupkg`.
+Evidence: `artifacts/local-development/batch3h/`. Server query results and hosted execution for this historical
+source remain unverified. Its next planned slice was scalar text collection membership, recorded above.
 
 ### Numeric Abs, Sign and Truncate checkpoint (2026-11-11)
 

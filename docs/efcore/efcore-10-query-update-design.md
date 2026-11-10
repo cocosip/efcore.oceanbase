@@ -244,9 +244,9 @@ capacity experiment reproduced identity failure with equal keys/shared services;
 timing was not recaptured. Production caching was not changed to force retention. Independent production
 review and scoped fixture re-review passed. This is local translation/binding/shaping evidence only.
 
-## Planned scalar text collection membership
+## Scalar text collection membership local contract
 
-The next QRY-03 slice covers bare inline/captured Enumerable.Contains and List.Contains over scalar text
+The local QRY-03 slice covers bare inline/captured Enumerable.Contains and List.Contains over scalar text
 arrays/lists in both modes, including existing provider-text converters and families. Add the existing EF
 string JSON reader/writer metadata as a collection-mapping prerequisite; this does not enable JSON tables.
 MySQL retains base scalar expansion. Oracle expands provider-text IN collection parameters before scalar
@@ -268,6 +268,38 @@ Characterize empty/null/all-null/duplicate/converted-empty collections, changed 
 name collisions, hostile literal data, fixed/national/LOB bindings and both modes/null settings. Native
 collation/padding/LOB equality/charset/server limits remain live gates. General VALUES roots and explicit
 EF.Parameter(collection) remain separate locally feasible work, with clear unsupported-shape tests.
+
+The independently reviewed slice passes 25 focused unit and 20 intercepted cases. Full Debug/Release and isolated
+EF10.0.14 Release pass 1200 tests. Real EF array/list queries cover both modes/null settings and changed
+captures; a separate artificial SQL-tree probe verifies one snapshot enumeration, mapping identity and name
+collisions. Raw padding covers boundaries through 2001 without copying EF's private filtered-index counters.
+Constant literals retain raw model values and mappings. The same baseline-built text-membership package
+passes both patches/modes, including Oracle all-provider-null predicates with no surviving equality/IN arm.
+These are translation/binding/shaping checks; live text membership and general collection roots remain open.
+
+## Planned captured integral collection roots
+
+After bare membership, the next bounded collection slice covers general captured int/int? array/list roots
+and nonempty inline roots, including native int and existing int-to-long converters. Filter/project/order,
+composed membership, joins and Count/Any must retain duplicates, nullable elements, ordinal semantics and
+current values. General roots contain exactly one row per input element; membership padding does not apply.
+
+Expand ValuesParameter before the base nullability processor's IntTypeMapping cast, using execution-local
+snapshots/mapping/name reuse and raw model values. Preserve caller collections, disable SQL caching and honor
+the actual remaining Value or _ord/Value column layout after EF pruning. Captured empty/null roots carry
+immutable typed NULL metadata and render a typed zero-row relation, never one fabricated NULL row.
+
+The generator retains EF wrapping/aliasing but renders SELECT/UNION ALL SELECT, with quoted first-arm aliases
+and Oracle FROM DUAL in every arm. Keep UNION ALL and outer EF ordering. Synthetic integer typing uses legal,
+lossless targets: MySQL SIGNED for the selected signed carriers and Oracle unqualified NUMBER. Keep physical
+column write precision out of query typing; retain original element mappings/converters/checked readers.
+Do not broaden unrelated explicit CAST behavior or replace the provider's checked int mapping with EF's class.
+
+Default/MultipleParameters and Constant retain their parameter/literal policies; composed Parameter roots
+and explicit EF.Parameter remain unsupported without a separate translator. Originally empty inline roots
+need compile-time metadata beyond this runtime slice; general text/other carrier roots need their own typing
+contracts. These remain local follow-up work. Native UNION coercion/results/order and server limits require
+later database validation. No implementation or passing evidence is claimed for this planned slice.
 
 ## Arithmetic division and remainder local contract
 
@@ -386,18 +418,33 @@ Run the read-only gate after packing, before the isolated consumer checks:
 
 ```powershell
 pwsh -NoProfile -File tests/OceanBase.EntityFrameworkCore.PackageConsumer/Verify-Package.ps1 `
-    -PackagePath artifacts/checkpoint-membership-20261111/OceanBase.EntityFrameworkCore.10.0.0-checkpoint.membership-20261111.nupkg `
-    -ExpectedVersion 10.0.0-checkpoint.membership-20261111
+    -PackagePath artifacts/checkpoint-text-membership-20261111/OceanBase.EntityFrameworkCore.10.0.0-checkpoint.text-membership-20261111.nupkg `
+    -ExpectedVersion 10.0.0-checkpoint.text-membership-20261111
 ```
 
 The PowerShell 7 script uses .NET ZIP/XML APIs and checks ID/version, the net10.0 assembly and dependency group,
 exact expected dependency ranges, and a nonempty packaged README with matching metadata. It does not build,
-restore, execute provider queries or establish server/runtime compatibility. The current membership package passes;
+restore, execute provider queries or establish server/runtime compatibility. The current text-membership package passes;
 wrong expected version, the old README-less alias package and the exact-patch README probe fail at their intended
 checks. The hosted e41981e package-content gate passed on Windows/Linux; the current package checks ran locally
 on Windows. Change the path/version for each new pack.
 
-### Current integral membership and relational-shape checkpoint (2026-11-11)
+### Current scalar text membership checkpoint (2026-11-11)
+
+Debug/Release and isolated EF10.0.14 Release pass 1200 tests (910 unit, 288 intercepted pipeline, two project
+consumers). Independent spec/quality review passed. The same baseline-built
+`10.0.0-checkpoint.text-membership-20261111` nupkg passes both modes at
+EF10.0.0/10.0.14. Repeated text captures alternate nonempty/empty/padded/all-provider-null collections;
+Oracle default null compensation produces IS NULL without a residual equality/IN arm. Unit/pipeline tests
+separately preserve native UNKNOWN under UseRelationalNulls. The prior membership package fails the new
+text collection mapping. Content/package-only graph checks pass; baseline source assets remain EF10.0.0.
+
+Repeat the commands below with `10.0.0-checkpoint.text-membership-20261111` and
+`artifacts/checkpoint-text-membership-20261111`. Evidence: `artifacts/local-development/batch3i/`.
+General VALUES/other collection families and native collation/padding/LOB/charset/results remain open.
+Hosted Windows/Linux evidence above still applies to e41981e.
+
+### Historical integral membership and relational-shape checkpoint (2026-11-11)
 
 Debug/Release and isolated EF10.0.14 Release pass 1155 tests (885 unit, 268 intercepted pipeline, two project
 consumers). Independent spec/quality and scoped cache-fixture reviews pass. The same baseline-built
