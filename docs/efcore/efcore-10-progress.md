@@ -12,6 +12,33 @@ each small group. Real database integration/tests and EF8/EF9 adaptation are exp
 [local development plan](efcore-10-local-development-plan.md) tracks the full remaining inventory, including
 an audit of locally feasible deferred families. Finishing one batch does not finish the overall goal.
 
+### Text and temporal aggregate extrema checkpoint (2026-11-11)
+
+Batch3ad follows cd8d256. Queryable `Min`/`Max` now accepts the provider-owned `string`, `DateTime`,
+`DateTimeOffset`, `DateOnly`, `TimeOnly` and `TimeSpan` model families, including nullable forms and
+non-null-converting converters. The provider validates the OceanBase mapping, converter and reader carrier,
+rejects cross-family/unowned mappings and null-converting converters, and rejects Oracle `CLOB`/`NCLOB`
+extrema. Native EF aggregate construction remains the single SQL construction path; no new service, cast,
+public API or dependency was added.
+
+New unit and intercepted functional coverage exercises scalar/selector identities, current filters, all-null
+and empty shapes, grouping/HAVING/order, native temporal readers, converter-owned values and sync/async
+execution in both compatibility modes. The new nonnumeric aggregate unit suite passes **94** cases; the
+combined nonnumeric/numeric aggregate focus passes **373** cases. The new functional suite passes **52** cases.
+Final EF10.0.0 Debug/Release and isolated EF10.0.14 Release each pass **3910** tests: 1858 unit + 1182
+intercepted functional + 868 model specification + two project-consumer cases, zero failures/skips.
+Evidence: `artifacts/nonnumeric-extrema-{unit,functional,debug,release,patch,debug-focused,patch-focused}.log`.
+
+The baseline-built `10.0.0-nonnumeric-extrema-20261111` package passes both-mode EF10.0.0/10.0.14
+consumer smoke, package contents/dependency/graph checks and provider/archive/consumer identity checks.
+Provider DLL SHA-256: `7C7B8C2C901CC9E69652B1968CA6E9D3B7FE351B7BFBB880B6FCA64B18D42957`.
+Nupkg SHA-256: `FB23BF972F868C844487B0E0537ECECBB80E9531CCD4C8BA9C46DC258DAA91CC`.
+The preceding converted-roots package fails the new null-converting-mapping smoke as expected; evidence:
+`artifacts/nonnumeric-extrema-package.log`, `artifacts/verify-nonnumeric-extrema-package.ps1` and
+`artifacts/nonnumeric-extrema-previous-package.log`. Independent source review found no actionable finding.
+These are local SQL-shape, binding, reader and package-consumer results; native ordering, collation, temporal
+semantics, live OceanBase execution, EF8/EF9 adaptation and release acceptance remain open.
+
 ### Contextual numeric element-projection checkpoint (2026-11-11)
 
 Batch3ac follows f93bc48. Direct numeric collection elements now retain contextual mappings in

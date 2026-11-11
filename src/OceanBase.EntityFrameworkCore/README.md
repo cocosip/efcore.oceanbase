@@ -32,6 +32,12 @@ bindings, projected readers and the CLR default fallback. Incompatible requireme
 its scalar-result consumers reject, including different converters with the same store type. Arbitrary
 converter/operator composition remains unsupported. Native UNION typing, results and costs are unverified.
 
+Text and temporal `Min/Max` support scalar/selector and nullable forms using native aggregates and
+the original mappings/readers. Supported temporal families are DateTime, DateTimeOffset, DateOnly,
+TimeOnly and TimeSpan. Filters, grouping and empty/null shaping use EF's relational pipeline.
+Null-converting converters, custom/cross-family carriers and Oracle CLOB/NCLOB extrema reject.
+Converters use stored-value ordering; native collation, temporal ordering and results remain unverified.
+
 Integer `&`, `|`, `^`, `~`, `<<` and `>>` have per-mode SQL translations, including nullable values and
 C# small-integer promotions. Bitwise enum storage must be numeric. Shift counts use C# width masking,
 and signed right shifts preserve sign extension. Text/floating/decimal converter carriers are rejected

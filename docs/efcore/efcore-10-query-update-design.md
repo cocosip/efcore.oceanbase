@@ -7,6 +7,48 @@ execution, transactions, complete scalar mappings and package validation remain 
 [feature checklist](efcore-10-feature-checklist.md). SQL-generation tests and intercepted commands do not prove
 that a server accepts the SQL, generates identity values or commits and rolls back correctly.
 
+## Text and temporal aggregate extrema contract (Batch3ad, QRY-04/11, MAP-06/07)
+
+Own the exact Queryable Min/Max generic scalar/selector identities for string, DateTime,
+DateTimeOffset, DateOnly, TimeOnly and TimeSpan, including nullable value types. Reuse EF10's
+QueryableAggregateMethodTranslator for the already working native MIN/MAX, filter -> CASE -> DISTINCT,
+nullable metadata and cardinality shaping. Add only the missing boundary validation in the existing
+provider aggregate translator; preserve plugin priority, numeric aggregates and Count/LongCount.
+
+The relational queryable visitor may elide a LINQ Distinct before MIN/MAX because duplicates cannot
+change extrema. Direct aggregate-service tests retain explicit DISTINCT input; pipeline tests accept
+that inherited optimization instead of forcing redundant DISTINCT into generated SQL.
+
+String results retain OceanBaseStringTypeMapping and its converter/facets. MySQL character/text
+storage participates; Oracle CHAR/VARCHAR2/NCHAR/NVARCHAR2 participates. Oracle CLOB/NCLOB extrema
+are explicitly unsupported in this profile: do not introduce a truncating VARCHAR cast. Temporal
+results retain the existing native date/timestamp/time/interval mappings, transport and reader hooks,
+including DateOnly/TimeOnly/DateTimeOffset built-in conversions. Same-family custom converters
+participate under stored-value semantics: decode(native MIN/MAX(encode(values))), not arbitrary CLR
+ordering or converter equivalence. Null-converting converters and custom/cross-family carriers in
+these owned model families fail explicitly before inherited fallback or a command.
+
+Empty/all-null string and nullable extrema return null; nonnullable temporal empty results use EF's
+no-elements exception. An empty GroupBy produces no row. Preserve current parameters in filters and
+HAVING/order composition, typed NULL CASE arms and result mappings independently of column capacity.
+Collation, Oracle empty strings, datetime/interval ordering and native aggregate metadata/results
+remain live acceptance gates; intercepted rows prove only command bindings, shaping and decoding.
+Boolean, enums, Guid, binary/custom scalar families and comparer overloads remain separate contracts.
+
+Source contracts: published EF10.0.0 QueryableMethods/QueryableAggregateMethodTranslator and relational
+aggregate-provider plugin order. Fresh baseline method/provider decompilations are cached under
+`artifacts/non-numeric-extrema-source/`; the translator is in `artifacts/local-development/reference/query-shapes/`.
+The older `query-aggregates/` method/provider manifest records EF10.0.14, not the baseline. OceanBase's pinned documentation revision
+`2a5ae3a23a51729d065cec716508eb26cb064106` describes character/date MIN/MAX, same-expression result
+types, ignored NULLs and DISTINCT/ALL; cached MIN/MAX pages and hashes are in the aggregate manifest.
+[Oracle MIN](https://docs.oracle.com/en/database/oracle/oracle-database/19/sqlrf/MIN.html) also documents
+character collation and date examples. These references establish contracts, not deployed acceptance.
+
+Verify all eleven native/nullable type shapes with both identities/operators/modes, exact mapping
+identity, native reader/converter ownership, filtered DISTINCT/group/HAVING/order SQL, sync/async
+current bindings, empty/all-null/no-group results and negative carrier/null-converter boundaries.
+Run full Debug/Release, fresh isolated EF10.0.14 and one baseline package at both patches/modes.
+
 ## Contextual numeric collection projection contract (Batch3ac, QRY-03/11, MAP-06/07)
 
 Support direct collection-element projection in SelectMany, scalar FirstOrDefault and Join after a

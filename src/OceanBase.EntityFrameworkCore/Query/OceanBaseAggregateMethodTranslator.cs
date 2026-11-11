@@ -8,6 +8,7 @@ using Microsoft.EntityFrameworkCore.Query;
 using Microsoft.EntityFrameworkCore.Query.SqlExpressions;
 using Microsoft.EntityFrameworkCore.Storage;
 using OceanBase.EntityFrameworkCore.Storage;
+using OceanBaseConnector;
 
 namespace OceanBase.EntityFrameworkCore.Query;
 
@@ -24,8 +25,25 @@ internal sealed class OceanBaseAggregateMethodTranslator(ISqlExpressionFactory s
             : QueryableMethods.IsAverageWithoutSelector(identity) || QueryableMethods.IsAverageWithSelector(identity) ? "AVG"
             : identity == QueryableMethods.MinWithoutSelector || identity == QueryableMethods.MinWithSelector ? "MIN"
             : identity == QueryableMethods.MaxWithoutSelector || identity == QueryableMethods.MaxWithSelector ? "MAX" : null;
-        if (function is null || !OceanBaseMathTranslator.IsNumeric(selector.Type))
+        if (function is null)
             return null;
+        if (!OceanBaseMathTranslator.IsNumeric(selector.Type))
+        {
+            var type = Nullable.GetUnderlyingType(selector.Type) ?? selector.Type;
+            if (function is "MIN" or "MAX" && (type == typeof(string) || type == typeof(DateTime)
+                || type == typeof(DateTimeOffset) || type == typeof(DateOnly) || type == typeof(TimeOnly) || type == typeof(TimeSpan)))
+            {
+                var owned = sqlExpressionFactory.ApplyDefaultTypeMapping(selector).TypeMapping;
+                var supported = type == typeof(string)
+                    ? owned is OceanBaseStringTypeMapping && owned.StoreTypeNameBase.Trim().ToUpperInvariant() is not ("CLOB" or "NCLOB")
+                    : owned is OceanBaseTemporalTypeMapping<DateTime> or OceanBaseTemporalTypeMapping<DateTimeOffset>
+                        or OceanBaseTemporalTypeMapping<TimeSpan> or OceanBaseTemporalTypeMapping<OceanBaseIntervalDayToSecond>;
+                if (!supported || owned?.Converter?.ConvertsNulls == true)
+                    throw new InvalidOperationException($"OceanBase {function} requires supported text or temporal storage and a converter that does not convert nulls; Oracle LOB extrema are unsupported.");
+            }
+            // EF already owns native nonnumeric MIN/MAX construction and result cardinality.
+            return null;
+        }
 
         selector = sqlExpressionFactory.ApplyDefaultTypeMapping(selector);
         var mapping = selector.TypeMapping;

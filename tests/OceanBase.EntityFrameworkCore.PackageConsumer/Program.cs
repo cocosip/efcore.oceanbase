@@ -439,6 +439,7 @@ namespace PackageConsumer
                 VerifyNumericRoots(context, mode, decimal.MinValue, decimal.MaxValue, 0.0000000000000000000000000001m, "DECIMAL(65,30)", "NUMBER");
                 VerifyNumericRoots(context, mode, float.MinValue, float.MaxValue, float.Epsilon, "FLOAT", "BINARY_FLOAT");
                 VerifyNumericRoots(context, mode, double.MinValue, double.MaxValue, double.Epsilon, "DOUBLE", "BINARY_DOUBLE");
+                VerifyNonnumericExtrema(context, mode);
                 int?[] nullableConvertedValues = [null, 17, 17];
                 var nullableConverted = context.Set<Row>().Where(row => nullableConvertedValues
                     .Where(value => value > row.NullableInteger).Contains(row.NullableInteger)).Select(row => row.NullableInteger);
@@ -835,6 +836,28 @@ namespace PackageConsumer
             }
         }
 
+        private static void VerifyNonnumericExtrema(ConsumerContext context, OceanBaseCompatibilityMode mode)
+        {
+            var sql = context.Set<Row>().GroupBy(row => row.Id).Select(group => new
+            {
+                MinText = group.Min(row => row.Name), MaxText = group.Max(row => row.Name),
+                MinStamp = group.Min(row => row.OccurredAt), MaxStamp = group.Max(row => row.OccurredAt),
+                MinZoned = group.Min(row => row.OffsetAt), MaxZoned = group.Max(row => row.OffsetAt),
+                MinDay = group.Min(row => row.Day), MaxDay = group.Max(row => row.Day),
+                MinClock = group.Min(row => row.Clock), MaxClock = group.Max(row => row.Clock),
+                MinDuration = group.Min(row => row.Duration), MaxDuration = group.Max(row => row.Duration)
+            }).ToQueryString();
+            if (sql.Split("MIN(", StringSplitOptions.None).Length - 1 != 6
+                || sql.Split("MAX(", StringSplitOptions.None).Length - 1 != 6
+                || !sql.Contains("GROUP BY", StringComparison.Ordinal) || sql.Contains("CAST(", StringComparison.Ordinal))
+                throw new Exception("Packed text/temporal MIN/MAX lost its native shape.");
+            var rejected = false;
+            try { _ = context.Set<AggregateBoundaryRow>().GroupBy(row => row.Id).Select(group => group.Min(row => row.Text)).ToQueryString(); }
+            catch (InvalidOperationException error) when (error.Message.Contains("OceanBase MIN", StringComparison.Ordinal)) { rejected = true; }
+            if (!rejected) throw new Exception("Packed MIN accepted a null-converting string mapping.");
+            Console.WriteLine($"{mode}: packed text/temporal MIN/MAX and null-converter boundary passed.");
+        }
+
         private static void VerifyNumericRoots<T>(ConsumerContext context, OceanBaseCompatibilityMode mode,
             T minimum, T maximum, T tiny, string mysql, string oracle) where T : struct
         {
@@ -1001,6 +1024,10 @@ namespace PackageConsumer
         {
             protected override void OnModelCreating(ModelBuilder modelBuilder)
             {
+#pragma warning disable EF1001
+                modelBuilder.Entity<AggregateBoundaryRow>().Property(row => row.Text).HasConversion(
+                    new ValueConverter<string, string>(value => value ?? "missing", value => value, convertsNulls: true));
+#pragma warning restore EF1001
                 modelBuilder.Entity<Row>().Property(row => row.Name).HasMaxLength(4);
                 modelBuilder.Entity<Row>().Property(row => row.Payload).HasMaxLength(8);
                 modelBuilder.Entity<Row>().Property(row => row.Count).HasColumnType(mode == OceanBaseCompatibilityMode.Oracle ? "NUMBER(3)" : "MEDIUMINT");
@@ -1055,6 +1082,12 @@ namespace PackageConsumer
             public ulong Bits { get; set; }
             public ByteFlags Flags { get; set; }
             public byte Narrow { get; set; }
+        }
+
+        private sealed class AggregateBoundaryRow
+        {
+            public int Id { get; set; }
+            public string Text { get; set; } = "";
         }
 
         [Flags]

@@ -42,6 +42,37 @@ Do not mark the goal complete while any locally developable item below remains u
 | 9. Deferred inventory audit | DEF-01..10 | Revisit every documented deferred family after Required local implementation stabilizes. Implement locally feasible families under explicit per-mode contracts and tests; record precise architectural/connector/server blockers for any unimplementable family. Do not treat a Deferred label alone as evidence it cannot be developed. |
 | 10. Completion audit | All IDs | Compare docs/public API/source/tests/package evidence. Every locally feasible feature is implemented/reviewed/committed; only specifically evidenced database or external blockers may remain. |
 
+## Batch3ad brief: text and temporal aggregate extrema
+
+**IDs:** QRY-04/11, MAP-06/07. **Spec:** text/temporal extrema contract in
+efcore-10-query-update-design.md. Continue from cd8d256; no live database or EF8/9 work.
+
+- [x] Add NonnumericAggregateQueryTests for the eleven string/native/nullable temporal types,
+  exact Min/Max scalar/selector identities, original mapping/readers/converters, filtered DISTINCT,
+  grouping/HAVING/order, unsupported identities and resolved-service negative mappings. Observe RED
+  for missing null-converter/carrier boundaries; characterize inherited correct SQL separately.
+- [x] In OceanBaseAggregateMethodTranslator, validate only owned nonnumeric Min/Max model families
+  before inherited fallback. Keep native string/temporal mappings and supported converters; explicitly
+  reject null-converting, unsupported cross-family/custom carriers and Oracle LOBs. Reuse the inherited
+  translator's native function construction; no new services, casts, public APIs or dependencies.
+- [x] Add dedicated NonnumericAggregateTests with deterministic sync/async command doubles for
+  current filters, native string/temporal readers, converters, all-null/empty/group shapes and failures
+  before commands. Extend the existing package consumer with both-mode text/temporal aggregate smoke.
+- [x] Run focused/full Debug/Release, a fresh EF10.0.14 snapshot and one baseline-built package at
+  both patches/modes, contents/dependency/graph/hash gates and negative old-package smoke where useful.
+  Independently review, fix confirmed findings with regressions, update evidence and commit locally.
+
+Review focus: no duplicated inherited aggregate logic, exact identities/plugin priority, provider
+ordering rather than CLR comparer claims, no Oracle LOB truncation, full temporal reader/converter
+ownership, empty/all-null cardinality and no dependency on live credentials. The full goal stays active.
+
+Batch3ad evidence: the new nonnumeric aggregate unit suite passes 94 cases (373 with the existing numeric
+aggregate focus) and the dedicated intercepted functional suite passes 52. EF10.0.0 Debug/Release and isolated EF10.0.14 Release
+each pass 3910 tests (1858 unit + 1182 functional + 868 specification + 2 consumers), zero failures/skips.
+Package `10.0.0-nonnumeric-extrema-20261111` passes both-mode consumer, content, dependency and identity
+checks; independent source review found no actionable issue. Native server extrema semantics and live
+database execution remain open.
+
 ## Batch3ac brief: contextual numeric collection projections
 
 **IDs:** QRY-03/11, MAP-06/07. **Spec:** contextual numeric projection contract in
