@@ -981,7 +981,7 @@ explicit predicates apply normally; applications supply concurrency predicates t
 MySQL UPDATE uses its table-reference list before SET, including EF-produced joins; UPDATE/FROM is
 not the MySQL contract. SET targets are qualified to avoid joined-column ambiguity. Oracle retains
 ordinary single-table UPDATE with unqualified SET targets and native target aliases. Joined Oracle
-UPDATE and EF fallback update joins require a future native rewrite and must fail before execution.
+UPDATE and EF fallback update joins use the correlated rewrite below.
 DELETE retains EF's single-target/predicate rewrite. Source contracts are the published EF10.0.0
 QuerySqlGenerator and relational method translator plus OceanBase's public MySQL parser grammar,
 downloaded for inspection in artifacts/bulk-dml-ef-source/. Public grammar is not deployed-server proof.
@@ -1009,9 +1009,37 @@ Retain root UpdateExpression/DeleteExpression tags across parameter processing: 
 UpdateExpression.VisitChildren can reconstruct an expression without its Tags after a child changes.
 The wrapper captures/restores those statement tags; no connector or server change is needed.
 
-Remaining DEF-03 work includes Oracle joined/paged update rewrites, MySQL cyclic/snapshot assignments,
+Remaining DEF-03 work includes MySQL cyclic/snapshot assignments, arbitrary converter server expressions,
 advanced JSON/complex/inheritance/table-split shapes and complete live acceptance; this stage does not
 establish complete bulk support. Rejecting an unimplemented shape is a provider gap, not a server defect.
+
+### Oracle correlated bulk update rewrite (DEF-03)
+
+For an EF-translated joined/pushed-down Oracle UpdateExpression, generate a single UPDATE of the
+physical target under a fresh outer alias. Each SET value is a scalar SELECT over the complete source
+table/join list, with its original predicate plus equality for every target primary-key column against
+the outer row. An EXISTS SELECT over the same source/predicate/key correlation limits affected targets.
+This preserves filters, outer joins, nullable scalar values and nested EF paging while keeping source
+values separate from the updated target alias. Multiple assignments observe the original source row.
+
+The Oracle relational translator accepts normalized left-join sources directly. EF10's default
+UPDATE/FROM shape check rejects a left join following the target and its fallback can lose anonymous
+setter bindings; the provider's correlated generator does not need that restriction. Sources requiring
+pushdown, including paging and filtered joined targets, still use EF's primary-key fallback.
+
+Use only normalized outer expressions without limit/offset/distinct/group/having/projections/order;
+those operators must remain inside EF's translated source subqueries. A joined keyless/view target
+has no physical correlation key and rejects before opening. Delimit all metadata identifiers and choose
+the outer alias outside all table/column aliases in the complete source/setter trees. No arbitrary SQL
+text is interpolated except provider-owned keywords and quoted model identifiers.
+
+References inspected: published EF10.0.0 QuerySqlGenerator and relational bulk translator;
+OceanBase documentation V4.3.5 commit2a5ae3a23a51729d065cec716508eb26cb064106, Oracle UPDATE and
+scalar-subquery-expression references (artifacts/bulk-oracle-source/). The documented scalar subquery
+returns NULL for zero rows and errors for more than one row. EXISTS prevents unrelated target updates;
+no DISTINCT/MIN/first-row selection hides duplicate source matches. Key assignments are not restricted
+by a MERGE ON clause because this rewrite uses UPDATE/WHERE. Physical read consistency, cardinality
+errors, source plan costs, affected rows, privileges and exact deployed-version syntax need live tests.
 
 ### Official relational model specifications (TST-01 / MOD-01/02/03)
 

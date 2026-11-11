@@ -66,7 +66,17 @@ An open row is not automatically waiting for a database. Track the remaining wor
 Development resumed at the user's request (2026-11-10) on efcore/10.0. See the
 [progress handoff](efcore-10-progress.md) for saved state, remaining work and the exact resume point.
 
-Bulk DML checkpoint (Batch9a after5f56125): ordinary both-mode sync/async ExecuteUpdate/ExecuteDelete,
+Oracle bulk checkpoint (Batch9b aftereb0c837): joined/paged updates use complete scalar source queries
+and EXISTS correlated by every physical primary-key column. Normalized left joins bypass EF's default
+UPDATE/FROM fallback.26 new intercepted cases, eight SQL cases and two caller-transaction cases cover
+both join sides, nullable Boolean storage, selective filters, composite/converted keys, paging, aliases,
+errors and cancellation. Final Debug/Release/isolated14 each3463=1652+941+868+2 pass, zero failures/skips.
+Independent review and coverage follow-up have no outstanding findings. Native syntax/results,
+cardinality/read consistency/costs and the remaining DEF-03 families are still open.
+Same bulk-oracle-20261111 package passes both modes/patches, content, package-only graphs and DLL
+identity; prior bulk-dml package rejects the new smoke with caught exit1. Baseline staysEF10.0.0.
+
+Historical bulk DML checkpoint (Batch9a after5f56125): ordinary both-mode sync/async ExecuteUpdate/ExecuteDelete,
 MySQL native joined UPDATE syntax, single-table assignment ordering and direct setter write validation
 have local coverage. Computed/cross-encoded Boolean setters emit target encodings and preserve NULL;
 arbitrary incompatible converter expressions, cyclic/dependent-joined MySQL assignments and Oracle
@@ -451,9 +461,9 @@ Creating an Oracle tenant is never inferred.
 | ID | Requirement and acceptance criteria | Priority | MySQL | Oracle | Existing evidence / gap |
 | --- | --- | --- | --- | --- | --- |
 | PKG-01 | Build net10.0 assets against published OceanBaseConnector 0.2.0 with warnings as errors. | Required | Done | Done | Current solution test command builds assets; not a package-content assertion. |
-| PKG-02 | Packed nuspec uses OceanBase.EntityFrameworkCore and EF ranges [10.0.0,11.0.0). | Required | Done | Done | Verify-Package.ps1 passes transaction-recovery-20261111 identity/net10.0/README/ranges; prior negative probes reject as expected. Rerun on every release pack; runtime/live gates are separate. |
-| PKG-03 | Isolated packed consumer restores/executes provider API without project/local connector references. | Required | Done | Done | Same transaction-recovery nupkg passes both modes/selected patches, including automatic cancellation recovery with native doubles and all prior schema/transaction smoke; package-only graph and DLL identity inspected; rerun after changes. |
-| PKG-04 | Minimum EF10 and selected later available EF10 patch restore/build/test without pinning the EF patch in the provider package; EF11 cannot satisfy dependencies. | Required | Done | Done | Final source suites pass2161 at10.0.0/10.0.14; same baseline-built transaction-recovery nupkg passes both consumers, including prior private-field runtime probes. Ranges rechecked; prior parser rejects11.0.0. Future patches need fresh private-contract evidence. |
+| PKG-02 | Packed nuspec uses OceanBase.EntityFrameworkCore and EF ranges [10.0.0,11.0.0). | Required | Done | Done | Verify-Package.ps1 passes bulk-oracle-20261111 identity/net10.0/README/ranges; prior negative probes reject as expected. Rerun on every release pack; runtime/live gates are separate. |
+| PKG-03 | Isolated packed consumer restores/executes provider API without project/local connector references. | Required | Done | Done | Same bulk-oracle nupkg passes both modes/selected patches, including correlated Oracle bulk SQL and prior schema/seeding/transaction/recovery smoke; package-only graph and DLL identity inspected; rerun after changes. |
+| PKG-04 | Minimum EF10 and selected later available EF10 patch restore/build/test without pinning the EF patch in the provider package; EF11 cannot satisfy dependencies. | Required | Done | Done | Final source suites pass3463 at10.0.0/10.0.14; same baseline-built bulk-oracle nupkg passes both consumers, including prior private-field runtime probes. Ranges rechecked; prior parser rejects11.0.0. Future patches need fresh private-contract evidence. |
 | TST-01 | Selected EF relational specification classes pass; exclusions map to checklist IDs and limitations. | Required | In progress | In progress | SpecificationTests now runs full inherited generic relational OneToMany/ManyToOne/OneToOne/ManyToMany/Inheritance/OwnedTypes families against real provider services in both modes:866 inherited+two guard cases pass at EF10.0.0/10.0.14, zero skips/exclusions. Other model families and query/write/runtime specification fixtures remain open. Selected metadata success does not establish deferred runtime features. |
 | TST-02 | Live core query/write/transaction/schema/scalar suites pass in at least one declared supported environment per mode. | Required | Planned | Planned | User confirms database addresses were already supplied (2026-11-11). The provider live fixture/configuration integration is still absent, and no live provider execution is recorded. Reuse previously supplied access; keep credentials outside the repository and establish the authorized schema/cleanup scope before destructive tests. Do not classify this missing implementation as missing user access. |
 | REL-01 | Support notes record server/connector/runtime/EF versions, tenant mode, direct/proxy endpoint, transport/options without credentials. | Required | Planned | Planned | Release evidence record missing. |
@@ -468,7 +478,7 @@ are difficult to implement. Promoting a deferred feature requires its own design
 | --- | --- | --- | --- | --- |
 | DEF-01 | Migrations/history table/scripts/idempotent scripts/bundles | Deferred | Deferred | DDL/history/design-time plan; upgrade/downgrade tests. |
 | DEF-02 | Reverse engineering/provider design-time services/dotnet ef tooling | Deferred | Deferred | Live schema fixtures; packed tooling consumer tests. |
-| DEF-03 | ExecuteUpdate/ExecuteDelete, including EF10 lambda/JSON variants | In progress | In progress | Batch9a locally implements ordinary bulk operations: both-mode immediate affected-row/tracking/filter contracts, MySQL joined SQL and single-table assignment ordering, Oracle single-table guards, direct setter write validation and Boolean target re-encoding.48 bulk+four transaction cases and full3427 pass on both selected patches. Oracle joined rewrites, cyclic/dependent-joined MySQL snapshots, arbitrary cross-converter expressions, wider model/JSON shapes and native/live behavior remain open. |
+| DEF-03 | ExecuteUpdate/ExecuteDelete, including EF10 lambda/JSON variants | In progress | In progress | Ordinary bulk operations and Batch9b Oracle joined/paged scalar/EXISTS rewrites have local coverage, including full physical keys, both join sides/left joins, nullable Boolean encodings, selective filters and nested alias avoidance. Final full3463 pass on both selected patches. Cyclic/dependent-joined MySQL snapshots, arbitrary cross-converter expressions, wider model/JSON shapes and native/live behavior remain open. |
 | DEF-04 | JSON, primitive collections/arrays and complex types, including JSON-owned/complex mappings | Deferred | Deferred | Per-mode mapping/query/update design. |
 | DEF-05 | Spatial, XML, native enum types, OBJECT, LOB locators, REF CURSOR | Deferred | Deferred | Connector capability review/live mappings; ordinary enum converters belong to MAP-07. |
 | DEF-06 | Stored-procedure modification mappings; provider-specific sequence/HiLo strategies | Deferred | Deferred | Parameter/result/generation contracts; reject unsupported mappings clearly. |

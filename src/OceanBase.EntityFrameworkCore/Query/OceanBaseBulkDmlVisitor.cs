@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Linq.Expressions;
+using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.EntityFrameworkCore.Query;
 using Microsoft.EntityFrameworkCore.Query.SqlExpressions;
 using OceanBase.EntityFrameworkCore.Storage;
@@ -34,8 +35,7 @@ namespace OceanBase.EntityFrameworkCore.Query
             }
             if (mode == OceanBaseCompatibilityMode.Oracle)
             {
-                if (update.SelectExpression.Tables.Count != 1 || update.SelectExpression.Tables[0] != update.Table)
-                    throw new NotSupportedException("Oracle joined bulk updates require a native rewrite that is not implemented.");
+                if (RequiresOracleRewrite(update)) GetOracleCorrelationKey(update);
                 return update.Update(update.SelectExpression, setters);
             }
 
@@ -61,6 +61,20 @@ namespace OceanBase.EntityFrameworkCore.Query
                 remaining.RemoveAt(next);
             }
             return update.Update(update.SelectExpression, ordered);
+        }
+
+        internal static bool RequiresOracleRewrite(UpdateExpression update)
+            => update.SelectExpression.Tables.Count != 1 || update.SelectExpression.Tables[0] != update.Table;
+
+        internal static IReadOnlyList<IColumn> GetOracleCorrelationKey(UpdateExpression update)
+        {
+            var select = update.SelectExpression;
+            if (select.Offset is not null || select.Limit is not null || select.IsDistinct || select.Having is not null
+                || select.Orderings.Count != 0 || select.GroupBy.Count != 0 || select.Projection.Count != 0
+                || select.Tables.Count == 0)
+                throw new NotSupportedException("Unsupported Oracle correlated bulk update query shape.");
+            return (update.Table.Table as ITable)?.PrimaryKey?.Columns
+                ?? throw new NotSupportedException("Oracle joined bulk updates require a physical table primary key for correlation.");
         }
 
         private SqlExpression EncodeValue(ColumnValueSetter setter)

@@ -8,7 +8,8 @@ namespace OceanBase.EntityFrameworkCore.Query
     {
         protected override Expression VisitUpdate(UpdateExpression update)
         {
-            if (_mode == OceanBaseCompatibilityMode.Oracle) return base.VisitUpdate(update);
+            if (_mode == OceanBaseCompatibilityMode.Oracle)
+                return OceanBaseBulkDmlVisitor.RequiresOracleRewrite(update) ? GenerateOracleCorrelatedUpdate(update) : base.VisitUpdate(update);
             var select = update.SelectExpression;
             if (select.Offset is not null || select.Limit is not null || select.IsDistinct || select.Having is not null
                 || select.Orderings.Count != 0 || select.GroupBy.Count != 0 || select.Projection.Count != 0

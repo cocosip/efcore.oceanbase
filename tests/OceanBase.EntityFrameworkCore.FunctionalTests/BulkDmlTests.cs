@@ -168,7 +168,7 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
 
         [Theory]
         [MemberData(nameof(Modes))]
-        public async Task Joined_updates_use_MySql_table_references_and_Oracle_rejects_before_open(OceanBaseCompatibilityMode mode, bool async)
+        public async Task Joined_updates_use_mode_specific_target_and_source_sql(OceanBaseCompatibilityMode mode, bool async)
         {
             var capture = new Capture();
             await using var context = Create(mode, capture);
@@ -177,22 +177,21 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
                 (row, group) => new { Row = row, Group = group }).Where(pair => pair.Group.Code == code);
             async Task<int> Update() => async ? await query.ExecuteUpdateAsync(setters => setters.SetProperty(pair => pair.Row.Name, pair => pair.Group.Code))
                 : query.ExecuteUpdate(setters => setters.SetProperty(pair => pair.Row.Name, pair => pair.Group.Code));
-            if (mode == OceanBaseCompatibilityMode.Oracle)
+            Assert.Equal(1, await Update());
+            var command = Assert.Single(capture.Commands);
+            if (mode == OceanBaseCompatibilityMode.MySql)
             {
-                var error = await Assert.ThrowsAsync<NotSupportedException>(Update);
-                Assert.Contains("joined", error.Message);
-                Assert.Equal(0, capture.Opens);
-                Assert.Empty(capture.Commands);
+                Assert.Matches(@"UPDATE BulkRows AS (\w+) INNER JOIN BulkGroups AS (\w+) ON \1\.GroupId = \2\.Id SET \1\.Name = \2\.Code WHERE", command.Sql);
+                Assert.DoesNotContain(" FROM ", command.Sql);
             }
             else
             {
-                Assert.Equal(1, await Update());
-                var command = Assert.Single(capture.Commands);
-                Assert.Matches(@"UPDATE BulkRows AS (\w+) INNER JOIN BulkGroups AS (\w+) ON \1\.GroupId = \2\.Id SET \1\.Name = \2\.Code WHERE", command.Sql);
-                Assert.DoesNotContain(" FROM ", command.Sql);
-                Assert.Contains(code, command.Values);
-                Assert.Contains(context.TenantId, command.Values);
+                Assert.StartsWith("UPDATE BulkRows __ob_bulk_target SET Name = (SELECT", command.Sql);
+                Assert.Contains("INNER JOIN BulkGroups", command.Sql);
+                Assert.Contains("WHERE EXISTS (SELECT 1", command.Sql);
             }
+            Assert.Contains(code, command.Values);
+            Assert.Contains(context.TenantId, command.Values);
         }
 
         [Theory]

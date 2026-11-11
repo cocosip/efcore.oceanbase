@@ -11,7 +11,46 @@ each small group. Real database integration/tests and EF8/EF9 adaptation are exp
 [local development plan](efcore-10-local-development-plan.md) tracks the full remaining inventory, including
 an audit of locally feasible deferred families. Finishing one batch does not finish the overall goal.
 
-### Bulk relational update/delete checkpoint (2026-11-11)
+### Oracle joined/paged bulk update checkpoint (2026-11-11)
+
+Batch9b aftereb0c837 implements Oracle joined and pushed-down ExecuteUpdate using a scalar source
+SELECT per setter and an EXISTS target filter. Each source retains the complete translated tables,
+joins and predicate; every physical primary-key column correlates to a fresh outer target alias.
+Nested EF paging remains inside its source subquery. Keys, schema/table/column names and aliases are
+quoted; alias selection scans nested source and setter scopes. Joined keyless targets and unnormalized
+outer operators reject before opening. The ordinary single-table path remains native.
+
+Oracle's translator now accepts normalized left joins directly rather than using EF10's default
+UPDATE/FROM fallback, which lost anonymous setter bindings in the new regression. Tests cover inner,
+left and self joins; target on either side, including the nullable side; composite/converted/renamed
+keys and key assignments; nullable Y/N-to-T/F setters; selective named filters; current captures;
+skip/take including zero; tags/timeouts; exception/cancellation identity and later zero-row execution;
+caller-transaction attachment without savepoints/commit/rollback. SQL keeps all duplicate source
+matches so the native scalar-subquery cardinality error is not silently replaced with an arbitrary row.
+
+OracleBulkDmlTests adds26 intercepted cases, OracleBulkDmlQueryTests adds eight SQL cases and
+TransactionTests adds two cases. The initial16-case RED run failed all16 on the previous unsupported
+path. Final focused76 functional cases and eight SQL cases pass. Final full Debug/Release at
+EF10.0.0 and isolated EF10.0.14 Release each pass3463=1652 unit+941 functional+868 specification+
+two consumer tests, zero failures/skips. Independent review found no implementation defect; its three
+important coverage suggestions are now closed by four extra sync/async cases and read-only follow-up.
+Evidence: artifacts/bulk-oracle-{red,focused,debug,release,patch}.log.
+
+The same baseline-built 10.0.0-bulk-oracle-20261111 nupkg passes both-mode consumers on both patches,
+package contents, package-only dependency graphs and Release/package/consumer SHA-256 identity:
+5D07CCF626A37B187CBDE4DF3D08E26F4D4153FC27CA275AB8B0324509669BBA.
+BulkDmlSmoke adds the correlated Oracle update. The previous bulk-dml package rejects this new smoke
+with a caught NotSupportedException and exit1, without an unhandled process crash. Evidence:
+artifacts/bulk-oracle-{package,prior-package}.log and artifacts/verify-bulk-oracle-package.ps1.
+Baseline source assets remainEF10.0.0. PackageConsumer is manual and is not executed by CI.
+
+Native syntax, original-row read consistency, duplicate cardinality, affected rows, permissions and
+repeated-source query costs still need live acceptance. MySQL snapshot assignments, incompatible
+converter expressions and wider model/JSON/complex bulk shapes remain under DEF-03. The overall
+EF10 goal remains active; no live execution, EF8/9, push or publication. No driver/server defect was
+demonstrated, and previously supplied database access is not an implementation blocker.
+
+### Historical bulk relational update/delete checkpoint (2026-11-11)
 
 Batch9a after5f56125 promotes ordinary ExecuteUpdate/ExecuteDelete into active development, reusing
 EF10's relational setter translation and immediate nonquery pipeline. MySQL UPDATE now renders

@@ -70,7 +70,10 @@ resolve native state. Local command doubles do not establish physical rollback o
 They execute immediately, return affected rows and bypass the change tracker; applications supply concurrency
 predicates and a transaction when several calls must share one. MySQL joined updates use native table-reference
 syntax. Single-table dependent assignments preserve old values through ordering; cyclic assignments and dependent
-joined assignments still require an unimplemented snapshot rewrite. Oracle joined/paged updates remain unsupported.
+joined assignments still require an unimplemented snapshot rewrite. Oracle joined/paged updates use correlated
+scalar source queries and EXISTS over every physical primary-key column. Filters, nested paging and left joins
+are preserved; joined keyless targets reject. Multiple source matches retain the scalar-subquery cardinality
+error rather than selecting an arbitrary value. Each setter repeats the source query, which can be expensive.
 Direct literal/captured setters use column write bounds; server-computed expression bounds and physical bulk SQL
 execution remain unverified. These limits are provider implementation gaps, not demonstrated server defects.
 

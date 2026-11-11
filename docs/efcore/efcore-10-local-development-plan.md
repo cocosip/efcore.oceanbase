@@ -285,6 +285,27 @@ no outstanding findings. See progress for package identity/hash and artifacts/bu
 Oracle join rewrites, MySQL snapshot assignments, wider converter/model shapes and live tests remain
 open; this stage does not complete DEF-03 or the overall goal. No driver/server defect demonstrated.
 
+## Batch9b brief: Oracle joined and pushed-down bulk updates
+
+DEF-03: replace the initial joined Oracle UPDATE rejection with correlated scalar-subquery SET values
+and an EXISTS target filter. Reuse EF10's complete translated source query, including join predicates,
+query filters and nested paging. Keep the native single-table path unchanged.
+
+- Inspect published EF10.0.0 QuerySqlGenerator/relational bulk translation and pinned OceanBase Oracle
+  UPDATE/scalar-subquery references. Use one source SELECT per setter and one EXISTS; correlate every
+  physical primary-key column to a distinct outer target alias. Never drop source filters or paging.
+- Require a physical table primary key for joined correlation and reject unsupported outer modifiers
+  before opening. Retain quoted table/schema/key/column names and avoid aliases from every nested scope.
+- Keep target encoding/write validation, original-row assignment semantics, tags/current binds,
+  cancellation/command timeout and caller transaction attachment. Key assignments remain permitted:
+  correlation is a WHERE condition on the original row, not a merge ON-clause restriction.
+- Cover inner/left/self joins, target on either join side, composite/converted/renamed keys, nullable
+  values, multiple/cyclic setters, Boolean encoding, named filters, order/skip/take/zero-row sources,
+  alias collisions and keyless early rejection. Duplicate source matches retain scalar-subquery
+  cardinality errors instead of choosing a value silently; actual server behavior remains a live gate.
+- Run both selected patches/full configurations, same-package checks and independent review, update
+  support/evidence docs, commit locally. MySQL snapshot assignments and the wider DEF-03 inventory stay open.
+
 ## Batch8a brief: official relational model specification fixtures
 
 TST-01 / MOD-01/02/03 / DEF-07: consume the official EF10 relational specification package in a
@@ -944,6 +965,18 @@ returns empty on NULL in MySQL; Oracle represents empty as NULL under its existi
 
 ## Execution record
 
+- Batch9b final aftereb0c837: Oracle joined/paged updates now use complete scalar source queries and
+  EXISTS correlated by every physical primary-key column. Normalized left joins bypass EF's
+  UPDATE/FROM fallback; native single-table behavior remains.26 intercepted, eight SQL and two
+  caller-transaction cases cover keys/filters/paging/aliases, both join sides/nullable targets,
+  nullable Boolean encoding, errors/cancellation and unchanged tracker/transaction ownership.
+  Initial16 failed; focused76 functional+eight SQL pass. Full Debug/Release/isolated14 each
+  3463=1652+941+868+2 pass, zero failures/skips. Independent review reports no production findings;
+  four extra cases close its nullable-target/Boolean/selective-filter coverage suggestions.
+  Same bulk-oracle-20261111 nupkg passes both modes/patches/content/graphs/DLL identity; prior
+  bulk-dml package returns caught NotSupportedException/exit1. Baseline staysEF10.0.0. Native
+  syntax/read consistency/cardinality/costs remain live gates. Next: MySQL snapshot assignments
+  and the remaining local inventory. No driver/server defect, live tests, EF8/9, push or publication.
 - Batch3z final:16 added unit/16 intercepted cases; full Debug/Release/isolated14 each
   2396=1638+756+2 pass without failures/skips. Same boolean-order-text-20261111 nupkg passes both
   modes/patches/content/package-only graphs and DLL identity; prior package rejects ToString predicate.

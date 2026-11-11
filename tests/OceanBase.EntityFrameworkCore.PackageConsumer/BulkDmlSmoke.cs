@@ -52,6 +52,18 @@ namespace PackageConsumer
                 if (count != 4 || capture.Commands.Count != 3 || !capture.Commands[2].Contains($"THEN {prefix}'Y'", StringComparison.Ordinal)
                     || !capture.Commands[2].Contains($"THEN {prefix}'N'", StringComparison.Ordinal))
                     throw new Exception("Packed computed Boolean setter lost its target encoding.");
+                if (mode == OceanBaseCompatibilityMode.Oracle)
+                {
+                    var joined = context.Set<Row>().Join(context.Set<Row>(), row => row.Id, other => other.Id,
+                        (row, other) => new { Target = row, Source = other });
+                    count = async ? joined.ExecuteUpdateAsync(setters => setters.SetProperty(pair => pair.Target.Name, pair => pair.Source.Name)).GetAwaiter().GetResult()
+                        : joined.ExecuteUpdate(setters => setters.SetProperty(pair => pair.Target.Name, pair => pair.Source.Name));
+                    var sql = capture.Commands.Last();
+                    if (count != 4 || !sql.StartsWith("UPDATE BulkRows __ob_bulk_target SET Name = (SELECT", StringComparison.Ordinal)
+                        || !sql.Contains("WHERE EXISTS (SELECT 1", StringComparison.Ordinal)
+                        || Regex.Matches(sql, @" = __ob_bulk_target.Id").Count != 2)
+                        throw new Exception("Packed Oracle joined bulk update lost its source or key correlation.");
+                }
             }
             Console.WriteLine($"{mode}: packed bulk update/delete, tags, assignment order and write bounds passed (offline).");
         }

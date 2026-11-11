@@ -1,5 +1,8 @@
+using System.Diagnostics.CodeAnalysis;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Query;
 using Microsoft.EntityFrameworkCore.Query.SqlExpressions;
+using OceanBase.EntityFrameworkCore.Internal;
 
 namespace OceanBase.EntityFrameworkCore.Query
 {
@@ -15,14 +18,31 @@ namespace OceanBase.EntityFrameworkCore.Query
 
         private sealed class Visitor : RelationalQueryableMethodTranslatingExpressionVisitor
         {
+            private readonly OceanBaseCompatibilityMode _mode;
+
             public Visitor(QueryableMethodTranslatingExpressionVisitorDependencies dependencies,
                 RelationalQueryableMethodTranslatingExpressionVisitorDependencies relationalDependencies,
                 RelationalQueryCompilationContext queryCompilationContext)
-                : base(dependencies, relationalDependencies, queryCompilationContext) { }
+                : base(dependencies, relationalDependencies, queryCompilationContext)
+                => _mode = queryCompilationContext.ContextOptions.FindExtension<OceanBaseOptionsExtension>()!.CompatibilityMode;
 
-            private Visitor(Visitor parent) : base(parent) { }
+            private Visitor(Visitor parent) : base(parent) => _mode = parent._mode;
 
             protected override QueryableMethodTranslatingExpressionVisitor CreateSubqueryVisitor() => new Visitor(this);
+
+            protected override bool IsValidSelectExpressionForExecuteUpdate(SelectExpression select, TableExpressionBase targetTable,
+                [NotNullWhen(true)] out TableExpression? tableExpression)
+            {
+                // Oracle's correlated generator preserves left joins without EF's UPDATE/FROM fallback.
+                if (_mode == OceanBaseCompatibilityMode.Oracle && select.Offset is null && select.Limit is null
+                    && !select.IsDistinct && select.GroupBy.Count == 0 && select.Having is null && select.Orderings.Count == 0
+                    && select.Tables.Count > 0 && (targetTable is JoinExpressionBase join ? join.Table : targetTable) is TableExpression target)
+                {
+                    tableExpression = target;
+                    return true;
+                }
+                return base.IsValidSelectExpressionForExecuteUpdate(select, targetTable, out tableExpression);
+            }
 
             protected override ShapedQueryExpression? TranslateInlineQueryRoot(InlineQueryRootExpression inlineQueryRootExpression)
             {
