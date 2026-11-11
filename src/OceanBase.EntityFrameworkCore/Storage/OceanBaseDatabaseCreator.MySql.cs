@@ -21,13 +21,17 @@ namespace OceanBase.EntityFrameworkCore.Storage
             if (connection.CurrentTransaction is not null || System.Transactions.Transaction.Current is not null
                 || connection is ITransactionEnlistmentManager { EnlistedTransaction: not null })
                 throw new NotSupportedException("Database namespace management cannot run inside a caller transaction.");
-            if (extension.Connection is not null || string.IsNullOrWhiteSpace(connection.ConnectionString))
-                throw new NotSupportedException("Database namespace management requires a configured connection string; supplied connections need an explicit management connection profile.");
             target = connection.DbConnection as OceanBaseConnection
                 ?? throw new InvalidOperationException("Database namespace management requires an OceanBaseConnector connection.");
             if (target.State != ConnectionState.Closed)
                 throw new InvalidOperationException("Close the target connection before database namespace management.");
             scope = extension.SchemaManagementScope!;
+            if (!string.Equals(target.Database, scope, StringComparison.Ordinal))
+                throw new InvalidOperationException("The configured database does not match the declared database management scope. No DDL was executed.");
+            if (extension.ManagementConnectionFactory is { } factory)
+                return CreateManagementConnection(factory, target);
+            if (extension.Connection is not null || string.IsNullOrWhiteSpace(connection.ConnectionString))
+                throw new NotSupportedException("Database namespace management requires a configured connection string or an explicit management connection factory.");
             if (connection is not OceanBaseRelationalConnection provider || !provider.IsProviderCreatedConnection(target)
                 || target.AddressResolver is not null || target.CredentialProvider is not null
                 || target.ClientCertificate is not null || target.RemoteCertificateValidationCallback is not null)
@@ -43,6 +47,35 @@ namespace OceanBase.EntityFrameworkCore.Storage
             var managementOptions = new DbContextOptionsBuilder((DbContextOptions)options).UseOceanBase(builder.ConnectionString, _mode).Options;
             return new OceanBaseRelationalConnection(connectionDependencies with { ContextOptions = managementOptions })
                 { CommandTimeout = connection.CommandTimeout };
+        }
+
+        private OceanBaseRelationalConnection CreateManagementConnection(Func<OceanBaseConnection> factory, OceanBaseConnection target)
+        {
+            if (connection is OceanBaseRelationalConnection provider)
+                provider.ValidateConnectionString(target.ConnectionString);
+            var management = factory() ?? throw new InvalidOperationException("The management connection factory returned null.");
+            // A mistaken factory must never transfer ownership of the application's target connection.
+            if (ReferenceEquals(management, target))
+                throw new InvalidOperationException("The management connection must be independent of the target connection.");
+            try
+            {
+                if (management.State != ConnectionState.Closed)
+                    throw new InvalidOperationException("The management connection factory must return a closed connection.");
+                if (_mode == OceanBaseCompatibilityMode.MySql && management.Database.Length != 0)
+                    throw new InvalidOperationException("The MySQL management connection must not select a database.");
+                var extension = options.FindExtension<Internal.OceanBaseOptionsExtension>()!
+                    .WithConnection(management, owned: true);
+                var managementOptions = new DbContextOptionsBuilder((DbContextOptions)options);
+                ((IDbContextOptionsBuilderInfrastructure)managementOptions).AddOrUpdateExtension(extension);
+                return new OceanBaseRelationalConnection(connectionDependencies with { ContextOptions = managementOptions.Options })
+                    { CommandTimeout = connection.CommandTimeout };
+            }
+            catch (Exception error)
+            {
+                try { management.Dispose(); }
+                catch (Exception cleanup) { error.Data["OceanBase.DatabaseManagementCleanupError"] = cleanup; }
+                throw;
+            }
         }
 
         private RawSqlCommand NamespaceProbe(string scope)

@@ -907,11 +907,11 @@ Reject known system databases (mysql, oceanbase, sys, information_schema, perfor
 Oracle user/schema creation/deletion needs its own management/authentication contract and remains
 unimplemented by this slice; this is not evidence of a connector or deployed-server defect.
 
-Before any management open, require exact ordinal agreement between the connection's configured
+Without an explicit management factory, before any management open, require exact ordinal agreement between the connection's configured
 database and declared name, a configured connection string, a closed target native connection and no
 current/enlisted/ambient transaction. Supplied/custom native connections are outside this initial
 namespace profile, because their credential/provider configuration cannot be cloned through the
-currently consumed public API. The future explicit management-connection profile remains local work.
+currently consumed public API. The explicit factory profile below supplies these independently.
 Verify provider-created native connection identity and canonical configuration against EF's active
 connection string (including credentials and the enforced mode), and reject native routing, credential
 or TLS hooks before management opens. Runtime SetDbConnection is a supplied connection; EF's
@@ -938,6 +938,34 @@ manual cleanup. DDL is non-atomic and is not retried: a later table failure may 
 partial tables, with no automatic DROP rollback. Concurrent creation/deletion is not serialized.
 Local tests and packaged consumers prove client control flow only; native privileges, selected-server
 syntax, database-name rules/case, sessions and pool invalidation still require declared live evidence.
+
+### Explicit management connection factory (Batch7e / SCH-02 / SCH-03)
+
+`UseOceanBaseManagementConnection(Func<OceanBaseConnection>)` is independent of namespace ownership.
+It never opens or requests credentials during options configuration, model creation, ordinary queries,
+create-script generation or existing-schema-only table creation. Options clones retain the delegate;
+service-provider identity/debug/log fragments never include it. A second context can supply a different
+factory while reusing the same provider services. Enabling table-only management revokes database
+ownership without losing the factory setting.
+
+The factory supplies a fresh, closed connection whose credentials/routing/TLS settings are authoritative
+for administration. The application must select the same tenant as its owned target, with sufficient
+privileges. Different user names, endpoints and callbacks do not provide a generally verifiable tenant
+identity; the provider never claims to prove this equivalence. MySQL management connections must not
+select a database. Supplied targets and target hooks are supported without cloning them. Exact target
+database scope, closed state, selected compatibility mode, no caller/enlisted/ambient transaction and
+prevalidated model still apply before requesting a management connection.
+
+Wrap the exact returned native instance using EF's `WithConnection(connection, owned: true)` so ordinary
+connection/command diagnostics and interceptors continue to work and sync/async disposal is provider-owned.
+Use the current runtime command timeout and operation cancellation token. Never modify or dispose the
+target when a factory mistakenly returns it. Null, opened, mode-conflicting and database-selected results
+reject before any command; dispose independent invalid results and attach any disposal failure to the
+original validation error. Factory exceptions retain identity. Existing command/open/disposal error and
+pool invalidation policies remain unchanged. There is no automatic retry or distributed DDL transaction.
+
+This supplies the independently privileged connection required by future Oracle CREATE/DROP USER;
+Oracle namespace lifecycle and password-DDL logging contracts are not implemented by Batch7e.
 
 ### EnsureCreated seeding callbacks (SCH-02 / DEF-09)
 

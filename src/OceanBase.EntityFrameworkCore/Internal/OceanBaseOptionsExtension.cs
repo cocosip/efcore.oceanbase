@@ -12,6 +12,7 @@ using OceanBase.EntityFrameworkCore.Storage;
 using OceanBase.EntityFrameworkCore.Metadata.Conventions;
 using OceanBase.EntityFrameworkCore.Query;
 using OceanBase.EntityFrameworkCore.Update;
+using OceanBaseConnector;
 
 namespace OceanBase.EntityFrameworkCore.Internal
 {
@@ -52,11 +53,19 @@ namespace OceanBase.EntityFrameworkCore.Internal
             CompatibilityMode = copyFrom.CompatibilityMode;
             SchemaManagementScope = copyFrom.SchemaManagementScope;
             DatabaseManagementEnabled = copyFrom.DatabaseManagementEnabled;
+            ManagementConnectionFactory = copyFrom.ManagementConnectionFactory;
         }
 
         public OceanBaseCompatibilityMode CompatibilityMode { get; private set; }
         public string? SchemaManagementScope { get; private set; }
         public bool DatabaseManagementEnabled { get; private set; }
+        public Func<OceanBaseConnection>? ManagementConnectionFactory { get; private set; }
+
+        public OceanBaseOptionsExtension WithManagementConnectionFactory(Func<OceanBaseConnection> factory)
+        {
+            ArgumentNullException.ThrowIfNull(factory);
+            return new OceanBaseOptionsExtension(this) { ManagementConnectionFactory = factory };
+        }
 
         public OceanBaseOptionsExtension WithSchemaManagementScope(string scope)
         {

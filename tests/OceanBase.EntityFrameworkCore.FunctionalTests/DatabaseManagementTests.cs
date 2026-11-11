@@ -17,6 +17,275 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
     {
         [Theory]
         [InlineData(false, false)]
+        [InlineData(true, false)]
+        [InlineData(false, true)]
+        [InlineData(true, true)]
+        public async Task Explicit_management_factory_preserves_native_hooks_and_owns_only_the_management_handle(bool async, bool supplied)
+        {
+            var capture = new Capture { NamespaceExists = true };
+            using var target = new OceanBaseConnection("Server=offline;Database=owned;User Id=application");
+            var hooks = new NativeHooks();
+            OceanBaseConnection? management = null;
+            var calls = 0;
+            await using var context = Create(capture, configure: builder =>
+            {
+                if (supplied) builder.UseOceanBase(target, OceanBase.EntityFrameworkCore.OceanBaseCompatibilityMode.MySql);
+                ConfigureManagement(builder, () =>
+                {
+                    calls++;
+                    return management = new OceanBaseConnection("Server=offline;User Id=administrator;Password=synthetic")
+                    {
+                        AddressResolver = hooks,
+                        CredentialProvider = hooks,
+                        RemoteCertificateValidationCallback = (_, _, _, _) => false
+                    };
+                });
+            });
+            var actualTarget = (OceanBaseConnection)context.Database.GetDbConnection();
+            actualTarget.AddressResolver = hooks;
+            context.Database.SetCommandTimeout(23);
+            Assert.True(async ? await context.Database.EnsureDeletedAsync() : context.Database.EnsureDeleted());
+            Assert.Equal(1, calls);
+            Assert.NotNull(management);
+            Assert.All(capture.Commands, command =>
+            {
+                Assert.Same(management, command.Connection);
+                Assert.Equal(23, command.Timeout);
+                Assert.Equal(async, command.Async);
+            });
+            Assert.Equal("administrator", new OceanBaseConnectionStringBuilder(management.ConnectionString).UserId);
+            Assert.Same(hooks, management.AddressResolver);
+            Assert.Same(hooks, management.CredentialProvider);
+            Assert.NotNull(management.RemoteCertificateValidationCallback);
+            Assert.Same(management, Assert.Single(capture.Opens.Distinct()));
+            Assert.Same(management, Assert.Single(capture.Disposals));
+            Assert.Equal("owned", actualTarget.Database);
+            Assert.Same(hooks, actualTarget.AddressResolver);
+        }
+
+        [Theory]
+        [InlineData(false, "null")]
+        [InlineData(true, "null")]
+        [InlineData(false, "target")]
+        [InlineData(true, "target")]
+        [InlineData(false, "mode")]
+        [InlineData(true, "mode")]
+        [InlineData(false, "database")]
+        [InlineData(true, "database")]
+        public async Task Invalid_factory_results_reject_before_open_and_only_independent_results_are_disposed(bool async, string profile)
+        {
+            var capture = new Capture();
+            OceanBaseConnection? target = null;
+            OceanBaseConnection? candidate = null;
+            await using var context = Create(capture, configure: builder => builder.UseOceanBaseManagementConnection(() =>
+                candidate = profile switch
+                {
+                    "null" => null!,
+                    "target" => target!,
+                    "mode" => new OceanBaseConnection("Server=offline;ExpectedMode=Oracle"),
+                    _ => new OceanBaseConnection("Server=offline;Database=owned")
+                }));
+            target = (OceanBaseConnection)context.Database.GetDbConnection();
+            if (async) await Assert.ThrowsAsync<InvalidOperationException>(() => context.Database.EnsureDeletedAsync());
+            else Assert.Throws<InvalidOperationException>(() => context.Database.EnsureDeleted());
+            Assert.Empty(capture.Opens);
+            Assert.Empty(capture.Commands);
+            using var stillUsable = target.CreateCommand();
+            if (profile is "mode" or "database")
+                Assert.Throws<ObjectDisposedException>(() => candidate!.CreateCommand());
+        }
+
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public async Task Each_operation_requests_and_disposes_its_own_management_connection_without_disposing_the_supplied_target(bool async)
+        {
+            var capture = new Capture { NamespaceExists = true };
+            using var target = new OceanBaseConnection("Server=offline;Database=owned");
+            var candidates = new List<OceanBaseConnection>();
+            await using (var context = Create(capture, configure: builder =>
+                builder.UseOceanBase(target, OceanBase.EntityFrameworkCore.OceanBaseCompatibilityMode.MySql)
+                    .UseOceanBaseManagementConnection(() =>
+                    {
+                        var candidate = new OceanBaseConnection("Server=offline;User Id=administrator");
+                        candidates.Add(candidate);
+                        return candidate;
+                    })))
+            {
+                Assert.True(async ? await context.Database.EnsureDeletedAsync() : context.Database.EnsureDeleted());
+                Assert.False(async ? await context.Database.EnsureDeletedAsync() : context.Database.EnsureDeleted());
+            }
+            Assert.Equal(2, candidates.Count);
+            Assert.NotSame(candidates[0], candidates[1]);
+            Assert.Equal(candidates, capture.Disposals.Cast<OceanBaseConnection>());
+            Assert.All(candidates, candidate => Assert.Throws<ObjectDisposedException>(() => candidate.CreateCommand()));
+            using var stillUsable = target.CreateCommand();
+        }
+
+        [Theory]
+        [InlineData(false, "table-only")]
+        [InlineData(true, "table-only")]
+        [InlineData(false, "oracle")]
+        [InlineData(true, "oracle")]
+        [InlineData(false, "mismatch")]
+        [InlineData(true, "mismatch")]
+        [InlineData(false, "cross-scope")]
+        [InlineData(true, "cross-scope")]
+        public async Task Invalid_ownership_or_model_rejects_before_requesting_privileged_credentials(bool async, string profile)
+        {
+            var capture = new Capture();
+            var calls = 0;
+            await using var context = Create(capture, profile, configure: builder => builder.UseOceanBaseManagementConnection(() =>
+            {
+                calls++;
+                throw new InvalidOperationException("Must not request management credentials.");
+            }));
+            var failure = await Record.ExceptionAsync(async () =>
+            {
+                if (profile == "cross-scope")
+                {
+                    if (async) await context.Database.EnsureCreatedAsync(); else context.Database.EnsureCreated();
+                }
+                else if (async) await context.Database.EnsureDeletedAsync(); else context.Database.EnsureDeleted();
+            });
+            Assert.NotNull(failure);
+            Assert.Equal(0, calls);
+            Assert.Empty(capture.Opens);
+            Assert.Empty(capture.Commands);
+        }
+
+        [Theory]
+        [InlineData(false, "factory")]
+        [InlineData(true, "factory")]
+        [InlineData(false, "open")]
+        [InlineData(true, "open")]
+        [InlineData(false, "command")]
+        [InlineData(true, "command")]
+        [InlineData(false, "cleanup")]
+        [InlineData(true, "cleanup")]
+        public async Task Factory_open_command_and_cleanup_failures_preserve_the_primary_error(bool async, string stage)
+        {
+            var failure = new InvalidOperationException("synthetic primary failure");
+            var cleanup = new InvalidOperationException("synthetic cleanup failure");
+            var capture = new Capture { NamespaceExists = true, CleanupFailure = cleanup };
+            if (stage == "open") capture.OpenFailure = failure;
+            if (stage == "command") { capture.Failure = failure; capture.FailPrefix = "DROP DATABASE"; }
+            OceanBaseConnection? candidate = null;
+            await using var context = Create(capture, configure: builder => builder.UseOceanBaseManagementConnection(() =>
+            {
+                if (stage == "factory") throw failure;
+                return candidate = new OceanBaseConnection("Server=offline;User Id=administrator");
+            }));
+            var actual = async ? await Assert.ThrowsAsync<InvalidOperationException>(() => context.Database.EnsureDeletedAsync())
+                : Assert.Throws<InvalidOperationException>(() => context.Database.EnsureDeleted());
+            Assert.Same(stage == "cleanup" ? cleanup : failure, actual);
+            if (stage is "open" or "command") Assert.Same(cleanup, failure.Data["OceanBase.DatabaseManagementCleanupError"]);
+            if (candidate is not null)
+            {
+                Assert.Same(candidate, Assert.Single(capture.Disposals));
+                Assert.Throws<ObjectDisposedException>(() => candidate.CreateCommand());
+            }
+            else Assert.Empty(capture.Opens);
+        }
+
+        [Fact]
+        public async Task Precancelled_factory_operations_never_request_credentials_and_inflight_cancellation_keeps_ownership()
+        {
+            var capture = new Capture { NamespaceExists = true };
+            var calls = 0;
+            await using var context = Create(capture, configure: builder => builder.UseOceanBaseManagementConnection(() =>
+            {
+                calls++;
+                return new OceanBaseConnection("Server=offline");
+            }));
+            using var source = new CancellationTokenSource();
+            source.Cancel();
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => context.Database.EnsureDeletedAsync(source.Token));
+            Assert.Equal(0, calls);
+            using var running = new CancellationTokenSource();
+            var failure = new OperationCanceledException(running.Token);
+            capture.Failure = failure;
+            capture.FailPrefix = "DROP DATABASE";
+            capture.BeforeFailure = running.Cancel;
+            Assert.Same(failure, await Assert.ThrowsAnyAsync<OperationCanceledException>(() => context.Database.EnsureDeletedAsync(running.Token)));
+            Assert.Equal(1, calls);
+            Assert.Single(capture.Disposals);
+            Assert.All(capture.Commands, command => Assert.Equal(running.Token, command.Token));
+        }
+
+        private static void ConfigureManagement(DbContextOptionsBuilder builder, Func<OceanBaseConnection> factory)
+            => builder.UseOceanBaseManagementConnection(factory);
+
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public async Task Factory_creation_runs_namespace_ddl_before_supplied_target_tables(bool async)
+        {
+            var capture = new Capture();
+            using var target = new OceanBaseConnection("Server=offline;Database=owned");
+            await using var context = Create(capture, configure: builder =>
+                builder.UseOceanBase(target, OceanBase.EntityFrameworkCore.OceanBaseCompatibilityMode.MySql)
+                    .UseOceanBaseManagementConnection(() => new OceanBaseConnection("Server=offline;User Id=administrator")));
+            Assert.True(async ? await context.Database.EnsureCreatedAsync() : context.Database.EnsureCreated());
+            Assert.Equal(4, capture.Commands.Count);
+            Assert.Equal("CREATE DATABASE `owned`", capture.Commands[1].Sql);
+            Assert.NotSame(target, capture.Commands[1].Connection);
+            Assert.Same(target, capture.Commands[2].Connection);
+            Assert.Same(target, capture.Commands[3].Connection);
+            Assert.StartsWith("CREATE TABLE", capture.Commands[3].Sql);
+        }
+
+        [Theory]
+        [InlineData(OceanBase.EntityFrameworkCore.OceanBaseCompatibilityMode.MySql)]
+        [InlineData(OceanBase.EntityFrameworkCore.OceanBaseCompatibilityMode.Oracle)]
+        public async Task Table_only_schema_and_bulk_query_operations_do_not_request_management_credentials(OceanBase.EntityFrameworkCore.OceanBaseCompatibilityMode mode)
+        {
+            var capture = new Capture();
+            var calls = 0;
+            await using var context = Create(capture, "table-only", configure: builder =>
+                builder.UseOceanBase("Server=offline;Database=owned", mode).UseOceanBaseManagementConnection(() =>
+                {
+                    calls++;
+                    throw new InvalidOperationException("Must not request management credentials.");
+                }));
+            Assert.Contains("CREATE TABLE", context.Database.GenerateCreateScript());
+            Assert.True(await context.Database.EnsureCreatedAsync());
+            Assert.Equal(0, await context.Set<Row>().ExecuteDeleteAsync());
+            Assert.Equal(0, calls);
+            var target = context.Database.GetDbConnection();
+            Assert.All(capture.Commands, command => Assert.Same(target, command.Connection));
+        }
+
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public async Task Caller_and_ambient_transactions_reject_before_invoking_the_management_factory(bool async)
+        {
+            var capture = new Capture();
+            var calls = 0;
+            await using var context = Create(capture, configure: builder => builder.UseOceanBaseManagementConnection(() =>
+            {
+                calls++;
+                throw new InvalidOperationException("Must not request management credentials.");
+            }));
+            using (var native = new CallerTransaction(context.Database.GetDbConnection()))
+            {
+                await using var transaction = context.Database.UseTransaction(native)!;
+                if (async) await Assert.ThrowsAsync<NotSupportedException>(() => context.Database.EnsureDeletedAsync());
+                else Assert.Throws<NotSupportedException>(() => context.Database.EnsureDeleted());
+                Assert.Same(transaction, context.Database.CurrentTransaction);
+            }
+            using (var ambient = new System.Transactions.TransactionScope(System.Transactions.TransactionScopeAsyncFlowOption.Enabled))
+            {
+                if (async) await Assert.ThrowsAsync<NotSupportedException>(() => context.Database.EnsureDeletedAsync());
+                else Assert.Throws<NotSupportedException>(() => context.Database.EnsureDeleted());
+            }
+            Assert.Equal(0, calls);
+            Assert.Empty(capture.Commands);
+        }
+
+        [Theory]
+        [InlineData(false, false)]
         [InlineData(false, true)]
         [InlineData(true, false)]
         [InlineData(true, true)]
@@ -418,7 +687,8 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
                 => throw new InvalidOperationException("Must not request credentials.");
         }
 
-        private static TestContext Create(Capture capture, string profile = "ordinary", string scope = "owned", bool empty = false)
+        private static TestContext Create(Capture capture, string profile = "ordinary", string scope = "owned", bool empty = false,
+            Action<DbContextOptionsBuilder<TestContext>>? configure = null)
         {
             var native = new OceanBaseConnectionStringBuilder { Server = "offline", Database = profile == "mismatch" ? "other" : scope };
             var builder = new DbContextOptionsBuilder<TestContext>().UseOceanBase(native.ConnectionString,
@@ -427,6 +697,7 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
             if (profile == "table-only") builder.EnableOceanBaseSchemaManagement(scope);
             else builder.EnableOceanBaseDatabaseManagement(scope);
             if (profile == "supplied") builder.UseOceanBase(new OceanBaseConnection(native.ConnectionString), OceanBase.EntityFrameworkCore.OceanBaseCompatibilityMode.MySql);
+            configure?.Invoke(builder);
             return new TestContext(builder.Options, empty, profile == "cross-scope", profile == "model-data");
         }
 

@@ -52,6 +52,14 @@ so that an undocumented feature is not accidentally advertised.
 
 ## Current evidence and blockers
 
+Latest checkpoint: Batch7e on 2026-11-11; development is paused at the user's request. Explicit owned
+management factories support supplied/custom MySQL targets. Final EF10.0.0 Debug/Release and isolated
+10.0.14 Release each pass3520=1656 unit+994 functional+868 specification+two consumer tests, zero failures/
+skips. Same management-profile-20261111 package passes both modes/patches/content/package-only graphs/
+DLL identity. Independent review has no actionable findings; dedicated already-open factory-result and
+invalid-result-disposal-failure regressions remain absent. Oracle user/schema lifecycle is not implemented.
+This is the latest local evidence; dated checkpoints below remain historical. No live database was executed.
+
 An open row is not automatically waiting for a database. Track the remaining work explicitly:
 
 - **Local implementation or coverage:** remaining collection families/converter projections, wider functions/aggregates,
@@ -124,7 +132,8 @@ Catalog NULL does not prove absence; only known-outcome DROP error1008 makes Ens
 Six new option cases and59 intercepted lifecycle cases cover ownership, runtime configuration divergence,
 custom native hooks, transactions, validation-before-DDL, sync/async cancellation and error/cleanup paths.
 Full Debug/Release/isolated14 each2461=1644+815+2 pass, no failures/skips; source review closed wrong-server
-management risk. Oracle namespace and supplied/custom management profiles remain local follow-up work;
+management risk. Batch7e adds an explicit owned management factory for supplied/custom MySQL targets;
+Oracle namespace provisioning remains local follow-up work;
 native privileges, SQL and pool/session effects remain live gates. Overall SCH rows remain open.
 The same database-management-r2 package passes both modes on EF10.0.0/10.0.14, content, package-only
 graphs and DLL identity. Previous-package rejection returns handled exit1 without a process crash.
@@ -456,23 +465,24 @@ EnableOceanBaseSchemaManagement's existing-schema table-creation profile are loc
 database/schema externally for that profile and declare its exact case-sensitive name. MySQL additionally has
 EnableOceanBaseDatabaseManagement's explicitly owned namespace profile. EnsureCreated skips populated schemas.
 DDL is not atomic and can leave partial objects; no automatic retry or destructive rollback is attempted.
-Oracle namespace creation/deletion, custom management profiles and live DDL acceptance remain open.
+Explicit management factories support independent credentials/routing/TLS with supplied MySQL targets.
+Oracle namespace creation/deletion and live DDL acceptance remain open.
 Creating an Oracle tenant is never inferred.
 
 | ID | Requirement and acceptance criteria | Priority | MySQL | Oracle | Existing evidence / gap |
 | --- | --- | --- | --- | --- | --- |
 | SCH-01 | DatabaseFacade services resolve; existence checks distinguish absence from authentication, permission and network failures. | Required | In progress | In progress | Scoped creator/read-only probes/error classification and Batch6a shared failed-open rollback exist. Physical cleanup has deterministic double evidence; live absence/authentication/permission/network and cleanup evidence remain open. Schema DDL is separate. |
-| SCH-02 | EnsureCreated/GenerateCreateScript implement schema profile and key generation; existing populated schemas are handled explicitly. | Required | In progress | In progress | Existing-schema tables and explicitly owned MySQL namespace creation are locally implemented. Batch7d adds matching sync/async EnsureCreated seeding, owned target transactions and scope rechecks, including populated/empty-model false results. Positive callback/SaveChanges tests use stateful doubles; namespace coverage verifies the DDL-to-transaction-start boundary only. Oracle provisioning, custom management profiles and native/live DDL/seeding remain open. |
-| SCH-03 | EnsureDeleted has an explicit ownership/deletion boundary, preserves tenant objects outside that boundary and fails clearly outside supported profile. | Required | In progress | Planned | Batch7c explicitly owns the entire named MySQL database, including non-model objects; independent verified management connection, quoted DROP, known-outcome error1008 absence and local failure/cleanup/cancellation coverage exist. Oracle namespace deletion and custom management profiles remain unimplemented; actual isolated-fixture deletion, privileges and pool/session effects need live proof. |
+| SCH-02 | EnsureCreated/GenerateCreateScript implement schema profile and key generation; existing populated schemas are handled explicitly. | Required | In progress | In progress | Existing-schema tables and explicitly owned MySQL namespace creation are locally implemented. Batch7d adds matching sync/async EnsureCreated seeding, owned target transactions and scope rechecks, including populated/empty-model false results. Batch7e supports explicit management factories for supplied/custom MySQL targets. Positive callback/SaveChanges tests use stateful doubles; namespace coverage verifies the DDL-to-transaction-start boundary only. Oracle provisioning and native/live DDL/seeding remain open. |
+| SCH-03 | EnsureDeleted has an explicit ownership/deletion boundary, preserves tenant objects outside that boundary and fails clearly outside supported profile. | Required | In progress | Planned | Batch7c explicitly owns the entire named MySQL database, including non-model objects; independent management connection, quoted DROP, known-outcome error1008 absence and local failure/cleanup/cancellation coverage exist. Batch7e adds explicit management factories with owned disposal, separate credentials/hooks and supplied-target preservation. The factory explicitly selects the administration tenant; equivalence is the application's responsibility. Oracle namespace deletion remains unimplemented; actual isolated-fixture deletion, privileges and pool/session effects need live proof. |
 
 ## Packages, compatibility and release evidence
 
 | ID | Requirement and acceptance criteria | Priority | MySQL | Oracle | Existing evidence / gap |
 | --- | --- | --- | --- | --- | --- |
 | PKG-01 | Build net10.0 assets against published OceanBaseConnector 0.2.0 with warnings as errors. | Required | Done | Done | Current solution test command builds assets; not a package-content assertion. |
-| PKG-02 | Packed nuspec uses OceanBase.EntityFrameworkCore and EF ranges [10.0.0,11.0.0). | Required | Done | Done | Verify-Package.ps1 passes bulk-snapshot-20261111 identity/net10.0/README/ranges; prior negative probes reject as expected. Rerun on every release pack; runtime/live gates are separate. |
-| PKG-03 | Isolated packed consumer restores/executes provider API without project/local connector references. | Required | Done | Done | Same bulk-snapshot nupkg passes both modes/selected patches, including MySQL snapshots/Oracle correlated bulk SQL and prior schema/seeding/transaction/recovery smoke; package-only graph and DLL identity inspected; rerun after changes. |
-| PKG-04 | Minimum EF10 and selected later available EF10 patch restore/build/test without pinning the EF patch in the provider package; EF11 cannot satisfy dependencies. | Required | Done | Done | Final source suites pass3480 at10.0.0/10.0.14; same baseline-built bulk-snapshot nupkg passes both consumers, including prior private-field runtime probes. Ranges rechecked; prior parser rejects11.0.0. Future patches need fresh private-contract evidence. |
+| PKG-02 | Packed nuspec uses OceanBase.EntityFrameworkCore and EF ranges [10.0.0,11.0.0). | Required | Done | Done | Verify-Package.ps1 passes management-profile-20261111 identity/net10.0/README/ranges; prior negative probes remain historical evidence. Rerun on every release pack; runtime/live gates are separate. |
+| PKG-03 | Isolated packed consumer restores/executes provider API without project/local connector references. | Required | Done | Done | Same management-profile nupkg passes both modes/selected patches, including explicit MySQL management factories, MySQL snapshots/Oracle correlated bulk SQL and prior schema/seeding/transaction/recovery smoke; package-only graph and DLL identity inspected; rerun after changes. |
+| PKG-04 | Minimum EF10 and selected later available EF10 patch restore/build/test without pinning the EF patch in the provider package; EF11 cannot satisfy dependencies. | Required | Done | Done | Final source suites pass3520 at10.0.0/10.0.14; same baseline-built management-profile nupkg passes both consumers, including prior private-field runtime probes. Ranges rechecked; prior parser rejects11.0.0. Future patches need fresh private-contract evidence. |
 | TST-01 | Selected EF relational specification classes pass; exclusions map to checklist IDs and limitations. | Required | In progress | In progress | SpecificationTests now runs full inherited generic relational OneToMany/ManyToOne/OneToOne/ManyToMany/Inheritance/OwnedTypes families against real provider services in both modes:866 inherited+two guard cases pass at EF10.0.0/10.0.14, zero skips/exclusions. Other model families and query/write/runtime specification fixtures remain open. Selected metadata success does not establish deferred runtime features. |
 | TST-02 | Live core query/write/transaction/schema/scalar suites pass in at least one declared supported environment per mode. | Required | Planned | Planned | User confirms database addresses were already supplied (2026-11-11). The provider live fixture/configuration integration is still absent, and no live provider execution is recorded. Reuse previously supplied access; keep credentials outside the repository and establish the authorized schema/cleanup scope before destructive tests. Do not classify this missing implementation as missing user access. |
 | REL-01 | Support notes record server/connector/runtime/EF versions, tenant mode, direct/proxy endpoint, transport/options without credentials. | Required | Planned | Planned | Release evidence record missing. |

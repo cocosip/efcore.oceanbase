@@ -9,6 +9,9 @@ public APIs and per-mode mappings/SQL. Separate local implementation evidence fr
 **Spec:** efcore-10-feature-checklist.md, efcore-10-technical-baseline.md, efcore-10-query-update-design.md.
 **Tech Stack:** C#, .NET 10, EF Core/Relational [10.0.0,11.0.0), xUnit, OceanBaseConnector 0.2.0.
 
+**Paused:** 2026-11-11 at the user's request. Batch7e is saved below; resume with the Oracle lifecycle
+contract in the progress handoff after the user requests further development. The full goal remains incomplete.
+
 ## Global constraints
 
 - Develop and commit on efcore/10.0. Do not push, publish, tag or synchronize other branches implicitly.
@@ -219,6 +222,29 @@ do not infer tenant creation or attribute this unimplemented profile to connecto
   Final documentation/consumer review approves after explicit packaged CREATE TABLE/INDEX assertions
   and a table-only namespace note correction. Same unchanged package reruns pass both patches/modes;
   provider DLL identity remains unchanged. Local slice is ready for commit; overall goal stays active.
+
+## Batch7e brief: explicit management connections (Oracle lifecycle prerequisite)
+
+- Add typed/untyped `UseOceanBaseManagementConnection(Func<OceanBaseConnection>)` options, independent of
+  namespace ownership. A factory alone never authorizes creation/deletion and is never invoked for queries,
+  table-only operations, invalid models/scopes, active caller transactions or pre-cancelled calls.
+- Each namespace operation requests a fresh, closed, independent native connection. The provider owns its
+  disposal; returning the target connection rejects without disposing it. Factory exceptions retain identity.
+  Invalid independent results are disposed; cleanup errors attach to the original validation error.
+- The factory explicitly selects the privileged endpoint/tenant, credentials and routing/TLS policy; the
+  application must point it at the same tenant as the owned target. Do not clone or erase native callbacks.
+  Validate native mode, reject a selected MySQL database, and retain exact target scope checks. The existing
+  provider-created string-only fallback retains all prior configuration-equivalence/hook guards.
+- Reuse normal EF connection/command diagnostics, interceptors, timeout and cancellation for this profile.
+  Preserve primary operation errors and owned disposal on success/open/command failures. No DDL retry.
+- Keep factories/credentials out of service-provider cache identity, debug information and option log fragments.
+  Copy factories through relational option clones without invoking them or granting ownership implicitly.
+- Scope: options/public extensions, database creator management construction, unit/functional tests, manual
+  packed consumer and English support/evidence docs. No native SQL/password DDL or new dependency is needed.
+- Verify missing-API RED, lifecycle/invalid-result/ownership/error/cancellation behavior, full Debug/Release/
+  isolated EF10.0.14 and same-package consumers at both patches/modes; independent review and local commit.
+  Oracle user/schema provisioning/deletion is the next implementation, not completed by this prerequisite.
+  No real database, standalone live program, EF8/9, push or publication.
 
 ## Batch7d brief: EnsureCreated seeding callbacks
 
@@ -988,6 +1014,19 @@ returns empty on NULL in MySQL; Oracle represents empty as NULL under its existi
 
 ## Execution record
 
+- Batch7e final after82dd469: typed/untyped explicit management factories support independent MySQL
+  administration credentials/hooks and supplied targets without cloning native private state. Exact native
+  instance is EF-owned; mistaken target returns preserve target ownership. Existing scope/transaction/
+  model/default-path guards remain. Options clones retain factories without service identity/log exposure.
+  Four missing-API RED cases precede implementation. Final Debug/Release/isolated14 each3520=
+  1656+994+868+2 pass, zero failures/skips; focused management96/options15 pass. Independent review
+  reports no actionable findings, with dedicated already-open/invalid-candidate-disposal-failure cases
+  still absent. Same management-profile-20261111 package passes both modes/patches/content/graphs/
+  DLL identity (0440D389798E84374260CF8A030F2A20975CBC2C4B34D6E6E0BA9C63018A9E4A).
+  Evidence: artifacts/management-profile-*.log and verify-management-profile-package.ps1.
+  Oracle namespace lifecycle/password-DDL contract remains the next implementation. No live evidence,
+  demonstrated connector/server defect, EF8/9, standalone live program, push or publication. Paused;
+  finish the local checkpoint commit and await the user's resume request.
 - Batch9c final aftere1ef05e: MySQL cycles/dependent joins and derived joined sources use complete
   encoded setter/key projections under NO_MERGE, joined by every original physical key to the real
   target. Single-table acyclic ordering remains. Both modes accept normalized left joins directly.

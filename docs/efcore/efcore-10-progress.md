@@ -1,8 +1,9 @@
 # EF Core 10 Development Progress
 
-## Active local development: 2026-11-10
+## Paused checkpoint: 2026-11-11
 
-Development resumed at the user's request on efcore/10.0, now the active EF10 development and packaging branch.
+Development resumed on 2026-11-10 on efcore/10.0 and is paused at the user's request on 2026-11-11.
+Finish this checkpoint locally; do not resume feature development until the user requests it.
 The provider is not release-ready. The [feature checklist](efcore-10-feature-checklist.md) remains the
 acceptance authority; this document records the handoff rather than defining a different completion target.
 
@@ -10,6 +11,69 @@ The current user goal is to finish all locally developable EF10 functionality, w
 each small group. Real database integration/tests and EF8/EF9 adaptation are explicitly postponed. The
 [local development plan](efcore-10-local-development-plan.md) tracks the full remaining inventory, including
 an audit of locally feasible deferred families. Finishing one batch does not finish the overall goal.
+
+### Explicit management connection checkpoint (2026-11-11)
+
+Batch7e follows `82dd469` and adds typed/untyped
+`UseOceanBaseManagementConnection(Func<OceanBaseConnection>)`. This is real namespace-management
+functionality: MySQL operations can use independent administration credentials, routing and TLS hooks,
+including when the application supplies its own target connection. The exact factory instance is wrapped
+with EF `WithConnection(connection, owned: true)` and disposed by the provider. The factory must return
+a fresh closed independent native connection with no selected MySQL database. Returning the target
+rejects without disposing it; invalid independent candidates are disposed. The application's factory
+authoritatively chooses the administration tenant; the application must select the same tenant as the
+owned target. Callback/account names do not establish tenant equivalence.
+
+Explicit database ownership, exact target scope, transaction rejection and prevalidated table plans
+remain mandatory. A factory alone grants no ownership and is not invoked for ordinary queries,
+existing-schema-only table creation, invalid ownership/models or pre-cancelled operations. The original
+string-only fallback keeps its native identity/configuration/hook guards. Options clone the delegate
+without putting it in service-provider identity, debug information or option logs. Normal EF diagnostics,
+interceptors, runtime timeout, cancellation, error identity and owned disposal remain in use.
+
+Four initial sync/async supplied/provider-created cases fail on the missing public API before implementation.
+Final full EF10.0.0 Debug and Release and isolated EF10.0.14 Release each pass **3520** tests:
+1656 unit + 994 intercepted functional + 868 specification + two project-consumer cases, zero failures/skips.
+This adds three unit and 37 functional cases. Focused management tests pass96 and options tests pass15.
+Intermediate runs caught two fixture assumptions (suppressed opens can repeat, and typed options require
+the matching context); these were corrected before all full runs. Read-only independent review reports
+no actionable findings. Two coverage limits remain explicit: already-open factory candidates and disposal
+failure while rejecting an invalid independent candidate have no dedicated regression case yet.
+
+The same baseline-built `10.0.0-management-profile-20261111` package passes manual consumers in both
+modes at EF10.0.0 and 10.0.14, package contents, package-only graphs and Release/package/consumer identity:
+SHA-256 `0440D389798E84374260CF8A030F2A20975CBC2C4B34D6E6E0BA9C63018A9E4A`.
+The new factory smoke verifies supplied-target preservation and management disposal in MySQL; Oracle
+still verifies its existing schema profile and unsupported namespace path. PackageConsumer remains outside
+CI, catches errors and exits normally. No intentional crash or old-package negative execution in this slice.
+Evidence: `artifacts/management-profile-{red,debug,release,patch,package}.log`, focused/options/functional
+logs and `artifacts/verify-management-profile-package.ps1`. Baseline assets remain EF10.0.0.
+
+### Resume here: Oracle namespace lifecycle and remaining EF10 work
+
+1. Recheck branch/worktree and saved commit before editing. Batch7e management factories are implemented;
+   do not repeat them or the completed bulk-update work. Current source/test/package evidence is above;
+   older sections below are historical checkpoints, not a new implementation backlog.
+2. Implement Oracle user/schema creation/deletion using the explicit independent management connection.
+   This is **not implemented** by Batch7e. Decide the credential-DDL logging contract before coding:
+   `CREATE USER ... IDENTIFIED BY ...` contains a password in SQL, so ordinary EF command logging cannot
+   receive that text. Do not assume password binds or ordinary identifier escaping handle passwords.
+   Establish exact catalog/absence error classification, target schema/login semantics, required grants,
+   scoped CASCADE deletion, pool effects and primary-error/cancellation/cleanup behavior.
+3. Reuse pinned public V4.3.5 docs at commit `2a5ae3a23a51729d065cec716508eb26cb064106`:
+   cached create/drop-user docs and `docs-tree.json` are under `artifacts/bulk-oracle-source/`.
+   Verify public Connector0.2.0 behavior from its package (ilspycmd is available); the adjacent local
+   connector source has not been established as identical to that package. No new driver/server defect
+   has been demonstrated. Research is incomplete, not an external access blocker.
+4. Continue the full checklist: remaining mapping/converter/collection/function combinations, wider
+   model/filter/materialization contracts, advanced bulk variants, required runtime/specification coverage,
+   then the documented deferred-family feasibility audit. Deferred labels do not complete the local goal.
+   Migrations/tooling, JSON/complex types, advanced inheritance/splitting, split queries and retries/
+   ambient/distributed transactions remain unimplemented or incomplete as listed in the checklist.
+5. Real database addresses were already supplied. Missing live configuration/fixtures are implementation
+   work, not missing user access. Keep the comprehensive standalone live-test program, live execution and
+   EF8/EF9 postponed until the user resumes those phases. Do not infer driver/server support or defects
+   from intercepted tests. No push, branch synchronization, tags or NuGet publication occurred.
 
 ### MySQL original-value snapshot checkpoint (2026-11-11)
 
@@ -1196,7 +1260,10 @@ unit run initially failed 29/37 cases before implementation. Removing text write
 pipeline length failures; restoring it passes the complete suite. Initial NuGet restore failed under the sandbox's
 TLS credentials; restore and verification succeeded in the normal user environment without dependency edits.
 
-## Work remaining
+## Historical scalar-checkpoint work remaining
+
+This older list predates the later implementations above. Use the paused checkpoint and current feature
+checklist to decide what still needs code; do not repeat completed work based on this historical list.
 
 Tasks 3, 4 and 5 remain incomplete. Required open work includes:
 
@@ -1213,7 +1280,9 @@ Tasks 3, 4 and 5 remain incomplete. Required open work includes:
 Migrations, reverse engineering and the other explicitly deferred checklist items retain their existing scope.
 Do not turn required gaps into deferred features merely to obtain a passing release checklist.
 
-## Next development point
+## Historical scalar-checkpoint next development point
+
+Superseded by "Resume here" at the beginning of this document.
 
 The local string declaration/write slice is implemented; do not repeat it. The character-count check is deliberately
 independent of unknown connection/column encodings and cannot prove BYTE/LOB capacity. Existing conservative

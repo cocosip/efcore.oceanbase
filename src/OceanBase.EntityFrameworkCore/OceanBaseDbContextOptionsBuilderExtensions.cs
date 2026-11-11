@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.Extensions.DependencyInjection;
 using OceanBase.EntityFrameworkCore;
 using OceanBase.EntityFrameworkCore.Internal;
+using OceanBaseConnection = OceanBaseConnector.OceanBaseConnection;
 
 namespace Microsoft.EntityFrameworkCore
 {
@@ -91,8 +92,9 @@ namespace Microsoft.EntityFrameworkCore
 
         /// <summary>
         /// Enables creation and deletion of the entire named MySQL database, including non-model objects.
-        /// Requires a closed provider-created connection configured by string for that exact database,
-        /// without native routing, credential or TLS hooks. Oracle namespace management is not implemented.
+        /// Requires a closed target connection for that exact database. UseOceanBaseManagementConnection
+        /// supplies explicit administration credentials/routing; without it, only an unchanged provider-created
+        /// string-configured connection without native hooks is supported. Oracle namespace management is not implemented.
         /// </summary>
         public static DbContextOptionsBuilder EnableOceanBaseDatabaseManagement(
             this DbContextOptionsBuilder optionsBuilder, string databaseName)
@@ -109,6 +111,28 @@ namespace Microsoft.EntityFrameworkCore
             where TContext : DbContext
             => (DbContextOptionsBuilder<TContext>)(object)((DbContextOptionsBuilder)optionsBuilder)
                 .EnableOceanBaseDatabaseManagement(databaseName);
+
+        /// <summary>
+        /// Supplies a fresh, closed management connection for each explicitly enabled namespace operation.
+        /// The provider owns and disposes it. The factory must select the same tenant as the target, with
+        /// appropriate privileges, routing and TLS policy; MySQL must have no selected database.
+        /// This does not enable namespace creation/deletion and is not used by ordinary queries or table creation.
+        /// </summary>
+        public static DbContextOptionsBuilder UseOceanBaseManagementConnection(
+            this DbContextOptionsBuilder optionsBuilder, Func<OceanBaseConnection> connectionFactory)
+        {
+            ArgumentNullException.ThrowIfNull(optionsBuilder);
+            var extension = GetOrCreateExtension(optionsBuilder).WithManagementConnectionFactory(connectionFactory);
+            ((IDbContextOptionsBuilderInfrastructure)optionsBuilder).AddOrUpdateExtension(extension);
+            return optionsBuilder;
+        }
+
+        /// <summary>Supplies a provider-owned, independent connection for explicit namespace management.</summary>
+        public static DbContextOptionsBuilder<TContext> UseOceanBaseManagementConnection<TContext>(
+            this DbContextOptionsBuilder<TContext> optionsBuilder, Func<OceanBaseConnection> connectionFactory)
+            where TContext : DbContext
+            => (DbContextOptionsBuilder<TContext>)(object)((DbContextOptionsBuilder)optionsBuilder)
+                .UseOceanBaseManagementConnection(connectionFactory);
 
         private static void ConfigureWarnings(DbContextOptionsBuilder optionsBuilder)
         {

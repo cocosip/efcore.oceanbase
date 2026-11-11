@@ -46,6 +46,42 @@ namespace PackageConsumer
             }
             Console.WriteLine($"{mode}: packed provider intercepted sync/async existing-schema creation passed.");
             RunDatabaseManagement(mode);
+            if (mode == OceanBaseCompatibilityMode.MySql) RunManagementFactory();
+        }
+
+        private static void RunManagementFactory()
+        {
+            foreach (var async in new[] { false, true })
+            {
+                var capture = new Capture { NamespaceExists = true };
+                using var target = new OceanBaseConnector.OceanBaseConnection("Server=offline;Database=owned");
+                var builder = new DbContextOptionsBuilder<SchemaContext>().UseOceanBase(target, OceanBaseCompatibilityMode.MySql)
+                    .EnableOceanBaseDatabaseManagement("owned").AddInterceptors(capture);
+                OceanBaseConnector.OceanBaseConnection? management = null;
+                Func<OceanBaseConnector.OceanBaseConnection> factory = () => management = new("Server=offline;User Id=administrator")
+                    { RemoteCertificateValidationCallback = (_, _, _, _) => false };
+                var api = typeof(OceanBaseDbContextOptionsBuilderExtensions).GetMethod("UseOceanBaseManagementConnection",
+                    [typeof(DbContextOptionsBuilder), typeof(Func<OceanBaseConnector.OceanBaseConnection>)]);
+                if (api is null) throw new NotSupportedException("Packed provider has no explicit management connection API.");
+                api.Invoke(null, [builder, factory]);
+                using (var context = new SchemaContext(builder.Options))
+                {
+                    capture.Target = target;
+                    context.Database.SetCommandTimeout(19);
+                    var deleted = async ? context.Database.EnsureDeletedAsync().GetAwaiter().GetResult() : context.Database.EnsureDeleted();
+                    if (!deleted || capture.Commands.Count != 2 || capture.Commands[1] != "DROP DATABASE `owned`"
+                        || management?.RemoteCertificateValidationCallback is null || capture.Management != management)
+                        throw new Exception("Packed provider lost explicit management connection routing or deletion.");
+                }
+                try
+                {
+                    using var command = management!.CreateCommand();
+                    throw new Exception("Packed provider did not dispose its owned management connection.");
+                }
+                catch (ObjectDisposedException) { }
+                using var targetCommand = target.CreateCommand();
+            }
+            Console.WriteLine("MySQL: packed explicit management connection and supplied-target ownership passed.");
         }
 
         private static void RunDatabaseManagement(OceanBaseCompatibilityMode mode)
@@ -98,6 +134,7 @@ namespace PackageConsumer
 
         private sealed class Capture : DbConnectionInterceptor, IDbCommandInterceptor
         {
+            public DbConnection? Management { get; private set; }
             public List<string> Commands { get; } = [];
             public bool HasTables { get; set; }
             public bool NamespaceExists { get; set; }
@@ -138,6 +175,7 @@ namespace PackageConsumer
             }
             private void VerifyManagementConnection(DbCommand command)
             {
+                Management = command.Connection;
                 if (command.Connection is null || ReferenceEquals(command.Connection, Target) || command.Connection.Database != "")
                     throw new Exception("Packed namespace command did not use an independent connection without a database.");
             }

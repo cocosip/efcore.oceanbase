@@ -55,10 +55,24 @@ callbacks must handle concurrent calls and be idempotent. Physical rollback and 
 For an application-owned MySQL database, `EnableOceanBaseDatabaseManagement("application_database")`
 also enables namespace creation and `EnsureDeleted`. It declares ownership of the **entire database**,
 including objects outside the model; deletion drops that database. System database names are rejected.
-Use a closed provider-created connection configured by connection string, with exactly the declared
-database name. Runtime supplied connections, native routing/credential/TLS hooks or native-only string
-changes are rejected before management opens. Hidden credentials prevent configuration verification
-and are rejected as well. Oracle user/schema provisioning and deletion remain unimplemented.
+The target must be closed and select exactly the declared database name. An explicit administration
+connection supports supplied targets and native credential, routing and TLS hooks:
+
+```csharp
+optionsBuilder.UseOceanBase(connectionString, OceanBaseCompatibilityMode.MySql)
+    .EnableOceanBaseDatabaseManagement("application_database")
+    .UseOceanBaseManagementConnection(() => new OceanBaseConnector.OceanBaseConnection(administrationConnectionString));
+```
+
+Load both strings from configuration/secrets. The factory must return a fresh, closed, independent
+connection with no selected MySQL database. The provider disposes it after each namespace operation;
+ordinary queries and existing-schema table creation never invoke the factory. Its configuration is
+authoritative for administration: the application must select the same tenant as the target and provide
+the required privileges, routing and TLS policy. The provider does not infer tenant equivalence from
+different user names or callbacks. Returning the target rejects without disposing it. A factory alone
+does not grant namespace ownership. Without a factory, the original provider-created string-only path
+still rejects native-only configuration changes, hooks and unverifiable hidden credentials.
+Oracle user/schema provisioning and deletion remain unimplemented.
 DDL is non-atomic: failed table creation can leave a new database or partial objects; no automatic
 drop rollback or retry occurs. Actual server syntax, privileges and pool effects need live validation.
 

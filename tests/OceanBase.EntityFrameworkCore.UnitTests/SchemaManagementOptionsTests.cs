@@ -88,5 +88,49 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
         }
 
         private sealed class TestContext(DbContextOptions<TestContext> options) : DbContext(options);
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle)]
+        public void Management_factories_are_scoped_options_preserved_by_clones_without_granting_ownership(OceanBaseCompatibilityMode mode)
+        {
+            Func<OceanBaseConnector.OceanBaseConnection> firstFactory = () => throw new InvalidOperationException("Must not invoke first factory.");
+            Func<OceanBaseConnector.OceanBaseConnection> secondFactory = () => throw new InvalidOperationException("Must not invoke second factory.");
+            var builder = new DbContextOptionsBuilder<TestContext>();
+            Assert.Same(builder, builder.UseOceanBaseManagementConnection(firstFactory));
+            builder.UseOceanBase("Server=offline;Database=owned", mode);
+            var original = builder.Options.FindExtension<OceanBaseOptionsExtension>()!;
+            Assert.Same(firstFactory, original.ManagementConnectionFactory);
+            Assert.False(original.DatabaseManagementEnabled);
+            Assert.Null(original.SchemaManagementScope);
+            using var supplied = new OceanBaseConnector.OceanBaseConnection("Server=offline;Database=owned");
+            builder.EnableOceanBaseDatabaseManagement("owned").UseOceanBase(supplied, mode);
+            var clone = builder.Options.FindExtension<OceanBaseOptionsExtension>()!;
+            Assert.Same(firstFactory, clone.ManagementConnectionFactory);
+            Assert.True(clone.DatabaseManagementEnabled);
+            var changed = new DbContextOptionsBuilder(builder.Options).UseOceanBaseManagementConnection(secondFactory);
+            using var first = new TestContext(builder.Options);
+            using var second = new TestContext((DbContextOptions<TestContext>)changed.Options);
+            Assert.Same(first.GetService<ISqlGenerationHelper>(), second.GetService<ISqlGenerationHelper>());
+            Assert.Same(secondFactory, changed.Options.FindExtension<OceanBaseOptionsExtension>()!.ManagementConnectionFactory);
+            Assert.Same(firstFactory, clone.ManagementConnectionFactory);
+            builder.EnableOceanBaseSchemaManagement("owned");
+            var tableOnly = builder.Options.FindExtension<OceanBaseOptionsExtension>()!;
+            Assert.False(tableOnly.DatabaseManagementEnabled);
+            Assert.Same(firstFactory, tableOnly.ManagementConnectionFactory);
+            var debug = new Dictionary<string, string>();
+            tableOnly.Info.PopulateDebugInfo(debug);
+            Assert.Equal(clone.Info.LogFragment, tableOnly.Info.LogFragment);
+            Assert.DoesNotContain("Factory", string.Join(" ", debug.Keys));
+        }
+
+        [Fact]
+        public void Null_management_factories_and_builders_reject_without_modifying_options()
+        {
+            var builder = new DbContextOptionsBuilder();
+            Assert.Throws<ArgumentNullException>(() => builder.UseOceanBaseManagementConnection(null!));
+            Assert.Null(builder.Options.FindExtension<OceanBaseOptionsExtension>());
+            Assert.Throws<ArgumentNullException>(() => ((DbContextOptionsBuilder)null!).UseOceanBaseManagementConnection(() => null!));
+        }
     }
 }
