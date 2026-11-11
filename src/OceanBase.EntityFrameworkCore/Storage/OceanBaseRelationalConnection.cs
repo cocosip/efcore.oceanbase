@@ -45,14 +45,32 @@ namespace OceanBase.EntityFrameworkCore.Storage
         public override bool Open(bool errorsExpected = false)
         {
             ValidateConnection(DbConnection);
-            return base.Open(errorsExpected);
+            var entry = new OceanBaseConnectionOpenState(this);
+            try
+            {
+                return base.Open(errorsExpected);
+            }
+            catch (Exception error)
+            {
+                entry.Restore(error);
+                throw;
+            }
         }
 
-        public override Task<bool> OpenAsync(CancellationToken cancellationToken, bool errorsExpected = false)
+        public override async Task<bool> OpenAsync(CancellationToken cancellationToken, bool errorsExpected = false)
         {
             cancellationToken.ThrowIfCancellationRequested();
             ValidateConnection(DbConnection);
-            return base.OpenAsync(cancellationToken, errorsExpected);
+            var entry = new OceanBaseConnectionOpenState(this);
+            try
+            {
+                return await base.OpenAsync(cancellationToken, errorsExpected).ConfigureAwait(false);
+            }
+            catch (Exception error)
+            {
+                await entry.RestoreAsync(error).ConfigureAwait(false);
+                throw;
+            }
         }
 
         private string ValidateConnectionString(string connectionString)

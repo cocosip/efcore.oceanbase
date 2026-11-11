@@ -11,6 +11,27 @@ each small group. Real database integration/tests and EF8/EF9 adaptation are exp
 [local development plan](efcore-10-local-development-plan.md) tracks the full remaining inventory, including
 an audit of locally feasible deferred families. Finishing one batch does not finish the overall goal.
 
+### Failed-open lifecycle checkpoint (2026-11-11)
+
+Batch6a fixes shared provider Open/OpenAsync rollback after opening callbacks and ambient warnings fail.
+It restores entry EF accounting, closes only the captured connection when newly opened, preserves caller
+and outer ownership, and retains opening cancellation if native cleanup also fails. Two private EF10
+accounting fields are isolated through UnsafeAccessor; patch/major upgrades must recheck that contract.
+Cleanup failure is recorded in Exception.Data["OceanBase.OpenCleanupError"] and may require direct cleanup.
+
+Eight registered-provider count regressions failed before implementation. ConnectionLifecycleTests now
+passes36 focused cases, including physical-state doubles, cancellation, retry and replacement-connection
+cleanup. Reverting the captured-close target reproduced both replacement regressions. Final Debug,
+Release and isolated EF10.0.14 Release each pass1962 (1474 unit,486 intercepted,two project consumers),
+zero failures/skips. Independent review identified cancellation masking and replacement targeting; both
+were corrected and regression-tested. Final scoped source/test/docs/evidence review approves, zero findings.
+
+The same baseline-built10.0.0-connection-lifecycle-final-20261111 nupkg passes package content checks and
+both-mode consumers on EF10.0.0/10.0.14, including failed-open accounting and retry. Evidence:
+artifacts/connection-lifecycle-*-final.log; isolated artifacts/connection-lifecycle-compat/; package under
+artifacts/connection-lifecycle-package/. No database connection, hosted CI, publication or EF8/EF9 work.
+The full local EF10 inventory, transactions and live lifecycle gates remain open.
+
 ### Model, graph materialization and filters checkpoint (2026-11-11)
 
 Batch4a/4b/4c adds 58 inherited-provider characterization cases in ModelMaterializationTests.

@@ -58,6 +58,34 @@ materializers; add provider behavior only for a reproduced failure. No database 
   update evidence and commit. No production/package rebuild is needed if only tests/docs change.
 - Keep Required rows partial until the remaining local and live acceptance criteria are satisfied.
 
+## Batch6a brief: failed-open ownership and accounting
+
+CON-03/04 and SCH-01: fix the documented failed-open cleanup gap at the shared provider connection,
+so queries, writes and read-only database probes use one policy. Validate the configured mode before
+capturing state. A failed open restores the entry EF open count/ownership flag and closes a physical
+connection only when it was not already open at entry. Preserve an outer EF lease and caller-opened
+connections. Async cleanup must not reuse a cancelled opening token.
+
+Exact EF10 RelationalConnection source/assemblies show ConnectionOpened callbacks execute before
+_openedInternally/_openedCount are updated; ambient handling executes after both. Public Close cannot
+distinguish these phases and may decrement an outer lease. There is no protected accounting snapshot API.
+Use two narrowly isolated .NET UnsafeAccessor field contracts for this EF10-only repair, with explicit
+tests on EF10.0.0 and10.0.14. Review these private contracts on every supported EF patch/major upgrade;
+do not access Connector internals or add an alternate transport. Cleanup uses public DbConnection close
+directly, avoiding reentrant EF closing callbacks after an opening callback has already failed.
+If raw close itself fails, retain the original opening exception (including cancellation), attach the
+cleanup exception as Exception.Data["OceanBase.OpenCleanupError"], and still restore accounting. Physical
+cleanup is then best effort and the captured connection can remain open; do not report that as successful
+cleanup. The entry DbConnection reference is captured before opening so callback reentrancy cannot make
+cleanup close a replacement connection.
+
+First reproduce ambient-warning count leakage through the real provider. Then cover both failure phases,
+pre-open failure, nested leases, caller-opened state, cancellation and retry with deterministic EF/native
+connection doubles. Test the real registered provider path as well as the physical-state double; doubles
+do not prove Connector/server behavior. Run full Debug/Release/isolated14, same-package consumers at both
+patches/modes, independent review, update evidence and commit. Broader transaction/lifecycle/live work
+remains open; EF8/EF9 are postponed.
+
 ## Batch 1 brief
 
 **Files:** OptionsTests.cs; SqlGenerationHelperTests.cs; ConsumerTests/ProviderConfigurationTests.cs;
@@ -503,6 +531,19 @@ explicit supported duplication contract, not inference from Scale's ambiguous ze
    update remaining boundaries, then commit. No database, EF8/EF9 or publication work.
 
 ## Execution record
+
+- Batch6a: shared provider failed-open snapshot/rollback fixes the documented opening-callback and ambient
+  warning phases, preserves outer/caller leases and retries, and closes the entry native instance rather
+  than a callback replacement. Original cancellation survives a native close failure via attached cleanup
+  evidence. Two private EF10 fields use isolated UnsafeAccessor contracts, reviewed against exact EF10
+  behavior and tested on both selected patches. RED8 registered-provider failures, focused GREEN36; review
+  callback-target mutation RED2 then GREEN. Final Debug/Release/isolated14 each1962=1474+486+2, no failures
+  or skips. Same baseline-built connection-lifecycle-final-20261111 package passes content gate and both
+  mode/patch consumers, including the packed failed-open probe. Logs artifacts/connection-lifecycle-*.log;
+  isolated props/build artifacts/connection-lifecycle-compat/; package artifacts/connection-lifecycle-package/.
+  Independent final source/test/docs/evidence review approves, zero findings. Native close failure remains
+  best effort with explicit direct-cleanup boundary. The wider local inventory,
+  transaction semantics and live acceptance remain open; no EF8/EF9, push or publication.
 
 - Batch4a/4b/4c: 58 model/materialization/filter characterization cases pass without a production
   change. Both-mode metadata, composite/alternate relationships, owned/shadow reads, Include/ThenInclude,

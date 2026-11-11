@@ -72,6 +72,31 @@ The MySQL and Oracle paths must have separate tests for:
 Common code is allowed only where both modes produce the same SQL and result semantics. A mode check based only
 on the connection string is insufficient when the EF model cache can reuse a model.
 
+## Failed-open cleanup contract
+
+CON-03/04 and SCH-01 share the provider relational connection's failed-open policy. Validate the native
+connection/mode first, then capture the entry DbConnection reference, whether it was already open,
+and EF's open count/internal-ownership flag. On failed sync/async Open, close only that captured native
+connection if it was not already open, restore both EF accounting fields, and rethrow the original error.
+Async cleanup does not reuse the opening cancellation token. Caller-opened connections and outer EF leases
+survive. Successful opens/closes continue through EF's normal implementation.
+
+EF10 runs ConnectionOpened callbacks before updating _openedInternally/_openedCount and handles ambient
+transactions after updating them. Public Close cannot roll back both phases without decrementing an outer
+lease. OceanBaseConnectionOpenState therefore isolates two .NET UnsafeAccessor field contracts against
+RelationalConnection. They are version-local private EF10 contracts, verified on10.0.0/10.0.14, and require
+review on every EF patch/major upgrade. This does not access Connector internals or implement transactions.
+
+Failed-open cleanup calls public DbConnection.Close/CloseAsync directly, without EF closing interceptors.
+If native close itself fails, retain the opening error/cancellation and attach the cleanup error under
+Exception.Data["OceanBase.OpenCleanupError"]. Accounting is still restored, but native cleanup is best effort:
+the connection may remain open and require direct caller cleanup or provider-owned context disposal.
+Arbitrary interceptor side effects/transaction disposal and concurrent context use are not rolled back.
+
+ConnectionLifecycleTests separates registered-provider accounting regressions from physical-state doubles.
+The package consumer also invokes the real packed provider's failed ambient-warning open and retry in
+both modes. Neither suppressed opening nor a physical-state double proves live Connector/server cleanup.
+
 ## Connection validation and mapping checkpoint
 
 The following contracts were checked against EF Core Relational 10.0.0 sources and the published

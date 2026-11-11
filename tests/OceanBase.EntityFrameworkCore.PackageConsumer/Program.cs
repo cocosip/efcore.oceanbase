@@ -1,9 +1,13 @@
 using System;
 using System.Data;
+using System.Data.Common;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Numerics;
+using System.Reflection;
+using System.Transactions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Storage;
 using OceanBase.EntityFrameworkCore;
@@ -19,6 +23,7 @@ namespace PackageConsumer
         {
             foreach (var mode in new[] { OceanBaseCompatibilityMode.MySql, OceanBaseCompatibilityMode.Oracle })
             {
+                VerifyFailedOpen(mode);
                 var options = new DbContextOptionsBuilder<ConsumerContext>()
                     .UseOceanBase("Server=localhost;Database=package_smoke", mode).Options;
                 using var context = new ConsumerContext(options, mode);
@@ -592,6 +597,41 @@ namespace PackageConsumer
 
                 Console.WriteLine($"{mode}: packed provider registration, scalar/text/temporal/binary/decimal model, string/null/Boolean SQL and paging passed; EF {typeof(DbContext).Assembly.GetName().Version}.");
             }
+        }
+
+        private static void VerifyFailedOpen(OceanBaseCompatibilityMode mode)
+        {
+            using var context = new DbContext(new DbContextOptionsBuilder()
+                .UseOceanBase("Server=localhost;Database=package_smoke", mode)
+                .AddInterceptors(new SuppressNetwork())
+                .ConfigureWarnings(warnings => warnings.Throw(RelationalEventId.AmbientTransactionWarning)).Options);
+            var connection = context.GetService<IRelationalConnection>();
+            using (var ambient = new TransactionScope())
+            {
+                try
+                {
+                    connection.Open();
+                    throw new Exception("Packed provider did not reject the unsupported ambient transaction.");
+                }
+                catch (InvalidOperationException error) when (error.Message.Contains("AmbientTransactionWarning", StringComparison.Ordinal))
+                {
+                }
+            }
+            // Package-only runtime probe: EF has no public open-count API.
+            var openedCount = typeof(RelationalConnection).GetField("_openedCount", BindingFlags.Instance | BindingFlags.NonPublic)!;
+            if ((int)openedCount.GetValue(connection)! != 0)
+                throw new Exception("Packed provider retained a failed open lease.");
+            connection.Open();
+            connection.Close();
+            if ((int)openedCount.GetValue(connection)! != 0)
+                throw new Exception("Packed provider could not balance a retry after failed open.");
+            Console.WriteLine($"{mode}: packed provider failed-open accounting and retry passed.");
+        }
+
+        private sealed class SuppressNetwork : DbConnectionInterceptor
+        {
+            public override InterceptionResult ConnectionOpening(DbConnection connection, ConnectionEventData eventData, InterceptionResult result)
+                => InterceptionResult.Suppress();
         }
 
         private static string MembershipSql(ConsumerContext context, int[] values)
