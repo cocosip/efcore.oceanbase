@@ -26,6 +26,7 @@ namespace PackageConsumer
                 VerifyFailedOpen(mode);
                 VerifyNullableConcurrency(mode);
                 TransactionSmoke.Run(mode);
+                SchemaSmoke.Run(mode);
                 var options = new DbContextOptionsBuilder<ConsumerContext>()
                     .UseOceanBase("Server=localhost;Database=package_smoke", mode).Options;
                 using var context = new ConsumerContext(options, mode);

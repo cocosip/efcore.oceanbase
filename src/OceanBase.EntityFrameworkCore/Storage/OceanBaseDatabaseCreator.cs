@@ -1,8 +1,10 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.EntityFrameworkCore.Storage;
 using OceanBaseConnector;
 
@@ -94,7 +96,13 @@ namespace OceanBase.EntityFrameworkCore.Storage
         public Task DeleteAsync(CancellationToken cancellationToken = default) => throw SchemaNotSupported();
         public void CreateTables() => throw SchemaNotSupported();
         public Task CreateTablesAsync(CancellationToken cancellationToken = default) => throw SchemaNotSupported();
-        public string GenerateCreateScript() => throw SchemaNotSupported();
+        public string GenerateCreateScript()
+        {
+            var context = currentContext.Context;
+            var statements = new OceanBaseSchemaSqlGenerator(context.GetService<ISqlGenerationHelper>(), _mode)
+                .Generate(context.GetService<IDesignTimeModel>().Model);
+            return string.Join(";\n\n", statements) + (statements.Count > 0 ? ";\n" : "");
+        }
         public bool EnsureCreated() => throw SchemaNotSupported();
         public Task<bool> EnsureCreatedAsync(CancellationToken cancellationToken = default) => throw SchemaNotSupported();
         public bool EnsureDeleted() => throw SchemaNotSupported();

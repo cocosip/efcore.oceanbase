@@ -349,7 +349,7 @@ commit/transaction behavior per mode.
 | ID | Requirement and acceptance criteria | Priority | MySQL | Oracle | Existing evidence / gap |
 | --- | --- | --- | --- | --- | --- |
 | SCH-01 | DatabaseFacade services resolve; existence checks distinguish absence from authentication, permission and network failures. | Required | In progress | In progress | Scoped creator/read-only probes/error classification and Batch6a shared failed-open rollback exist. Physical cleanup has deterministic double evidence; live absence/authentication/permission/network and cleanup evidence remain open. Schema DDL is separate. |
-| SCH-02 | EnsureCreated/GenerateCreateScript implement schema profile and key generation; existing populated schemas are handled explicitly. | Required | Planned | Planned | Mode-specific DDL design/live fixtures missing. |
+| SCH-02 | EnsureCreated/GenerateCreateScript implement schema profile and key generation; existing populated schemas are handled explicitly. | Required | In progress | In progress | GenerateCreateScript emits offline relational tables/keys/indexes/checks/FKs/identity/default/computed definitions with explicit unsupported-shape errors. Ownership, mutating lifecycle and live DDL remain open; script tests do not establish execution. |
 | SCH-03 | EnsureDeleted has an explicit ownership/deletion boundary, preserves unrelated tenant objects and fails clearly outside supported profile. | Required | Planned | Planned | Destructive-operation contract missing; tests must use isolated owned fixtures. |
 
 ## Packages, compatibility and release evidence

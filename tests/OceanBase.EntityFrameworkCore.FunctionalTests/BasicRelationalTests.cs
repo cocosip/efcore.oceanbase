@@ -217,7 +217,6 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
                 Assert.Throws<NotSupportedException>(() => context.Database.EnsureCreated());
                 Assert.Throws<NotSupportedException>(() => context.Database.EnsureDeleted());
             }
-            Assert.Throws<NotSupportedException>(() => context.Database.GenerateCreateScript());
         }
 
         [Theory]

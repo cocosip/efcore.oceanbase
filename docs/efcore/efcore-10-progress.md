@@ -11,6 +11,27 @@ each small group. Real database integration/tests and EF8/EF9 adaptation are exp
 [local development plan](efcore-10-local-development-plan.md) tracks the full remaining inventory, including
 an audit of locally feasible deferred families. Finishing one batch does not finish the overall goal.
 
+### Offline create scripts checkpoint (2026-11-11)
+
+Batch7a after8a4ad6a implements GenerateCreateScript without opening a connection. It emits ordinary scalar
+tables, nullability, keys/indexes/checks, foreign keys after all tables, supported identities/defaults and computed
+columns. Mapped/excluded/view/owned/join/one-to-one/cyclic shapes have DDL tests; these are not full runtime
+feature claims. Explicit unsupported shapes fail instead of silently losing their metadata. Mutating lifecycle
+methods remain guarded until the ownership profile is implemented.
+
+Initial RED8 confirms the missing script API. SchemaScriptTests now passes27 focused cases; Debug/Release and
+isolated EF10.0.14 Release each pass2077 (1501 unit,574 functional,two consumers), zero failures/skips.
+Independent review found missing MySQL computed-column collation and invalid TPT/entity-split identity inference.
+RED/GREEN regressions cover both: preserve computed collation; explicitly reject TPT/TPC and entity splitting
+until their table-specific generation contract is implemented. Final independent review approves with no open
+findings. Same baseline-built schema-script-20261111 nupkg passes content and both-mode/patch consumers,
+package-only graphs and identical assembly hashes. The preceding transactions package fails the new script
+smoke at the expected NotSupportedException. Baseline source assets stay10.0.0.
+
+Evidence: artifacts/schema-script-*.log (final suites use -final2), schema-script-compat/ and
+schema-script-package/. No live DDL, server/version compatibility or schema deletion is claimed. Continue with
+explicit ownership and existing-schema EnsureCreated/CreateTables; standalone live test program stays postponed.
+
 ### Transactions and savepoints checkpoint (2026-11-11)
 
 Batch6b after456902f registers an EF10 transaction factory. Oracle release is a logical no-op with EF
