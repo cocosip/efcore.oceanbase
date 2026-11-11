@@ -588,8 +588,8 @@ contract and tests; live arithmetic result/predicate tests remain open for both 
 ## Tracked writes
 
 A modification batch contains one row operation. This permits command-level affected-row checks and keeps the
-provider independent of the connector's multi-statement and multi-send options. EF's batch executor continues to
-control transactions across multiple row operations.
+provider independent of the connector's multi-statement and multi-send options. The provider's EF10-based batch
+executor controls transactions across multiple row operations.
 
 Writes use `IRelationalCommand` and `RelationalCommandParameterObject` with `CommandSource.SaveChanges`. This
 retains EF command diagnostics, interceptors, configured timeout and transaction attachment. Input parameters
@@ -634,9 +634,22 @@ MySQL readback uses `IReadOnlyModificationCommand.PropagateResults`.
 
 The local generated-readback boundary also rejects a MySQL composite key with more than one generated identity
 column before DML. `LAST_INSERT_ID()` can identify only one generated identity in this provider slice; the
-rejection is covered sync/async through BasicRelationalTests and does not imply a general server limitation or
-cover Oracle's multi-column `RETURNING` path. A future strategy would require an explicit generation contract
-and separate tests.
+rejection is covered sync/async through BasicRelationalTests and does not imply a general server limitation.
+A future multiple-identity strategy would require its own generation contract and tests.
+
+GeneratedValuesTests covers composite-key inserts with exactly one identity, multi-column defaults/computed
+outputs and updates. Oracle assigns synthetic values according to each RETURNING column's INTO bind name;
+MySQL supplies a reader in the projected column order. Independent assertions pin the generated-column set and
+input values in SQL placeholder order. On-add defaults are returned only when EF selects the store default;
+explicit client values are written and retained, and ordinary updates do not refresh on-add-only defaults.
+
+Nullable generated fields, including converted enum concurrency outputs, accept DBNull. A later update uses
+the previous NULL token as IS NULL or binds its original non-NULL provider value, then refreshes the original
+snapshot on success. Required NULLs and fractional integer-converted outputs fail as DbUpdateException with
+the affected entity. EF discards partially published generated values on failure, retaining temporary insert
+keys and pending update/original state. A zero affected-row result prevents readback/propagation; a missing
+MySQL generated row raises DbUpdateConcurrencyException. These intercepted tests disable automatic
+transactions and prove client state/SQL only, not execution of expressions, physical storage or atomicity.
 
 ### Offline create scripts (SCH-02 / MOD-03)
 

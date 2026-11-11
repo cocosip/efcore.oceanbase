@@ -222,6 +222,22 @@ test of the current provider boundary; it does not add a second identity retriev
 multi-output/live generation behavior. Run full Debug/Release/isolated14, independent review and commit; no
 package rebuild is needed when production code is unchanged.
 
+## Batch5e brief: multi-column default/computed readback
+
+UPD-02/05 / MOD-03: continue from9d1f4d2. Pin insert/update generated identity, nullable/non-null computed
+values, on-add defaults and converted concurrency outputs together in real EF SaveChanges. Cover composite-key
+MySQL readback with exactly one identity and explicit/default-sentinel writes. Supply deterministic values by
+the actual projected/RETURNING column names, but assert the SQL/bind/output sets independently.
+
+- Verify generated values and original concurrency snapshots after successful insert/update; on-add defaults do
+  not overwrite explicit values or refresh on update. NULL outputs must be accepted for nullable properties and
+  rejected for required properties rather than silently becoming CLR defaults.
+- Failed later conversion/readback/affected-row checks retain entries, temporary keys and pending changes; a
+  failed update must not accept new originals. Never claim synthetic readback executes database expressions.
+- Characterize already-correct behavior; reproduce defects RED before fixes. Run baseline/selected-patch suites,
+  independent review, same-package smoke if production changes, update evidence and locally commit. No live DB
+  or standalone functional test program. Transaction/physical generation acceptance remains separate.
+
 ## Batch 1 brief
 
 **Files:** OptionsTests.cs; SqlGenerationHelperTests.cs; ConsumerTests/ProviderConfigurationTests.cs;
@@ -701,6 +717,18 @@ explicit supported duplication contract, not inference from Scale's ambiguous ze
   context/transaction state and explicitly clean native resources. No physical rollback guarantee.
   Minor (deferred): transaction conflicts are checked before opening; repeating the guard after opening would
   additionally cover unsupported transaction-state mutation from reentrant connection interception.
+- Batch6c committed as9d1f4d2 after source/fix/consumer/docs reviews and complete source/patch/package gates.
+- Batch5e after9d1f4d2:26 GeneratedValuesTests characterize composite-key single-identity multi-column default/
+  computed/concurrency outputs, explicit default overrides, NULLs, conversion/zero-row/missing-row failure state.
+  No provider defect was reproduced and no production change is needed. Initial test failures were fixture
+  parsing, EntityEntry-wrapper equality and named-parameter ordering assumptions, all corrected.
+  Independent review found Oracle output values followed parameter collection order instead of INTO binds.
+  A temporary reversed-bind mutation passed26 with the old fixture and fails8 after named-bind/uniqueness/set
+  validation; restored production source passes26. Scoped re-review approves without open findings.
+  Full final Debug/Release/isolated14 each2187=1507+678+2 pass, zero failures/skips. No new package required for
+  test/docs-only changes; previous package evidence stays historical. Rebuilt provider informational-version
+  commit metadata changes from16b1d92 to9d1f4d2, so the new binary SHA is not asserted unchanged. Baseline assets
+  stay10.0.0. Evidence: artifacts/generated-values-*-final.log and -mutant-before/after.log. No live/atomicity claim.
 
 - Batch6b after456902f: TransactionTests adds38 cases for both-mode sync/async transaction ownership,
   isolation/commit/rollback, different-connection rejection, savepoints, multi-batch failures/retry and MySQL

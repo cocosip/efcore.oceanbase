@@ -11,6 +11,26 @@ each small group. Real database integration/tests and EF8/EF9 adaptation are exp
 [local development plan](efcore-10-local-development-plan.md) tracks the full remaining inventory, including
 an audit of locally feasible deferred families. Finishing one batch does not finish the overall goal.
 
+### Multi-column generated readback checkpoint (2026-11-11)
+
+Batch5e after9d1f4d2 adds26 intercepted GeneratedValuesTests cases in both modes/sync/async. They characterize
+already-working composite-key single-identity inserts and multi-output defaults/computed values, explicit default
+overrides, nullable enum concurrency output/snapshot refresh, required NULL errors, failed later conversion,
+zero affected rows and missing MySQL generated rows. No provider/connector defect was reproduced; no production
+behavior changed. Automatic transactions are disabled in this fixture; physical expression evaluation and
+atomicity remain live gates.
+
+Independent review found the Oracle fixture ignored INTO bind order. Temporary reversal of output binds passed
+all26 before the fixture fix and fails8 afterward; restored production source passes26. The fixture now resolves
+named INTO binds and validates uniqueness/complete parameter sets. Focused re-review approves. Full final
+Debug/Release and isolated EF10.0.14 Release each pass2187 (1507 unit,678 functional,two consumers), zero
+failures/skips. Evidence: artifacts/generated-values-{focused,debug,release,patch}-final.log and mutation logs.
+
+No package rebuild is required for this test/docs-only slice. The previous transaction-recovery package evidence
+remains its historical checkpoint. A fresh provider build has updated commit informational-version metadata
+(9d1f4d2 instead of16b1d92), so its SHA is not asserted identical to that preceding package. Source baseline
+assets remain EF10.0.0. No live DB, standalone program, EF8/EF9, push or publication; full EF10 goal active.
+
 ### Save cancellation and cleanup checkpoint (2026-11-11)
 
 Batch6c after16b1d92 specializes EF10's batch execution loops: automatic async rollback/release use an uncancelled
