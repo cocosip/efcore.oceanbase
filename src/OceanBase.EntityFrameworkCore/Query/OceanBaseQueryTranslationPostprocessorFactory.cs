@@ -24,7 +24,7 @@ namespace OceanBase.EntityFrameworkCore.Query
 
             protected override Expression ProcessTypeMappings(Expression expression)
             {
-                var mapped = new IntegerCollectionTypeMappingPostprocessor(Dependencies, RelationalDependencies,
+                var mapped = new NumericCollectionTypeMappingPostprocessor(Dependencies, RelationalDependencies,
                     RelationalQueryCompilationContext).Process(expression);
                 var metadata = new MetadataVisitor();
                 metadata.Visit(mapped);
@@ -36,8 +36,8 @@ namespace OceanBase.EntityFrameworkCore.Query
                         ?? RelationalDependencies.TypeMappingSource.FindMapping(elementType);
                     if (mapping is null || (Nullable.GetUnderlyingType(mapping.ClrType) ?? mapping.ClrType)
                             != (Nullable.GetUnderlyingType(elementType) ?? elementType)
-                        || !OceanBaseCollectionParameterExpandingVisitor.IsSupportedIntegral(mapping))
-                        throw new NotSupportedException("Empty inline collection roots require integer elements with non-null-converting integer storage carriers.");
+                        || !OceanBaseCollectionParameterExpandingVisitor.IsSupportedNumeric(mapping))
+                        throw new NotSupportedException("Empty inline collection roots require numeric elements with non-null-converting numeric storage carriers.");
                     var ordinal = RelationalDependencies.TypeMappingSource.FindMapping(typeof(int))!;
                     _emptyColumns.Add(values.Alias, (elementType, new Dictionary<string, SqlExpression>
                     {
@@ -59,7 +59,7 @@ namespace OceanBase.EntityFrameworkCore.Query
             }
         }
 
-        private sealed class IntegerCollectionTypeMappingPostprocessor(QueryTranslationPostprocessorDependencies dependencies,
+        private sealed class NumericCollectionTypeMappingPostprocessor(QueryTranslationPostprocessorDependencies dependencies,
             RelationalQueryTranslationPostprocessorDependencies relationalDependencies,
             RelationalQueryCompilationContext queryCompilationContext)
             : RelationalTypeMappingPostprocessor(dependencies, relationalDependencies, queryCompilationContext)
@@ -72,11 +72,11 @@ namespace OceanBase.EntityFrameworkCore.Query
                     : parameter.TypeMapping?.ElementTypeMapping as RelationalTypeMapping
                         ?? RelationalDependencies.TypeMappingSource.FindMapping(
                             OceanBaseCollectionParameterExpandingVisitor.ElementType(parameter.Type)!);
-                if (element is null || !OceanBaseCollectionParameterExpandingVisitor.IsSupportedIntegral(element))
+                if (element is null || !OceanBaseCollectionParameterExpandingVisitor.IsSupportedNumeric(element))
                     return base.ApplyTypeMappingsOnValuesExpression(values);
                 var collection = RelationalDependencies.TypeMappingSource.FindMapping(parameter.Type,
                     QueryCompilationContext.Model, element)
-                    ?? throw new InvalidOperationException("An integer collection mapping is required for the query root.");
+                    ?? throw new InvalidOperationException("A numeric collection mapping is required for the query root.");
                 return values.Update(parameter.ApplyTypeMapping(collection));
             }
         }

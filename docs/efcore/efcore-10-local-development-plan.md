@@ -42,6 +42,32 @@ Do not mark the goal complete while any locally developable item below remains u
 | 9. Deferred inventory audit | DEF-01..10 | Revisit every documented deferred family after Required local implementation stabilizes. Implement locally feasible families under explicit per-mode contracts and tests; record precise architectural/connector/server blockers for any unimplementable family. Do not treat a Deferred label alone as evidence it cannot be developed. |
 | 10. Completion audit | All IDs | Compare docs/public API/source/tests/package evidence. Every locally feasible feature is implemented/reviewed/committed; only specifically evidenced database or external blockers may remain. |
 
+## Batch3ab brief: decimal and floating collection roots
+
+**IDs:** QRY-03/11, MAP-06/07. **Spec:** numeric collection-root contract in
+efcore-10-query-update-design.md. Continue from 677b7ef in this checkout, no live execution.
+Use the writing-plans/executing-plans and TDD workflows for this existing work inventory.
+
+- [x] Add failing NumericCollectionRootQueryTests and intercepted NumericCollectionRootTests for
+  decimal/Single/Double, nullable and numeric converters, both modes/null settings/policies, exact
+  empty/nonempty rows and inline ordinals. Include extrema, scale-28, subnormals and rebinding.
+- [x] Extend the shared carrier guard in OceanBaseCollectionParameterExpandingVisitor, reuse it in
+  OceanBaseQueryTranslationPostprocessorFactory, and expand GenerateCollectionCast in the SQL generator.
+  Keep inferred conflicts authoritative, mapping/converter identity and reader hooks intact. Update
+  older rejection tests only for numeric families newly supported by this contract.
+- [x] Verify sync/async native bindings and result conversion, narrow physical facets, invalid inputs
+  and null-converting/nonnumeric rejection before commands. Add package-consumer numeric root smoke.
+- [x] Run full Debug/Release, isolated EF10.0.14, one baseline-built package on both patches/modes,
+  archive/dependency/graph/hash gates. Independently review, fix findings with regressions, update
+  progress/checklist/README and commit locally. Overall EF10 and live acceptance remain incomplete.
+
+Verified: all three source configurations pass3728=1748+1110+868+2 with0fail/skip. The same final
+numeric-roots-r1 package passes both modes/patches, contents/dependency ranges, package-only graphs
+and DLL identity; the preceding integer package fails the new smoke with caught exit1. Review's
+broader contextual-projection exclusion and stale package-evidence notes are corrected, with no
+production findings. Ruling: preserve EF's authoritative conflict checks and record directly projected
+contextually converted elements as the next implementation family, rather than bypassing the checks.
+
 ## Batch3aa brief: complete integer collection-root carriers
 
 **Feature IDs:** QRY-03/11, MAP-06/07. Continue after the reviewed Oracle lifecycle commit a891959.

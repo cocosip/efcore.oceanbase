@@ -436,6 +436,9 @@ namespace PackageConsumer
                 VerifyIntegerRoots(context, mode, uint.MinValue, uint.MaxValue, true);
                 VerifyIntegerRoots(context, mode, long.MinValue, long.MaxValue, false);
                 VerifyIntegerRoots(context, mode, ulong.MinValue, ulong.MaxValue, true);
+                VerifyNumericRoots(context, mode, decimal.MinValue, decimal.MaxValue, 0.0000000000000000000000000001m, "DECIMAL(65,30)", "NUMBER");
+                VerifyNumericRoots(context, mode, float.MinValue, float.MaxValue, float.Epsilon, "FLOAT", "BINARY_FLOAT");
+                VerifyNumericRoots(context, mode, double.MinValue, double.MaxValue, double.Epsilon, "DOUBLE", "BINARY_DOUBLE");
                 int?[] nullableConvertedValues = [null, 17, 17];
                 var nullableConverted = context.Set<Row>().Where(row => nullableConvertedValues
                     .Where(value => value > row.NullableInteger).Contains(row.NullableInteger)).Select(row => row.NullableInteger);
@@ -811,6 +814,27 @@ namespace PackageConsumer
 
                 Console.WriteLine($"{mode}: packed provider registration, scalar/text/temporal/binary/decimal model, string/null/Boolean SQL and paging passed; EF {typeof(DbContext).Assembly.GetName().Version}.");
             }
+        }
+
+        private static void VerifyNumericRoots<T>(ConsumerContext context, OceanBaseCompatibilityMode mode,
+            T minimum, T maximum, T tiny, string mysql, string oracle) where T : struct
+        {
+            T?[] values = [];
+            var query = context.Set<Row>().SelectMany(row => values.Where(value => row.Id > 0));
+            var target = mode == OceanBaseCompatibilityMode.MySql ? mysql : oracle;
+            foreach (var input in new T?[][] { [], [minimum, maximum, tiny, minimum, null], [null, null], [tiny], [] })
+            {
+                values = input;
+                var sql = query.ToQueryString();
+                if (!sql.Contains(" AS " + target + ")", StringComparison.Ordinal)
+                    || sql.Split("UNION ALL SELECT", StringSplitOptions.None).Length - 1 != Math.Max(0, input.Length - 1)
+                    || sql.Contains("WHERE 1 = 0", StringComparison.Ordinal) != (input.Length == 0))
+                    throw new Exception("Packed numeric root lost its provider carrier, row count or empty transition.");
+            }
+            var empty = context.Set<Row>().Select(row => new T[] { }.Count(value => row.Id > 0)).ToQueryString();
+            if (!empty.Contains("CAST(NULL AS " + target + ")", StringComparison.Ordinal)
+                || !empty.Contains("WHERE 1 = 0", StringComparison.Ordinal))
+                throw new Exception("Packed numeric root lost its original empty-inline type.");
         }
 
         private static void VerifyIntegerRoots<T>(ConsumerContext context, OceanBaseCompatibilityMode mode,

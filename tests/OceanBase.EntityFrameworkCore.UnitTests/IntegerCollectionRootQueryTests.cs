@@ -137,16 +137,20 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
         [Theory]
         [InlineData(OceanBaseCompatibilityMode.MySql)]
         [InlineData(OceanBaseCompatibilityMode.Oracle)]
-        public void Noninteger_and_null_converting_root_mappings_reject_before_expansion(OceanBaseCompatibilityMode mode)
+        public void Nonnumeric_and_null_converting_root_mappings_reject_before_expansion(OceanBaseCompatibilityMode mode)
         {
             using var context = Create<int>(mode, false, null);
             var source = context.GetService<IRelationalTypeMappingSource>();
             var mappings = new[]
             {
                 source.FindMapping(typeof(int))!.WithComposedConverter(new ValueConverter<bool, int>(value => value ? 1 : 0, value => value != 0)),
-                source.FindMapping(typeof(long))!.WithComposedConverter(new ValueConverter<decimal, long>(value => (long)value, value => value)),
-                source.FindMapping(typeof(decimal))!.WithComposedConverter(new ValueConverter<int, decimal>(value => value, value => (int)value)),
-                source.FindMapping(typeof(int))!.WithComposedConverter(new ValueConverter<int, int>(value => value, value => value, convertsNulls: true))
+                source.FindMapping(typeof(long))!.WithComposedConverter(new ValueConverter<string, long>(value => long.Parse(value), value => value.ToString())),
+                source.FindMapping(typeof(decimal))!.WithComposedConverter(new ValueConverter<bool, decimal>(value => value ? 1m : 0m, value => value != 0m)),
+                source.FindMapping(typeof(int))!.WithComposedConverter(new ValueConverter<int, int>(value => value, value => value, convertsNulls: true)),
+                source.FindMapping(typeof(decimal))!.WithComposedConverter(new ValueConverter<decimal, decimal>(value => value, value => value, convertsNulls: true)),
+                source.FindMapping(typeof(float))!.WithComposedConverter(new ValueConverter<float, float>(value => value, value => value, convertsNulls: true)),
+                source.FindMapping(typeof(double))!.WithComposedConverter(new ValueConverter<double, double>(value => value, value => value, convertsNulls: true)),
+                new DecimalTypeMapping("DECIMAL(65,30)")
             };
             foreach (var core in mappings)
             {
@@ -157,7 +161,7 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
                 var visitor = new OceanBaseCollectionParameterExpandingVisitor(context.GetService<ISqlExpressionFactory>(),
                     new RelationalParameterBasedSqlProcessorParameters(false, ParameterTranslationMode.MultipleParameters),
                     new ParametersCacheDecorator(parameters), source, mode);
-                Assert.Contains("integer", Assert.Throws<NotSupportedException>(() => visitor.Visit(
+                Assert.Contains("numeric", Assert.Throws<NotSupportedException>(() => visitor.Visit(
                     new ValuesExpression("v", parameter, new[] { "Value" }))).Message);
                 Assert.Single(parameters);
             }

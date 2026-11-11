@@ -12,6 +12,54 @@ each small group. Real database integration/tests and EF8/EF9 adaptation are exp
 [local development plan](efcore-10-local-development-plan.md) tracks the full remaining inventory, including
 an audit of locally feasible deferred families. Finishing one batch does not finish the overall goal.
 
+### Decimal and floating collection-root checkpoint (2026-11-11)
+
+Batch3ab follows 677b7ef. General VALUES roots now accept decimal, Single and Double, nullable forms
+and non-null-converting numeric-to-numeric converters in addition to the integer carriers. The same
+expansion, EF type-mapping postprocessor and UNION renderer retain mapping/converter ownership,
+capture snapshots, exact duplicates/order/NULL cells, current values and originally empty-inline types.
+MySQL query casts use DECIMAL(65,30), FLOAT or DOUBLE; Oracle uses NUMBER, BINARY_FLOAT or BINARY_DOUBLE.
+Query transport is independent of narrower physical facets. Non-finite floating inputs and values
+converted to infinity reject before command execution. No mapping-reader or connector changes needed.
+
+The MySQL CAST reference and public v4.3.5_CE_BP5 parser confirm the numeric cast targets; Oracle CAST's
+conversion table confirms NUMBER/binary floating targets. Cached parser evidence lives under
+`artifacts/numeric-roots-source/`. Source contracts and generated SQL do not establish deployed syntax,
+native UNION coercion, result accuracy or cost on the supplied databases. No live execution occurred.
+
+Forty new unit and36 intercepted functional cases cover both modes/null settings/collection policies,
+arrays/lists, originally empty/nonempty inline roots, ordinal pruning, extrema, scale-28 decimals,
+floating subnormals, rebinding, native read hooks and nullable cross-carrier converters. Narrow decimal
+columns retain wide query inputs; double-to-Single converters retain Single casts even for wide physical
+storage. Initial38 unit cases failed on the missing carrier boundary/EF UnreachableException before
+implementation. The functional fixture retains Decimal GetDecimal and exercises floating GetValue,
+OceanBaseDecimal normalization and overflow separately. Supplied rows establish shaping only.
+
+Independent source review found no production defect and reproduced a broader EF mapping-inference
+boundary: directly projecting contextually converted collection elements can fail in SelectMany,
+FirstOrDefault and Join. Two characterization cases cover those shapes in both modes; support notes
+now state the broader exclusion. This family remains local implementation work; rejecting it does not
+complete converter projection support. Final documentation/evidence re-review confirms the test counts,
+package identity and corrected exclusions; its stale package-row evidence finding is also corrected.
+No unresolved actionable findings remain within this module's documented scope.
+
+Final EF10.0.0 Debug/Release and isolated EF10.0.14 Release each pass **3728** tests:
+1748 unit +1110 intercepted functional +868 model specification +two project-consumer cases,
+zero failures/skips. Evidence: `artifacts/numeric-roots-{red,red-detail,focused,functional,
+projection-boundary,debug,release,patch,patch-restore}.log`. The final source snapshot adds the two
+projection-boundary cases before rebuilding all three configurations. Provider assets remain EF10.0.0.
+
+The same baseline-built `10.0.0-numeric-roots-r1-20261111` nupkg passes both-mode manual consumers on
+EF10.0.0/10.0.14, numeric captured/empty-inline smoke, contents/dependency ranges, package-only graphs
+and Release/archive/consumer DLL identity. SHA-256:
+`504CC9F0DEB65AFE1FDC056B37B5C2E49570D3861F350104AF1F11071451F003`.
+The preceding integer-roots-r1 package fails the new smoke with a caught UnreachableException/exit1.
+Evidence: `artifacts/numeric-roots-package.log`, `artifacts/verify-numeric-roots-package.ps1` and
+`artifacts/numeric-roots-previous-package.log`. The negative consumer's local-feed-only restore could
+not resolve baseline EF packages; the ordinary sources/normal-user network resolved it without
+warning overrides. No new dependencies, EF8/EF9, push, publication or branch synchronization.
+Text/other carriers, converted element projections and the remaining EF10 inventory stay open.
+
 ### Wider integer collection-root checkpoint (2026-11-11)
 
 Batch3aa follows Oracle lifecycle commit `a891959`. General collection roots now support all eight
@@ -142,7 +190,8 @@ logs and `artifacts/verify-management-profile-package.ps1`. Baseline assets rema
 
 ### Resume here: remaining EF10 local inventory
 
-1. Recheck branch/worktree and saved commit before editing. Batch3aa integer collection carriers,
+1. Recheck branch/worktree and saved commit before editing. Batch3ab decimal/floating collection carriers,
+   Batch3aa integer collection carriers,
    Batch7f Oracle user lifecycle, Batch7e management factories and bulk-update rewrites are implemented;
    do not repeat them. Current evidence is above;
    older sections below are historical checkpoints, not a new implementation backlog.

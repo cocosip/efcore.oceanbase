@@ -7,6 +7,30 @@ execution, transactions, complete scalar mappings and package validation remain 
 [feature checklist](efcore-10-feature-checklist.md). SQL-generation tests and intercepted commands do not prove
 that a server accepts the SQL, generates identity values or commits and rolls back correctly.
 
+## Decimal and floating collection-root contract (Batch3ab, QRY-03/11, MAP-06/07)
+
+Extend the existing integer VALUES pipeline to decimal, Single and Double, nullable forms and
+non-null-converting numeric-to-numeric converters. Both model and provider carriers must be numeric;
+the original mapping owns conversion, binding and reading. Preserve contextual mapping inference,
+capture snapshots, exact duplicates/order/NULL cells, current values and empty-inline metadata.
+Constant, MultipleParameters and the default policy participate; single JSON parameters remain separate.
+
+Typing casts follow the provider carrier, never the physical column's narrower facets: MySQL uses
+DECIMAL(65,30), FLOAT or DOUBLE, Oracle NUMBER, BINARY_FLOAT or BINARY_DOUBLE. Every CLR decimal
+fits DECIMAL(65,30) without rounding (at most 29 integral and 28 fractional digits). Reject non-finite
+floating inputs through the mapping's existing validation. The MySQL CAST documentation and public
+[v4.3.5_CE_BP5 parser cast_data_type production](https://github.com/oceanbase/oceanbase/blob/v4.3.5_CE_BP5/src/sql/parser/sql_parser_mysql_mode.y#L6483)
+confirm decimal/float/double syntax; Oracle CAST's
+conversion table confirms NUMBER and binary floating targets. This is source evidence, not live proof.
+
+Cover both modes/null settings/policies, arrays/lists, inline/captured empty roots, nullable values,
+min/max, scale-28 decimals, floating subnormals, rebinding and converter provider ownership. Intercepted
+sync/async commands must verify exact values/DbTypes and mapping readers independently of SQL shape.
+Native UNION coercion/results and older-server syntax remain live acceptance gates. Text/other carriers
+and contextual projections of converted collection elements remain separate work: SelectMany,
+FirstOrDefault and Join can fail EF's earlier conflicting-mapping check. Nonprojected contextual
+roots and ordinary native element projections participate; do not bypass EF's conflict validation.
+
 ## Wider integer collection-root contract (Batch3aa, QRY-03/11, MAP-06/07)
 
 Extend the existing VALUES expansion/UNION ALL renderer and empty-inline metadata path to sbyte,

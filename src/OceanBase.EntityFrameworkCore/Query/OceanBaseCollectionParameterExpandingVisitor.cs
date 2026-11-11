@@ -28,8 +28,8 @@ namespace OceanBase.EntityFrameworkCore.Query
             if (node is ValuesExpression { ValuesParameter: { } root } valuesExpression)
             {
                 if (root.TypeMapping?.ElementTypeMapping is not RelationalTypeMapping elementMapping
-                    || !IsSupportedIntegral(elementMapping))
-                    throw new NotSupportedException("General collection roots require integer elements with non-null-converting integer storage carriers.");
+                    || !IsSupportedNumeric(elementMapping))
+                    throw new NotSupportedException("General collection roots require numeric elements with non-null-converting numeric storage carriers.");
                 if (!(valuesExpression.ColumnNames.SequenceEqual(new[] { "Value" })
                     || valuesExpression.ColumnNames.SequenceEqual(new[] { "_ord", "Value" })))
                     throw new NotSupportedException("Unsupported general collection column layout.");
@@ -87,14 +87,17 @@ namespace OceanBase.EntityFrameworkCore.Query
             return membership.Update((SqlExpression)Visit(membership.Item), scalars);
         }
 
-        internal static bool IsSupportedIntegral(RelationalTypeMapping mapping)
+        internal static bool IsSupportedNumeric(RelationalTypeMapping mapping)
             => mapping.Converter?.ConvertsNulls != true
                 && Type.GetTypeCode(Nullable.GetUnderlyingType(mapping.ClrType) ?? mapping.ClrType) is (TypeCode.SByte or TypeCode.Byte or TypeCode.Int16
-                    or TypeCode.UInt16 or TypeCode.Int32 or TypeCode.UInt32 or TypeCode.Int64 or TypeCode.UInt64)
+                    or TypeCode.UInt16 or TypeCode.Int32 or TypeCode.UInt32 or TypeCode.Int64 or TypeCode.UInt64
+                    or TypeCode.Decimal or TypeCode.Single or TypeCode.Double)
                 && mapping is OceanBaseIntegerTypeMapping<sbyte> or OceanBaseIntegerTypeMapping<byte>
                     or OceanBaseIntegerTypeMapping<short> or OceanBaseIntegerTypeMapping<ushort>
                     or OceanBaseIntegerTypeMapping<int> or OceanBaseIntegerTypeMapping<uint>
-                    or OceanBaseIntegerTypeMapping<long> or OceanBaseIntegerTypeMapping<ulong>;
+                    or OceanBaseIntegerTypeMapping<long> or OceanBaseIntegerTypeMapping<ulong>
+                    or OceanBaseDecimalTypeMapping or OceanBaseFloatingPointTypeMapping<float>
+                    or OceanBaseFloatingPointTypeMapping<double>;
 
         private List<object?> Snapshot(SqlParameterExpression source)
         {

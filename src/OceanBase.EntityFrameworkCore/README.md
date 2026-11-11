@@ -19,12 +19,15 @@ This is a development provider. Local tests cover model/type mappings, SQL gener
 pipelines and package consumption. Real OceanBase query, write, transaction and schema acceptance is still open
 for both modes. Passing local tests does not establish server compatibility or release readiness.
 
-General query collection roots support all eight CLR integer types, nullable forms and integer-backed
-enums through scalar parameters or constants and SELECT/UNION ALL. Empty roots retain their original
-element type and produce zero-row SQL. Integer-to-integer converters keep their parameter/read hooks;
-typing casts use the provider carrier's signedness in MySQL and NUMBER in Oracle. Single-parameter
-JSON-style roots, noninteger carriers and null-converting converters are not supported by this path.
-Some directly projected converted joins still fail EF's mapping-inference check. Native UNION typing,
+General query collection roots support all eight CLR integer types, decimal, Single, Double, nullable
+forms and integer-backed enums through scalar parameters or constants and SELECT/UNION ALL. Empty
+roots retain their original element type and produce zero-row SQL. Numeric-to-numeric converters keep
+their parameter/read hooks. Typing casts follow the provider carrier independently of column facets:
+MySQL SIGNED/UNSIGNED, DECIMAL(65,30), FLOAT or DOUBLE; Oracle NUMBER, BINARY_FLOAT or BINARY_DOUBLE.
+Non-finite floating inputs reject before execution. Single-parameter JSON-style roots, nonnumeric
+carriers and null-converting converters are not supported by this path.
+Contextually converted element projections (including SelectMany, FirstOrDefault and Join) can still
+fail EF's mapping-inference check. Native UNION typing,
 results and query costs remain unverified.
 
 Integer `&`, `|`, `^`, `~`, `<<` and `>>` have per-mode SQL translations, including nullable values and
