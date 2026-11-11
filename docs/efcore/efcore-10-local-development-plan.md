@@ -175,6 +175,51 @@ guarded until the next slice; Oracle tenant creation is never inferred.
 - Add deterministic both-mode sync/async connection/command fixtures and option-clone tests, RED/GREEN, full
   suites, same-package consumer smoke, independent review, docs and a local commit. No actual DB access.
 
+## Batch7c brief: explicitly owned MySQL database namespaces
+
+SCH-01/02/03, CFG-04: add typed/untyped EnableOceanBaseDatabaseManagement(databaseName), separate
+from the existing-schema opt-in. It declares ownership of the entire named MySQL database, including
+objects outside the EF model. Preserve immutable per-context options/clones and singleton sharing;
+switching back to EnableOceanBaseSchemaManagement disables namespace management. Reject system database
+names. Oracle user/schema namespace provisioning/deletion remains a separate locally developable slice;
+do not infer tenant creation or attribute this unimplemented profile to connector/server limitations.
+
+- Require the current configured MySQL database name to match the declared scope exactly, a configured
+  connection string, a closed target physical connection and no active/enlisted/ambient transaction.
+  Verify provider-created identity and agreement of canonical EF/native configuration; reject runtime
+  supplied connections and native routing/credential/TLS hooks before any management open.
+  Validate the complete table plan before EnsureCreated can create a namespace. Supplied/native custom
+  connections require a future explicit management-connection contract; do not copy private credentials.
+- Clone EF connection dependencies/options into an independent provider connection with Database empty;
+  retain mode, interceptors, timeout and public connector APIs, without changing the target connection.
+  Query information_schema.schemata with a bound name and verify its returned spelling exactly. Do not
+  treat authorization/network/catalog errors as absence. Quote namespace DDL with the SQL helper.
+- Create/Delete execute CREATE/DROP DATABASE directly. Catalog NULL cannot prove absence because
+  visibility depends on privileges; EnsureDeleted still attempts DROP and returns false only for
+  known-outcome MySQL error1008. Direct Delete preserves that error. EnsureCreated creates a missing namespace and tables,
+  returns false for existing populated schemas, and handles an empty model without invented tables.
+  Clear only the target connector pool around namespace mutation; never clear unrelated pools.
+- Async propagates tokens and checks pre-cancellation. Dispose only the owned management connection;
+  preserve primary errors and attach cleanup failures. DDL is non-atomic, has no auto-retry/rollback and
+  may leave a created namespace or partial tables after failure. Never auto-drop on create failure.
+- Test option boundaries, exact names/quoting, master-versus-target connection identity, lifecycle paths,
+  transactions/cancellation/failures/cleanup, both sync/async, and retained Oracle guards. Full baseline
+  Debug/Release/isolated14, same-package/content/graph/hash gates, independent review, docs/local commit.
+  No database access, live test application, EF8/9, push or publication.
+
+- Batch7c review ruling: EF can cache an old connection string while the actual native target has
+  changed server/credentials; runtime SetDbConnection bypasses options-level supplied guards. Fourteen
+  RED regression cases prove this risk. Track provider-created native identity, reject custom hooks and
+  compare both strings through the same public-mode/concurrency validator. Preserve supported EF
+  SetConnectionString. Hidden secrets cannot prove equivalence and are conservatively rejected.
+- Batch7c source gates:59 intercepted lifecycle and12 option cases pass. Full Debug/Release and isolated
+  EF10.0.14 Release each2461=1644+815+2 pass, zero failures/skips. Independent source re-review approves
+  with no open findings. Same database-management-r2 package passes both modes/patches, archive content,
+  package-only graphs and DLL identity. Preceding package returns handled exit1 at the missing new API.
+  Final documentation/consumer review approves after explicit packaged CREATE TABLE/INDEX assertions
+  and a table-only namespace note correction. Same unchanged package reruns pass both patches/modes;
+  provider DLL identity remains unchanged. Local slice is ready for commit; overall goal stays active.
+
 ## Batch5a brief: tracked graph writes and composite concurrency
 
 UPD-01..05 and DIA-02: exercise real EF SaveChanges in both modes, sync/async, with commands intercepted

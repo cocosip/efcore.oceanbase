@@ -12,9 +12,10 @@ using OceanBaseConnector;
 
 namespace OceanBase.EntityFrameworkCore.Storage
 {
-    internal sealed class OceanBaseDatabaseCreator(
+    internal sealed partial class OceanBaseDatabaseCreator(
         IRelationalConnection connection, IRawSqlCommandBuilder commands, ICurrentDbContext currentContext,
-        IRelationalCommandDiagnosticsLogger logger, IDbContextOptions options) : IRelationalDatabaseCreator
+        IRelationalCommandDiagnosticsLogger logger, IDbContextOptions options,
+        RelationalConnectionDependencies connectionDependencies) : IRelationalDatabaseCreator
     {
         private readonly OceanBaseCompatibilityMode _mode = options.FindExtension<Internal.OceanBaseOptionsExtension>()!.CompatibilityMode;
 
@@ -90,12 +91,14 @@ namespace OceanBase.EntityFrameworkCore.Storage
                 : (long)OceanBaseNumericConversion.ConvertValue(value, typeof(long)) > 0;
 
         private static NotSupportedException SchemaNotSupported()
-            => new("OceanBase database/user creation and deletion are not implemented. Provision the database/schema externally; opt in to existing-schema table creation with EnableOceanBaseSchemaManagement.");
+            => new("Namespace management requires EnableOceanBaseDatabaseManagement for an owned MySQL database. Oracle user/schema creation and deletion are not implemented. Use EnableOceanBaseSchemaManagement for existing-schema table creation.");
 
-        public void Create() => throw SchemaNotSupported();
-        public Task CreateAsync(CancellationToken cancellationToken = default) => throw SchemaNotSupported();
-        public void Delete() => throw SchemaNotSupported();
-        public Task DeleteAsync(CancellationToken cancellationToken = default) => throw SchemaNotSupported();
+        public void Create() => ManageDatabase(delete: false, checkExists: false);
+        public async Task CreateAsync(CancellationToken cancellationToken = default)
+            => await ManageDatabaseAsync(delete: false, checkExists: false, cancellationToken).ConfigureAwait(false);
+        public void Delete() => ManageDatabase(delete: true, checkExists: false);
+        public async Task DeleteAsync(CancellationToken cancellationToken = default)
+            => await ManageDatabaseAsync(delete: true, checkExists: false, cancellationToken).ConfigureAwait(false);
         public void CreateTables() => CreateTables(onlyIfEmpty: false);
         public async Task CreateTablesAsync(CancellationToken cancellationToken = default)
             => await CreateTablesAsync(onlyIfEmpty: false, cancellationToken).ConfigureAwait(false);
@@ -106,9 +109,22 @@ namespace OceanBase.EntityFrameworkCore.Storage
             return string.Join(";\n\n", statements) + (statements.Count > 0 ? ";\n" : "");
         }
 
-        public bool EnsureCreated() => CreateTables(onlyIfEmpty: true);
-        public Task<bool> EnsureCreatedAsync(CancellationToken cancellationToken = default)
-            => CreateTablesAsync(onlyIfEmpty: true, cancellationToken);
+        public bool EnsureCreated()
+        {
+            if (!DatabaseManagementEnabled) return CreateTables(onlyIfEmpty: true);
+            ValidateTableCreation();
+            var created = ManageDatabase(delete: false, checkExists: true);
+            return CreateTables(onlyIfEmpty: !created) || created;
+        }
+
+        public async Task<bool> EnsureCreatedAsync(CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (!DatabaseManagementEnabled) return await CreateTablesAsync(onlyIfEmpty: true, cancellationToken).ConfigureAwait(false);
+            ValidateTableCreation();
+            var created = await ManageDatabaseAsync(delete: false, checkExists: true, cancellationToken).ConfigureAwait(false);
+            return await CreateTablesAsync(onlyIfEmpty: !created, cancellationToken).ConfigureAwait(false) || created;
+        }
 
         private IReadOnlyList<string> CreateStatements(IModel model)
             => new OceanBaseSchemaSqlGenerator(currentContext.Context.GetService<ISqlGenerationHelper>(), _mode).Generate(model);
@@ -213,7 +229,8 @@ namespace OceanBase.EntityFrameworkCore.Storage
             }
         }
 
-        public bool EnsureDeleted() => throw SchemaNotSupported();
-        public Task<bool> EnsureDeletedAsync(CancellationToken cancellationToken = default) => throw SchemaNotSupported();
+        public bool EnsureDeleted() => ManageDatabase(delete: true, checkExists: true);
+        public Task<bool> EnsureDeletedAsync(CancellationToken cancellationToken = default)
+            => ManageDatabaseAsync(delete: true, checkExists: true, cancellationToken);
     }
 }

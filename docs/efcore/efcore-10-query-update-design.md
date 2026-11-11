@@ -890,9 +890,52 @@ lease alone. Caller/outer connection ownership follows EF's connection accountin
 
 DDL may implicitly commit and the plan is not atomic. No automatic retry, DROP rollback, destructive cleanup or
 schema upgrade occurs; failure can leave partially created objects requiring explicit manual cleanup. Concurrent
-creation is not serialized. Create/Delete/EnsureDeleted and async variants remain unsupported pending namespace
-ownership/deletion design. SchemaLifecycleTests and package consumers intercept all commands: they establish
+creation is not serialized. Create/Delete/EnsureDeleted and async variants are unsupported under this
+table-only option; the following section defines explicit MySQL namespace ownership. SchemaLifecycleTests
+and package consumers intercept all commands: they establish
 client SQL/control flow, not real DDL, physical session continuity, server permissions or cleanup.
+
+### Explicit MySQL database ownership (SCH-01/02/03)
+
+EnableOceanBaseDatabaseManagement(databaseName) declares ownership of an entire MySQL database,
+including unrelated-to-model objects. It also enables the existing table-creation profile; switching
+back to EnableOceanBaseSchemaManagement removes namespace permission. This opt-in is per-context,
+cloned with relational options, omitted from diagnostic fragments and not a singleton/model-cache key.
+Reject known system databases (mysql, oceanbase, sys, information_schema, performance_schema).
+Oracle user/schema creation/deletion needs its own management/authentication contract and remains
+unimplemented by this slice; this is not evidence of a connector or deployed-server defect.
+
+Before any management open, require exact ordinal agreement between the connection's configured
+database and declared name, a configured connection string, a closed target native connection and no
+current/enlisted/ambient transaction. Supplied/custom native connections are outside this initial
+namespace profile, because their credential/provider configuration cannot be cloned through the
+currently consumed public API. The future explicit management-connection profile remains local work.
+Verify provider-created native connection identity and canonical configuration against EF's active
+connection string (including credentials and the enforced mode), and reject native routing, credential
+or TLS hooks before management opens. Runtime SetDbConnection is a supplied connection; EF's
+SetConnectionString remains supported when the actual native configuration agrees. A native string
+with hidden credentials cannot establish that agreement and is rejected; no private state is copied.
+EnsureCreated validates the entire table plan before creating a namespace. No tenant is created.
+
+Use an owned, independent OceanBaseRelationalConnection constructed from EF10 injected dependency
+records with cloned options and Database empty. Retain mode, interceptors and runtime command timeout.
+Use a bound name to query information_schema.schemata; exact matching name means present, mismatched
+returned spelling or malformed values reject. NULL is not authoritative absence because catalog
+visibility can depend on privileges. Create/Delete issue quoted CREATE DATABASE/DROP DATABASE;
+EnsureDeleted still attempts the explicitly owned DROP after a NULL catalog result and returns false
+only for MySQL error1008 with a known execution outcome. Direct Delete preserves that error. Do not
+swallow authorization/network/catalog errors or unknown execution outcomes.
+EnsureCreated creates missing namespace/tables, skips populated schemas and can create an empty-model
+namespace. Existing-schema-only behavior remains unchanged. Clear only the target connector pool at
+namespace mutation boundaries through OceanBaseConnection.ClearPool, not ClearAllPools.
+
+Async honors cancellation before validation/opening and on all commands. Dispose only the owned
+management connection; preserve an operation failure over disposal and attach a secondary error as
+Data["OceanBase.DatabaseManagementCleanupError"]. Disposal failure can leave native state requiring
+manual cleanup. DDL is non-atomic and is not retried: a later table failure may leave the new database or
+partial tables, with no automatic DROP rollback. Concurrent creation/deletion is not serialized.
+Local tests and packaged consumers prove client control flow only; native privileges, selected-server
+syntax, database-name rules/case, sessions and pool invalidation still require declared live evidence.
 
 ### Transactions and savepoints (TXN-01..03)
 

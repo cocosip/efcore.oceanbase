@@ -14,6 +14,10 @@ namespace OceanBase.EntityFrameworkCore.Storage
     internal sealed class OceanBaseRelationalConnection : RelationalConnection
     {
         private readonly OceanBaseCompatibilityMode _compatibilityMode;
+        private OceanBaseConnection? _providerCreatedConnection;
+
+        internal bool IsProviderCreatedConnection(OceanBaseConnection value)
+            => ReferenceEquals(value, _providerCreatedConnection);
 
         public OceanBaseRelationalConnection(RelationalConnectionDependencies dependencies)
             : base(dependencies)
@@ -32,7 +36,7 @@ namespace OceanBase.EntityFrameworkCore.Storage
                 : OceanBaseConnector.OceanBaseCompatibilityMode.MySql;
 
         protected override DbConnection CreateDbConnection()
-            => new OceanBaseConnection(ValidateConnectionString(GetValidatedConnectionString()));
+            => _providerCreatedConnection = new OceanBaseConnection(ValidateConnectionString(GetValidatedConnectionString()));
 
         public override void SetDbConnection(DbConnection? value, bool contextOwnsConnection)
         {
@@ -141,7 +145,7 @@ namespace OceanBase.EntityFrameworkCore.Storage
             if (EnlistedTransaction is not null) throw new InvalidOperationException(RelationalStrings.ConflictingEnlistedTransaction);
         }
 
-        private string ValidateConnectionString(string connectionString)
+        internal string ValidateConnectionString(string connectionString)
         {
             var builder = new OceanBaseConnectionStringBuilder(connectionString);
             if (builder.ExpectedMode is { } configuredMode && configuredMode != ExpectedMode)

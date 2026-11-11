@@ -51,16 +51,27 @@ namespace OceanBase.EntityFrameworkCore.Internal
         {
             CompatibilityMode = copyFrom.CompatibilityMode;
             SchemaManagementScope = copyFrom.SchemaManagementScope;
+            DatabaseManagementEnabled = copyFrom.DatabaseManagementEnabled;
         }
 
         public OceanBaseCompatibilityMode CompatibilityMode { get; private set; }
         public string? SchemaManagementScope { get; private set; }
+        public bool DatabaseManagementEnabled { get; private set; }
 
         public OceanBaseOptionsExtension WithSchemaManagementScope(string scope)
         {
             ArgumentException.ThrowIfNullOrWhiteSpace(scope);
             if (scope.Contains('\0')) throw new ArgumentException("The schema management scope cannot contain NUL.", nameof(scope));
-            return new OceanBaseOptionsExtension(this) { SchemaManagementScope = scope };
+            return new OceanBaseOptionsExtension(this) { SchemaManagementScope = scope, DatabaseManagementEnabled = false };
+        }
+
+        public OceanBaseOptionsExtension WithDatabaseManagementScope(string scope)
+        {
+            var clone = WithSchemaManagementScope(scope);
+            if (scope.ToLowerInvariant() is "mysql" or "oceanbase" or "sys" or "information_schema" or "performance_schema")
+                throw new ArgumentException("System databases cannot be owned by EF database management.", nameof(scope));
+            clone.DatabaseManagementEnabled = true;
+            return clone;
         }
 
         public override DbContextOptionsExtensionInfo Info

@@ -44,7 +44,17 @@ optionsBuilder.UseOceanBase(connectionString, OceanBaseCompatibilityMode.MySql)
 The current database/schema must match the declared name exactly, including case. `EnsureCreated` returns false
 if any ordinary table exists; it does not reconcile or upgrade existing schemas. DDL is not atomic and a failure
 can leave partially created objects requiring manual cleanup. Caller transactions and seeding callbacks are
-rejected. Database/user creation and `EnsureDeleted` remain unsupported; this option enables table creation only.
+rejected. This option enables table creation only.
+
+For an application-owned MySQL database, `EnableOceanBaseDatabaseManagement("application_database")`
+also enables namespace creation and `EnsureDeleted`. It declares ownership of the **entire database**,
+including objects outside the model; deletion drops that database. System database names are rejected.
+Use a closed provider-created connection configured by connection string, with exactly the declared
+database name. Runtime supplied connections, native routing/credential/TLS hooks or native-only string
+changes are rejected before management opens. Hidden credentials prevent configuration verification
+and are rejected as well. Oracle user/schema provisioning and deletion remain unimplemented.
+DDL is non-atomic: failed table creation can leave a new database or partial objects; no automatic
+drop rollback or retry occurs. Actual server syntax, privileges and pool effects need live validation.
 
 Automatic savepoint recovery after cancellation uses an uncancelled cleanup token and preserves the original
 save error. Recovery or native disposal can still fail; discard an unusable context/transaction and explicitly

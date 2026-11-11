@@ -45,20 +45,80 @@ namespace PackageConsumer
                     throw new Exception("Packed schema creation changed an existing populated schema.");
             }
             Console.WriteLine($"{mode}: packed provider intercepted sync/async existing-schema creation passed.");
+            RunDatabaseManagement(mode);
+        }
+
+        private static void RunDatabaseManagement(OceanBaseCompatibilityMode mode)
+        {
+            foreach (var async in new[] { false, true })
+            {
+                var capture = new Capture();
+                using var context = new SchemaContext(new DbContextOptionsBuilder<SchemaContext>()
+                    .UseOceanBase("Server=offline;Database=owned", mode)
+                    .EnableOceanBaseDatabaseManagement("owned").AddInterceptors(capture).Options);
+                capture.Target = context.Database.GetDbConnection();
+                if (mode == OceanBaseCompatibilityMode.Oracle)
+                {
+                    try
+                    {
+                        if (async) context.Database.EnsureDeletedAsync().GetAwaiter().GetResult();
+                        else context.Database.EnsureDeleted();
+                        throw new Exception("Packed provider allowed unsupported Oracle namespace deletion.");
+                    }
+                    catch (NotSupportedException) { }
+                    if (capture.Opens != 0) throw new Exception("Oracle namespace rejection opened a connection.");
+                    continue;
+                }
+                var created = async ? context.Database.EnsureCreatedAsync().GetAwaiter().GetResult() : context.Database.EnsureCreated();
+                if (!created || capture.Commands.Count != 5 || capture.Commands[1] != "CREATE DATABASE `owned`"
+                    || capture.Commands[2] != "SELECT DATABASE()"
+                    || !capture.Commands[3].StartsWith("CREATE TABLE", StringComparison.Ordinal)
+                    || !capture.Commands[4].StartsWith("CREATE UNIQUE INDEX", StringComparison.Ordinal))
+                    throw new Exception("Packed provider lost namespace-before-table creation.");
+                capture.Commands.Clear();
+                var deleted = async ? context.Database.EnsureDeletedAsync().GetAwaiter().GetResult() : context.Database.EnsureDeleted();
+                if (!deleted || capture.Commands.Count != 2 || capture.Commands[1] != "DROP DATABASE `owned`"
+                    || capture.Target.Database != "owned")
+                    throw new Exception("Packed provider lost owned namespace deletion or changed the target.");
+                capture.Commands.Clear();
+                capture.Opens = 0;
+                ((OceanBaseConnector.OceanBaseConnection)capture.Target).ConnectionString = "Server=other;Database=owned";
+                try
+                {
+                    if (async) context.Database.EnsureDeletedAsync().GetAwaiter().GetResult();
+                    else context.Database.EnsureDeleted();
+                    throw new Exception("Packed provider accepted a stale management server configuration.");
+                }
+                catch (NotSupportedException) { }
+                if (capture.Opens != 0 || capture.Commands.Count != 0)
+                    throw new Exception("Unsafe management configuration reached connection execution.");
+            }
+            Console.WriteLine($"{mode}: packed provider namespace ownership and management connection guards passed.");
         }
 
         private sealed class Capture : DbConnectionInterceptor, IDbCommandInterceptor
         {
             public List<string> Commands { get; } = [];
             public bool HasTables { get; set; }
+            public bool NamespaceExists { get; set; }
+            public DbConnection? Target { get; set; }
+            public int Opens { get; set; }
             public override InterceptionResult ConnectionOpening(DbConnection connection, ConnectionEventData eventData, InterceptionResult result)
-                => InterceptionResult.Suppress();
+            { Opens++; return InterceptionResult.Suppress(); }
             public override ValueTask<InterceptionResult> ConnectionOpeningAsync(DbConnection connection, ConnectionEventData eventData,
                 InterceptionResult result, CancellationToken cancellationToken = default)
-                => ValueTask.FromResult(InterceptionResult.Suppress());
+                => ValueTask.FromResult(ConnectionOpening(connection, eventData, result));
             public InterceptionResult<object> ScalarExecuting(DbCommand command, CommandEventData eventData, InterceptionResult<object> result)
             {
                 Commands.Add(command.CommandText);
+                if (command.CommandText.StartsWith("SELECT SCHEMA_NAME", StringComparison.Ordinal))
+                {
+                    VerifyManagementConnection(command);
+                    if (!command.CommandText.EndsWith("SCHEMA_NAME = ?", StringComparison.Ordinal)
+                        || command.Parameters.Count != 1 || !Equals(command.Parameters[0].Value, "owned"))
+                        throw new Exception("Packed namespace probe did not bind its scope.");
+                    return InterceptionResult<object>.SuppressWithResult(NamespaceExists ? "owned" : DBNull.Value);
+                }
                 return InterceptionResult<object>.SuppressWithResult(command.CommandText.StartsWith("SELECT COUNT", StringComparison.Ordinal)
                     ? HasTables ? 1 : 0 : "owned");
             }
@@ -68,7 +128,18 @@ namespace PackageConsumer
             public InterceptionResult<int> NonQueryExecuting(DbCommand command, CommandEventData eventData, InterceptionResult<int> result)
             {
                 Commands.Add(command.CommandText);
+                if (command.CommandText.StartsWith("CREATE DATABASE", StringComparison.Ordinal)
+                    || command.CommandText.StartsWith("DROP DATABASE", StringComparison.Ordinal))
+                {
+                    VerifyManagementConnection(command);
+                    NamespaceExists = command.CommandText.StartsWith("CREATE", StringComparison.Ordinal);
+                }
                 return InterceptionResult<int>.SuppressWithResult(0);
+            }
+            private void VerifyManagementConnection(DbCommand command)
+            {
+                if (command.Connection is null || ReferenceEquals(command.Connection, Target) || command.Connection.Database != "")
+                    throw new Exception("Packed namespace command did not use an independent connection without a database.");
             }
             public ValueTask<InterceptionResult<int>> NonQueryExecutingAsync(DbCommand command, CommandEventData eventData,
                 InterceptionResult<int> result, CancellationToken cancellationToken = default)

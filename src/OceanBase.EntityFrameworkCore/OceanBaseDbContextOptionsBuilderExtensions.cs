@@ -89,6 +89,27 @@ namespace Microsoft.EntityFrameworkCore
             => (DbContextOptionsBuilder<TContext>)(object)((DbContextOptionsBuilder)optionsBuilder)
                 .EnableOceanBaseSchemaManagement(databaseOrSchema);
 
+        /// <summary>
+        /// Enables creation and deletion of the entire named MySQL database, including non-model objects.
+        /// Requires a closed provider-created connection configured by string for that exact database,
+        /// without native routing, credential or TLS hooks. Oracle namespace management is not implemented.
+        /// </summary>
+        public static DbContextOptionsBuilder EnableOceanBaseDatabaseManagement(
+            this DbContextOptionsBuilder optionsBuilder, string databaseName)
+        {
+            ArgumentNullException.ThrowIfNull(optionsBuilder);
+            var extension = GetOrCreateExtension(optionsBuilder).WithDatabaseManagementScope(databaseName);
+            ((IDbContextOptionsBuilderInfrastructure)optionsBuilder).AddOrUpdateExtension(extension);
+            return optionsBuilder;
+        }
+
+        /// <summary>Declares ownership of an entire MySQL database for creation and deletion.</summary>
+        public static DbContextOptionsBuilder<TContext> EnableOceanBaseDatabaseManagement<TContext>(
+            this DbContextOptionsBuilder<TContext> optionsBuilder, string databaseName)
+            where TContext : DbContext
+            => (DbContextOptionsBuilder<TContext>)(object)((DbContextOptionsBuilder)optionsBuilder)
+                .EnableOceanBaseDatabaseManagement(databaseName);
+
         private static void ConfigureWarnings(DbContextOptionsBuilder optionsBuilder)
         {
             var coreOptions = optionsBuilder.Options.FindExtension<CoreOptionsExtension>()

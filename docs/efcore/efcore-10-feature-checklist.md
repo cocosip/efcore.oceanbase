@@ -73,6 +73,18 @@ content and both-mode/patch consumers; prior lifecycle package fails the new NUL
 Release and consumer DLL identities match. Independent review found and closed an async token-count test
 gap; no production findings remain. Transactions/live remain open.
 
+MySQL namespace local checkpoint (Batch7c after89dd02e): explicit entire-database ownership is separate
+from existing-schema table permission. Create/Delete/EnsureCreated/EnsureDeleted use an independent
+database-free management connection, bound catalog probes, quoted DDL and target-only pool clearing.
+Catalog NULL does not prove absence; only known-outcome DROP error1008 makes EnsureDeleted return false.
+Six new option cases and59 intercepted lifecycle cases cover ownership, runtime configuration divergence,
+custom native hooks, transactions, validation-before-DDL, sync/async cancellation and error/cleanup paths.
+Full Debug/Release/isolated14 each2461=1644+815+2 pass, no failures/skips; source review closed wrong-server
+management risk. Oracle namespace and supplied/custom management profiles remain local follow-up work;
+native privileges, SQL and pool/session effects remain live gates. Overall SCH rows remain open.
+The same database-management-r2 package passes both modes on EF10.0.0/10.0.14, content, package-only
+graphs and DLL identity. Previous-package rejection returns handled exit1 without a process crash.
+
 Boolean ordering/text local checkpoint (Batch3z after7235f38):16 unit/16 intercepted cases add exact
 CompareTo and ToString identities with independent normalization, signed CASE results and distinct
 typed.Value versus boxed-object NULL behavior. Covers inverted/unsigned/nullable mappings, current
@@ -397,15 +409,17 @@ duplicates and mode-specific string semantics.
 The acceptance target is an isolated test-owned database/schema with ordinary tables, scalar columns,
 primary/foreign keys, non-unique/unique indexes and supported identity/default definitions. Offline DDL and
 EnableOceanBaseSchemaManagement's existing-schema table-creation profile are locally implemented. Provision the
-database/schema externally and declare its exact case-sensitive name; EnsureCreated skips any populated schema.
+database/schema externally for that profile and declare its exact case-sensitive name. MySQL additionally has
+EnableOceanBaseDatabaseManagement's explicitly owned namespace profile. EnsureCreated skips populated schemas.
 DDL is not atomic and can leave partial objects; no automatic retry or destructive rollback is attempted.
-Namespace creation/deletion and live DDL acceptance remain open. Creating an Oracle tenant is never inferred.
+Oracle namespace creation/deletion, custom management profiles and live DDL acceptance remain open.
+Creating an Oracle tenant is never inferred.
 
 | ID | Requirement and acceptance criteria | Priority | MySQL | Oracle | Existing evidence / gap |
 | --- | --- | --- | --- | --- | --- |
 | SCH-01 | DatabaseFacade services resolve; existence checks distinguish absence from authentication, permission and network failures. | Required | In progress | In progress | Scoped creator/read-only probes/error classification and Batch6a shared failed-open rollback exist. Physical cleanup has deterministic double evidence; live absence/authentication/permission/network and cleanup evidence remain open. Schema DDL is separate. |
-| SCH-02 | EnsureCreated/GenerateCreateScript implement schema profile and key generation; existing populated schemas are handled explicitly. | Required | In progress | In progress | Offline scripts and explicitly scoped existing-schema EnsureCreated/CreateTables are implemented; 46 intercepted lifecycle cases plus six option cases cover both modes/sync/async, scope/FK boundaries, existing tables, transactions/callback rejection, cancellation, partial failure and cleanup errors. Namespace creation and native/live DDL remain open. |
-| SCH-03 | EnsureDeleted has an explicit ownership/deletion boundary, preserves unrelated tenant objects and fails clearly outside supported profile. | Required | Planned | Planned | Destructive-operation contract missing; tests must use isolated owned fixtures. |
+| SCH-02 | EnsureCreated/GenerateCreateScript implement schema profile and key generation; existing populated schemas are handled explicitly. | Required | In progress | In progress | Existing-schema table profile covers both modes. Batch7c adds explicitly owned MySQL namespace creation, empty models and full plan validation before DDL; 59 additional lifecycle and six additional option cases. Oracle provisioning, custom management connections, seeding callbacks and native/live DDL remain open. |
+| SCH-03 | EnsureDeleted has an explicit ownership/deletion boundary, preserves tenant objects outside that boundary and fails clearly outside supported profile. | Required | In progress | Planned | Batch7c explicitly owns the entire named MySQL database, including non-model objects; independent verified management connection, quoted DROP, known-outcome error1008 absence and local failure/cleanup/cancellation coverage exist. Oracle namespace deletion and custom management profiles remain unimplemented; actual isolated-fixture deletion, privileges and pool/session effects need live proof. |
 
 ## Packages, compatibility and release evidence
 

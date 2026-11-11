@@ -11,6 +11,47 @@ each small group. Real database integration/tests and EF8/EF9 adaptation are exp
 [local development plan](efcore-10-local-development-plan.md) tracks the full remaining inventory, including
 an audit of locally feasible deferred families. Finishing one batch does not finish the overall goal.
 
+### Explicitly owned MySQL database namespace checkpoint (2026-11-11)
+
+Batch7c after89dd02e adds typed/untyped EnableOceanBaseDatabaseManagement(databaseName), separate
+from the existing-schema table-only permission. It declares ownership of the entire named MySQL
+database, including objects outside the EF model. System database names reject; switching back to
+EnableOceanBaseSchemaManagement disables namespace management. Oracle provisioning/deletion and
+supplied/custom management connections remain locally developable follow-ups, not connector defects.
+
+Create/Delete and EnsureCreated/EnsureDeleted use an owned independent provider connection with no
+selected database, cloned injected EF dependencies/options, retained interceptors/runtime timeout,
+bound information_schema probes and quoted CREATE/DROP DATABASE. Only the target connector pool is
+cleared around mutations. A NULL catalog row cannot prove absence because visibility depends on
+privileges: EnsureDeleted still attempts DROP, returning false only for known-outcome error1008.
+Direct Delete retains that error; permission/network/unknown outcomes propagate. EnsureCreated
+validates the full table plan before namespace creation, handles empty models and skips populated
+schemas. Caller transactions reject. Cancellation and primary-versus-cleanup failures remain explicit.
+
+Independent review identified stale EF connection strings and runtime native replacement/hooks as a
+wrong-server management risk. Fourteen RED cases establish it; provider-created identity, shared
+configuration validation, canonical EF/native agreement and routing/credential/TLS hook guards fix it
+before management opens. EF SetConnectionString remains supported; native-only mutation, runtime
+SetDbConnection and hidden-secret ambiguity reject. No private connector state is copied.
+
+SchemaManagementOptionsTests adds six cases (12 total); DatabaseManagementTests adds59 intercepted
+sync/async cases covering namespace lifecycle, names/quoting, invisible catalogs/error classification,
+connection identity, configuration mutation, transaction/plan/seeding guards, cancellation and cleanup.
+Full Debug/Release and isolated EF10.0.14 Release each pass2461=1644 unit+815 functional+2 consumers,
+zero failures/skips. Independent source/fix review approves. The same baseline-built
+`10.0.0-database-management-r2-20261111` package passes both modes on EF10.0.0/10.0.14, package content,
+package-only dependency graphs and provider DLL identity:
+`7335872C39CA355B535C04B3AFFF3FCB1AD0DC5E491C21E4FF83C9AB3E7F91F0`.
+The preceding package rejects the new API with a handled MissingMethodException, exit1 and no unhandled
+process exception. Baseline assets remain EF10.0.0. Evidence: artifacts/database-management-{options,
+profile-red,focused,debug,release-final,patch,package-final,previous-package}.log, the corresponding
+package/compat directories and artifacts/verify-database-management-package.ps1.
+
+Native permissions, server syntax/name/case rules, concurrent DDL, physical pool/session effects and
+actual rollback/cleanup remain unverified live gates. DDL is non-atomic and not retried; later failure
+may leave a namespace or partial objects, with no automatic DROP rollback. SCH-01/02/03 remain open.
+Overall EF10 work continues; no live DB/application, EF8/EF9, push or publication occurred.
+
 ### Boolean ordering and string representation checkpoint (2026-11-11)
 
 Batch3z after7235f38 adds exact bool.CompareTo(bool/object) and Boolean/nullable/boxed ToString
