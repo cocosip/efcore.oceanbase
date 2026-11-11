@@ -3059,6 +3059,22 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
             Assert.Empty(commands.Sql);
         }
 
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public async Task MySql_multiple_generated_keys_fail_before_writes(bool async)
+        {
+            var commands = new CommandCapture();
+            await using var context = CreateContext(OceanBaseCompatibilityMode.MySql, commands);
+            context.Add(new MultipleGeneratedKey());
+
+            var exception = async ? await Assert.ThrowsAsync<NotSupportedException>(() => context.SaveChangesAsync())
+                : Assert.Throws<NotSupportedException>(() => context.SaveChanges());
+
+            Assert.Contains("at most one generated identity", exception.Message, StringComparison.Ordinal);
+            Assert.Empty(commands.Sql);
+        }
+
         private static TestContext CreateContext(OceanBaseCompatibilityMode mode, CommandCapture commands, bool relationalNulls = false)
         {
             var builder = new DbContextOptionsBuilder<TestContext>()
@@ -3131,6 +3147,10 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
                 modelBuilder.Entity<Customer>().ToTable("Customers");
                 modelBuilder.Entity<Customer>().Property(customer => customer.Version).IsConcurrencyToken();
                 modelBuilder.Entity<KeyOnly>().ToTable("Keys");
+                modelBuilder.Entity<MultipleGeneratedKey>().ToTable("MultipleGeneratedKeys");
+                modelBuilder.Entity<MultipleGeneratedKey>().HasKey(entity => new { entity.Id, entity.SecondaryId });
+                modelBuilder.Entity<MultipleGeneratedKey>().Property(entity => entity.Id).ValueGeneratedOnAdd();
+                modelBuilder.Entity<MultipleGeneratedKey>().Property(entity => entity.SecondaryId).ValueGeneratedOnAdd();
                 modelBuilder.Entity<StringDefaultKey>().Property(entity => entity.Id).HasDefaultValueSql("UUID()");
                 modelBuilder.Entity<NumericDefaultKey>().Property(entity => entity.Id).HasDefaultValueSql("123");
                 modelBuilder.Entity<ScalarRow>().Property(entity => entity.Id).ValueGeneratedNever();
@@ -3450,6 +3470,12 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
         private sealed class KeyOnly
         {
             public int Id { get; set; }
+        }
+
+        private sealed class MultipleGeneratedKey
+        {
+            public int Id { get; set; }
+            public int SecondaryId { get; set; }
         }
 
         private sealed class StringDefaultKey

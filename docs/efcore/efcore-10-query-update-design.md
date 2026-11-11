@@ -632,6 +632,12 @@ Oracle output values are converted to the mapping's provider CLR type before app
 assigning through `IColumnModification.Value`, which publishes store-generated values through EF's update entry.
 MySQL readback uses `IReadOnlyModificationCommand.PropagateResults`.
 
+The local generated-readback boundary also rejects a MySQL composite key with more than one generated identity
+column before DML. `LAST_INSERT_ID()` can identify only one generated identity in this provider slice; the
+rejection is covered sync/async through BasicRelationalTests and does not imply a general server limitation or
+cover Oracle's multi-column `RETURNING` path. A future strategy would require an explicit generation contract
+and separate tests.
+
 Update and delete conditions include the original key and concurrency-token values selected by EF. A result other
 than exactly one affected row raises `DbUpdateConcurrencyException` with the affected entries. Provider exceptions
 are wrapped in `DbUpdateException`; cancellation remains `OperationCanceledException`. An already-cancelled async

@@ -11,6 +11,19 @@ each small group. Real database integration/tests and EF8/EF9 adaptation are exp
 [local development plan](efcore-10-local-development-plan.md) tracks the full remaining inventory, including
 an audit of locally feasible deferred families. Finishing one batch does not finish the overall goal.
 
+### Generated readback shape checkpoint (2026-11-11)
+
+Batch5d adds two MySQL sync/async cases for a composite key with two generated identity columns. Both fail
+with the documented provider limitation before command interception; this is not a server or connector
+limitation claim. Focused Release passes2/2; full Debug/Release and isolated EF10.0.14 Release each pass2012
+(1474 unit,536 functional,two consumers), zero failures/skips. Independent read-only review found no code/test
+defects and one stale execution-ledger status, now corrected. No production or package change. Evidence:
+artifacts/generated-readback-{debug,release,patch}-final.log. Oracle multi-output, defaults/computed generation,
+transactions, schema and wider local inventory remain open.
+
+The standalone live-database test program requested on 2026-11-11 has been explicitly postponed by the user
+until provider functionality is implemented. It has not been added; continue the local implementation plan.
+
 ### Tracked graph writes and nullable concurrency checkpoint (2026-11-11)
 
 Batch5a after6714626 adds24 GraphUpdateTests cases for both modes sync/async: three-level dependency

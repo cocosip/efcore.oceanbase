@@ -124,6 +124,15 @@ or throws a synthetic failure. This establishes EF/provider logging boundaries o
 structured redaction sinks, and production policy remain separate. Run focused and full suites, independent
 review and commit; no package rebuild when production code is unchanged.
 
+## Batch5d brief: generated readback shape rejection
+
+UPD-02/UPD-05: add a real EF SaveChanges regression for a MySQL composite key with two generated identity
+columns. The provider's single-identity `LAST_INSERT_ID()` readback contract must reject the shape before
+executing DML in both sync and async paths, with the existing actionable `NotSupportedException`. This is a
+test of the current provider boundary; it does not add a second identity retrieval strategy or establish Oracle
+multi-output/live generation behavior. Run full Debug/Release/isolated14, independent review and commit; no
+package rebuild is needed when production code is unchanged.
+
 ## Batch 1 brief
 
 **Files:** OptionsTests.cs; SqlGenerationHelperTests.cs; ConsumerTests/ProviderConfigurationTests.cs;
@@ -585,6 +594,13 @@ explicit supported duplication contract, not inference from Scale's ambiguous ze
   zero failures/skips. Independent review found and closed async callback/event-text assertions; no production
   change or package rebuild is needed. This is EF logging/interceptor evidence only; connector/server logging
   and live policy stay open.
+
+- Batch5d: BasicRelationalTests adds two MySQL sync/async cases for a composite key with two generated identity
+  columns. Both reject before command interception with the documented single-identity readback limitation.
+  Focused Release passes2/2; full Debug/Release and isolated EF10.0.14 Release each pass2012=1474+536+2,
+  zero failures/skips. Independent read-only review found no code/test defects; corrected its stale suite-status
+  documentation finding. Evidence: artifacts/generated-readback-{debug,release,patch}-final.log. No production or
+  package change; Oracle multi-output and live generation remain open.
 
 - Batch5a after6714626: graph dependency ordering/key propagation/reverse deletes, composite NULL/non-NULL
   original tokens and current NULL writes, zero-row conflict entries, synthetic connector and in-flight
