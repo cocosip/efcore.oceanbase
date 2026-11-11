@@ -12,6 +12,29 @@ each small group. Real database integration/tests and EF8/EF9 adaptation are exp
 [local development plan](efcore-10-local-development-plan.md) tracks the full remaining inventory, including
 an audit of locally feasible deferred families. Finishing one batch does not finish the overall goal.
 
+### General text collection-root checkpoint (2026-11-11)
+
+Batch3ae follows b611f0b. Captured `string`/`string?` arrays and lists, including originally empty inline
+roots, now use the existing general VALUES expansion in both compatibility modes. Provider-owned text mappings
+and non-null-converting model-to-string converters retain their parameters, readers, current values, duplicates,
+NULL cells and zero-row metadata. MySQL uses `CAST(... AS CHAR)` and Oracle uses the declared text store type;
+Oracle empty-string normalization happens after expansion. Numeric roots retain their previous path. Null-converting
+converters, binary/temporal/other carriers, unsupported layouts and explicit `EF.Parameter(collection)` remain
+explicit boundaries before command execution.
+
+Focused text unit coverage passes **27** cases; the general collection-root unit focus passes **151**, integer
+roots **38**, numeric roots **56**, and intercepted text functional coverage **8**. Final EF10.0.0 Debug/Release
+and a fresh isolated EF10.0.14 Release each pass **3922** tests: 1862 unit + 1190 intercepted functional +
+868 model specification + two project-consumer cases, zero failures/skips. Evidence: `artifacts/text-roots-debug.log`,
+`artifacts/text-roots-release.log` and the isolated snapshot under `artifacts/text-roots-ef10.0.14/`.
+
+The baseline-built package `10.0.0-text-roots-20261111` passes Verify-Package.ps1, both-mode consumers on
+EF10.0.0 and EF10.0.14, and package-only identity/dependency checks. Provider DLL SHA-256:
+`EE745999FD26FD6E5B4AEB7803E23C1803A6246874AB8181C2ADA55ACC1BB967`. Nupkg SHA-256:
+`18506B19C4A289E17816EB09B09582E20A217AB88C800A83B4D142DE6BE26B63`. Independent source review found no
+actionable issue. These are local SQL-shape, binding, reader and package-consumer results; native text collation,
+LOB behavior, UNION coercion, live OceanBase execution, EF8/EF9 adaptation and release acceptance remain open.
+
 ### Text and temporal aggregate extrema checkpoint (2026-11-11)
 
 Batch3ad follows cd8d256. Queryable `Min`/`Max` now accepts the provider-owned `string`, `DateTime`,

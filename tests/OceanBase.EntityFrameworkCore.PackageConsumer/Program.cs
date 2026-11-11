@@ -440,6 +440,7 @@ namespace PackageConsumer
                 VerifyNumericRoots(context, mode, float.MinValue, float.MaxValue, float.Epsilon, "FLOAT", "BINARY_FLOAT");
                 VerifyNumericRoots(context, mode, double.MinValue, double.MaxValue, double.Epsilon, "DOUBLE", "BINARY_DOUBLE");
                 VerifyNonnumericExtrema(context, mode);
+                VerifyTextRoots(context, mode);
                 int?[] nullableConvertedValues = [null, 17, 17];
                 var nullableConverted = context.Set<Row>().Where(row => nullableConvertedValues
                     .Where(value => value > row.NullableInteger).Contains(row.NullableInteger)).Select(row => row.NullableInteger);
@@ -856,6 +857,30 @@ namespace PackageConsumer
             catch (InvalidOperationException error) when (error.Message.Contains("OceanBase MIN", StringComparison.Ordinal)) { rejected = true; }
             if (!rejected) throw new Exception("Packed MIN accepted a null-converting string mapping.");
             Console.WriteLine($"{mode}: packed text/temporal MIN/MAX and null-converter boundary passed.");
+        }
+
+        private static void VerifyTextRoots(ConsumerContext context, OceanBaseCompatibilityMode mode)
+        {
+            string?[] values = ["one", null, "two"];
+            var query = context.Set<Row>().SelectMany(row => values.Where(value => value != row.Name));
+            foreach (var input in new string?[][] { values, [], ["again", "again"] })
+            {
+                values = input;
+                var sql = query.ToQueryString();
+                if (sql.Contains("UNION ALL VALUES", StringComparison.Ordinal)
+                    || sql.Split("UNION ALL SELECT", StringSplitOptions.None).Length - 1 != Math.Max(0, input.Length - 1)
+                    || sql.Contains("WHERE 1 = 0", StringComparison.Ordinal) != (input.Length == 0))
+                    throw new Exception("Packed text collection root lost its current values or row shape: " + sql);
+                if (mode == OceanBaseCompatibilityMode.Oracle && input.Length > 0
+                    && sql.Split("FROM DUAL", StringSplitOptions.None).Length - 1 != input.Length)
+                    throw new Exception("Oracle text collection SELECT arms do not each have FROM DUAL.");
+            }
+
+            var empty = context.Set<Row>().Select(row => new string[] { }.Count(value => row.Id > 0)).ToQueryString();
+            if (!empty.Contains("WHERE 1 = 0", StringComparison.Ordinal)
+                || !empty.Contains(mode == OceanBaseCompatibilityMode.MySql ? "CAST(NULL AS CHAR)" : "CAST(NULL AS NVARCHAR2",
+                    StringComparison.Ordinal))
+                throw new Exception("Packed text collection root lost its typed empty relation: " + empty);
         }
 
         private static void VerifyNumericRoots<T>(ConsumerContext context, OceanBaseCompatibilityMode mode,

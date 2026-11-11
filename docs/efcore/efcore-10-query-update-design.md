@@ -49,6 +49,27 @@ identity, native reader/converter ownership, filtered DISTINCT/group/HAVING/orde
 current bindings, empty/all-null/no-group results and negative carrier/null-converter boundaries.
 Run full Debug/Release, fresh isolated EF10.0.14 and one baseline package at both patches/modes.
 
+## General text collection-root contract (Batch3ae, QRY-03/06/11, MAP-06/07)
+
+Support captured arrays/lists and originally empty inline arrays whose element mapping is an
+`OceanBaseStringTypeMapping` with a string provider carrier and a converter that does not convert
+nulls. The existing VALUES expansion keeps one raw model value per row, current capture snapshots,
+duplicates/order and the optional `_ord` column. Constant and MultipleParameters policies remain
+supported; an explicit `EF.Parameter(collection)` root remains unsupported without a primitive-
+collection translator.
+
+Use the same mapping for collection parameters, predicates and projected readers, including ordinary
+model-to-string converters. MySQL synthetic typing uses `CAST(... AS CHAR)`; Oracle uses the mapping's
+declared text type (for example `NVARCHAR2(...)`) so empty roots retain typed NULL metadata and
+`WHERE 1 = 0`. Oracle's later string normalizer handles empty-string-as-NULL after raw model values
+have been expanded. Null-converting converters, binary/temporal/other carriers and unknown column
+layouts reject before command execution.
+
+Cover SelectMany, joins/ordinal or other direct-root compositions as they are added, current values,
+empty transitions, NULL/empty text, converter-owned parameter/read values, sync/async bindings and both
+compatibility modes. Intercepted SQL and readers establish translation, mapping and shaping only;
+native text collation, LOB behavior, UNION coercion and server results remain live gates.
+
 ## Contextual numeric collection projection contract (Batch3ac, QRY-03/11, MAP-06/07)
 
 Support direct collection-element projection in SelectMany, scalar FirstOrDefault and Join after a

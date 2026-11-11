@@ -24,7 +24,7 @@ namespace OceanBase.EntityFrameworkCore.Query
             foreach (var column in _metadata.Columns)
             {
                 if (Root(column) is not { } root || IsDefault(column)
-                    || !OceanBaseCollectionParameterExpandingVisitor.IsSupportedNumeric(column.TypeMapping!)) continue;
+                    || !OceanBaseCollectionParameterExpandingVisitor.IsSupportedCollectionElement(column.TypeMapping!)) continue;
                 if (_contextual.TryGetValue(root, out var existing)) Validate(existing, column.TypeMapping!);
                 else _contextual.Add(root, column.TypeMapping!);
             }
@@ -53,7 +53,7 @@ namespace OceanBase.EntityFrameworkCore.Query
                 if (_applyProjectionMappings)
                 {
                     var projectionMapping = _contextual.GetValueOrDefault(root) ?? column.TypeMapping ?? mappings.FindMapping(column.Type, model);
-                    if (projectionMapping is not null && OceanBaseCollectionParameterExpandingVisitor.IsSupportedNumeric(projectionMapping))
+                    if (projectionMapping is not null && OceanBaseCollectionParameterExpandingVisitor.IsSupportedCollectionElement(projectionMapping))
                         return column.ApplyTypeMapping(projectionMapping);
                 }
                 // EF defaults projections before contextual inference; readers must use the owning mapping too.

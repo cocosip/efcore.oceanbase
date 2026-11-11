@@ -27,7 +27,7 @@ namespace OceanBase.EntityFrameworkCore.Query
             var prototypes = empty ? valuesExpression.FindAnnotation(OceanBaseCollectionParameterExpandingVisitor.EmptyColumnsAnnotation)
                 ?.Value as IReadOnlyList<SqlExpression> : null;
             if (empty && (prototypes is null || prototypes.Count != valuesExpression.ColumnNames.Count))
-                throw new NotSupportedException("An empty collection root requires retained numeric element mapping metadata.");
+                throw new NotSupportedException("An empty collection root requires retained element mapping metadata.");
             for (var row = 0; row < (empty ? 1 : rows.Count); row++)
             {
                 if (row > 0) Sql.AppendLine().Append("UNION ALL ");
@@ -53,11 +53,18 @@ namespace OceanBase.EntityFrameworkCore.Query
 
         private void GenerateCollectionCast(SqlExpression expression)
         {
-            if (expression.TypeMapping is not { } mapping || !OceanBaseCollectionParameterExpandingVisitor.IsSupportedNumeric(mapping))
-                throw new NotSupportedException("Collection typing casts require numeric elements with non-null-converting numeric storage carriers.");
-            // Use the lossless query carrier, not a property's narrower physical write declaration.
+            if (expression.TypeMapping is not { } mapping
+                || !OceanBaseCollectionParameterExpandingVisitor.IsSupportedCollectionElement(mapping))
+                throw new NotSupportedException("Collection typing casts require supported numeric or text elements with non-null-converting storage carriers.");
             Sql.Append("CAST(");
             Visit(expression);
+            if (OceanBaseCollectionParameterExpandingVisitor.IsSupportedText(mapping))
+            {
+                Sql.Append(" AS ").Append(_mode == OceanBaseCompatibilityMode.Oracle ? mapping.StoreType : "CHAR").Append(")");
+                return;
+            }
+
+            // Use the lossless query carrier, not a property's narrower physical write declaration.
             var oracle = _mode == OceanBaseCompatibilityMode.Oracle;
             var target = mapping switch
             {

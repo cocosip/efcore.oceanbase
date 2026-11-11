@@ -18,6 +18,44 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
     public sealed class TextCollectionQueryTests
     {
         [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle)]
+        public void Captured_text_general_roots_expand_to_typed_select_unions(OceanBaseCompatibilityMode mode)
+        {
+            using var context = CreateContext(mode);
+            string?[] values = ["one", null, "two"];
+            var query = context.Rows.SelectMany(row => values.Where(value => value != row.Text));
+            var sql = query.ToQueryString();
+            Assert.Contains("UNION ALL SELECT", sql);
+            Assert.DoesNotContain("numeric", sql, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("JSON", sql, StringComparison.OrdinalIgnoreCase);
+
+            values = [];
+            Assert.Contains("WHERE 1 = 0", query.ToQueryString());
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle)]
+        public void General_text_roots_reject_null_converting_mappings(OceanBaseCompatibilityMode mode)
+        {
+            using var context = CreateContext(mode);
+            var factory = context.GetService<ISqlExpressionFactory>();
+            var source = context.GetService<IRelationalTypeMappingSource>();
+            var mapping = (RelationalTypeMapping)context.Model.FindEntityType(typeof(Row))!
+                .FindProperty(nameof(Row.NullConverted))!.GetTypeMapping();
+            var parameter = new SqlParameterExpression("values", typeof(string[]),
+                source.FindMapping(typeof(string[]), context.Model, mapping));
+            var dictionary = new Dictionary<string, object?> { ["values"] = new[] { "value" } };
+            var visitor = new OceanBaseCollectionParameterExpandingVisitor(factory,
+                new RelationalParameterBasedSqlProcessorParameters(false, ParameterTranslationMode.MultipleParameters),
+                new ParametersCacheDecorator(dictionary), source, mode);
+            var error = Assert.Throws<NotSupportedException>(() => visitor.Visit(
+                new ValuesExpression("v", parameter, new[] { "Value" })));
+            Assert.Contains("numeric or text", error.Message);
+        }
+
+        [Theory]
         [InlineData(OceanBaseCompatibilityMode.MySql, false)]
         [InlineData(OceanBaseCompatibilityMode.MySql, true)]
         [InlineData(OceanBaseCompatibilityMode.Oracle, false)]

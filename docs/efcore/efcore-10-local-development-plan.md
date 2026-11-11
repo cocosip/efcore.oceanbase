@@ -73,6 +73,25 @@ Package `10.0.0-nonnumeric-extrema-20261111` passes both-mode consumer, content,
 checks; independent source review found no actionable issue. Native server extrema semantics and live
 database execution remain open.
 
+## Batch3ae brief: general text collection roots
+
+**IDs:** QRY-03/06/11, MAP-06/07. **Spec:** general text collection-root contract in
+efcore-10-query-update-design.md. Continue from b611f0b; no live database or EF8/9 work.
+
+- [x] Add RED coverage for captured string arrays/lists and empty inline string roots in both modes;
+  preserve the existing scalar text membership and explicit `EF.Parameter(collection)` boundaries.
+- [x] Reuse the existing VALUES expansion and SQL renderer for provider-owned text mappings,
+  non-null-converting model-to-string converters and Oracle empty-string normalization. Keep numeric
+  behavior unchanged; reject null-converting, binary/other carriers and unknown layouts before commands.
+- [x] Add sync/async intercepted pipeline coverage for current values, duplicates/NULL/empty rows,
+  converter-owned parameters/readers and typed zero-row SQL. Extend the packed consumer with both-mode
+  text-root smoke.
+- [x] Run full Debug/Release, a fresh EF10.0.14 snapshot and one baseline-built package at both patches/
+  modes, then complete independent code review, update evidence and commit locally. Final evidence is the
+  3922-test gate, the `10.0.0-text-roots-20261111` package, both patch consumers and the checkpoint above.
+
+Native text collation, LOB behavior, UNION coercion and live server results remain outside this local batch.
+
 ## Batch3ac brief: contextual numeric collection projections
 
 **IDs:** QRY-03/11, MAP-06/07. **Spec:** contextual numeric projection contract in

@@ -191,9 +191,11 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
         public void Originally_empty_inline_count_does_not_guess_nonnumeric_element_types_from_its_int_result(OceanBaseCompatibilityMode mode)
         {
             using var context = CreateContext(mode);
+            var text = context.Rows.Select(row => new string[] { }.Count(value => row.Id > 0)).ToQueryString();
+            Assert.Contains("WHERE 1 = 0", text);
+            Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? "CAST(NULL AS CHAR)" : "CAST(NULL AS NVARCHAR2", text);
             foreach (var query in new IQueryable[]
             {
-                context.Rows.Select(row => new string[] { }.Count(value => row.Id > 0)),
                 context.Rows.Select(row => new bool[] { }.Count(value => row.Id > 0)),
                 context.Rows.Select(row => new DateTime[] { }.Count(value => row.Id > 0))
             })
@@ -400,8 +402,14 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
                 new ValuesExpression("v", new SqlParameterExpression("values", typeof(int[]), null), new[] { "Value" }))).Message);
             var textMapping = source.FindMapping(typeof(string))!;
             var texts = new SqlParameterExpression("texts", typeof(string[]), source.FindMapping(typeof(string[]), context.Model, textMapping));
-            Assert.Contains("numeric", Assert.Throws<NotSupportedException>(() => visitor.Visit(
-                new ValuesExpression("v", texts, new[] { "Value" }))).Message);
+            var textRoot = Assert.IsType<ValuesExpression>(visitor.Visit(new ValuesExpression("v", texts, new[] { "Value" })));
+            Assert.Equal(2, textRoot.RowValues!.Count);
+            Assert.All(textRoot.RowValues, row => Assert.Same(textMapping, row.Values[0].TypeMapping));
+            var binaryMapping = source.FindMapping(typeof(byte[]))!;
+            var binary = new SqlParameterExpression("binary", typeof(byte[]),
+                source.FindMapping(typeof(byte[]), context.Model, binaryMapping));
+            Assert.Contains("numeric or text", Assert.Throws<NotSupportedException>(() => visitor.Visit(
+                new ValuesExpression("v", binary, new[] { "Value" }))).Message);
             var membership = factory.In(new ColumnExpression("Text", "r", typeof(string), textMapping, true), texts);
             if (mode == OceanBaseCompatibilityMode.MySql) Assert.Same(membership, visitor.Visit(membership));
             else Assert.Null(Assert.IsType<InExpression>(visitor.Visit(membership)).ValuesParameter);

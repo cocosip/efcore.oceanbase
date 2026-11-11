@@ -32,6 +32,13 @@ bindings, projected readers and the CLR default fallback. Incompatible requireme
 its scalar-result consumers reject, including different converters with the same store type. Arbitrary
 converter/operator composition remains unsupported. Native UNION typing, results and costs are unverified.
 
+Text collection roots support captured arrays/lists and empty inline arrays when the provider-owned mapping
+uses a string carrier and does not convert nulls. Model-to-string converters retain parameter and reader
+hooks; MySQL empty roots use `CAST(NULL AS CHAR)` and Oracle uses the declared text type. Null-converting,
+binary/other carriers and explicit `EF.Parameter(collection)` roots remain unsupported. Oracle empty-string
+normalization occurs after raw collection expansion. Native text collation, LOB behavior and UNION results
+remain unverified.
+
 Text and temporal `Min/Max` support scalar/selector and nullable forms using native aggregates and
 the original mappings/readers. Supported temporal families are DateTime, DateTimeOffset, DateOnly,
 TimeOnly and TimeSpan. Filters, grouping and empty/null shaping use EF's relational pipeline.

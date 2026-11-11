@@ -28,8 +28,8 @@ namespace OceanBase.EntityFrameworkCore.Query
             if (node is ValuesExpression { ValuesParameter: { } root } valuesExpression)
             {
                 if (root.TypeMapping?.ElementTypeMapping is not RelationalTypeMapping elementMapping
-                    || !IsSupportedNumeric(elementMapping))
-                    throw new NotSupportedException("General collection roots require numeric elements with non-null-converting numeric storage carriers.");
+                    || !IsSupportedCollectionElement(elementMapping))
+                    throw new NotSupportedException("General collection roots require supported numeric or text elements with non-null-converting storage carriers.");
                 if (!(valuesExpression.ColumnNames.SequenceEqual(new[] { "Value" })
                     || valuesExpression.ColumnNames.SequenceEqual(new[] { "_ord", "Value" })))
                     throw new NotSupportedException("Unsupported general collection column layout.");
@@ -98,6 +98,14 @@ namespace OceanBase.EntityFrameworkCore.Query
                     or OceanBaseIntegerTypeMapping<long> or OceanBaseIntegerTypeMapping<ulong>
                     or OceanBaseDecimalTypeMapping or OceanBaseFloatingPointTypeMapping<float>
                     or OceanBaseFloatingPointTypeMapping<double>;
+
+        internal static bool IsSupportedText(RelationalTypeMapping mapping)
+            => mapping.Converter?.ConvertsNulls != true
+                && mapping is OceanBaseStringTypeMapping
+                && OceanBaseOracleStringVisitor.IsProviderString(mapping);
+
+        internal static bool IsSupportedCollectionElement(RelationalTypeMapping mapping)
+            => IsSupportedNumeric(mapping) || IsSupportedText(mapping);
 
         private List<object?> Snapshot(SqlParameterExpression source)
         {

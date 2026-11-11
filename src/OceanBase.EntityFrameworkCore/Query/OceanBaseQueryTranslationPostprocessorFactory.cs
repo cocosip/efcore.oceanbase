@@ -38,8 +38,8 @@ namespace OceanBase.EntityFrameworkCore.Query
                         ?? RelationalDependencies.TypeMappingSource.FindMapping(elementType);
                     if (mapping is null || (Nullable.GetUnderlyingType(mapping.ClrType) ?? mapping.ClrType)
                             != (Nullable.GetUnderlyingType(elementType) ?? elementType)
-                        || !OceanBaseCollectionParameterExpandingVisitor.IsSupportedNumeric(mapping))
-                        throw new NotSupportedException("Empty inline collection roots require numeric elements with non-null-converting numeric storage carriers.");
+                        || !OceanBaseCollectionParameterExpandingVisitor.IsSupportedCollectionElement(mapping))
+                        throw new NotSupportedException("Empty inline collection roots require supported numeric or text elements with non-null-converting storage carriers.");
                     var ordinal = RelationalDependencies.TypeMappingSource.FindMapping(typeof(int))!;
                     _emptyColumns.Add(values.Alias, (elementType, new Dictionary<string, SqlExpression>
                     {
@@ -74,7 +74,7 @@ namespace OceanBase.EntityFrameworkCore.Query
                     : parameter.TypeMapping?.ElementTypeMapping as RelationalTypeMapping
                         ?? RelationalDependencies.TypeMappingSource.FindMapping(
                             OceanBaseCollectionParameterExpandingVisitor.ElementType(parameter.Type)!);
-                if (element is null || !OceanBaseCollectionParameterExpandingVisitor.IsSupportedNumeric(element))
+                if (element is null || !OceanBaseCollectionParameterExpandingVisitor.IsSupportedCollectionElement(element))
                     return base.ApplyTypeMappingsOnValuesExpression(values);
                 var collection = RelationalDependencies.TypeMappingSource.FindMapping(parameter.Type,
                     QueryCompilationContext.Model, element)
