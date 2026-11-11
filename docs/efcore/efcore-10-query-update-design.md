@@ -673,6 +673,16 @@ the command interceptors do not execute a connector wire operation, so these tes
 reuse, server timeout enforcement, network cancellation, connector resource cleanup, transaction
 rollback or live connection behavior. Those gates remain under CON-05/TXN and the live matrix.
 
+### Command diagnostics and redaction local contract
+
+Batch5c's CommandLoggingTests uses `LogTo` with the provider's normal EF relational services and runs successful
+and failing queries in both modes/sync paths. Runtime-captured parameter values are redacted from default
+command/error log messages and appear when `EnableSensitiveDataLogging` is explicitly enabled; command SQL and
+the original synthetic failure text remain observable. Compile-time constants are deliberately excluded because
+EF may render them as SQL literals before logging. This proves the EF/provider logging boundary and interceptor
+delivery only. Connector log sinks, server diagnostics, structured redaction policy and live failure output
+remain outside the local evidence.
+
 Both provider-created and caller-owned connections are checked for compatibility-mode conflicts. A closed connection
 without `ExpectedMode` receives the configured provider mode before opening. An already-open connection must agree
 with that mode. MySQL requires `UseAffectedRows=false`: EF concurrency checks count matched rows, including a match

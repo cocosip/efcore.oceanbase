@@ -70,6 +70,18 @@ coverage was added, and claims were narrowed from physical lifecycle to EF-visib
 CON-05 remains partial for live timeout/cancellation and resource behavior; DIA logging and transactions remain
 separate. EF8/EF9 and real database work stay postponed.
 
+### Command diagnostics and redaction checkpoint (2026-11-11)
+
+Batch5c adds 16 CommandLoggingTests cases across MySQL/Oracle, sync/async, successful/failing queries and
+the sensitive-data logging switch. The real EF logging pipeline reports SQL and synthetic failures; runtime
+captured parameter values are hidden by default and visible only when `EnableSensitiveDataLogging` is enabled.
+The initial RED was caused by a compile-time constant rendered as a SQL literal; captured variables provide the
+correct parameter boundary. Focused Release passes16/16; final Debug/Release/isolated14 each pass2010
+(1474 unit, 534 functional, two consumers), zero failures/skips. Independent review found and closed the
+async-interceptor/event-log assertion gap; tests now require the expected sync/async callback and EF command
+event text. No production code changed and no package rebuild is needed. Connector/server logging sinks,
+structured redaction policy and live diagnostics remain unverified.
+
 ### Model, graph materialization and filters checkpoint (2026-11-11)
 
 Batch4a/4b/4c adds 58 inherited-provider characterization cases in ModelMaterializationTests.

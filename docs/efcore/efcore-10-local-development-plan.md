@@ -113,6 +113,17 @@ wire cancellation, server timeout enforcement, or transaction/resource behavior 
 reproduced provider defect, then run full Debug/Release/isolated14, independent review, update evidence and
 commit. DIA logging/redaction and transaction gates remain separate slices.
 
+## Batch5c brief: command diagnostics and parameter redaction
+
+DIA-01: exercise EF's real command logging and interceptor pipeline in both modes and sync/async paths.
+Successful commands must be reported, failures must retain the original exception in the log, and captured
+parameter values must remain redacted by default while `EnableSensitiveDataLogging` explicitly permits them.
+Use runtime-captured query values so EF creates parameters; compile-time constants may be rendered as SQL
+literals and are outside this redaction assertion. The network-suppressed reader supplies a deterministic row
+or throws a synthetic failure. This establishes EF/provider logging boundaries only; connector/server logs,
+structured redaction sinks, and production policy remain separate. Run focused and full suites, independent
+review and commit; no package rebuild when production code is unchanged.
+
 ## Batch 1 brief
 
 **Files:** OptionsTests.cs; SqlGenerationHelperTests.cs; ConsumerTests/ProviderConfigurationTests.cs;
@@ -566,6 +577,14 @@ explicit supported duplication contract, not inference from Scale's ambiguous ze
   1994=1474+518+2, zero failures/skips. Independent review found and closed sync-retry coverage and physical
   lifecycle overclaiming; evidence now stays at EF-visible/interceptor boundaries. No package rebuild was needed.
   Connector wire cancellation, server timeout enforcement, transactions and logging remain open.
+
+- Batch5c: CommandLoggingTests adds 16 both-mode sync/async success/failure cases. Runtime-captured parameter
+  values are absent from default EF command/error logs and appear only with EnableSensitiveDataLogging; command
+  SQL and synthetic failure text are reported. Initial RED exposed compile-time constant inlining, corrected by
+  using captured variables. Focused Release passes16/16; final Debug/Release/isolated14 each pass2010=1474+534+2,
+  zero failures/skips. Independent review found and closed async callback/event-text assertions; no production
+  change or package rebuild is needed. This is EF logging/interceptor evidence only; connector/server logging
+  and live policy stay open.
 
 - Batch5a after6714626: graph dependency ordering/key propagation/reverse deletes, composite NULL/non-NULL
   original tokens and current NULL writes, zero-row conflict entries, synthetic connector and in-flight
