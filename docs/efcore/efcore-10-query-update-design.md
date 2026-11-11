@@ -70,6 +70,20 @@ empty transitions, NULL/empty text, converter-owned parameter/read values, sync/
 compatibility modes. Intercepted SQL and readers establish translation, mapping and shaping only;
 native text collation, LOB behavior, UNION coercion and server results remain live gates.
 
+## Boolean collection-root contract (Batch3af, QRY-03/06/11, MAP-06/07)
+
+Support captured arrays/lists and originally empty inline `bool`/`bool?` roots in both compatibility modes by
+reusing the general VALUES expansion. Preserve current captures, order, duplicates, NULL cells, empty roots,
+`Constant`/`MultipleParameters` policies, provider-owned Boolean mappings and non-null-converting Boolean-to-
+integer/decimal converters. `EF.Parameter(collection)` remains outside this translator boundary.
+
+MySQL synthetic collection typing uses `CAST(... AS SIGNED)` or the carrier's unsigned/decimal target; Oracle
+uses `CAST(... AS NUMBER)` and emits `FROM DUAL` for every SELECT arm. Oracle's decimal Boolean carrier and
+reader continue to decode `OceanBaseDecimal` values to `bool?`. Unknown layouts, null-converting converters,
+non-Boolean model carriers and binary/temporal/other mappings fail before command execution. Intercepted
+bindings and SQL prove local translation, mapping and shaping only; native Boolean UNION coercion, Boolean
+result semantics and live OceanBase execution remain open.
+
 ## Contextual numeric collection projection contract (Batch3ac, QRY-03/11, MAP-06/07)
 
 Support direct collection-element projection in SelectMany, scalar FirstOrDefault and Join after a

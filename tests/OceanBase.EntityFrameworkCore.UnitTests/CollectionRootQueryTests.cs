@@ -196,7 +196,6 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? "CAST(NULL AS CHAR)" : "CAST(NULL AS NVARCHAR2", text);
             foreach (var query in new IQueryable[]
             {
-                context.Rows.Select(row => new bool[] { }.Count(value => row.Id > 0)),
                 context.Rows.Select(row => new DateTime[] { }.Count(value => row.Id > 0))
             })
                 Assert.Contains("numeric", Assert.Throws<NotSupportedException>(() => query.ToQueryString()).Message);
@@ -408,7 +407,7 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             var binaryMapping = source.FindMapping(typeof(byte[]))!;
             var binary = new SqlParameterExpression("binary", typeof(byte[]),
                 source.FindMapping(typeof(byte[]), context.Model, binaryMapping));
-            Assert.Contains("numeric or text", Assert.Throws<NotSupportedException>(() => visitor.Visit(
+            Assert.Contains("numeric, Boolean or text", Assert.Throws<NotSupportedException>(() => visitor.Visit(
                 new ValuesExpression("v", binary, new[] { "Value" }))).Message);
             var membership = factory.In(new ColumnExpression("Text", "r", typeof(string), textMapping, true), texts);
             if (mode == OceanBaseCompatibilityMode.MySql) Assert.Same(membership, visitor.Visit(membership));

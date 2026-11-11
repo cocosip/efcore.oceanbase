@@ -29,7 +29,7 @@ namespace OceanBase.EntityFrameworkCore.Query
             {
                 if (root.TypeMapping?.ElementTypeMapping is not RelationalTypeMapping elementMapping
                     || !IsSupportedCollectionElement(elementMapping))
-                    throw new NotSupportedException("General collection roots require supported numeric or text elements with non-null-converting storage carriers.");
+                    throw new NotSupportedException("General collection roots require supported numeric, Boolean or text elements with non-null-converting storage carriers.");
                 if (!(valuesExpression.ColumnNames.SequenceEqual(new[] { "Value" })
                     || valuesExpression.ColumnNames.SequenceEqual(new[] { "_ord", "Value" })))
                     throw new NotSupportedException("Unsupported general collection column layout.");
@@ -104,8 +104,25 @@ namespace OceanBase.EntityFrameworkCore.Query
                 && mapping is OceanBaseStringTypeMapping
                 && OceanBaseOracleStringVisitor.IsProviderString(mapping);
 
+        internal static bool IsSupportedBoolean(RelationalTypeMapping mapping)
+        {
+            var modelType = mapping.Converter?.ModelClrType ?? mapping.ClrType;
+            var providerType = mapping.Converter?.ProviderClrType ?? mapping.ClrType;
+            var providerCode = Type.GetTypeCode(Nullable.GetUnderlyingType(providerType) ?? providerType);
+            return mapping.Converter?.ConvertsNulls != true
+                && (Nullable.GetUnderlyingType(modelType) ?? modelType) == typeof(bool)
+                && (mapping is OceanBaseIntegerTypeMapping<sbyte> or OceanBaseIntegerTypeMapping<byte>
+                    or OceanBaseIntegerTypeMapping<short> or OceanBaseIntegerTypeMapping<ushort>
+                    or OceanBaseIntegerTypeMapping<int> or OceanBaseIntegerTypeMapping<uint>
+                    or OceanBaseIntegerTypeMapping<long> or OceanBaseIntegerTypeMapping<ulong>
+                    or OceanBaseIntegerTypeMapping<bool> or OceanBaseIntegerTypeMapping<decimal>)
+                && (providerCode is TypeCode.Boolean or TypeCode.SByte or TypeCode.Byte or TypeCode.Int16
+                    or TypeCode.UInt16 or TypeCode.Int32 or TypeCode.UInt32 or TypeCode.Int64 or TypeCode.UInt64
+                    or TypeCode.Decimal);
+        }
+
         internal static bool IsSupportedCollectionElement(RelationalTypeMapping mapping)
-            => IsSupportedNumeric(mapping) || IsSupportedText(mapping);
+            => IsSupportedNumeric(mapping) || IsSupportedBoolean(mapping) || IsSupportedText(mapping);
 
         private List<object?> Snapshot(SqlParameterExpression source)
         {

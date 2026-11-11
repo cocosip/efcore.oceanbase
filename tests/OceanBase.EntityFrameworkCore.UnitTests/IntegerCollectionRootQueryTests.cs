@@ -143,9 +143,7 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             var source = context.GetService<IRelationalTypeMappingSource>();
             var mappings = new[]
             {
-                source.FindMapping(typeof(int))!.WithComposedConverter(new ValueConverter<bool, int>(value => value ? 1 : 0, value => value != 0)),
                 source.FindMapping(typeof(long))!.WithComposedConverter(new ValueConverter<string, long>(value => long.Parse(value), value => value.ToString())),
-                source.FindMapping(typeof(decimal))!.WithComposedConverter(new ValueConverter<bool, decimal>(value => value ? 1m : 0m, value => value != 0m)),
                 source.FindMapping(typeof(int))!.WithComposedConverter(new ValueConverter<int, int>(value => value, value => value, convertsNulls: true)),
                 source.FindMapping(typeof(decimal))!.WithComposedConverter(new ValueConverter<decimal, decimal>(value => value, value => value, convertsNulls: true)),
                 source.FindMapping(typeof(float))!.WithComposedConverter(new ValueConverter<float, float>(value => value, value => value, convertsNulls: true)),

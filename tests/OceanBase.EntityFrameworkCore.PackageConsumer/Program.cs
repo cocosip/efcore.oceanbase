@@ -441,6 +441,7 @@ namespace PackageConsumer
                 VerifyNumericRoots(context, mode, double.MinValue, double.MaxValue, double.Epsilon, "DOUBLE", "BINARY_DOUBLE");
                 VerifyNonnumericExtrema(context, mode);
                 VerifyTextRoots(context, mode);
+                VerifyBooleanRoots(context, mode);
                 int?[] nullableConvertedValues = [null, 17, 17];
                 var nullableConverted = context.Set<Row>().Where(row => nullableConvertedValues
                     .Where(value => value > row.NullableInteger).Contains(row.NullableInteger)).Select(row => row.NullableInteger);
@@ -881,6 +882,30 @@ namespace PackageConsumer
                 || !empty.Contains(mode == OceanBaseCompatibilityMode.MySql ? "CAST(NULL AS CHAR)" : "CAST(NULL AS NVARCHAR2",
                     StringComparison.Ordinal))
                 throw new Exception("Packed text collection root lost its typed empty relation: " + empty);
+        }
+
+        private static void VerifyBooleanRoots(ConsumerContext context, OceanBaseCompatibilityMode mode)
+        {
+            bool?[] values = [true, null, false, true];
+            var query = context.Set<Row>().SelectMany(row => values.Where(value => value != row.OptionalBoolean));
+            foreach (var input in new bool?[][] { values, [], [false, false], [] })
+            {
+                values = input;
+                var sql = query.ToQueryString();
+                if (!sql.Contains(mode == OceanBaseCompatibilityMode.MySql ? " AS SIGNED)" : " AS NUMBER)", StringComparison.Ordinal)
+                    || sql.Split("UNION ALL SELECT", StringSplitOptions.None).Length - 1 != Math.Max(0, input.Length - 1)
+                    || sql.Contains("WHERE 1 = 0", StringComparison.Ordinal) != (input.Length == 0))
+                    throw new Exception("Packed Boolean collection root lost its current values, carrier or row shape: " + sql);
+                if (mode == OceanBaseCompatibilityMode.Oracle && input.Length > 0
+                    && sql.Split("FROM DUAL", StringSplitOptions.None).Length - 1 != input.Length)
+                    throw new Exception("Oracle Boolean collection SELECT arms do not each have FROM DUAL.");
+            }
+
+            var empty = context.Set<Row>().Select(row => new bool[] { }.Count(value => row.Id > 0)).ToQueryString();
+            if (!empty.Contains("WHERE 1 = 0", StringComparison.Ordinal)
+                || !empty.Contains(mode == OceanBaseCompatibilityMode.MySql ? "CAST(NULL AS SIGNED)" : "CAST(NULL AS NUMBER)",
+                    StringComparison.Ordinal))
+                throw new Exception("Packed Boolean collection root lost its typed empty relation: " + empty);
         }
 
         private static void VerifyNumericRoots<T>(ConsumerContext context, OceanBaseCompatibilityMode mode,

@@ -12,6 +12,27 @@ each small group. Real database integration/tests and EF8/EF9 adaptation are exp
 [local development plan](efcore-10-local-development-plan.md) tracks the full remaining inventory, including
 an audit of locally feasible deferred families. Finishing one batch does not finish the overall goal.
 
+### Boolean collection-root checkpoint (2026-11-12)
+
+Batch3af follows `776a9a6`. Captured `bool`/`bool?` arrays and lists, including originally empty inline roots,
+now use the general VALUES expansion in both compatibility modes. Provider-owned Boolean mappings and
+non-null-converting Boolean-to-integer/decimal converters retain current values, duplicates, order, NULL cells,
+typed zero-row metadata, parameters and readers. MySQL collection typing uses SIGNED or the carrier's unsigned/
+decimal target; Oracle uses NUMBER and emits FROM DUAL for each SELECT arm. Null-converting converters,
+non-Boolean/unsupported carriers, unknown layouts and explicit `EF.Parameter(collection)` remain explicit
+boundaries before command execution.
+
+Focused Boolean coverage passes **26** unit and **12** intercepted functional cases. The affected collection
+focus passes **206** unit and **100** intercepted functional cases. Baseline EF10.0.0 Debug/Release and an
+isolated EF10.0.14 Release each pass **3960** source tests: 1888 unit + 1202 intercepted functional + 868
+specification + 2 consumer tests, zero failures/skips. The packed consumer passes both modes on EF10.0.0 and
+EF10.0.14. Package `10.0.0-boolean-roots-20261112` passes Verify-Package.ps1; provider DLL SHA-256 is
+`4A3357600C4672FB86AA577A5C6F1D8200C959C0A7C6A494E2150DDAF2F5B57`, and nupkg SHA-256 is
+`D46E134D96F35722D075776F918F80792D7BE3300FE0C19FAEDA04CDAE4F64EC`.
+
+These are local SQL-shape, binding, reader and package-consumer results; native Boolean UNION coercion,
+Boolean result semantics, live OceanBase execution, EF8/EF9 adaptation and release acceptance remain open.
+
 ### General text collection-root checkpoint (2026-11-11)
 
 Batch3ae follows b611f0b. Captured `string`/`string?` arrays and lists, including originally empty inline

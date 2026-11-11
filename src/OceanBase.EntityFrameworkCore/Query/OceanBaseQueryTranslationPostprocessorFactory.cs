@@ -39,7 +39,7 @@ namespace OceanBase.EntityFrameworkCore.Query
                     if (mapping is null || (Nullable.GetUnderlyingType(mapping.ClrType) ?? mapping.ClrType)
                             != (Nullable.GetUnderlyingType(elementType) ?? elementType)
                         || !OceanBaseCollectionParameterExpandingVisitor.IsSupportedCollectionElement(mapping))
-                        throw new NotSupportedException("Empty inline collection roots require supported numeric or text elements with non-null-converting storage carriers.");
+                        throw new NotSupportedException("Empty inline collection roots require supported numeric, Boolean or text elements with non-null-converting storage carriers.");
                     var ordinal = RelationalDependencies.TypeMappingSource.FindMapping(typeof(int))!;
                     _emptyColumns.Add(values.Alias, (elementType, new Dictionary<string, SqlExpression>
                     {
@@ -78,7 +78,7 @@ namespace OceanBase.EntityFrameworkCore.Query
                     return base.ApplyTypeMappingsOnValuesExpression(values);
                 var collection = RelationalDependencies.TypeMappingSource.FindMapping(parameter.Type,
                     QueryCompilationContext.Model, element)
-                    ?? throw new InvalidOperationException("A numeric collection mapping is required for the query root.");
+                    ?? throw new InvalidOperationException("A supported collection mapping is required for the query root.");
                 return values.Update(parameter.ApplyTypeMapping(collection));
             }
         }

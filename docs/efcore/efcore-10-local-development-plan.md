@@ -92,6 +92,24 @@ efcore-10-query-update-design.md. Continue from b611f0b; no live database or EF8
 
 Native text collation, LOB behavior, UNION coercion and live server results remain outside this local batch.
 
+## Batch3af brief: Boolean collection roots
+
+**IDs:** QRY-03/06/11, MAP-06/07. **Spec:** Boolean collection-root contract in
+efcore-10-query-update-design.md. Continue from `776a9a6`; no live database or EF8/9 work.
+
+- [x] Add RED/GREEN unit coverage for captured and inline `bool`/`bool?` arrays, lists, empty roots,
+  converter mappings, Constant/MultipleParameters policies and both compatibility modes.
+- [x] Reuse the general VALUES expansion and retain provider Boolean mappings/readers. Generate MySQL
+  SIGNED/unsigned/decimal carrier casts and Oracle NUMBER casts with per-arm DUAL; keep null-converting,
+  non-Boolean, unsupported carrier/layout and explicit `EF.Parameter(collection)` boundaries.
+- [x] Add synchronous/asynchronous intercepted binding and reader coverage plus both-mode package-consumer
+  smoke. Run baseline Debug/Release and isolated EF10.0.14 Release gates, then update the checklist and
+  progress checkpoint before committing locally.
+
+Final evidence is the 3960-test source gate (1888 unit, 1202 intercepted functional, 868 specification and
+2 consumer tests), the Boolean focused 26/12 tests, and package consumers on EF10.0.0/10.0.14. Native
+Boolean UNION/result semantics and live OceanBase execution remain open.
+
 ## Batch3ac brief: contextual numeric collection projections
 
 **IDs:** QRY-03/11, MAP-06/07. **Spec:** contextual numeric projection contract in

@@ -55,9 +55,19 @@ namespace OceanBase.EntityFrameworkCore.Query
         {
             if (expression.TypeMapping is not { } mapping
                 || !OceanBaseCollectionParameterExpandingVisitor.IsSupportedCollectionElement(mapping))
-                throw new NotSupportedException("Collection typing casts require supported numeric or text elements with non-null-converting storage carriers.");
+                throw new NotSupportedException("Collection typing casts require supported numeric, Boolean or text elements with non-null-converting storage carriers.");
             Sql.Append("CAST(");
             Visit(expression);
+            if (OceanBaseCollectionParameterExpandingVisitor.IsSupportedBoolean(mapping))
+            {
+                var providerType = mapping.Converter?.ProviderClrType ?? mapping.ClrType;
+                var providerCode = IntegerCode(providerType);
+                var booleanTarget = _mode == OceanBaseCompatibilityMode.Oracle ? "NUMBER"
+                    : providerCode is { } code ? UnsignedMaximum(code) is null ? "SIGNED" : "UNSIGNED"
+                    : providerType == typeof(decimal) ? "DECIMAL(65,30)" : "SIGNED";
+                Sql.Append(" AS ").Append(booleanTarget).Append(")");
+                return;
+            }
             if (OceanBaseCollectionParameterExpandingVisitor.IsSupportedText(mapping))
             {
                 Sql.Append(" AS ").Append(_mode == OceanBaseCompatibilityMode.Oracle ? mapping.StoreType : "CHAR").Append(")");
