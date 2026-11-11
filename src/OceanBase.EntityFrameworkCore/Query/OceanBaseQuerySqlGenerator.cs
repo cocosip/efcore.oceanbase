@@ -63,6 +63,15 @@ namespace OceanBase.EntityFrameworkCore.Query
 
         protected override Expression VisitSqlBinary(SqlBinaryExpression sqlBinaryExpression)
         {
+            if (sqlBinaryExpression.OperatorType == ExpressionType.ExclusiveOr && sqlBinaryExpression.Type == typeof(bool))
+            {
+                Sql.Append("(");
+                BooleanXorOperand(sqlBinaryExpression.Left);
+                Sql.Append(" <> ");
+                BooleanXorOperand(sqlBinaryExpression.Right);
+                Sql.Append(")");
+                return sqlBinaryExpression;
+            }
             if (sqlBinaryExpression.OperatorType is ExpressionType.And or ExpressionType.Or or ExpressionType.ExclusiveOr
                 && IntegerCode(sqlBinaryExpression.Type) is { } code)
             {
@@ -175,6 +184,28 @@ namespace OceanBase.EntityFrameworkCore.Query
                 return expression;
             }
             return base.VisitSqlUnary(expression);
+        }
+
+        private void BooleanXorOperand(SqlExpression operand)
+        {
+            var mapping = operand.TypeMapping;
+            var carrier = mapping?.Converter?.ProviderClrType ?? mapping?.ClrType;
+            var code = Type.GetTypeCode(carrier is null ? null : Nullable.GetUnderlyingType(carrier) ?? carrier);
+            if (operand.Type != typeof(bool) || mapping is null || mapping.Converter?.ConvertsNulls == true
+                || code is not (TypeCode.Boolean or TypeCode.SByte or TypeCode.Byte or TypeCode.Int16 or TypeCode.UInt16
+                    or TypeCode.Int32 or TypeCode.UInt32 or TypeCode.Int64 or TypeCode.UInt64 or TypeCode.Single
+                    or TypeCode.Double or TypeCode.Decimal or TypeCode.String))
+                throw new NotSupportedException("Boolean XOR requires non-null-converting numeric or text Boolean storage.");
+            var trueValue = mapping.Converter is { } converter ? converter.ConvertToProvider(true) : true;
+            var falseValue = mapping.Converter is { } falseConverter ? falseConverter.ConvertToProvider(false) : false;
+            if (trueValue is null || falseValue is null || Equals(trueValue, falseValue)
+                || _mode == OceanBaseCompatibilityMode.Oracle && (trueValue is "" || falseValue is ""))
+                throw new NotSupportedException("Boolean XOR requires distinct non-null true and false storage values.");
+            Sql.Append("CASE WHEN ");
+            BitwiseOperand(operand);
+            Sql.Append(" = ").Append(mapping.GenerateSqlLiteral(true)).Append(" THEN 1 WHEN ");
+            BitwiseOperand(operand);
+            Sql.Append(" = ").Append(mapping.GenerateSqlLiteral(false)).Append(" THEN 0 ELSE NULL END");
         }
 
         private void BitwiseOperand(SqlExpression operand)

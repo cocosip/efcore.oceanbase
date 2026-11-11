@@ -109,6 +109,37 @@ namespace PackageConsumer
                     if (!bitwiseSql.Contains(fragment, StringComparison.Ordinal))
                         throw new Exception($"Packed provider did not preserve integer bitwise semantics: {fragment}");
 
+                bool? xorFlag = true;
+                var xorQuery = context.Set<Row>().Where(row => row.BooleanText ^ row.BooleanNumber)
+                    .Select(row => row.OptionalBoolean ^ xorFlag);
+                foreach (var value in new bool?[] { true, false, null, true, null, false })
+                {
+                    xorFlag = value;
+                    using var xorCommand = xorQuery.CreateDbCommand();
+                    var xorSql = xorCommand.CommandText;
+                    foreach (var fragment in new[] { " <> ", "CASE WHEN", "ELSE NULL", " = 2 THEN 1", " = -1 THEN 0",
+                        mode == OceanBaseCompatibilityMode.MySql ? " = 'Y' THEN 1" : " = N'Y' THEN 1" })
+                        if (!xorSql.Contains(fragment, StringComparison.Ordinal))
+                            throw new Exception($"Packed provider lost Boolean XOR normalization: {fragment}");
+                    if (xorSql.Contains(" ^ ", StringComparison.Ordinal)
+                        || xorSql.Contains("THEN 'Y'", StringComparison.Ordinal))
+                        throw new Exception("Packed provider used storage-space Boolean XOR or a converted result.");
+                    if (value is null)
+                    {
+                        if (xorCommand.Parameters.Count != 0 || !xorSql.Contains("(NULL) = 1 THEN 1", StringComparison.Ordinal))
+                            throw new Exception("Packed provider retained a stale nullable Boolean capture.");
+                    }
+                    else
+                    {
+                        if (xorCommand.Parameters.Count != (mode == OceanBaseCompatibilityMode.MySql ? 2 : 1))
+                            throw new Exception("Packed provider lost Boolean XOR parameter ordering/reuse.");
+                        foreach (DbParameter parameter in xorCommand.Parameters)
+                            if (Convert.ToDecimal(parameter.Value) != (value.Value ? 1m : 0m)
+                                || parameter.DbType != (mode == OceanBaseCompatibilityMode.MySql ? DbType.Boolean : DbType.Decimal))
+                                throw new Exception("Packed provider used a converted operand mapping for a Boolean capture.");
+                    }
+                }
+
                 var shiftCount = -1;
                 var shiftQuery = context.Set<Row>().Where(row => (row.Id << shiftCount) != 0).Select(row => new
                 {
@@ -767,6 +798,10 @@ namespace PackageConsumer
                 modelBuilder.Entity<Row>().Property(row => row.Payload).HasMaxLength(8);
                 modelBuilder.Entity<Row>().Property(row => row.Count).HasColumnType(mode == OceanBaseCompatibilityMode.Oracle ? "NUMBER(3)" : "MEDIUMINT");
                 modelBuilder.Entity<Row>().Property(row => row.Enabled).HasColumnType(mode == OceanBaseCompatibilityMode.Oracle ? "NUMBER(3)" : "BOOLEAN");
+                modelBuilder.Entity<Row>().Property(row => row.BooleanText)
+                    .HasConversion(value => value ? "Y" : "N", value => value == "Y");
+                modelBuilder.Entity<Row>().Property(row => row.BooleanNumber)
+                    .HasConversion(value => value ? 2 : -1, value => value == 2);
                 modelBuilder.Entity<Row>().Property(row => row.ExplicitToken).HasColumnType(mode == OceanBaseCompatibilityMode.Oracle ? "VARCHAR2(36)" : "BINARY(16)");
                 modelBuilder.Entity<Row>().Property(row => row.Amplitude).HasColumnType(mode == OceanBaseCompatibilityMode.Oracle ? "BINARY_FLOAT" : "FLOAT(24)");
                 modelBuilder.Entity<Row>().Property(row => row.Wide).HasColumnType(mode == OceanBaseCompatibilityMode.Oracle ? "BINARY_DOUBLE" : "DOUBLE PRECISION");
@@ -785,6 +820,9 @@ namespace PackageConsumer
             public string Name { get; set; } = string.Empty;
             public string? SearchText { get; set; }
             public bool Enabled { get; set; }
+            public bool BooleanText { get; set; }
+            public bool BooleanNumber { get; set; }
+            public bool? OptionalBoolean { get; set; }
             public Guid Token { get; set; }
             public Guid ExplicitToken { get; set; }
             public DateTime OccurredAt { get; set; }

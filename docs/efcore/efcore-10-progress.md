@@ -11,6 +11,36 @@ each small group. Real database integration/tests and EF8/EF9 adaptation are exp
 [local development plan](efcore-10-local-development-plan.md) tracks the full remaining inventory, including
 an audit of locally feasible deferred families. Finishing one batch does not finish the overall goal.
 
+### Boolean XOR checkpoint (2026-11-11)
+
+Batch3w after e47892c implements bool/bool? XOR in both modes, retaining the ExclusiveOr node
+through EF null processing and emitting NULL-preserving normalization/comparison only at SQL
+generation. Each operand uses its own numeric/text true/false encodings; mixed/inverted converters
+do not become the result converter. Oracle handles XOR as a search condition and preserves UNKNOWN
+when converting to a scalar. Reject null-converting/ambiguous/unsupported and Oracle empty encodings.
+
+Initial16 query regressions fail against the previous source. A second2-case RED catches converter
+output NULL being accidentally replaced with a fallback Boolean. Independent review then identifies
+the model-default mapping route: four sync/async RED tests reproduce Decimal-to-String reader errors
+with a global Y/N converter. The result mapping lookup now excludes the model; all16 unit and12
+intercepted cases pass, including native true/false/null reads and current Boolean capture transitions.
+The XOR IS NULL test follows EF's valid operand-null simplification rather than demanding XOR SQL.
+Scoped independent re-review approves with no remaining important findings.
+
+Full baseline Debug/Release and isolated EF10.0.14 Release each pass2288=1580 unit+706 functional+2
+consumers, zero failures/skips. The same baseline-built `10.0.0-boolean-xor-20261111-r1` nupkg passes
+content and both-mode consumers on EF10.0.0/10.0.14, package-only graphs and Release/package/consumer
+DLL SHA-256 equality: `70CBA19F37C22D734B75FF46E75630470F09674643F834F566D2C784E1C508E1`.
+The preceding shift package fails the new Boolean normalization assertion as intended. Baseline
+source assets remain EF10.0.0. Evidence: artifacts/boolean-xor-{focused,functional,debug-final,
+release-final,patch-final,package-final}.log, boolean-xor-{red,null-carrier-red,global-converter-red,
+old-package-red}.log, boolean-xor-package/ and boolean-xor-compat/.
+
+Valid stored encodings, native collation/coercion/results and repeated volatile evaluation remain
+acceptance boundaries. Broader inherited comparisons between independently converted Boolean
+values remain local follow-up work. No connector defect or deployed-server limitation was established.
+The overall goal remains active; no live tests, EF8/EF9 adaptation, push or publication occurred.
+
 ### Integer shift checkpoint (2026-11-11)
 
 Batch3v after e52a4d3 implements LINQ integer left/right shifts in both modes. It preserves C# small
@@ -39,7 +69,7 @@ assets remain EF10.0.0. Evidence: artifacts/shift-package-final.log, shift-old-p
 
 A .NET10 compiler probe rejects expression-tree `>>>` with CS7053 before EF executes. This is a
 language boundary, not an ADO.NET defect or unsupported OceanBase server feature. No new public
-unsigned-right-shift function is introduced. Boolean XOR, broader numeric casts/overflow and wider
+unsigned-right-shift function is introduced. Boolean XOR is covered by the later Batch3w above; broader numeric casts/overflow and wider
 query/model/write/schema/specification/deferred inventory still need local development. No live DB,
 standalone testing program, EF8/EF9, push or publication; the complete EF10 goal remains active.
 

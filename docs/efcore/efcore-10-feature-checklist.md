@@ -73,6 +73,15 @@ content and both-mode/patch consumers; prior lifecycle package fails the new NUL
 Release and consumer DLL identities match. Independent review found and closed an async token-count test
 gap; no production findings remain. Transactions/live remain open.
 
+Boolean XOR local checkpoint (Batch3w after e47892c): BooleanXorQueryTests adds16 cases and
+BasicRelationalTests adds12 intercepted sync/async cases. Both modes normalize each operand's mapped
+true/false values, preserve nullable XOR through EF null processing and use native Boolean result
+mapping even with global default converters. Null/equal/unsupported and Oracle empty encodings reject.
+Full Debug/Release and isolated14 each pass2288=1580+706+2, zero failures/skips. Independent review
+found and closed a global-converter result bug. Native results/collation/coercion, volatile single
+evaluation and broader independently converted Boolean comparisons remain open; QRY-01 stays In progress.
+Package evidence is recorded in the progress handoff.
+
 Integer shift local checkpoint (Batch3v after e52a4d3): ShiftQueryTests adds35 cases and
 BasicRelationalTests adds8 intercepted sync/async cases. Both modes cover `<<`/`>>`, C# small-integer
 promotion, negative/oversized count masking, signed right shift, signed32 wrap and full64-bit results,
@@ -311,7 +320,7 @@ numeric/Guid design. Complete each case in both modes before closing its parent 
 | Parent IDs | Concrete cases still required |
 | --- | --- |
 | `MAP-01` | All eight integer CLR types at minimum/maximum and nullable values; native MySQL and decimal/OceanBaseDecimal Oracle reader forms; fractional and overflow rejection. |
-| `MAP-01`, `QRY-01` | Boolean true/false/null binding and reading; Boolean columns, comparisons, NOT/AND/OR, CASE and EXISTS in predicates and projections; SQL three-valued null behavior. |
+| `MAP-01`, `QRY-01` | Boolean true/false/null binding and reading; Boolean columns, comparisons, NOT/AND/OR/XOR, CASE and EXISTS in predicates and projections; SQL three-valued null behavior. |
 | `MAP-03`, `MAP-06` | Empty/null text, quotes, backslashes, control and non-ASCII characters through parameters and literals; MySQL backslash-mode independence; Oracle national literals and empty-string behavior. |
 | `MAP-04` | Empty/null/bounded binary; Guid.Empty and a known UUID through parameters, literals and materialization; fixed string/RAW size and documented byte order. |
 | `MAP-06`, `MAP-07` | Explicit type/facets, mapping clones and converter composition preserve provider reader/parameter hooks; test real EF query and tracked-write paths. |
@@ -331,7 +340,7 @@ duplicates and mode-specific string semantics.
 | --- | --- | --- | --- | --- | --- |
 | SQL-01 | Escape identifiers, schema qualification and embedded delimiters; Oracle table aliases omit AS and table-free SELECT uses DUAL. | Required | In progress | In progress | UH now covers embedded delimiters, schema/Unicode/empty-name escaping and all builder overloads; UQ aliases pass; table-free/live SQL evidence still incomplete. |
 | SQL-02 | Parameter names/placeholders follow each dialect. | Required | Done | Done | UH Generates_mode_specific_identifiers_and_parameters. |
-| QRY-01 | SELECT/projection, arithmetic/comparison/Boolean predicates and null semantics bind values and materialize nullable/non-null results. | Required | In progress | In progress | UQ/FP cover Boolean/string/scalar handling, integer AND/OR/XOR/complement and left/right shifts, signed/unsigned widths, promotions, nullable/enums and bind refresh; MySQL query parameters use positional `?` ordering at the Connector 0.2.0 boundary. Boolean XOR, broader cast/overflow semantics, wider operators and live results remain open. |
+| QRY-01 | SELECT/projection, arithmetic/comparison/Boolean predicates and null semantics bind values and materialize nullable/non-null results. | Required | In progress | In progress | UQ/FP cover Boolean/string/scalar handling, Boolean XOR with mixed numeric/text operands and native results, integer AND/OR/XOR/complement and left/right shifts, signed/unsigned widths, promotions, nullable/enums and bind refresh; MySQL query parameters use positional `?` ordering at the Connector 0.2.0 boundary. Broader converted Boolean comparisons, cast/overflow semantics, wider operators and live results remain open. |
 | QRY-02 | OrderBy/ThenBy, Distinct, Skip/Take and offset-only queries return correct results, including deterministic paging/empty pages. | Required | In progress | In progress | UQ SQL shape only; live ordering/string/paging missing. |
 | QRY-03 | Inner/left joins, correlated subqueries, Any/All and scalar/collection Contains have verified results or explicit exclusions. | Required | In progress | In progress | URS/UTC/URC/FP cover ordinary joins/subqueries/quantifiers, bare integral/text membership, captured int/int? roots and nonempty/originally-empty inline roots. Typed zero-row metadata survives subqueries/pruning, including a bounded sole-ordinal repair. Consistent int-to-long bindings pass; converted Join Value projections can fail earlier EF inference. General text/other carriers and wider shapes remain local work; actual server results remain open. |
 | QRY-04 | GroupBy aggregates, Count/LongCount, Sum/Average/Min/Max handle empty and nullable inputs correctly. | Required | In progress | In progress | URS/UNA/FP cover Count/LongCount plus native numeric Sum/Average/Min/Max, all exact numeric/nullable selector families, filtered DISTINCT/HAVING/order, independent promoted Double, neutral Single results, converter-owned SUM zero and supplied empty/null/checked reads. Nonnumeric extrema and real aggregate execution remain open. |

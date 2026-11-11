@@ -729,8 +729,38 @@ including negative and oversized counts. Reject non-integer storage carriers for
   C# expression-tree boundary for `>>>`; do not advertise a translation the compiler cannot represent.
   No live DB, standalone testing application, EF8/EF9, push or publication work.
 
+## Batch3w brief: Boolean exclusive OR
+
+QRY-01: translate bool/bool? XOR in predicates, scalar projections and nested expressions in both
+modes. Retain the ExclusiveOr node through EF null processing: rewriting to nullable NotEqual early
+would introduce incorrect null compensation. Map each operand independently and use the default
+Boolean result mapping, never a converted operand's storage mapping.
+
+- Normalize each operand using its mapped true/false literals in a NULL-preserving CASE, then compare
+  the normalized values with <> at SQL generation time. Oracle classifies Boolean XOR as a search
+  condition and uses its existing three-valued CASE conversion for scalar contexts.
+- Cover native and mixed numeric/text Boolean converters, nullable captures/transitions, both null
+  settings, predicates/projections/NOT/CASE/nesting and integer XOR controls. Reject null-converting,
+  nonnumeric/nontext carriers and null/equal (Oracle empty) true/false representations.
+- Add failing query regressions before implementation, sync/async intercepted readers and packed
+  consumers; run baseline Debug/Release and isolated14, independent review, update docs and commit.
+  Repeated operand evaluation and native collation/coercion/results remain explicit boundaries.
+  No standalone live-test application, database access, EF8/EF9, push or publication work.
+
 ## Execution record
 
+- Batch3w after e47892c: bool/bool? XOR retains EF null propagation, independently mapped operand
+  normalization and native result mapping; Oracle uses existing three-valued search-condition conversion.
+  Initial query RED16, null-carrier RED2 and review-found global-default-converter reader RED4 were
+  corrected. Focused16 unit+12 intercepted and full Debug/Release/isolated14 each2288=1580+706+2 pass,
+  zero failures/skips. Scoped independent re-review approves without remaining important findings.
+  Same baseline-built boolean-xor-20261111-r1 package passes both modes/patches, content, package-only
+  graphs and DLL identity; previous shift package fails the new normalization assertion. Baseline
+  assets stay10.0.0. EF may simplify XOR IS NULL to operand null tests; preserve that valid optimization.
+  Model-free result mapping prevents global Y/N defaults from reading numeric SQL results as text.
+  Native results/collation/coercion, repeated volatile evaluation and broader converted Boolean
+  comparisons remain open. Evidence: artifacts/boolean-xor-*.log, boolean-xor-package/ and
+  boolean-xor-compat/. Overall goal active; no standalone live program, EF8/EF9, push or publication.
 - Batch3v after e52a4d3: LINQ shifts via strict internal functions, original promotions/left result
   mapping and independent Int32 count mapping. MySQL native shifts normalize width/sign; Oracle
   NUMBER formulas reduce before multiplying. Initial missing-translation RED32; exact signed32 CAST

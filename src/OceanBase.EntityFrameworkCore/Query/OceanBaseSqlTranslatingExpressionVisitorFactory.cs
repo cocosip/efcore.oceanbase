@@ -63,6 +63,17 @@ namespace OceanBase.EntityFrameworkCore.Query
         {
             protected override Expression VisitBinary(BinaryExpression expression)
             {
+                if (expression.Method is null && expression.NodeType == ExpressionType.ExclusiveOr
+                    && Unwrap(expression.Type) == typeof(bool))
+                {
+                    if (Visit(expression.Left) is not SqlExpression left || Visit(expression.Right) is not SqlExpression right)
+                        return QueryCompilationContext.NotTranslatedExpression;
+                    var factory = Dependencies.SqlExpressionFactory;
+                    // Keep XOR until after null processing; nullable inequality has different compensation.
+                    return new SqlBinaryExpression(ExpressionType.ExclusiveOr,
+                        factory.ApplyDefaultTypeMapping(left), factory.ApplyDefaultTypeMapping(right), typeof(bool),
+                        Dependencies.TypeMappingSource.FindMapping(typeof(bool)));
+                }
                 if (expression.Method is null && expression.NodeType is ExpressionType.LeftShift or ExpressionType.RightShift)
                 {
                     if (Visit(expression.Left) is not SqlExpression value || Visit(expression.Right) is not SqlExpression count)

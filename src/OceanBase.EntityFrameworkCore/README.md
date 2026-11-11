@@ -26,6 +26,11 @@ for these operations. Integer numeric converters operate in stored value space; 
 equivalence, overflowing/narrowing casts and single evaluation of volatile operands need separate
 contracts. C# expression trees reject `>>>` (CS7053). Native results remain unverified on OceanBase.
 
+Boolean `^` normalizes each operand's numeric/text true/false encoding and preserves nullable XOR.
+Its result uses the native Boolean mapping even when the operands have different converters.
+Null-converting, ambiguous and Oracle empty-string encodings are rejected. Valid stored encodings,
+native collation/coercion and repeated volatile operand evaluation remain acceptance boundaries.
+
 `Database.GenerateCreateScript()` generates supported relational DDL offline. To create tables in an already
 provisioned MySQL database or Oracle schema, explicitly name the target:
 

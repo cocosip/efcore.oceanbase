@@ -50,7 +50,8 @@ namespace OceanBase.EntityFrameworkCore.Query
                         (SqlExpression?)VisitInContext(@case.ElseResult, false)), condition, false);
                 case SqlBinaryExpression binary:
                     var logical = binary.OperatorType is ExpressionType.AndAlso or ExpressionType.OrElse;
-                    var comparison = logical || binary.OperatorType is ExpressionType.Equal or ExpressionType.NotEqual
+                    var comparison = logical || binary.OperatorType == ExpressionType.ExclusiveOr && binary.Type == typeof(bool)
+                        || binary.OperatorType is ExpressionType.Equal or ExpressionType.NotEqual
                         or ExpressionType.LessThan or ExpressionType.LessThanOrEqual
                         or ExpressionType.GreaterThan or ExpressionType.GreaterThanOrEqual;
                     return Convert(binary.Update(

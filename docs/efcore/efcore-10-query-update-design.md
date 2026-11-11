@@ -623,6 +623,31 @@ overflow remain live gates. Arbitrary converter transformations are not CLR bitw
 Overflowing/narrowing and signedness-changing explicit casts have separate CLR wrapping/range semantics;
 this slice's canonical MySQL CAST syntax does not establish those broader conversion contracts.
 
+## Boolean XOR local contract
+
+QRY-01 includes bool/bool? exclusive OR in both modes. Retain EF's ExclusiveOr binary node through
+null processing; an early rewrite to NotEqual would compensate nullable inequality and lose lifted
+NULL propagation. Independently default-map the operands and assign the native Boolean result
+mapping, so a Y/N or 0/2 operand converter never becomes the result converter. The result lookup is
+model-free: a global DefaultTypeMapping<bool> converter must not override the native comparison result.
+
+At SQL generation time normalize each operand with its own mapped true/false literals:
+`CASE WHEN operand = trueLiteral THEN 1 WHEN operand = falseLiteral THEN 0 ELSE NULL END`.
+Compare the two normalized values with <>. This supports mixed numeric/text Boolean storage and
+inverted true/false encodings. Oracle treats Boolean ExclusiveOr as a search condition; existing
+three-valued CASE handling converts it to a scalar in projections, ordering and enclosing operands.
+The normalization/comparison is emitted after EF null processing, so surrounding equality/inequality
+still uses the configured null semantics while XOR itself propagates NULL in both settings.
+An XOR IS NULL predicate may be simplified by EF to operand null tests without evaluating XOR.
+
+Reject null-converting and nonnumeric/nontext carriers, equal/null true/false representations and
+Oracle empty-string representations. Data must use the converter's valid encodings; equality of
+text representations also depends on the configured native collation. This slice does not repair
+the broader inherited comparison behavior between independently converted Boolean values outside
+XOR. Normalization repeats operands and Oracle scalar conversion repeats the entire predicate;
+single evaluation of volatile expressions is not promised. SQL generation, intercepted parameter/
+reader tests and packaged consumers are local evidence, not native result/coercion/collation proof.
+
 ## Integer shift local contract
 
 QRY-01 extends integer expressions with `<<` and `>>`. C# first promotes small integers to Int32;
