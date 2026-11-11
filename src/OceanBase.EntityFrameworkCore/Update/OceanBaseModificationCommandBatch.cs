@@ -78,8 +78,11 @@ namespace OceanBase.EntityFrameworkCore.Update
             builder.Append(sql.ToString());
             foreach (var column in command.ColumnModifications)
             {
-                if (column.UseCurrentValueParameter) AddInput(builder, column, column.ParameterName!, column.Value);
-                if (column.UseOriginalValueParameter) AddInput(builder, column, column.OriginalParameterName!, column.OriginalValue);
+                // NULL conditions use IS NULL; only NULL values actually written need a parameter.
+                if (column.UseCurrentValueParameter && (column.IsWrite || column.Value is not null))
+                    AddInput(builder, column, column.ParameterName!, column.Value);
+                if (column.UseOriginalValueParameter && column.OriginalValue is not null)
+                    AddInput(builder, column, column.OriginalParameterName!, column.OriginalValue);
             }
 
             var reads = command.ColumnModifications.Where(column => column.IsRead).ToList();

@@ -637,6 +637,28 @@ than exactly one affected row raises `DbUpdateConcurrencyException` with the aff
 are wrapped in `DbUpdateException`; cancellation remains `OperationCanceledException`. An already-cancelled async
 save fails before executing the batch's command.
 
+### Tracked graph and nullable concurrency local contract
+
+Batch5a uses EF's existing dependency ordering and relationship fixup; no provider graph scheduler is added.
+GraphUpdateTests exercises dependent-first tracking of a three-level graph, principal-first inserts,
+temporary-to-generated key propagation into child foreign keys, and dependent-first cascade deletes in both
+modes, sync/async. Captured DML and MySQL generated-value SELECTs must use the same native connection.
+The fixture disables automatic transactions; this does not prove atomicity or server-generated values.
+
+Composite-key updates/deletes use original concurrency values: a NULL original emits IS NULL with no
+parameter, while a non-NULL original retains its predicate bind. Current NULL values in SET/INSERT still
+require an input parameter carrying DBNull. The batch only omits NULL predicate parameters; AddInput itself
+must not discard NULL writes or generated-read key inputs. Tests pin complete DML, values in SQL order and
+absence of unused native parameters, including Oracle named binds and RETURNING output binds.
+
+Zero-row composite update/delete results retain the conflicting entity entry and pending state. Synthetic
+connector errors during DML or MySQL generated readback retain the identical InnerException and failing
+entry in DbUpdateException. Cancellation raised inside those command callbacks retains the original
+OperationCanceledException/token, and async commands receive the SaveChangesAsync token. Supplied affected
+rows, output parameters and readers establish provider behavior only; they do not establish server error
+classification, actual network cancellation, matched-row behavior, rollback or transaction attachment.
+Wider generation/readback shapes, unsupported graphs, transaction and diagnostic/logging gates remain open.
+
 Both provider-created and caller-owned connections are checked for compatibility-mode conflicts. A closed connection
 without `ExpectedMode` receives the configured provider mode before opening. An already-open connection must agree
 with that mode. MySQL requires `UseAffectedRows=false`: EF concurrency checks count matched rows, including a match

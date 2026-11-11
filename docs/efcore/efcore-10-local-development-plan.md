@@ -86,6 +86,22 @@ do not prove Connector/server behavior. Run full Debug/Release/isolated14, same-
 patches/modes, independent review, update evidence and commit. Broader transaction/lifecycle/live work
 remains open; EF8/EF9 are postponed.
 
+## Batch5a brief: tracked graph writes and composite concurrency
+
+UPD-01..05 and DIA-02: exercise real EF SaveChanges in both modes, sync/async, with commands intercepted
+before network execution. Add dependent-first three-level graphs and verify principal-before-dependent
+inserts, generated-key propagation, relationship fixup and dependent-before-principal deletes. Characterize
+composite-key updates/deletes with NULL/non-NULL original concurrency tokens, current versus original
+values, zero-row conflicts, exception entries and connector/cancellation identity.
+
+Pin full generated DML and parameter-to-placeholder values independently of supplied reader/output values.
+Synthetic readback must follow the command's projected columns. Preserve the existing single-row batches;
+do not add graph ordering code if EF already orders correctly. Automatic transactions are explicitly disabled
+in this command fixture, so these tests do not establish SaveChanges atomicity or rollback. Test missing
+behavior RED before implementation; run full Debug/Release/isolated14 and independent review. Repack and
+repeat both-mode/patch consumers if production changes. Wider generation/readback, unsupported graph shapes,
+transaction and live gates remain separate required inventory.
+
 ## Batch 1 brief
 
 **Files:** OptionsTests.cs; SqlGenerationHelperTests.cs; ConsumerTests/ProviderConfigurationTests.cs;
@@ -531,6 +547,19 @@ explicit supported duplication contract, not inference from Scale's ambiguous ze
    update remaining boundaries, then commit. No database, EF8/EF9 or publication work.
 
 ## Execution record
+
+- Batch5a after6714626: graph dependency ordering/key propagation/reverse deletes, composite NULL/non-NULL
+  original tokens and current NULL writes, zero-row conflict entries, synthetic connector and in-flight
+  cancellation identity have24 focused cases. Original16 tests reproduced four MySQL unused NULL predicate
+  bindings; omit only those binds in the shared batch producer, retaining NULL write inputs. Full Debug,
+  Release and isolated14 each1986=1474+510+2, zero failures/skips. Same graph-update-20261111 nupkg passes
+  content and both-mode/patch consumers; prior lifecycle package fails new NULL-token smoke as expected.
+  Package/baseline/consumer DLL identities and package-only dependency graphs pass; baseline assets stay10.0.0.
+  Logs artifacts/graph-update-*.log; isolated build/props artifacts/graph-update-compat/; packed consumers
+  artifacts/graph-update-package/. Independent review found and closed one async token-count assertion gap
+  with RED/GREEN focused evidence; no production findings remain. Transactions are disabled in this command
+  fixture; no atomicity/live claim. Wider graph/readback, logging, transaction/schema/specification and
+  remaining local inventory stay open. No EF8/EF9, database connection, push or publication.
 
 - Batch6a: shared provider failed-open snapshot/rollback fixes the documented opening-callback and ambient
   warning phases, preserves outer/caller leases and retries, and closes the entry native instance rather

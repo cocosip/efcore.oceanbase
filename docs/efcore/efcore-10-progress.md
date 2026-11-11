@@ -11,6 +11,29 @@ each small group. Real database integration/tests and EF8/EF9 adaptation are exp
 [local development plan](efcore-10-local-development-plan.md) tracks the full remaining inventory, including
 an audit of locally feasible deferred families. Finishing one batch does not finish the overall goal.
 
+### Tracked graph writes and nullable concurrency checkpoint (2026-11-11)
+
+Batch5a after6714626 adds24 GraphUpdateTests cases for both modes sync/async: three-level dependency
+ordering/generated-key propagation/reverse deletes, composite original-key/token predicates, NULL current
+writes, zero-row conflict entries, connector-error identity and in-flight cancellation/token identity.
+MySQL DML/readback shares the native connection; the fixture disables transactions and proves no atomicity.
+NULL originals previously emitted IS NULL but retained an unused native bind, breaking MySQL positional
+binding. The common batch parameter producer now omits those predicate binds while retaining NULL SET binds.
+
+Initial16-case run reproduced four MySQL failures; final focused24 pass. Debug/Release and isolated
+EF10.0.14 Release each pass1986 (1474 unit,510 intercepted,two project consumers), no failures/skips.
+The same baseline-built10.0.0-graph-update-20261111 nupkg passes the content gate and both-mode consumers
+on10.0.0/10.0.14, including composite NULL concurrency and NULL writes. The preceding lifecycle package
+fails the new smoke at its unused-bind regression. Package/Release/consumer DLL identities and package-only
+graphs pass; baseline assets stay10.0.0. Independent review found one P2 test-coverage gap in async
+token-count assertions; the intentionally failing assertion reproduced it and the corrected assertion
+passes24 focused cases plus fresh full suites. No production findings remain.
+
+Evidence: artifacts/graph-update-*.log (including graph-update-token-red/green); isolated artifacts/graph-update-compat/;
+package/consumers under
+artifacts/graph-update-package/. Wider generation, graph shapes, diagnostic logging, transactions, schema
+and specification inventory remain open. No real database, EF8/EF9, hosted CI, push or publication.
+
 ### Failed-open lifecycle checkpoint (2026-11-11)
 
 Batch6a fixes shared provider Open/OpenAsync rollback after opening callbacks and ambient warnings fail.

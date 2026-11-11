@@ -24,6 +24,7 @@ namespace PackageConsumer
             foreach (var mode in new[] { OceanBaseCompatibilityMode.MySql, OceanBaseCompatibilityMode.Oracle })
             {
                 VerifyFailedOpen(mode);
+                VerifyNullableConcurrency(mode);
                 var options = new DbContextOptionsBuilder<ConsumerContext>()
                     .UseOceanBase("Server=localhost;Database=package_smoke", mode).Options;
                 using var context = new ConsumerContext(options, mode);
@@ -597,6 +598,75 @@ namespace PackageConsumer
 
                 Console.WriteLine($"{mode}: packed provider registration, scalar/text/temporal/binary/decimal model, string/null/Boolean SQL and paging passed; EF {typeof(DbContext).Assembly.GetName().Version}.");
             }
+        }
+
+        private static void VerifyNullableConcurrency(OceanBaseCompatibilityMode mode)
+        {
+            var commands = new CaptureWrite();
+            using var context = new WriteContext(new DbContextOptionsBuilder<WriteContext>()
+                .UseOceanBase("Server=localhost;Database=package_smoke", mode)
+                .AddInterceptors(new SuppressNetwork(), commands).Options);
+            context.Database.AutoTransactionBehavior = AutoTransactionBehavior.Never;
+            var row = new VersionedRow { TenantId = 2, Id = 17, Name = "before" };
+            context.Attach(row);
+            row.Name = "after";
+            row.Version = 9;
+            if (context.SaveChanges() != 1) throw new Exception("Packed nullable-token update failed.");
+            commands.Verify("UPDATE VersionedRows SET Name = ?, Version = ? WHERE Id = ? AND TenantId = ? AND Version IS NULL;",
+                ["after", 9, 17, 2]);
+            row.Version = null;
+            if (context.SaveChanges() != 1) throw new Exception("Packed NULL write failed.");
+            commands.Verify("UPDATE VersionedRows SET Version = ? WHERE Id = ? AND TenantId = ? AND Version = ?;",
+                [DBNull.Value, 17, 2, 9]);
+            context.Remove(row);
+            if (context.SaveChanges() != 1) throw new Exception("Packed nullable-token delete failed.");
+            commands.Verify("DELETE FROM VersionedRows WHERE Id = ? AND TenantId = ? AND Version IS NULL;", [17, 2]);
+            Console.WriteLine($"{mode}: packed provider composite nullable concurrency and NULL writes passed.");
+        }
+
+        private sealed class CaptureWrite : DbCommandInterceptor
+        {
+            private string _sql = "";
+            private object?[] _values = [];
+
+            public override InterceptionResult<int> NonQueryExecuting(DbCommand command, CommandEventData eventData, InterceptionResult<int> result)
+            {
+                var parameters = command.Parameters.Cast<DbParameter>().ToArray();
+                var binds = System.Text.RegularExpressions.Regex.Matches(command.CommandText, @"[:@]\w+|\?");
+                if (binds.Count != parameters.Length) throw new Exception("Packed write has missing or unused bindings.");
+                _values = binds.Select((bind, index) => bind.Value == "?" ? parameters[index].Value
+                    : parameters.Single(parameter => parameter.ParameterName.TrimStart(':', '@') == bind.Value.TrimStart(':', '@')).Value).ToArray();
+                _sql = System.Text.RegularExpressions.Regex.Replace(command.CommandText
+                    .Replace("`", "", StringComparison.Ordinal).Replace("\"", "", StringComparison.Ordinal), @"[:@]\w+|\?", "?");
+                _sql = System.Text.RegularExpressions.Regex.Replace(_sql, @"\s+", " ").Trim();
+                return InterceptionResult<int>.SuppressWithResult(1);
+            }
+
+            public void Verify(string sql, object?[] values)
+            {
+                if (_sql != sql || !_values.SequenceEqual(values))
+                    throw new Exception("Packed nullable concurrency SQL or bindings changed: " + _sql);
+            }
+        }
+
+        private sealed class WriteContext(DbContextOptions<WriteContext> options) : DbContext(options)
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<VersionedRow>().ToTable("VersionedRows");
+                modelBuilder.Entity<VersionedRow>().HasKey(row => new { row.TenantId, row.Id });
+                modelBuilder.Entity<VersionedRow>().Property(row => row.Id).ValueGeneratedNever();
+                modelBuilder.Entity<VersionedRow>().Property(row => row.Name).HasMaxLength(80);
+                modelBuilder.Entity<VersionedRow>().Property(row => row.Version).IsConcurrencyToken();
+            }
+        }
+
+        private sealed class VersionedRow
+        {
+            public int TenantId { get; set; }
+            public int Id { get; set; }
+            public string Name { get; set; } = "";
+            public int? Version { get; set; }
         }
 
         private static void VerifyFailedOpen(OceanBaseCompatibilityMode mode)

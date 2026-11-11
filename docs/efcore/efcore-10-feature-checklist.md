@@ -66,7 +66,14 @@ An open row is not automatically waiting for a database. Track the remaining wor
 Development resumed at the user's request (2026-11-10) on efcore/10.0. See the
 [progress handoff](efcore-10-progress.md) for saved state, remaining work and the exact resume point.
 
-Latest local lifecycle checkpoint: Batch6a after0b04af6 fixes failed provider Open/OpenAsync accounting
+Latest local write checkpoint: Batch5a after6714626 fixes unused NULL original predicate binds while
+retaining NULL writes.24 focused graph/composite-concurrency/error/cancellation cases and full Debug,
+Release/isolated14 each1986=1474+510+2 pass, no failures/skips. Same graph-update-20261111 nupkg passes
+content and both-mode/patch consumers; prior lifecycle package fails the new NULL-token smoke. Package,
+Release and consumer DLL identities match. Independent review found and closed an async token-count test
+gap; no production findings remain. Transactions/live remain open.
+
+Historical local lifecycle checkpoint: Batch6a after0b04af6 fixes failed provider Open/OpenAsync accounting
 and physical cleanup using isolated EF10 private-field contracts.36 focused cases and final full
 Debug/Release/isolated14 suites pass1962=1474+486+2, no failures/skips. Same final lifecycle nupkg passes
 both-mode consumers on10.0.0/10.0.14 and the package-content gate. Raw close failure remains best effort;
@@ -256,7 +263,7 @@ Existing evidence references used below identify partial coverage, not automatic
 | CON-04 | Sync/async open, execute, read, close and connection reuse honor mode and connector settings. | Required | In progress | In progress | FP commands plus registered-provider failed-open accounting and physical-state/retry doubles pass; no live lifecycle execution. EF10 private snapshot contracts require patch review. |
 | CON-05 | Timeout/cancellation reach connector; pre-cancelled/in-flight query/save operations release resources. | Required | In progress | In progress | FP covers pre-cancelled save only. |
 | DIA-01 | Logging/interceptors report commands and failures; parameter values stay protected unless sensitive logging is explicitly enabled. | Required | In progress | In progress | FP interceptors; logging/event/redaction assertions missing. |
-| DIA-02 | Update failures retain inner connector errors and entries; cancellation is not wrapped as DbUpdateException. | Required | In progress | In progress | FP cancellation; connector-error cases missing. |
+| DIA-02 | Update failures retain inner connector errors and entries; cancellation is not wrapped as DbUpdateException. | Required | In progress | In progress | GraphUpdateTests retains synthetic connector-error/entry identity and in-flight cancellation/token in both modes sync/async, including MySQL generated readback. Actual connector/network failure and cancellation remain live gates. |
 
 ## Model and scalar mappings
 
@@ -323,10 +330,10 @@ duplicates and mode-specific string semantics.
 | ID | Requirement and acceptance criteria | Priority | MySQL | Oracle | Existing evidence / gap |
 | --- | --- | --- | --- | --- | --- |
 | UPD-01 | Sync/async INSERT binds values, supports explicit keys/default-only inserts and propagates generated keys. | Required | In progress | In progress | FP generated/default-only inserts now retain MySQL positional bind order in sync/async intercepted tests; server identity generation remains unverified. |
-| UPD-02 | Generated/default/computed readback uses same connection; MySQL LAST_INSERT_ID/Oracle RETURNING handle null/converted outputs. | Required | In progress | In progress | FP synthetic exact/overflow/fractional numeric, converted Boolean, Oracle timestamp/zoned and both-mode binary/Guid outputs; null/multiple-output and live defaults/computed/transaction cases missing. |
-| UPD-03 | UPDATE/DELETE bind original keys/tokens, including composite keys and nullable concurrency tokens. | Required | In progress | In progress | FP simple int key/token only. |
-| UPD-04 | Stale update/delete throws DbUpdateConcurrencyException with entries; unchanged matched rows succeed in MySQL. | Required | In progress | In progress | FP zero-row update and UO affected-row option rejection; live matched-row/conflict tests missing. |
-| UPD-05 | Multi-entity saves respect dependency order and propagate parent/child keys; unsupported readback shapes reject before DML. | Required | Planned | Planned | Missing graph/unsupported-shape tests. |
+| UPD-02 | Generated/default/computed readback uses same connection; MySQL LAST_INSERT_ID/Oracle RETURNING handle null/converted outputs. | Required | In progress | In progress | FP generated graph keys share the native connection; synthetic exact/overflow/fractional numeric, converted Boolean, Oracle timestamp/zoned and both-mode binary/Guid outputs. Null/multiple-output and live defaults/computed/transaction cases remain open. |
+| UPD-03 | UPDATE/DELETE bind original keys/tokens, including composite keys and nullable concurrency tokens. | Required | In progress | In progress | GraphUpdateTests covers composite original keys, NULL/non-NULL originals and current NULL writes, full DML/value order and no unused native binds in both modes sync/async; live predicates remain unverified. |
+| UPD-04 | Stale update/delete throws DbUpdateConcurrencyException with entries; unchanged matched rows succeed in MySQL. | Required | In progress | In progress | FP zero-row composite update/delete retains failing entry/state; UO rejects affected-row option conflicts. Live matched-row/conflict tests remain open. |
+| UPD-05 | Multi-entity saves respect dependency order and propagate parent/child keys; unsupported readback shapes reject before DML. | Required | In progress | In progress | GraphUpdateTests covers three-level insert ordering, generated key/FK propagation, fixup and reverse cascade deletes. Wider/unsupported graph shapes, transactional atomicity and live writes remain open. |
 | TXN-01 | Begin/commit/rollback and existing transaction enlistment work sync/async; incompatible connections/transactions reject. | Required | Planned | Planned | Missing; FP disables transactions. |
 | TXN-02 | SaveChanges is atomic across commands/readback; later failure rolls back earlier writes; cancellation leaves no unintended partial commit. | Required | Planned | Planned | Missing live failure/rollback fixtures. |
 | TXN-03 | Savepoints and SaveChanges inside an existing transaction preserve caller transaction after recoverable failure. | Required | Planned | Planned | Missing connector/server capability and execution tests. |
@@ -350,9 +357,9 @@ commit/transaction behavior per mode.
 | ID | Requirement and acceptance criteria | Priority | MySQL | Oracle | Existing evidence / gap |
 | --- | --- | --- | --- | --- | --- |
 | PKG-01 | Build net10.0 assets against published OceanBaseConnector 0.2.0 with warnings as errors. | Required | Done | Done | Current solution test command builds assets; not a package-content assertion. |
-| PKG-02 | Packed nuspec uses OceanBase.EntityFrameworkCore and EF ranges [10.0.0,11.0.0). | Required | Done | Done | Verify-Package.ps1 passes connection-lifecycle-final-20261111 identity/net10.0/README/ranges; prior negative probes reject as expected. Rerun on every release pack; runtime/live gates are separate. |
-| PKG-03 | Isolated packed consumer restores/executes provider API without project/local connector references. | Required | Done | Done | Same final lifecycle nupkg passes both modes/selected patches, including failed-open accounting/retry and prior query/mapping smoke; package-only graph inspected; rerun after changes. |
-| PKG-04 | Minimum EF10 and selected later available EF10 patch restore/build/test without pinning the EF patch in the provider package; EF11 cannot satisfy dependencies. | Required | Done | Done | Final source suites pass1962 at10.0.0/10.0.14; same baseline-built lifecycle nupkg passes both consumers, including private-field runtime probes. Ranges rechecked; prior parser rejects11.0.0. Future patches need fresh private-contract evidence. |
+| PKG-02 | Packed nuspec uses OceanBase.EntityFrameworkCore and EF ranges [10.0.0,11.0.0). | Required | Done | Done | Verify-Package.ps1 passes graph-update-20261111 identity/net10.0/README/ranges; prior negative probes reject as expected. Rerun on every release pack; runtime/live gates are separate. |
+| PKG-03 | Isolated packed consumer restores/executes provider API without project/local connector references. | Required | Done | Done | Same graph-update nupkg passes both modes/selected patches, including NULL composite concurrency/NULL writes and prior smoke; package-only graph and DLL identity inspected; rerun after changes. |
+| PKG-04 | Minimum EF10 and selected later available EF10 patch restore/build/test without pinning the EF patch in the provider package; EF11 cannot satisfy dependencies. | Required | Done | Done | Final source suites pass1986 at10.0.0/10.0.14; same baseline-built graph-update nupkg passes both consumers, including prior private-field runtime probes. Ranges rechecked; prior parser rejects11.0.0. Future patches need fresh private-contract evidence. |
 | TST-01 | Selected EF relational specification classes pass; exclusions map to checklist IDs and limitations. | Required | Planned | Planned | Specification project/selection absent. |
 | TST-02 | Live core query/write/transaction/schema/scalar suites pass in at least one declared supported environment per mode. | Required | Planned | Planned | User will supply access later; User Secrets fixture and authorized schema/cleanup scope required; no live provider execution recorded. |
 | REL-01 | Support notes record server/connector/runtime/EF versions, tenant mode, direct/proxy endpoint, transport/options without credentials. | Required | Planned | Planned | Release evidence record missing. |
