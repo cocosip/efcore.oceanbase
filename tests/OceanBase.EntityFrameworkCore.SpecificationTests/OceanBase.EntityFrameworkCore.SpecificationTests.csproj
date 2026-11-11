@@ -8,6 +8,8 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Relational.Specification.Tests" />
+    <!-- Service the official specification package's Xml/Pkcs test dependencies without changing the provider. -->
+    <PackageReference Include="System.Security.Cryptography.Xml" />
     <PackageReference Include="xunit" />
     <PackageReference Include="xunit.runner.visualstudio" />
     <ProjectReference Include="../../src/OceanBase.EntityFrameworkCore/OceanBase.EntityFrameworkCore.csproj" />

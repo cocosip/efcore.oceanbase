@@ -52,7 +52,13 @@ so that an undocumented feature is not accidentally advertised.
 
 ## Current evidence and blockers
 
-Latest checkpoint: Batch7e on 2026-11-11; development is paused at the user's request. Explicit owned
+Latest checkpoint: Batch8b on 2026-11-11; development resumed at the user's request. The default
+restore audit gate now passes with a test-owned Cryptography.Xml 9.0.23 reference resolving Pkcs 9.0.23;
+neither is a provider runtime dependency. Full default Debug/Release each pass3520, zero failures/skips,
+without warning overrides. The audit-20261111 package content gate passes. Selected-patch/manual consumer
+evidence below remains historical; Oracle namespace lifecycle and the full remaining inventory stay open.
+
+Preceding functional checkpoint: Batch7e on 2026-11-11. Explicit owned
 management factories support supplied/custom MySQL targets. Final EF10.0.0 Debug/Release and isolated
 10.0.14 Release each pass3520=1656 unit+994 functional+868 specification+two consumer tests, zero failures/
 skips. Same management-profile-20261111 package passes both modes/patches/content/package-only graphs/

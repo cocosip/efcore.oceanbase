@@ -9,8 +9,9 @@ public APIs and per-mode mappings/SQL. Separate local implementation evidence fr
 **Spec:** efcore-10-feature-checklist.md, efcore-10-technical-baseline.md, efcore-10-query-update-design.md.
 **Tech Stack:** C#, .NET 10, EF Core/Relational [10.0.0,11.0.0), xUnit, OceanBaseConnector 0.2.0.
 
-**Paused:** 2026-11-11 at the user's request. Batch7e is saved below; resume with the Oracle lifecycle
-contract in the progress handoff after the user requests further development. The full goal remains incomplete.
+**Resumed:** 2026-11-11 at the user's request. Continue EF10 in this checkout, test each module and
+review each completed major module before committing. EF8/EF9 and live execution remain postponed.
+The full goal remains incomplete.
 
 ## Global constraints
 
@@ -40,6 +41,22 @@ Do not mark the goal complete while any locally developable item below remains u
 | 8. Specification and package gates | TST-01, PKG-01..04, REL-01/02 | Selected EF relational specification fixtures locally; documented exclusions; repeatable nupkg identity/content/range gate, README, expanded package consumers and selected patch matrix. |
 | 9. Deferred inventory audit | DEF-01..10 | Revisit every documented deferred family after Required local implementation stabilizes. Implement locally feasible families under explicit per-mode contracts and tests; record precise architectural/connector/server blockers for any unimplementable family. Do not treat a Deferred label alone as evidence it cannot be developed. |
 | 10. Completion audit | All IDs | Compare docs/public API/source/tests/package evidence. Every locally feasible feature is implemented/reviewed/committed; only specifically evidenced database or external blockers may remain. |
+
+## Batch8b brief: restore the default dependency audit gate
+
+**Feature IDs:** PKG-01/02, TST-01, REL-02. The ordinary solution restore currently fails because the
+official EF10.0.0 specification package brings vulnerable Cryptography.Xml/Pkcs 9.0.0 test dependencies.
+Keep warnings-as-errors and NuGet audit enabled. Override the test dependency with the available 9.0.23
+servicing patch, using central version management and a reference owned by SpecificationTests. Prefer
+one direct Xml reference if its dependency closes Pkcs as well; do not change provider runtime dependencies.
+
+- [x] Capture default restore failure with NU1902/NU1903 before editing dependencies.
+- [x] Add the centrally versioned test-only Xml reference; restore without warning overrides and inspect
+  the resolved Xml/Pkcs versions and absence of these libraries from the provider dependency graph.
+- [x] Run full Debug and Release solution tests under the default warning policy. Pack the provider and
+  run Verify-Package.ps1 to prove the runtime dependency boundary remains unchanged.
+- [x] Independently review the diff and dependency graphs, resolve findings, update checkpoint evidence
+  and commit. Then continue the Oracle namespace lifecycle contract; this gate does not complete EF10.
 
 ## Batch4a/4b/4c brief: relational model, graph materialization and filters
 

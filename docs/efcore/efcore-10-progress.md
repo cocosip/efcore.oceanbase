@@ -1,9 +1,9 @@
 # EF Core 10 Development Progress
 
-## Paused checkpoint: 2026-11-11
+## Active checkpoint: 2026-11-11
 
-Development resumed on 2026-11-10 on efcore/10.0 and is paused at the user's request on 2026-11-11.
-Finish this checkpoint locally; do not resume feature development until the user requests it.
+Development resumed on 2026-11-11 on efcore/10.0 at the user's request, following the paused Batch7e checkpoint.
+Test each module and review completed major modules before committing. EF8/EF9 remain postponed.
 The provider is not release-ready. The [feature checklist](efcore-10-feature-checklist.md) remains the
 acceptance authority; this document records the handoff rather than defining a different completion target.
 
@@ -11,6 +11,22 @@ The current user goal is to finish all locally developable EF10 functionality, w
 each small group. Real database integration/tests and EF8/EF9 adaptation are explicitly postponed. The
 [local development plan](efcore-10-local-development-plan.md) tracks the full remaining inventory, including
 an audit of locally feasible deferred families. Finishing one batch does not finish the overall goal.
+
+### Default dependency audit gate restored (2026-11-11)
+
+Batch8b follows `9fa3fd0`. Default restore reproduced NU1902/NU1903 failures from the official
+EF10.0.0 specification package's Cryptography.Xml/Pkcs 9.0.0 dependency chain. SpecificationTests
+now directly references centrally managed Cryptography.Xml 9.0.23, which resolves Pkcs 9.0.23 as
+well. Neither library appears in the provider dependency graph. Audit and warnings-as-errors stay enabled.
+
+Default restore and full Debug/Release tests pass without warning overrides: **3520** tests each,
+1656 unit + 994 intercepted functional + 868 model specification + two project-consumer cases,
+zero failures/skips. The `10.0.0-audit-20261111` package passes Verify-Package.ps1, retaining exactly
+the original three runtime dependencies. Evidence: `artifacts/dependency-audit-{red,restore,debug,release}.log`
+and `artifacts/dependency-audit-package/`. No new runtime functionality or live acceptance is claimed;
+the previous selected-patch and manual packed-consumer results remain historical and were not rerun here.
+Independent read-only review found no actionable issues in the diff, assets, logs or package boundary.
+Oracle namespace lifecycle remains the next functional module.
 
 ### Explicit management connection checkpoint (2026-11-11)
 
