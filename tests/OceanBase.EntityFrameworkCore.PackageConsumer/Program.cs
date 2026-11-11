@@ -29,7 +29,7 @@ namespace PackageConsumer
                 var nameParameter = new OceanBaseParameter { ParameterName = explicitName, Value = "a" };
                 var rawSql = context.Set<Row>().FromSqlRaw("SELECT Id, Name FROM Rows WHERE Name = {0}", nameParameter)
                     .Select(row => row.Id).ToQueryString();
-                if (!rawSql.Contains("WHERE Name = " + explicitName, StringComparison.Ordinal))
+                if (!rawSql.Contains("WHERE Name = " + (mode == OceanBaseCompatibilityMode.MySql ? "?" : explicitName), StringComparison.Ordinal))
                     throw new Exception("Packed provider did not preserve the named raw SQL placeholder.");
                 var sql = context.Set<Row>().Where(row => row.Enabled).OrderBy(row => row.Id).Skip(1).Take(2)
                     .Select(row => new { row.Name, row.Token, row.ExplicitToken, row.OccurredAt, row.OffsetAt, row.Day,

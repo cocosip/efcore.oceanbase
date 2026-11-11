@@ -63,12 +63,20 @@ the tenant's prefix. Query composition uses the provider's identifier delimiters
 Sync/async intercepted commands prove SQL shape, parameters, materialization and affected-row
 propagation; they do not execute SQL. Raw text/identifiers remain the caller's responsibility.
 
-MySQL has a confirmed bind contract gap: OceanBaseConnector 0.2.0 sends MySQL statement text
+MySQL had a confirmed bind contract gap: OceanBaseConnector 0.2.0 sends MySQL statement text
 unchanged and binds ordered values to `?` positions. Provider-generated `@name` is a MySQL user
 variable, not a prepared statement parameter. This affects generated queries, tracked writes and
-raw APIs with generated placeholders, even when intercepted commands pass. It needs an ordered
-positional binding path and offline connector-boundary tests before live acceptance. Oracle has a
+raw APIs with generated placeholders, even when intercepted commands pass. The provider now supplies
+that positional binding path and offline connector-boundary tests. Oracle has a
 separate named-bind path in the connector and is not affected by this mismatch.
+
+MySQL SQL templates retain EF names and redacted log text. A final relational binding parameter rewrites
+the materialized command before CommandInitialized, preserving that hook's final-command contract.
+Repeated EF-mapped inputs are recreated through their mapping; caller-created native duplicates reject
+because Connector 0.2.0 has no public clone that preserves optional scale declarations. Use distinct
+native parameters or repeated scalar format arguments. Streams cannot be consumed twice. Quoted or
+commented tokens are preserved; SQL_MODE-dependent backslash literals, executable comments with binds,
+mixed markers and missing/unused inputs reject. Bind string values instead of embedding such literals.
 
 The scoped database creator supplies the dependency EF's `DatabaseFacade` needs even for
 non-DDL calls. `Exists` opens the configured connection and balances its successful open;

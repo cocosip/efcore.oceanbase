@@ -23,6 +23,77 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
         [InlineData(OceanBaseCompatibilityMode.MySql, true)]
         [InlineData(OceanBaseCompatibilityMode.Oracle, false)]
         [InlineData(OceanBaseCompatibilityMode.Oracle, true)]
+        public async Task Query_positions_follow_projection_then_predicate_and_refresh_cached_values(OceanBaseCompatibilityMode mode, bool async)
+        {
+            var commands = new CommandCapture();
+            await using var context = CreateContext(mode, commands);
+            var minimum = 7;
+            var name = "first' @minimum ?";
+            var query = context.Set<Customer>().Where(row => row.Name == name && row.Id > minimum)
+                .Select(row => row.Id + minimum);
+            foreach (var value in new[] { 7, 11 })
+            {
+                minimum = value;
+                commands.Values.Clear();
+                var result = async ? await query.ToListAsync() : query.ToList();
+                Assert.Equal(new[] { 42 }, result);
+                if (mode == OceanBaseCompatibilityMode.MySql)
+                {
+                    Assert.Equal(new object?[] { value, name, value }, commands.Values);
+                    Assert.Contains("SELECT `c`.`Id` + ?", commands.Sql[^1]);
+                    Assert.DoesNotContain("@", commands.Sql[^1]);
+                }
+                else
+                    Assert.Contains(":minimum", commands.Sql[^1]);
+            }
+        }
+
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public async Task MySql_raw_scalar_arguments_repeat_in_format_order(bool async)
+        {
+            var commands = new CommandCapture();
+            await using var context = CreateContext(OceanBaseCompatibilityMode.MySql, commands);
+            var sql = "UPDATE Customers SET Id = {1} WHERE Id = {0} OR Id = {1}";
+            var count = async ? await context.Database.ExecuteSqlRawAsync(sql, 7, 11)
+                : context.Database.ExecuteSqlRaw(sql, 7, 11);
+            Assert.Equal(1, count);
+            Assert.Equal("UPDATE Customers SET Id = ? WHERE Id = ? OR Id = ?", Assert.Single(commands.Sql));
+            Assert.Equal(new object?[] { 11, 7, 11 }, commands.Values);
+        }
+
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public async Task MySql_tracked_writes_bind_in_placeholder_order_including_generated_key_readback(bool async)
+        {
+            var commands = new CommandCapture();
+            await using var context = CreateContext(OceanBaseCompatibilityMode.MySql, commands);
+            var customer = new Customer { Name = "new ' @p0 ?" };
+            context.Add(customer);
+            Assert.Equal(1, async ? await context.SaveChangesAsync() : context.SaveChanges());
+            Assert.Equal(42, customer.Id);
+            Assert.Contains(commands.Sql, sql => sql.StartsWith("INSERT", StringComparison.Ordinal) && sql.Contains("?", StringComparison.Ordinal));
+            commands.Values.Clear();
+            commands.Sql.Clear();
+            customer.Name = "changed";
+            Assert.Equal(1, async ? await context.SaveChangesAsync() : context.SaveChanges());
+            Assert.Equal(new object?[] { "changed", 42, 0 }, commands.Values);
+            Assert.DoesNotContain("@", Assert.Single(commands.Sql));
+            commands.Values.Clear();
+            commands.Sql.Clear();
+            context.Remove(customer);
+            Assert.Equal(1, async ? await context.SaveChangesAsync() : context.SaveChanges());
+            Assert.Contains(42, commands.Values);
+            Assert.DoesNotContain("@", Assert.Single(commands.Sql));
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true)]
         public async Task Database_facade_resolves_connection_and_readonly_probes(OceanBaseCompatibilityMode mode, bool async)
         {
             var commands = new CommandCapture { ScalarValue = mode == OceanBaseCompatibilityMode.Oracle ? new OceanBaseDecimal(1m) : 1L };
@@ -170,7 +241,7 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
                 var rows = async ? await query.ToListAsync() : query.ToList();
                 Assert.Equal(new[] { 42 }, rows);
                 var sql = commands.Sql[^1];
-                Assert.Contains($"SELECT Id, Name FROM Customers WHERE Name = {prefix}p0", sql);
+                Assert.Contains("SELECT Id, Name FROM Customers WHERE Name = " + (mode == OceanBaseCompatibilityMode.MySql ? "?" : prefix + "p0"), sql);
                 Assert.Contains(mode == OceanBaseCompatibilityMode.Oracle ? ") \"o\"" : ") AS `o`", sql);
                 Assert.DoesNotContain(hostile, sql);
                 Assert.Equal(hostile, Assert.Single(commands.Inputs).Value);
@@ -196,7 +267,7 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
             Assert.Same(name, Assert.Single(commands.Inputs));
             Assert.Equal(12, name.Size);
             Assert.Equal(DBNull.Value, name.Value);
-            Assert.Contains($"WHERE Name = {prefix}name", Assert.Single(commands.Sql));
+            Assert.Contains("WHERE Name = " + (mode == OceanBaseCompatibilityMode.MySql ? "?" : prefix + "name"), Assert.Single(commands.Sql));
             Assert.DoesNotContain(prefix + prefix, commands.Sql[0]);
         }
 
@@ -225,7 +296,8 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
                 ? await context.Database.ExecuteSqlRawAsync(sql, parameter, null!)
                 : context.Database.ExecuteSqlRaw(sql, parameter, null!);
             Assert.Equal(3, count);
-            Assert.Equal($"UPDATE Customers SET Name = {prefix}named WHERE Name = {prefix}p0", Assert.Single(commands.Sql));
+            Assert.Equal(mode == OceanBaseCompatibilityMode.MySql ? "UPDATE Customers SET Name = ? WHERE Name = ?"
+                : $"UPDATE Customers SET Name = {prefix}named WHERE Name = {prefix}p0", Assert.Single(commands.Sql));
             Assert.Same(parameter, commands.StringInputs.Single());
             Assert.Equal(200, parameter.Size);
             Assert.Equal(new object?[] { parameter.Value, DBNull.Value }, commands.Values);
@@ -248,7 +320,8 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
                 var count = async ? await context.Database.ExecuteSqlInterpolatedAsync(sql)
                     : context.Database.ExecuteSqlInterpolated(sql);
                 Assert.Equal(0, count);
-                Assert.Equal($"UPDATE Customers SET Name = {prefix}p0 WHERE Id = {prefix}p1", commands.Sql[^1]);
+                Assert.Equal(mode == OceanBaseCompatibilityMode.MySql ? "UPDATE Customers SET Name = ? WHERE Id = ?"
+                    : $"UPDATE Customers SET Name = {prefix}p0 WHERE Id = {prefix}p1", commands.Sql[^1]);
                 Assert.Equal(new object?[] { value is null ? DBNull.Value : value, 42 }, commands.Values);
             }
         }
@@ -315,7 +388,7 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
                 Assert.Equal(3.75m, row.Reversed);
                 Assert.Contains(threshold + 10m, commands.Values);
                 var sql = commands.Sql[^1];
-                Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? "GREATEST(@" : "GREATEST(:", sql);
+                Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? "GREATEST(?" : "GREATEST(:", sql);
                 Assert.Contains("CAST(GREATEST(", sql);
                 Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? " AS FLOAT)" : " AS BINARY_FLOAT)", sql);
                 Assert.DoesNotContain("LEAST(CAST(", sql);
@@ -1117,9 +1190,13 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
                 Assert.Contains(commands.Inputs, parameter => Equals(parameter.Value, (decimal)cross) && parameter.DbType == DbType.Decimal);
                 Assert.Contains(commands.Inputs, parameter => Equals(parameter.Value, (double)reverse) && parameter.DbType == DbType.Double);
                 Assert.Contains(commands.Inputs, parameter => Equals(parameter.Value, (long)integral) && parameter.DbType == DbType.Int64);
-                var operand = Assert.Single(commands.Inputs, parameter => Equals(parameter.Value, fraction));
-                Assert.Equal(decimal.GetBits(fraction), decimal.GetBits((decimal)operand.Value!));
-                Assert.Equal(DbType.Decimal, operand.DbType);
+                var operands = commands.Inputs.Where(parameter => Equals(parameter.Value, fraction)).ToList();
+                Assert.NotEmpty(operands);
+                Assert.All(operands, operand =>
+                {
+                    Assert.Equal(decimal.GetBits(fraction), decimal.GetBits((decimal)operand.Value!));
+                    Assert.Equal(DbType.Decimal, operand.DbType);
+                });
                 Assert.All(commands.Inputs.Where(parameter => parameter.DbType == DbType.Decimal), parameter =>
                 {
                     Assert.Equal((byte)0, parameter.Precision);
@@ -1461,11 +1538,15 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
                 Assert.Contains(commands.Inputs, parameter => Equals(parameter.Value, wide) && parameter.DbType == DbType.Double);
                 Assert.Contains(commands.Inputs, parameter => Equals(parameter.Value, transformedComparison * -2m)
                     && parameter.DbType == DbType.Decimal);
-                var operand = Assert.Single(commands.Inputs, parameter => Equals(parameter.Value, fraction));
-                Assert.Equal(DbType.Decimal, operand.DbType);
-                Assert.Equal((byte)0, operand.Precision);
-                Assert.Null(operand.DecimalScale);
-                Assert.Equal(decimal.GetBits(fraction), decimal.GetBits((decimal)operand.Value!));
+                var operands = commands.Inputs.Where(parameter => Equals(parameter.Value, fraction)).ToList();
+                Assert.NotEmpty(operands);
+                Assert.All(operands, operand =>
+                {
+                    Assert.Equal(DbType.Decimal, operand.DbType);
+                    Assert.Equal((byte)0, operand.Precision);
+                    Assert.Null(operand.DecimalScale);
+                    Assert.Equal(decimal.GetBits(fraction), decimal.GetBits((decimal)operand.Value!));
+                });
                 Assert.Contains("ABS(", commands.Sql[^1]);
                 Assert.Contains("SIGN(", commands.Sql[^1]);
                 Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? "TRUNCATE(" : "TRUNC(", commands.Sql[^1]);

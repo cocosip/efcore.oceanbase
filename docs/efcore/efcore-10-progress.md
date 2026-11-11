@@ -32,10 +32,19 @@ two project consumers), zero failures/skips. The same `raw-facade-20261111` pack
 on 10.0.0 and 10.0.14 and passes package-content verification. Independent source review found and
 corrected Oracle session-schema scope; failure after physical open still needs CON-03 coverage.
 
-**Next local priority:** MySQL connector 0.2.0 binds only positional `?` values, whereas the provider
-currently emits `@name`. This is a source-confirmed blocker for parameterized execution, not an
-infrastructure gap. Cover ordered/repeated markers across query, raw and update paths at the connector
-boundary. Oracle named binding and native execution in both modes remain separately verified gates.
+Batch3t supplies a MySQL command builder that rewrites EF named templates to positional `?` binds,
+orders repeated values by SQL occurrence, rejects ambiguous quote/comment/mixed/missing bindings and
+keeps Oracle named commands unchanged. Query, raw SQL, tracked write and generated-key paths have
+offline EF/Connector boundary coverage, including the connector's client-prepared literal fallback.
+Native MySQL/Oracle execution, caller-owned repeated streams, server metadata and post-open connection
+cleanup remain live or follow-up gates.
+Debug, Release and isolated EF10.0.14 Release now pass 1868 tests (1438 unit, 428 intercepted,
+two project consumers), zero failures/skips. The `positional-final-20261111` package passes content checks
+and both-mode EF10.0.0/10.0.14 package consumers.
+Independent review found and regression-tested reader-rejection connection balancing and the final
+initialization interceptor's view of all positional parameters. Caller-owned native duplicates and
+SQL_MODE-dependent backslash literals still reject explicitly; use distinct native parameters and
+bound string values. Full QRY-10 acceptance remains open.
 
 ### Gregorian calendar checkpoint (2026-11-11)
 

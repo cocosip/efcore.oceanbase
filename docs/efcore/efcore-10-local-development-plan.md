@@ -463,6 +463,25 @@ CanConnect follows EF's boolean probe contract while preserving cancellation. DD
 reject before opening a connection until Batch 7 supplies the schema creation/ownership contract;
 SCH-02/03 are still Required and Planned. Add facade and cancellation/error tests before registration.
 
+## Batch3t brief: MySQL positional command boundary
+
+QRY-01/03/06/07/10, UPD-01/02/03, CFG-04: keep EF's named SQL templates, but supply a
+provider relational command builder/factory that converts the final MySQL DbCommand to positional
+SQL and orders bound values by marker occurrence. Oracle commands remain named. Preserve EF's
+original LogCommandText, command timeout/transaction, cancellation, interceptors and reader cleanup.
+Parse quotes/comments without treating marker-like text as binds; reject ambiguous SQL_MODE-dependent
+backslash quoting, executable comments with binds, missing/unused/mixed binds and repeated streams
+before execution. Recreate repeated mapped parameters through EF rather than copying native facets.
+Connector 0.2.0 has no public parameter clone; repeated caller-owned native parameters require an
+explicit supported duplication contract, not inference from Scale's ambiguous zero getter.
+
+1. Add focused failing tests for order/repetition, quote/comment skipping and malformed/ambiguous SQL.
+2. Implement parser and command factory in Storage; register the factory before core services.
+3. Add real EF query/raw/write tests asserting final positional command text and ordered values;
+   verify the connector 0.2.0 binding contract directly offline. Update changed actual-command assertions.
+4. Run full Debug/Release, isolated EF10.0.14 Release and packed consumers; independent source review,
+   update remaining boundaries, then commit. No database, EF8/EF9 or publication work.
+
 ## Execution record
 
 - Batch3s: four raw query cases passed initially; twelve execute cases exposed missing creator DI.
@@ -471,6 +490,12 @@ SCH-02/03 are still Required and Planned. Add facade and cancellation/error test
   1840 each, no failures/skips; same-package consumers and contents pass. Independent review fixed
   Oracle metadata scope. Connector v0.2.0 review identified MySQL positional binding as the next
   local priority, spanning generated queries, raw SQL and tracked writes. DDL/live remain open.
+
+- Batch3t: positional MySQL command factory/parser covers query, raw, tracked write and generated-key
+  order/repetition, quote/comment rejection, mixed/missing binds and connector client-prepared fallback.
+  Initial focused run: 11 failing/two passing cases. Final Debug/Release/isolated EF10.0.14 Release 1868 each, zero failures/skips;
+  package content and EF10.0.0/10.0.14 consumers pass. Caller-owned repeated streams remain explicitly unsupported.
+  Independent review fixes have RED/GREEN regressions for reader open balancing and initialization interceptors.
 
 - Batch3r extends the existing temporal translator with four Gregorian calendar members. Twelve RED
   translation cases; final Debug/Release/isolated EF10.0.14 Release 1792 each, zero failures/skips.

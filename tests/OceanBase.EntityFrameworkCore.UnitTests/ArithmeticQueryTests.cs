@@ -54,7 +54,7 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
                 N = row.Optional / divisor, U = row.OptionalUnsigned / 2U }).ToQueryString();
             Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? "@divisor" : ":divisor", sql);
             Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? " DIV " : "TRUNC(", sql);
-            Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? "-`r`.`Int32` DIV @divisor"
+            Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? "-`r`.`Int32` DIV ?"
                 : "TRUNC(-\"r\".\"Int32\" / :divisor)", sql);
             var remainder = context.Rows.Select(row => new { R = -row.Int32 % divisor,
                 L = row.Int64 % -3L, N = row.Optional % divisor, U = row.UInt64 % 2UL,
