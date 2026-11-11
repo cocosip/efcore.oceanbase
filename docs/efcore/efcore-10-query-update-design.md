@@ -53,6 +53,32 @@ in the [technical baseline](efcore-10-technical-baseline.md). Larger Oracle stri
 generating an order or group operation over LOB storage does not establish valid execution. Live mapping and query
 evidence remains required before advertising support.
 
+## Raw SQL local contract
+
+QRY-10 uses EF Core 10's relational raw-command builder and FromSql translation through the provider's
+SQL helper, type mappings, connection and OceanBaseConnector 0.2.0 parameters. The four APIs accept
+values, including hostile text and NULL, without inserting values into SQL text. Caller-created
+OceanBaseParameter instances retain native metadata and names; generated placeholders must match
+the tenant's prefix. Query composition uses the provider's identifier delimiters and alias syntax.
+Sync/async intercepted commands prove SQL shape, parameters, materialization and affected-row
+propagation; they do not execute SQL. Raw text/identifiers remain the caller's responsibility.
+
+MySQL has a confirmed bind contract gap: OceanBaseConnector 0.2.0 sends MySQL statement text
+unchanged and binds ordered values to `?` positions. Provider-generated `@name` is a MySQL user
+variable, not a prepared statement parameter. This affects generated queries, tracked writes and
+raw APIs with generated placeholders, even when intercepted commands pass. It needs an ordered
+positional binding path and offline connector-boundary tests before live acceptance. Oracle has a
+separate named-bind path in the connector and is not affected by this mismatch.
+
+The scoped database creator supplies the dependency EF's `DatabaseFacade` needs even for
+non-DDL calls. `Exists` opens the configured connection and balances its successful open;
+only MySQL error 1049 means an absent database. `CanConnect` returns false on failures and
+propagates cancellation. `HasTables` probes the current MySQL database or Oracle `CURRENT_SCHEMA`
+using metadata visible to the current account. Oracle counts can use the connector's exact
+numeric carrier. Creation/deletion/script methods reject without opening the connection while
+the SCH-02/SCH-03 ownership and schema contracts remain unfinished.
+Post-open interceptor and ambient transaction failures still require ownership tests under CON-03.
+
 ## String concatenation local contract
 
 The QRY-01/QRY-06/QRY-11 concatenation slice fixes string addition and the fixed two/three/four-string Concat overloads.

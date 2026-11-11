@@ -21,6 +21,22 @@ not later local commits or database integration. Earlier db676ff also passed in
 Run/job/step metadata is saved under artifacts/local-development/. The earlier log archive endpoint returned
 HTTP403 (repository admin rights); no new per-test count or resolved EF patch is inferred from job metadata.
 
+### Raw SQL and database facade checkpoint (2026-11-11)
+
+Batch3s wires the scoped database creator required by EF's facade, adds read-only connection and
+table probes, and preserves a single prefix for explicitly named raw SQL parameters. Local tests
+cover all four raw SQL APIs, both modes, sync/async, values with SQL metacharacters, NULL, provider
+parameter metadata, cancellation and error classification. Schema DDL is still unimplemented.
+Debug, Release and isolated EF10.0.14 Release each pass 1840 tests (1418 unit, 420 intercepted,
+two project consumers), zero failures/skips. The same `raw-facade-20261111` package passes both modes
+on 10.0.0 and 10.0.14 and passes package-content verification. Independent source review found and
+corrected Oracle session-schema scope; failure after physical open still needs CON-03 coverage.
+
+**Next local priority:** MySQL connector 0.2.0 binds only positional `?` values, whereas the provider
+currently emits `@name`. This is a source-confirmed blocker for parameterized execution, not an
+infrastructure gap. Cover ordered/repeated markers across query, raw and update paths at the connector
+boundary. Oracle named binding and native execution in both modes remain separately verified gates.
+
 ### Gregorian calendar checkpoint (2026-11-11)
 
 Batch3r adds DateTime/DateOnly DayOfYear and DayOfWeek. MySQL uses native calendar functions;

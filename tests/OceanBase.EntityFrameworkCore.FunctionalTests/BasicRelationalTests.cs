@@ -10,6 +10,7 @@ using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Storage;
 using OceanBaseConnector;
 using Xunit;
 
@@ -17,6 +18,241 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
 {
     public sealed class BasicRelationalTests
     {
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true)]
+        public async Task Database_facade_resolves_connection_and_readonly_probes(OceanBaseCompatibilityMode mode, bool async)
+        {
+            var commands = new CommandCapture { ScalarValue = mode == OceanBaseCompatibilityMode.Oracle ? new OceanBaseDecimal(1m) : 1L };
+            await using var context = CreateContext(mode, commands);
+            Assert.IsType<OceanBaseConnection>(context.Database.GetDbConnection());
+            context.Database.SetCommandTimeout(17);
+            Assert.Equal(17, context.Database.GetCommandTimeout());
+            Assert.Null(context.Database.CurrentTransaction);
+            var creator = context.GetService<IRelationalDatabaseCreator>();
+            Assert.True(async ? await context.Database.CanConnectAsync() : context.Database.CanConnect());
+            Assert.True(async ? await creator.ExistsAsync() : creator.Exists());
+            Assert.True(async ? await creator.HasTablesAsync() : creator.HasTables());
+            Assert.Equal(mode == OceanBaseCompatibilityMode.MySql
+                ? "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_type = 'BASE TABLE'"
+                : "SELECT COUNT(*) FROM ALL_TABLES WHERE OWNER = SYS_CONTEXT('USERENV', 'CURRENT_SCHEMA')", Assert.Single(commands.Sql));
+            commands.ScalarValue = 0;
+            Assert.False(async ? await creator.HasTablesAsync() : creator.HasTables());
+            Assert.Equal(ConnectionState.Closed, context.Database.GetDbConnection().State);
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true)]
+        public async Task Database_probes_distinguish_boolean_connectivity_from_exists_errors(OceanBaseCompatibilityMode mode, bool async)
+        {
+            var error = new InvalidOperationException("Synthetic connection rejection");
+            var options = new DbContextOptionsBuilder<TestContext>().UseOceanBase("Server=localhost;Database=test", mode)
+                .AddInterceptors(new RejectConnection(error)).Options;
+            await using var context = new TestContext(options, mode);
+            Assert.False(async ? await context.Database.CanConnectAsync() : context.Database.CanConnect());
+            var creator = context.GetService<IRelationalDatabaseCreator>();
+            var failure = async ? await Assert.ThrowsAsync<InvalidOperationException>(() => creator.ExistsAsync())
+                : Assert.Throws<InvalidOperationException>(() => creator.Exists());
+            Assert.Same(error, failure);
+            using var cancelled = new CancellationTokenSource();
+            cancelled.Cancel();
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => context.Database.CanConnectAsync(cancelled.Token));
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => creator.ExistsAsync(cancelled.Token));
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => creator.HasTablesAsync(cancelled.Token));
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql, 1049, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, 1049, true)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, 1045, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, 2003, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, 1049, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, 1049, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, 1017, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, 12541, true)]
+        public async Task Only_MySql_unknown_database_is_an_absent_database(OceanBaseCompatibilityMode mode, int code, bool async)
+        {
+            // The connector exposes server errors publicly but constructs them internally.
+            var error = (OceanBaseException)Activator.CreateInstance(typeof(OceanBaseException),
+                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic, null,
+                new object?[] { "Synthetic server error", code, null, false, null, null }, CultureInfo.InvariantCulture)!;
+            var options = new DbContextOptionsBuilder<TestContext>().UseOceanBase("Server=localhost;Database=test", mode)
+                .AddInterceptors(new RejectConnection(error)).Options;
+            await using var context = new TestContext(options, mode);
+            var creator = context.GetService<IRelationalDatabaseCreator>();
+            if (mode == OceanBaseCompatibilityMode.MySql && code == 1049)
+                Assert.False(async ? await creator.ExistsAsync() : creator.Exists());
+            else
+                Assert.Same(error, async ? await Assert.ThrowsAsync<OceanBaseException>(() => creator.ExistsAsync())
+                    : Assert.Throws<OceanBaseException>(() => creator.Exists()));
+            Assert.False(async ? await context.Database.CanConnectAsync() : context.Database.CanConnect());
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true)]
+        public async Task Database_probes_do_not_hide_inflight_cancellation(OceanBaseCompatibilityMode mode, bool async)
+        {
+            var cancellation = new OperationCanceledException();
+            var options = new DbContextOptionsBuilder<TestContext>().UseOceanBase("Server=localhost;Database=test", mode)
+                .AddInterceptors(new RejectConnection(cancellation)).Options;
+            await using var context = new TestContext(options, mode);
+            if (async)
+                Assert.Same(cancellation, await Assert.ThrowsAnyAsync<OperationCanceledException>(() => context.Database.CanConnectAsync()));
+            else
+                Assert.Same(cancellation, Assert.ThrowsAny<OperationCanceledException>(() => context.Database.CanConnect()));
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true)]
+        public async Task Table_probe_rejects_unexpected_null_count(OceanBaseCompatibilityMode mode, bool async)
+        {
+            var commands = new CommandCapture { ScalarValue = DBNull.Value };
+            await using var context = CreateContext(mode, commands);
+            var creator = context.GetService<IRelationalDatabaseCreator>();
+            if (async)
+                await Assert.ThrowsAsync<InvalidOperationException>(() => creator.HasTablesAsync());
+            else
+                Assert.Throws<InvalidOperationException>(() => creator.HasTables());
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true)]
+        public async Task Schema_lifecycle_rejects_before_open_until_ownership_profile_is_implemented(OceanBaseCompatibilityMode mode, bool async)
+        {
+            var options = new DbContextOptionsBuilder<TestContext>().UseOceanBase("Server=localhost;Database=test", mode)
+                .AddInterceptors(new RejectConnection(new InvalidOperationException("Must not open"))).Options;
+            await using var context = new TestContext(options, mode);
+            if (async)
+            {
+                await Assert.ThrowsAsync<NotSupportedException>(() => context.Database.EnsureCreatedAsync());
+                await Assert.ThrowsAsync<NotSupportedException>(() => context.Database.EnsureDeletedAsync());
+            }
+            else
+            {
+                Assert.Throws<NotSupportedException>(() => context.Database.EnsureCreated());
+                Assert.Throws<NotSupportedException>(() => context.Database.EnsureDeleted());
+            }
+            Assert.Throws<NotSupportedException>(() => context.Database.GenerateCreateScript());
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true)]
+        public async Task Raw_query_composition_keeps_hostile_values_out_of_SQL(OceanBaseCompatibilityMode mode, bool async)
+        {
+            var commands = new CommandCapture();
+            await using var context = CreateContext(mode, commands);
+            var prefix = mode == OceanBaseCompatibilityMode.Oracle ? ":" : "@";
+            var hostile = "'; DROP TABLE Customers; -- {0} 海🌊";
+            foreach (var raw in new[] { false, true })
+            {
+                commands.Inputs.Clear();
+                var source = raw
+                    ? context.Set<Customer>().FromSqlRaw("SELECT Id, Name FROM Customers WHERE Name = {0}", hostile)
+                    : context.Set<Customer>().FromSqlInterpolated($"SELECT Id, Name FROM Customers WHERE Name = {hostile}");
+                var query = source.Where(row => row.Id > 0).Select(row => row.Id);
+                var rows = async ? await query.ToListAsync() : query.ToList();
+                Assert.Equal(new[] { 42 }, rows);
+                var sql = commands.Sql[^1];
+                Assert.Contains($"SELECT Id, Name FROM Customers WHERE Name = {prefix}p0", sql);
+                Assert.Contains(mode == OceanBaseCompatibilityMode.Oracle ? ") \"o\"" : ") AS `o`", sql);
+                Assert.DoesNotContain(hostile, sql);
+                Assert.Equal(hostile, Assert.Single(commands.Inputs).Value);
+                hostile = "next ' value";
+            }
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true)]
+        public async Task Raw_queries_preserve_explicit_nullable_parameters(OceanBaseCompatibilityMode mode, bool async)
+        {
+            var commands = new CommandCapture();
+            await using var context = CreateContext(mode, commands);
+            var prefix = mode == OceanBaseCompatibilityMode.Oracle ? ":" : "@";
+            var name = new OceanBaseParameter { ParameterName = prefix + "name", DbType = DbType.String, Size = 12, Value = DBNull.Value };
+            var query = context.Set<Customer>().FromSqlRaw("SELECT Id, Name FROM Customers WHERE Name = {0}", name)
+                .Select(row => row.Id);
+            var rows = async ? await query.ToListAsync() : query.ToList();
+            Assert.Equal(new[] { 42 }, rows);
+            Assert.Same(name, Assert.Single(commands.Inputs));
+            Assert.Equal(12, name.Size);
+            Assert.Equal(DBNull.Value, name.Value);
+            Assert.Contains($"WHERE Name = {prefix}name", Assert.Single(commands.Sql));
+            Assert.DoesNotContain(prefix + prefix, commands.Sql[0]);
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false, true)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true, true)]
+        public async Task Raw_commands_keep_explicit_parameter_metadata_and_one_prefix(
+            OceanBaseCompatibilityMode mode, bool async, bool prefixed)
+        {
+            var commands = new CommandCapture { AffectedRows = 3 };
+            await using var context = CreateContext(mode, commands);
+            var prefix = mode == OceanBaseCompatibilityMode.Oracle ? ":" : "@";
+            var parameter = new OceanBaseParameter
+            {
+                ParameterName = prefixed ? prefix + "named" : "named",
+                DbType = DbType.String, Size = 200, Value = "'; DELETE FROM Customers; --"
+            };
+            var sql = "UPDATE Customers SET Name = {0} WHERE Name = {1}";
+            var count = async
+                ? await context.Database.ExecuteSqlRawAsync(sql, parameter, null!)
+                : context.Database.ExecuteSqlRaw(sql, parameter, null!);
+            Assert.Equal(3, count);
+            Assert.Equal($"UPDATE Customers SET Name = {prefix}named WHERE Name = {prefix}p0", Assert.Single(commands.Sql));
+            Assert.Same(parameter, commands.StringInputs.Single());
+            Assert.Equal(200, parameter.Size);
+            Assert.Equal(new object?[] { parameter.Value, DBNull.Value }, commands.Values);
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true)]
+        public async Task Interpolated_raw_commands_refresh_values_and_bind_null(OceanBaseCompatibilityMode mode, bool async)
+        {
+            var commands = new CommandCapture { AffectedRows = 0 };
+            await using var context = CreateContext(mode, commands);
+            var prefix = mode == OceanBaseCompatibilityMode.Oracle ? ":" : "@";
+            foreach (var value in new string?[] { "'; DROP TABLE Customers; --", null, "海🌊" })
+            {
+                commands.Values.Clear();
+                FormattableString sql = $"UPDATE Customers SET Name = {value} WHERE Id = {42}";
+                var count = async ? await context.Database.ExecuteSqlInterpolatedAsync(sql)
+                    : context.Database.ExecuteSqlInterpolated(sql);
+                Assert.Equal(0, count);
+                Assert.Equal($"UPDATE Customers SET Name = {prefix}p0 WHERE Id = {prefix}p1", commands.Sql[^1]);
+                Assert.Equal(new object?[] { value is null ? DBNull.Value : value, 42 }, commands.Values);
+            }
+        }
+
         [Theory]
         [InlineData(OceanBaseCompatibilityMode.MySql, false)]
         [InlineData(OceanBaseCompatibilityMode.Oracle, true)]
@@ -3155,6 +3391,15 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
                 => ValueTask.FromResult(InterceptionResult.Suppress());
         }
 
+        private sealed class RejectConnection(Exception error) : DbConnectionInterceptor
+        {
+            public override InterceptionResult ConnectionOpening(DbConnection connection, ConnectionEventData eventData, InterceptionResult result)
+                => throw error;
+            public override ValueTask<InterceptionResult> ConnectionOpeningAsync(DbConnection connection,
+                ConnectionEventData eventData, InterceptionResult result, CancellationToken cancellationToken = default)
+                => throw error;
+        }
+
         private sealed class TextMembershipRow
         {
             public int Id { get; set; }
@@ -3173,6 +3418,16 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
 
         private sealed class CommandCapture : DbCommandInterceptor
         {
+            public object ScalarValue { get; set; } = 0;
+            public override InterceptionResult<object> ScalarExecuting(DbCommand command, CommandEventData eventData, InterceptionResult<object> result)
+            {
+                Sql.Add(command.CommandText);
+                return InterceptionResult<object>.SuppressWithResult(ScalarValue);
+            }
+            public override ValueTask<InterceptionResult<object>> ScalarExecutingAsync(DbCommand command,
+                CommandEventData eventData, InterceptionResult<object> result, CancellationToken cancellationToken = default)
+                => ValueTask.FromResult(ScalarExecuting(command, eventData, result));
+
             public List<string> Sql { get; } = [];
             public List<object?> Values { get; } = [];
             public List<OceanBaseParameter> Inputs { get; } = [];

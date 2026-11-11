@@ -446,7 +446,31 @@ outside this slice. Pin the per-mode SQL and nullable/converted behavior in `Tem
 exercise enum projection and filtering through `BasicRelationalTests`, then run the full suite and the
 packed consumer. Review the mappings, SQL and live limitations before committing.
 
+## Batch3s brief: raw SQL command boundaries
+
+QRY-10/DIA-01: characterize inherited FromSqlRaw/FromSqlInterpolated and
+ExecuteSqlRaw/ExecuteSqlInterpolated through the real EF command builder and connector parameters.
+Add sync/async, both-mode tests to BasicRelationalTests with hostile text, NULL, explicit connector
+parameters, repeat execution and composed query materialization. Fix only proven provider defects.
+Raw SQL identifiers/text remain caller-owned; interpolating identifiers is not supported. Exercise
+packed SQL translation, run complete suites, review, update QRY-10 evidence and commit. Native SQL
+execution, server parameter metadata and database effects remain live gates.
+
+The initial command tests expose CFG-04/SCH-01's missing database creator. Implement its read-only
+connection/Exists/HasTables service using IRelationalConnection and IRawSqlCommandBuilder, with
+MySQL unknown-database classification and propagated Oracle/auth/permission/network errors from Exists.
+CanConnect follows EF's boolean probe contract while preserving cancellation. DDL methods explicitly
+reject before opening a connection until Batch 7 supplies the schema creation/ownership contract;
+SCH-02/03 are still Required and Planned. Add facade and cancellation/error tests before registration.
+
 ## Execution record
+
+- Batch3s: four raw query cases passed initially; twelve execute cases exposed missing creator DI.
+  After registration, prefixed raw parameters exposed doubled SQL prefixes and Oracle scalar tests
+  exposed a connector-number conversion gap. Both fixed. Final Debug/Release/isolated EF10.0.14 Release
+  1840 each, no failures/skips; same-package consumers and contents pass. Independent review fixed
+  Oracle metadata scope. Connector v0.2.0 review identified MySQL positional binding as the next
+  local priority, spanning generated queries, raw SQL and tracked writes. DDL/live remain open.
 
 - Batch3r extends the existing temporal translator with four Gregorian calendar members. Twelve RED
   translation cases; final Debug/Release/isolated EF10.0.14 Release 1792 each, zero failures/skips.

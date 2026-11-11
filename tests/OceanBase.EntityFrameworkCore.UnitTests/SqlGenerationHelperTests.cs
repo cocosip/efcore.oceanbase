@@ -71,5 +71,15 @@ public sealed class SqlGenerationHelperTests
             helper.GenerateParameterNamePlaceholder(builder, name);
             Assert.Equal("prefix:" + prefix + name, builder.ToString());
         }
+
+        var prefixed = prefix + "named";
+        Assert.Equal(prefixed, helper.GenerateParameterName(prefixed));
+        Assert.Equal(prefixed, helper.GenerateParameterNamePlaceholder(prefixed));
+        var parameterBuilder = new StringBuilder("existing:");
+        helper.GenerateParameterName(parameterBuilder, prefixed);
+        Assert.Equal("existing:" + prefixed, parameterBuilder.ToString());
+        parameterBuilder.Clear().Append("existing:");
+        helper.GenerateParameterNamePlaceholder(parameterBuilder, prefixed);
+        Assert.Equal("existing:" + prefixed, parameterBuilder.ToString());
     }
 }

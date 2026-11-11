@@ -23,6 +23,14 @@ namespace PackageConsumer
                     .UseOceanBase("Server=localhost;Database=package_smoke", mode).Options;
                 using var context = new ConsumerContext(options, mode);
                 if (!context.Database.IsOceanBase()) throw new Exception("Provider registration failed.");
+                if (context.Database.GetDbConnection() is not OceanBaseConnector.OceanBaseConnection)
+                    throw new Exception("Database facade did not resolve the packed provider connection.");
+                var explicitName = mode == OceanBaseCompatibilityMode.MySql ? "@named" : ":named";
+                var nameParameter = new OceanBaseParameter { ParameterName = explicitName, Value = "a" };
+                var rawSql = context.Set<Row>().FromSqlRaw("SELECT Id, Name FROM Rows WHERE Name = {0}", nameParameter)
+                    .Select(row => row.Id).ToQueryString();
+                if (!rawSql.Contains("WHERE Name = " + explicitName, StringComparison.Ordinal))
+                    throw new Exception("Packed provider did not preserve the named raw SQL placeholder.");
                 var sql = context.Set<Row>().Where(row => row.Enabled).OrderBy(row => row.Id).Skip(1).Take(2)
                     .Select(row => new { row.Name, row.Token, row.ExplicitToken, row.OccurredAt, row.OffsetAt, row.Day,
                         row.Clock, row.Duration, row.Payload, row.LargePayload, row.Count, row.Amplitude, row.Wide,

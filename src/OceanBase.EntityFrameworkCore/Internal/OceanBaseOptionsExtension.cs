@@ -100,6 +100,7 @@ namespace OceanBase.EntityFrameworkCore.Internal
                 .TryAdd<IRelationalSqlTranslatingExpressionVisitorFactory, OceanBaseSqlTranslatingExpressionVisitorFactory>()
                 .TryAdd<IQueryTranslationPostprocessorFactory, OceanBaseQueryTranslationPostprocessorFactory>()
                 .TryAdd<IRelationalConnection, OceanBaseRelationalConnection>()
+                .TryAdd<IRelationalDatabaseCreator, OceanBaseDatabaseCreator>()
                 .TryAdd<IModificationCommandBatchFactory, OceanBaseModificationCommandBatchFactory>();
 
             builder.TryAdd<ISqlGenerationHelper>(serviceProvider =>

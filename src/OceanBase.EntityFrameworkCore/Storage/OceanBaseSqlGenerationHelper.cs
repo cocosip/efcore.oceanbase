@@ -26,10 +26,11 @@ internal sealed class OceanBaseSqlGenerationHelper : RelationalSqlGenerationHelp
         _identifierDelimiter = mode == OceanBaseCompatibilityMode.Oracle ? '"' : '`';
     }
 
-    public override string GenerateParameterName(string name) => _parameterPrefix + name;
+    public override string GenerateParameterName(string name)
+        => name.StartsWith(_parameterPrefix, StringComparison.Ordinal) ? name : _parameterPrefix + name;
 
     public override void GenerateParameterName(StringBuilder builder, string name)
-        => builder.Append(_parameterPrefix).Append(name);
+        => builder.Append(GenerateParameterName(name));
 
     public override string GenerateParameterNamePlaceholder(string name)
         => GenerateParameterName(name);
