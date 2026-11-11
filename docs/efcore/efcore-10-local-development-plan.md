@@ -438,7 +438,20 @@ with neutral Single casts at binary precision boundaries. Preserve the original 
 converter. See `artifacts/local-development/batch3q/` for decompiled runtime reference and local
 evidence. Runtime arguments and actual engine calculation remain separate acceptance work.
 
+## Batch3r brief: Gregorian calendar members
+
+QRY-07/QRY-11: extend the existing temporal member translator with `DateTime` and `DateOnly`
+`DayOfYear` and `DayOfWeek`. Reuse the native carrier checks and leave unrelated date/time members
+outside this slice. Pin the per-mode SQL and nullable/converted behavior in `TemporalMemberQueryTests`,
+exercise enum projection and filtering through `BasicRelationalTests`, then run the full suite and the
+packed consumer. Review the mappings, SQL and live limitations before committing.
+
 ## Execution record
+
+- Batch3r extends the existing temporal translator with four Gregorian calendar members. Twelve RED
+  translation cases; final Debug/Release/isolated EF10.0.14 Release 1792 each, zero failures/skips.
+  Package `calendar-final-20261111` passes both modes/patches and package-content verification.
+  Independent source review findings addressed; engine arithmetic/result metadata remain live gates.
 
 - Batch3q adds 16 floating Round signatures with constant syntax arguments, precision guards and
   Single normalization. Debug, Release and isolated EF Core 10.0.14 each pass 1780 tests. The same

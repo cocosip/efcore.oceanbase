@@ -21,6 +21,18 @@ not later local commits or database integration. Earlier db676ff also passed in
 Run/job/step metadata is saved under artifacts/local-development/. The earlier log archive endpoint returned
 HTTP403 (repository admin rights); no new per-test count or resolved EF patch is inferred from job metadata.
 
+### Gregorian calendar checkpoint (2026-11-11)
+
+Batch3r adds DateTime/DateOnly DayOfYear and DayOfWeek. MySQL uses native calendar functions;
+Oracle uses Gregorian and ISO-week TRUNC anchors without territory-sensitive weekday formatting.
+Unit tests pin full arithmetic and nullable SQL; intercepted commands check integer/enum/nullable
+materialization in both sync/async paths. Synthetic leap/year/Sunday outputs do not prove engine calculation.
+Twelve new cases failed translation before implementation. Independent review identified and resolved a
+stale unsupported assertion and strengthened formula/null coverage; native calculation/metadata stay open.
+Debug, Release and isolated EF10.0.14 Release each pass 1792 tests (1418 unit, 372 intercepted,
+two project consumers), zero failures/skips. The same `calendar-final-20261111` package passes
+both modes on EF10.0.0 and 10.0.14 plus the package-content gate. EF8/EF9/live tests stay postponed.
+
 ### Floating Round checkpoint (2026-11-11)
 
 The 16 binary Round signatures on Math, MathF, Double and Single translate with all five constant

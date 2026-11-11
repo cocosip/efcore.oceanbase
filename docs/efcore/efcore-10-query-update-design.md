@@ -160,7 +160,7 @@ result null tests even for required sources. Existing plugin/DbFunction/mode and
 
 ## Ordinary temporal-member local contract
 
-The implemented QRY-07 slice covers exactly DateTime.Year/Month/Day/Hour/Minute/Second, DateOnly.Year/Month/Day
+The original QRY-07 slice covers DateTime.Year/Month/Day/Hour/Minute/Second, DateOnly.Year/Month/Day
 and TimeOnly.Hour/Minute/Second. Match exact members; use MySQL YEAR/MONTH/DAYOFMONTH/HOUR/MINUTE/SECOND
 and Oracle EXTRACT(unit FROM input), with fixed allowlisted units rendered through a narrow internal marker.
 Inputs remain visited expressions with their existing carriers/converters/precision; no user text becomes SQL syntax.
@@ -177,7 +177,16 @@ TimeOnly TIME/INTERVAL. Preserve built-in carriers and connected temporal conver
 string/binary/numeric/zoned replacements. Native parts operate on stored values, not arbitrary model-space
 converter equivalence. Plugin/model precedence and mode-separated services stay intact.
 
-DateTimeOffset, clocks/Now/UtcNow/Today, fractional parts/Ticks, Date/TimeOfDay/day-number properties, duration
+`DateTime` and `DateOnly` additionally target `DayOfYear` and `DayOfWeek` through EF Core 10's
+`IMemberTranslator`. MySQL uses `DAYOFYEAR` and converts `DAYOFWEEK` from 1–7 to .NET's Sunday-zero
+enum. Oracle uses Gregorian `TRUNC(value, 'YYYY')` for the year start and ISO `TRUNC(value, 'IW')`
+for Monday, avoiding territory-dependent weekday numbering. Subtract truncated days, then add one
+for ordinal days or shift and wrap the weekday with `MOD`. Preserve NULL and use the CLR result's
+mapping, independent of the input converter. Test leap day, year boundaries, enum materialization,
+both null semantics, and rejection of non-temporal carriers. Native computation and return types
+remain live acceptance gates.
+
+DateTimeOffset, clocks/Now/UtcNow/Today, fractional parts/Ticks, Date/TimeOfDay/DayNumber, duration
 parts and Add operations need their own timezone/range/precision/calendar/wrapping contracts. This slice makes
 no server extraction, DATE cast, calendar/zero-date, interval-clock or result-metadata claim without live evidence.
 

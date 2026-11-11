@@ -126,7 +126,7 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             Assert.Null(members.Translate(factory.Constant(DateTime.UtcNow, source.FindMapping(typeof(DateTime))!),
                 typeof(DateTimeOffset).GetProperty(nameof(DateTimeOffset.Year))!, typeof(int), logger));
             Assert.Null(members.Translate(factory.Constant(DateTime.UtcNow, source.FindMapping(typeof(DateTime))!),
-                typeof(DateTime).GetProperty(nameof(DateTime.DayOfYear))!, typeof(int), logger));
+                typeof(DateTime).GetProperty(nameof(DateTime.Millisecond))!, typeof(int), logger));
         }
 
         [Theory]
@@ -243,6 +243,39 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
                 context.GetService<IDiagnosticsLogger<DbLoggerCategory.Query>>()));
             Assert.Same(mapping, part.Arguments![^1].TypeMapping);
             Assert.Null(part.TypeMapping!.Converter);
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true)]
+        public void Gregorian_calendar_parts_translate_in_predicates_and_ordering(OceanBaseCompatibilityMode mode, bool relationalNulls)
+        {
+            using var context = CreateContext(mode, relationalNulls);
+            var sql = context.Rows.Where(row => row.DateStamp.DayOfWeek == DayOfWeek.Sunday
+                    && row.Date.DayOfYear == 60 && row.OptionalDate!.Value.DayOfWeek == DayOfWeek.Thursday)
+                .OrderBy(row => row.Stamp.DayOfYear).Select(row => row.Date.DayOfWeek).ToQueryString();
+            DayOfWeek? missingDay = null;
+            var nullSql = context.Rows.Where(row => (DayOfWeek?)row.OptionalDate!.Value.DayOfWeek == missingDay).ToQueryString();
+            if (mode == OceanBaseCompatibilityMode.Oracle)
+            {
+                Assert.Contains("(TRUNC(\"r\".\"Date\", 'DD') - TRUNC(\"r\".\"Date\", 'YYYY')) + 1", sql);
+                Assert.Contains("MOD((TRUNC(\"r\".\"DateStamp\", 'DD') - TRUNC(\"r\".\"DateStamp\", 'IW')) + 1, 7)", sql);
+                Assert.Contains("TRUNC(\"r\".\"Stamp\", 'YYYY')", sql);
+                Assert.Contains("WHERE TRUNC(\"r\".\"OptionalDate\", 'DD') IS NULL OR TRUNC(\"r\".\"OptionalDate\", 'IW') IS NULL", nullSql);
+            }
+            else
+            {
+                Assert.Contains("DAYOFYEAR(`r`.`Date`)", sql);
+                Assert.Contains("DAYOFYEAR(`r`.`Stamp`)", sql);
+                Assert.Contains("DAYOFWEEK(`r`.`DateStamp`) - 1", sql);
+                Assert.Contains("DAYOFWEEK(`r`.`OptionalDate`) - 1", sql);
+                Assert.Contains("WHERE DAYOFWEEK(`r`.`OptionalDate`) IS NULL", nullSql);
+            }
+            Assert.DoesNotContain("TO_CHAR", sql);
+            Assert.Throws<InvalidOperationException>(() => context.Rows.Where(row => row.TextStamp.DayOfWeek == DayOfWeek.Sunday).ToQueryString());
+            Assert.Throws<InvalidOperationException>(() => context.Rows.Where(row => row.TextDate.DayOfYear == 60).ToQueryString());
         }
 
         private static TestContext CreateContext(OceanBaseCompatibilityMode mode, bool relationalNulls = false)

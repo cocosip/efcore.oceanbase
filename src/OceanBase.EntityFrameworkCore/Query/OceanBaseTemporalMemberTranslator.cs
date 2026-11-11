@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq.Expressions;
 using System.Reflection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
@@ -32,9 +33,26 @@ namespace OceanBase.EntityFrameworkCore.Query
             [typeof(TimeOnly).GetProperty(nameof(TimeOnly.Second))!] = (typeof(TimeOnly), "SECOND", "SECOND")
         };
 
+        private static readonly Dictionary<MemberInfo, bool> CalendarParts = new()
+        {
+            [typeof(DateTime).GetProperty(nameof(DateTime.DayOfYear))!] = false,
+            [typeof(DateOnly).GetProperty(nameof(DateOnly.DayOfYear))!] = false,
+            [typeof(DateTime).GetProperty(nameof(DateTime.DayOfWeek))!] = true,
+            [typeof(DateOnly).GetProperty(nameof(DateOnly.DayOfWeek))!] = true
+        };
+
         public SqlExpression? Translate(SqlExpression? instance, MemberInfo member, Type returnType,
             IDiagnosticsLogger<DbLoggerCategory.Query> logger)
         {
+            if (instance is not null && CalendarParts.TryGetValue(member, out var weekday)
+                && returnType == (weekday ? typeof(DayOfWeek) : typeof(int)))
+            {
+                instance = factory.ApplyDefaultTypeMapping(instance);
+                return instance.TypeMapping is { } calendarMapping && SupportsCarrier(member.DeclaringType!, calendarMapping)
+                    ? TranslateCalendarPart(instance, weekday)
+                    : null;
+            }
+
             if (instance is null || returnType != typeof(int) || member is not PropertyInfo { PropertyType: var propertyType }
                 || propertyType != typeof(int) || !Parts.TryGetValue(member, out var part)
                 || member.DeclaringType != part.Receiver)
@@ -62,6 +80,27 @@ namespace OceanBase.EntityFrameworkCore.Query
                 ? factory.Function("TRUNC", [extracted], nullable: true,
                     argumentsPropagateNullability: [false], typeof(int), intMapping)
                 : extracted;
+        }
+
+        private SqlExpression TranslateCalendarPart(SqlExpression instance, bool weekday)
+        {
+            var intMapping = mappingSource.FindMapping(typeof(int))!;
+            var one = factory.Constant(1, intMapping);
+            if (mode == OceanBaseCompatibilityMode.MySql)
+            {
+                var part = factory.Function(weekday ? "DAYOFWEEK" : "DAYOFYEAR", [instance], nullable: true,
+                    argumentsPropagateNullability: [false], typeof(int), intMapping);
+                return weekday ? factory.Subtract(part, one, intMapping) : part;
+            }
+
+            var dateMapping = mappingSource.FindMapping(typeof(DateTime), "DATE")!;
+            SqlExpression Truncate(string formatLiteral) => factory.Function("TRUNC", [instance, factory.Fragment(formatLiteral)],
+                nullable: true, argumentsPropagateNullability: [false, false], typeof(DateTime), dateMapping);
+            // Oracle DATE subtraction returns a number of days, independent of the operand mapping.
+            var elapsed = new SqlBinaryExpression(ExpressionType.Subtract, Truncate("'DD'"),
+                Truncate(weekday ? "'IW'" : "'YYYY'"), typeof(int), intMapping);
+            var shifted = factory.Add(elapsed, one, intMapping);
+            return weekday ? factory.Modulo(shifted, factory.Constant(7, intMapping), intMapping) : shifted;
         }
 
         private bool SupportsCarrier(Type receiver, RelationalTypeMapping mapping)

@@ -146,6 +146,13 @@ namespace PackageConsumer
                 if (mode == OceanBaseCompatibilityMode.Oracle && !temporalPartsSql.Contains("AS TIMESTAMP(7)", StringComparison.Ordinal))
                     throw new Exception("Oracle DATE clock extraction lacked a timestamp cast.");
 
+                var calendarSql = context.Set<Row>().Where(row => row.OccurredAt.DayOfWeek == DayOfWeek.Sunday
+                    && row.Day.DayOfYear == 60).ToQueryString();
+                var calendarParts = mode == OceanBaseCompatibilityMode.MySql
+                    ? new[] { "DAYOFWEEK(", "DAYOFYEAR(" } : new[] { "'IW'", "'YYYY'" };
+                if (calendarParts.Any(part => !calendarSql.Contains(part, StringComparison.Ordinal)))
+                    throw new Exception("Packed provider did not translate Gregorian calendar parts.");
+
                 var numericFunctionsSql = context.Set<Row>().Where(row => Math.Abs(row.Id) == 1
                     && Math.Sign(row.Amount) == -1 && Math.Truncate(row.Amplitude) == 1d
                     && MathF.Abs(row.Wide) > 0f && decimal.Truncate(row.Amount) == 1m)

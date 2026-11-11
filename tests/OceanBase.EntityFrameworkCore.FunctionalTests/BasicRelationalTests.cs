@@ -1332,6 +1332,41 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
         [InlineData(OceanBaseCompatibilityMode.Oracle, true, false)]
         [InlineData(OceanBaseCompatibilityMode.Oracle, false, true)]
         [InlineData(OceanBaseCompatibilityMode.Oracle, true, true)]
+        public async Task Calendar_parts_materialize_enum_and_nullable_results(OceanBaseCompatibilityMode mode, bool async, bool relationalNulls)
+        {
+            using var table = new DataTable();
+            table.Columns.Add("DayOfYear", typeof(object));
+            table.Columns.Add("DayOfWeek", typeof(object));
+            table.Columns.Add("Optional", typeof(object));
+            var oracle = mode == OceanBaseCompatibilityMode.Oracle;
+            object Number(int value) => oracle ? new OceanBaseDecimal(value) : value;
+            table.Rows.Add(Number(60), Number(4), Number(4)); // 2024-02-29, Thursday
+            table.Rows.Add(Number(366), Number(2), DBNull.Value); // 2024-12-31, Tuesday
+            table.Rows.Add(Number(1), Number(0), Number(0)); // 2023-01-01, Sunday
+            var commands = new CommandCapture { Results = table };
+            await using var context = CreateContext(mode, commands, relationalNulls);
+            var weekday = DayOfWeek.Sunday;
+            var query = context.Set<TemporalRow>()
+                .Where(row => row.Date.DayOfWeek >= weekday)
+                .Select(row => new { row.Stamp.DayOfYear, row.Date.DayOfWeek,
+                    Optional = (DayOfWeek?)row.OptionalDate!.Value.DayOfWeek });
+            var rows = async ? await query.ToListAsync() : query.ToList();
+            Assert.Equal(new[] { 60, 366, 1 }, rows.Select(row => row.DayOfYear));
+            Assert.Equal(new[] { DayOfWeek.Thursday, DayOfWeek.Tuesday, DayOfWeek.Sunday }, rows.Select(row => row.DayOfWeek));
+            Assert.Equal(new DayOfWeek?[] { DayOfWeek.Thursday, null, DayOfWeek.Sunday }, rows.Select(row => row.Optional));
+            Assert.Contains(commands.Inputs, parameter => Equals(parameter.Value, 0) && parameter.DbType == DbType.Int32);
+            Assert.Contains(oracle ? "'IW'" : "DAYOFWEEK(", Assert.Single(commands.Sql));
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false, true)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true, true)]
         public async Task Substring_commands_bind_dynamic_arguments_and_convert_synthetic_results(
             OceanBaseCompatibilityMode mode, bool async, bool relationalNulls)
         {
