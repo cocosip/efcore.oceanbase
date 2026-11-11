@@ -660,6 +660,35 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
             Assert.Equal(ConnectionState.Open, native.State);
         }
 
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public async Task MySql_snapshot_update_keeps_the_caller_transaction_without_savepoints(bool async)
+        {
+            await using var context = Create(OceanBaseCompatibilityMode.MySql);
+            var native = Native(context);
+            using var source = new CancellationTokenSource();
+            await using var transaction = await context.Database.BeginTransactionAsync(source.Token);
+            var physical = Assert.IsType<NativeTransaction>(transaction.GetDbTransaction());
+            var query = context.Set<Row>().Join(context.Set<Row>(), row => row.Id, other => other.Id,
+                (row, other) => new { Target = row, Source = other });
+            Assert.Equal(1, async ? await query.ExecuteUpdateAsync(setters => setters.SetProperty(pair => pair.Target.Name, pair => pair.Source.Name)
+                .SetProperty(pair => pair.Target.Id, pair => pair.Target.Name.Length), source.Token)
+                : query.ExecuteUpdate(setters => setters.SetProperty(pair => pair.Target.Name, pair => pair.Source.Name)
+                    .SetProperty(pair => pair.Target.Id, pair => pair.Target.Name.Length)));
+            var command = Assert.Single(native.Commands);
+            Assert.Contains("SELECT /*+ NO_MERGE */", command.Sql);
+            Assert.Same(physical, command.Transaction);
+            Assert.Equal(async, command.Async);
+            Assert.Equal(async ? source.Token : default, command.Token);
+            Assert.Equal(1, native.Begins);
+            Assert.Equal(0, physical.Commits);
+            Assert.Equal(0, physical.Rollbacks);
+            Assert.Equal(0, physical.Disposals);
+            Assert.Same(transaction, context.Database.CurrentTransaction);
+            Assert.Equal(ConnectionState.Open, native.State);
+        }
+
         private static TestContext Create(OceanBaseCompatibilityMode mode, params IInterceptor[] interceptors)
             => new(new DbContextOptionsBuilder<TestContext>()
                 .UseOceanBase("Server=localhost;Database=offline", mode)

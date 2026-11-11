@@ -144,7 +144,7 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
 
         [Theory]
         [MemberData(nameof(Modes))]
-        public async Task Assignment_cycles_reject_in_MySql_before_open_and_use_native_simultaneous_assignment_in_Oracle(OceanBaseCompatibilityMode mode, bool async)
+        public async Task Assignment_cycles_use_MySql_snapshots_or_native_Oracle_simultaneous_assignment(OceanBaseCompatibilityMode mode, bool async)
         {
             var capture = new Capture();
             await using var context = Create(mode, capture);
@@ -152,18 +152,16 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
                 .SetProperty(row => row.Count, row => row.Previous).SetProperty(row => row.Previous, row => row.Count))
                 : context.Set<Row>().ExecuteUpdate(setters => setters
                     .SetProperty(row => row.Count, row => row.Previous).SetProperty(row => row.Previous, row => row.Count));
+            Assert.Equal(1, await Update());
+            var sql = Assert.Single(capture.Commands).Sql;
             if (mode == OceanBaseCompatibilityMode.MySql)
             {
-                var error = await Assert.ThrowsAsync<NotSupportedException>(Update);
-                Assert.Contains("snapshot", error.Message);
-                Assert.Equal(0, capture.Opens);
-                Assert.Empty(capture.Commands);
+                Assert.Contains("SELECT /*+ NO_MERGE */", sql);
+                Assert.Contains(".Previous AS __ob_value_0", sql);
+                Assert.Contains(".Count AS __ob_value_1", sql);
+                Assert.Contains("SET __ob_bulk_target.Count = __ob_bulk_snapshot.__ob_value_0, __ob_bulk_target.Previous = __ob_bulk_snapshot.__ob_value_1", sql);
             }
-            else
-            {
-                Assert.Equal(1, await Update());
-                Assert.Matches(@"SET Count = \w+\.Previous, Previous = \w+\.Count", Assert.Single(capture.Commands).Sql);
-            }
+            else Assert.Matches(@"SET Count = \w+\.Previous, Previous = \w+\.Count", sql);
         }
 
         [Theory]
@@ -197,7 +195,7 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
         [Theory]
         [InlineData(false)]
         [InlineData(true)]
-        public async Task MySql_joined_assignment_dependencies_require_a_snapshot_because_order_is_not_guaranteed(bool async)
+        public async Task MySql_joined_assignment_dependencies_use_projected_snapshot_values(bool async)
         {
             var capture = new Capture();
             await using var context = Create(OceanBaseCompatibilityMode.MySql, capture);
@@ -207,10 +205,161 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
                 .SetProperty(pair => pair.Row.Count, pair => pair.Row.Count + 1).SetProperty(pair => pair.Row.Previous, pair => pair.Row.Count))
                 : query.ExecuteUpdate(setters => setters
                     .SetProperty(pair => pair.Row.Count, pair => pair.Row.Count + 1).SetProperty(pair => pair.Row.Previous, pair => pair.Row.Count));
-            var error = await Assert.ThrowsAsync<NotSupportedException>(Update);
-            Assert.Contains("snapshot", error.Message);
+            Assert.Equal(1, await Update());
+            var command = Assert.Single(capture.Commands);
+            Assert.Contains("SELECT /*+ NO_MERGE */", command.Sql);
+            Assert.Contains("INNER JOIN BulkGroups", command.Sql);
+            Assert.Contains(".Count + 1 AS __ob_value_0", command.Sql);
+            Assert.Contains(".Count AS __ob_value_1", command.Sql);
+            Assert.Contains("__ob_bulk_target.TenantId = __ob_bulk_snapshot.__ob_key_0 AND __ob_bulk_target.Id = __ob_bulk_snapshot.__ob_key_1", command.Sql);
+            Assert.Equal(new object[] { context.TenantId }, command.Values);
+        }
+
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public async Task MySql_snapshot_sql_preserves_all_keys_current_binds_tags_and_write_validation(bool async)
+        {
+            var capture = new Capture();
+            await using var context = Create(OceanBaseCompatibilityMode.MySql, capture);
+            context.Database.SetCommandTimeout(19);
+            var floor = 2;
+            var delta = 3;
+            var name = "x'--";
+            var query = context.Set<Row>().Where(row => row.Id > floor).TagWith("snapshot");
+            async Task<int> Update() => async ? await query.ExecuteUpdateAsync(setters => setters
+                .SetProperty(row => row.Count, row => row.Previous + delta).SetProperty(row => row.Previous, row => row.Count)
+                .SetProperty(row => row.Name, name))
+                : query.ExecuteUpdate(setters => setters.SetProperty(row => row.Count, row => row.Previous + delta)
+                    .SetProperty(row => row.Previous, row => row.Count).SetProperty(row => row.Name, name));
+            for (var attempt = 0; attempt < 2; attempt++)
+            {
+                Assert.Equal(1, await Update());
+                var command = capture.Commands.Last();
+                Assert.Equal("-- snapshot UPDATE BulkRows AS __ob_bulk_target INNER JOIN ( SELECT /*+ NO_MERGE */ b.TenantId AS __ob_key_0, b.Id AS __ob_key_1, b.Previous + ? AS __ob_value_0, b.Count AS __ob_value_1, ? AS __ob_value_2 FROM BulkRows AS b WHERE b.TenantId = ? AND b.Id > ? ) AS __ob_bulk_snapshot ON __ob_bulk_target.TenantId = __ob_bulk_snapshot.__ob_key_0 AND __ob_bulk_target.Id = __ob_bulk_snapshot.__ob_key_1 SET __ob_bulk_target.Count = __ob_bulk_snapshot.__ob_value_0, __ob_bulk_target.Previous = __ob_bulk_snapshot.__ob_value_1, __ob_bulk_target.Name = __ob_bulk_snapshot.__ob_value_2", command.Sql);
+                Assert.Equal(new object[] { delta, name, context.TenantId, floor }, command.Values);
+                Assert.DoesNotContain(name, command.Sql);
+                Assert.Null(command.Transaction);
+                Assert.Equal(19, command.Timeout);
+                floor = 6;
+                delta = 8;
+                name = "next";
+                context.TenantId = 9;
+            }
+            name = "longer than eight";
+            var opens = capture.Opens;
+            await Assert.ThrowsAsync<ArgumentException>(Update);
+            Assert.Equal(opens, capture.Opens);
+            Assert.Equal(2, capture.Commands.Count);
+        }
+
+        [Theory]
+        [InlineData(false, false)]
+        [InlineData(true, false)]
+        [InlineData(false, true)]
+        [InlineData(true, true)]
+        public async Task MySql_nullable_Boolean_swaps_encode_each_snapshot_value_with_or_without_a_left_join(bool async, bool leftJoin)
+        {
+            var capture = new Capture();
+            await using var context = Create(OceanBaseCompatibilityMode.MySql, capture);
+            var query = context.Set<Row>();
+            int count;
+            if (leftJoin)
+            {
+                var joined = query.GroupJoin(context.Set<Group>(), row => row.GroupId, group => group.Id,
+                        (row, groups) => new { Row = row, Groups = groups })
+                    .SelectMany(pair => pair.Groups.DefaultIfEmpty(), (pair, group) => new { pair.Row, Group = group });
+                count = async ? await joined.ExecuteUpdateAsync(setters => setters.SetProperty(pair => pair.Row.OptionalFlag, pair => pair.Row.OptionalSourceFlag)
+                    .SetProperty(pair => pair.Row.OptionalSourceFlag, pair => pair.Row.OptionalFlag))
+                    : joined.ExecuteUpdate(setters => setters.SetProperty(pair => pair.Row.OptionalFlag, pair => pair.Row.OptionalSourceFlag)
+                        .SetProperty(pair => pair.Row.OptionalSourceFlag, pair => pair.Row.OptionalFlag));
+            }
+            else count = async ? await query.ExecuteUpdateAsync(setters => setters.SetProperty(row => row.OptionalFlag, row => row.OptionalSourceFlag)
+                .SetProperty(row => row.OptionalSourceFlag, row => row.OptionalFlag))
+                : query.ExecuteUpdate(setters => setters.SetProperty(row => row.OptionalFlag, row => row.OptionalSourceFlag)
+                    .SetProperty(row => row.OptionalSourceFlag, row => row.OptionalFlag));
+            Assert.Equal(1, count);
+            var command = Assert.Single(capture.Commands);
+            Assert.Contains("CASE WHEN b.OptionalSourceFlag = 'T' THEN 'Y' WHEN b.OptionalSourceFlag = 'F' THEN 'N' END AS __ob_value_0", command.Sql);
+            Assert.Contains("CASE WHEN b.OptionalFlag = 'Y' THEN 'T' WHEN b.OptionalFlag = 'N' THEN 'F' END AS __ob_value_1", command.Sql);
+            Assert.Contains("SET __ob_bulk_target.OptionalFlag = __ob_bulk_snapshot.__ob_value_0, __ob_bulk_target.OptionalSourceFlag = __ob_bulk_snapshot.__ob_value_1", command.Sql);
+            Assert.Equal(leftJoin, command.Sql.Contains("LEFT JOIN BulkGroups", StringComparison.Ordinal));
+            Assert.DoesNotContain("ELSE 'N'", command.Sql);
+            Assert.DoesNotContain("ELSE 'F'", command.Sql);
+        }
+
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public async Task MySql_snapshot_key_updates_and_paging_keep_original_key_projections(bool async)
+        {
+            var capture = new Capture();
+            await using var context = Create(OceanBaseCompatibilityMode.MySql, capture);
+            var query = context.Set<Row>().OrderBy(row => row.Id).Skip(1).Take(2);
+            Assert.Equal(1, async ? await query.ExecuteUpdateAsync(setters => setters.SetProperty(row => row.Id, row => row.Previous)
+                .SetProperty(row => row.Previous, row => row.Id))
+                : query.ExecuteUpdate(setters => setters.SetProperty(row => row.Id, row => row.Previous)
+                    .SetProperty(row => row.Previous, row => row.Id)));
+            var command = Assert.Single(capture.Commands);
+            Assert.Contains("SELECT /*+ NO_MERGE */", command.Sql);
+            Assert.Single(Regex.Matches(command.Sql, "LIMIT "));
+            Assert.Single(Regex.Matches(command.Sql, "OFFSET "));
+            Assert.Contains("ORDER BY", command.Sql);
+            Assert.Contains("AS __ob_key_0", command.Sql);
+            Assert.Contains("AS __ob_key_1", command.Sql);
+            Assert.Contains("__ob_bulk_target.Id = __ob_bulk_snapshot.__ob_key_1 SET __ob_bulk_target.Id = __ob_bulk_snapshot.__ob_value_0", command.Sql);
+            Assert.Contains(1, command.Values);
+            Assert.Contains(2, command.Values);
+        }
+
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public async Task MySql_keyless_snapshot_rejects_before_open_instead_of_losing_row_identity(bool async)
+        {
+            var capture = new Capture();
+            await using var context = Create(OceanBaseCompatibilityMode.MySql, capture);
+            async Task<int> Update() => async ? await context.Set<KeylessRow>().ExecuteUpdateAsync(setters => setters
+                .SetProperty(row => row.Count, row => row.Previous).SetProperty(row => row.Previous, row => row.Count))
+                : context.Set<KeylessRow>().ExecuteUpdate(setters => setters.SetProperty(row => row.Count, row => row.Previous)
+                    .SetProperty(row => row.Previous, row => row.Count));
+            Assert.Contains("primary key", (await Assert.ThrowsAsync<NotSupportedException>(Update)).Message);
             Assert.Equal(0, capture.Opens);
             Assert.Empty(capture.Commands);
+        }
+
+        [Theory]
+        [InlineData(false, false)]
+        [InlineData(true, false)]
+        [InlineData(false, true)]
+        [InlineData(true, true)]
+        public async Task MySql_snapshot_failures_preserve_identity_tokens_and_tracker_state(bool async, bool cancellation)
+        {
+            var capture = new Capture { AffectedRows = 0 };
+            await using var context = Create(OceanBaseCompatibilityMode.MySql, capture);
+            var tracked = new Row { TenantId = 3, Id = 1, Count = 7, Previous = 9 };
+            context.Attach(tracked);
+            using var source = new CancellationTokenSource();
+            Exception failure = cancellation ? new OperationCanceledException(source.Token) : new InvalidOperationException("snapshot command failure");
+            capture.Failure = failure;
+            if (cancellation) capture.BeforeFailure = source.Cancel;
+            async Task<int> Update(CancellationToken token) => async ? await context.Set<Row>().ExecuteUpdateAsync(setters => setters
+                .SetProperty(row => row.Count, row => row.Previous).SetProperty(row => row.Previous, row => row.Count), token)
+                : context.Set<Row>().ExecuteUpdate(setters => setters.SetProperty(row => row.Count, row => row.Previous)
+                    .SetProperty(row => row.Previous, row => row.Count));
+            Assert.Same(failure, await Record.ExceptionAsync(() => Update(source.Token)));
+            var command = Assert.Single(capture.Commands);
+            Assert.Contains("SELECT /*+ NO_MERGE */", command.Sql);
+            Assert.Equal(async ? source.Token : default, command.Token);
+            Assert.Null(command.Transaction);
+            Assert.Equal(System.Data.ConnectionState.Closed, context.Database.GetDbConnection().State);
+            capture.Failure = null;
+            capture.BeforeFailure = null;
+            Assert.Equal(0, await Update(default));
+            Assert.Equal(2, capture.Commands.Count);
+            Assert.Equal(7, tracked.Count);
+            Assert.Equal(9, tracked.Previous);
+            Assert.Equal(EntityState.Unchanged, context.Entry(tracked).State);
         }
 
         [Theory]
@@ -329,6 +478,7 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
                 row.Property(value => value.Status).HasConversion<string>();
                 row.Property(value => value.Price).HasPrecision(4, 1);
                 model.Entity<Group>().ToTable("BulkGroups");
+                model.Entity<KeylessRow>().ToTable("BulkKeylessRows").HasNoKey();
             }
         }
 
@@ -351,7 +501,8 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
             public decimal Price { get; set; }
         }
         private sealed class Group { public int Id { get; set; } public string Code { get; set; } = ""; }
-        private sealed record Command(string Sql, object[] Values, bool Async, CancellationToken Token, DbTransaction? Transaction);
+        private sealed class KeylessRow { public int Count { get; set; } public int Previous { get; set; } }
+        private sealed record Command(string Sql, object[] Values, bool Async, CancellationToken Token, DbTransaction? Transaction, int Timeout);
 
         private sealed class Capture : DbConnectionInterceptor, IDbCommandInterceptor
         {
@@ -377,7 +528,7 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
                 var values = Regex.Matches(sql, @"[:@]\w+|\?", RegexOptions.CultureInvariant).Select(bind =>
                     bind.Value == "?" ? parameters[position++].Value!
                         : parameters.Single(parameter => parameter.ParameterName.TrimStart(':', '@') == bind.Value.TrimStart(':', '@')).Value!).ToArray();
-                Commands.Add(new Command(sql, values, async, token, command.Transaction));
+                Commands.Add(new Command(sql, values, async, token, command.Transaction, command.CommandTimeout));
                 if (Failure is { } failure) { BeforeFailure?.Invoke(); throw failure; }
                 return InterceptionResult<int>.SuppressWithResult(AffectedRows);
             }

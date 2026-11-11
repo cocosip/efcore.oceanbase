@@ -35,10 +35,20 @@ namespace OceanBase.EntityFrameworkCore.Query
             }
             if (mode == OceanBaseCompatibilityMode.Oracle)
             {
-                if (RequiresOracleRewrite(update)) GetOracleCorrelationKey(update);
+                if (RequiresOracleRewrite(update)) GetBulkCorrelationKey(update, mode);
                 return update.Update(update.SelectExpression, setters);
             }
 
+            var ordered = GetMySqlAssignmentOrder(update.SelectExpression, setters);
+            if (ordered is null) GetBulkCorrelationKey(update, mode);
+            return update.Update(update.SelectExpression, ordered ?? setters);
+        }
+
+        // Null means assignment order cannot preserve original values and a snapshot is required.
+        internal static IReadOnlyList<ColumnValueSetter>? GetMySqlAssignmentOrder(SelectExpression select,
+            IReadOnlyList<ColumnValueSetter> setters)
+        {
+            var targets = setters.Select(setter => (setter.Column.TableAlias, setter.Column.Name)).ToHashSet();
             var reads = setters.Select(setter =>
             {
                 var visitor = new ColumnReads();
@@ -46,8 +56,9 @@ namespace OceanBase.EntityFrameworkCore.Query
                 visitor.Columns.Remove((setter.Column.TableAlias, setter.Column.Name));
                 return visitor.Columns;
             }).ToArray();
-            if (update.SelectExpression.Tables.Count > 1 && reads.Any(columns => columns.Overlaps(targets)))
-                throw new NotSupportedException("Dependent MySQL joined assignments require snapshot values because multi-table assignment order is not guaranteed.");
+            // Derived projections can hide reads of assigned target columns, so snapshot them conservatively.
+            if (select.Tables.Count > 1 && (reads.Any(columns => columns.Overlaps(targets))
+                || select.Tables.Any(table => (table is JoinExpressionBase join ? join.Table : table) is SelectExpression))) return null;
             var remaining = Enumerable.Range(0, setters.Count).ToList();
             var ordered = new List<ColumnValueSetter>(setters.Count);
             while (remaining.Count > 0)
@@ -55,26 +66,25 @@ namespace OceanBase.EntityFrameworkCore.Query
                 // A reader must run before another assignment overwrites the column it reads.
                 var next = remaining.FindIndex(candidate => !remaining.Any(reader =>
                     reads[reader].Contains((setters[candidate].Column.TableAlias, setters[candidate].Column.Name))));
-                if (next < 0)
-                    throw new NotSupportedException("Cyclic MySQL bulk assignments require snapshot-based simultaneous values, which are not implemented.");
+                if (next < 0) return null;
                 ordered.Add(setters[remaining[next]]);
                 remaining.RemoveAt(next);
             }
-            return update.Update(update.SelectExpression, ordered);
+            return ordered;
         }
 
         internal static bool RequiresOracleRewrite(UpdateExpression update)
             => update.SelectExpression.Tables.Count != 1 || update.SelectExpression.Tables[0] != update.Table;
 
-        internal static IReadOnlyList<IColumn> GetOracleCorrelationKey(UpdateExpression update)
+        internal static IReadOnlyList<IColumn> GetBulkCorrelationKey(UpdateExpression update, OceanBaseCompatibilityMode mode)
         {
             var select = update.SelectExpression;
             if (select.Offset is not null || select.Limit is not null || select.IsDistinct || select.Having is not null
                 || select.Orderings.Count != 0 || select.GroupBy.Count != 0 || select.Projection.Count != 0
                 || select.Tables.Count == 0)
-                throw new NotSupportedException("Unsupported Oracle correlated bulk update query shape.");
+                throw new NotSupportedException($"Unsupported {mode} correlated/snapshot bulk update query shape.");
             return (update.Table.Table as ITable)?.PrimaryKey?.Columns
-                ?? throw new NotSupportedException("Oracle joined bulk updates require a physical table primary key for correlation.");
+                ?? throw new NotSupportedException($"{mode} correlated/snapshot bulk updates require a physical table primary key for correlation.");
         }
 
         private SqlExpression EncodeValue(ColumnValueSetter setter)

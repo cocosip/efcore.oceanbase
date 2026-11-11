@@ -988,9 +988,9 @@ downloaded for inspection in artifacts/bulk-dml-ef-source/. Public grammar is no
 
 EF setter expressions refer to the pre-update row. MySQL's assignment order must not change a later
 RHS read of another assigned target column. Topologically order assignments so readers precede writers;
-ignore a setter's self-reference, and reject cycles before execution until snapshot assignment is
-implemented. Joined MySQL updates cannot rely on assignment order, so cross-assignment dependencies
-also require a snapshot and currently reject. Oracle's native simultaneous assignment retains the declared order. Duplicate target
+ignore a setter's self-reference, and use the snapshot rewrite below for cycles. Joined MySQL updates
+cannot rely on assignment order, so cross-assignment dependencies and derived sources also use snapshots.
+Oracle's native simultaneous assignment retains the declared order. Duplicate target
 columns reject rather than depend on assignment precedence.
 
 For direct constant/parameter setter values, reuse the target mapping's IOceanBaseWriteValidation
@@ -1009,7 +1009,7 @@ Retain root UpdateExpression/DeleteExpression tags across parameter processing: 
 UpdateExpression.VisitChildren can reconstruct an expression without its Tags after a child changes.
 The wrapper captures/restores those statement tags; no connector or server change is needed.
 
-Remaining DEF-03 work includes MySQL cyclic/snapshot assignments, arbitrary converter server expressions,
+Remaining DEF-03 work includes arbitrary converter server expressions,
 advanced JSON/complex/inheritance/table-split shapes and complete live acceptance; this stage does not
 establish complete bulk support. Rejecting an unimplemented shape is a provider gap, not a server defect.
 
@@ -1040,6 +1040,26 @@ returns NULL for zero rows and errors for more than one row. EXISTS prevents unr
 no DISTINCT/MIN/first-row selection hides duplicate source matches. Key assignments are not restricted
 by a MERGE ON clause because this rewrite uses UPDATE/WHERE. Physical read consistency, cardinality
 errors, source plan costs, affected rows, privileges and exact deployed-version syntax need live tests.
+
+### MySQL original-value snapshot rewrite (DEF-03)
+
+For cyclic single-table assignments or joined assignments reading another assigned target column,
+update the physical table under a fresh alias and join a derived source by every physical primary-key
+column. The derived SELECT projects original keys as __ob_key_N and each complete encoded setter as
+__ob_value_N, then preserves the complete EF source/predicate and any nested paging. The outer SET
+only reads projected values, so assignment order cannot expose an already overwritten target value.
+Ordinary acyclic single-table updates keep topological assignment ordering; independent joins keep
+native table-reference SQL. Joined sources with derived tables use snapshots conservatively because
+projected aliases can hide target-column dependencies. Joined keyless targets requiring a snapshot
+reject before opening. Both generators accept normalized left joins without EF's UPDATE/FROM fallback.
+
+Use SELECT /*+ NO_MERGE */ inside the source, per OceanBase's documented prohibition of view merging.
+Target the physical table rather than updating the derived table (the MySQL UPDATE reference rejects
+that). The pinned public docs/grammar establish syntax and rewrite intent, not native execution:
+snapshot evaluation/read consistency, optimizer handling, duplicate-match choice, affected rows and
+cost still need server acceptance. Multiple matching rows keep native MySQL joined-update behavior;
+no DISTINCT/MIN/arbitrary client choice is added. References are OceanBase docs V4.3.5
+commit2a5ae3a23a51729d065cec716508eb26cb064106, MySQL UPDATE and NO_MERGE cost-based transformation.
 
 ### Official relational model specifications (TST-01 / MOD-01/02/03)
 

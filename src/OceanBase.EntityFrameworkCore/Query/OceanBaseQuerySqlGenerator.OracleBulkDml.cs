@@ -9,12 +9,8 @@ namespace OceanBase.EntityFrameworkCore.Query
     {
         private Expression GenerateOracleCorrelatedUpdate(UpdateExpression update)
         {
-            var key = OceanBaseBulkDmlVisitor.GetOracleCorrelationKey(update);
-            var aliases = new BulkAliases();
-            aliases.Visit(update);
-            var outerAlias = "__ob_bulk_target";
-            for (var suffix = 0; aliases.Names.Contains(outerAlias);)
-                outerAlias = "__ob_bulk_target" + ++suffix;
+            var key = OceanBaseBulkDmlVisitor.GetBulkCorrelationKey(update, _mode);
+            var outerAlias = GetBulkAlias(update, "__ob_bulk_target");
             var helper = Dependencies.SqlGenerationHelper;
             Sql.Append("UPDATE ").Append(helper.DelimitIdentifier(update.Table.Name, update.Table.Schema))
                 .Append(" ").Append(helper.DelimitIdentifier(outerAlias)).AppendLine().Append("SET ");
@@ -51,6 +47,15 @@ namespace OceanBase.EntityFrameworkCore.Query
                         .Append(" = ").Append(helper.DelimitIdentifier(outerAlias)).Append(".").Append(column);
                 }
             }
+        }
+
+        private static string GetBulkAlias(UpdateExpression update, string prefix)
+        {
+            var aliases = new BulkAliases();
+            aliases.Visit(update);
+            var alias = prefix;
+            for (var suffix = 0; aliases.Names.Contains(alias);) alias = prefix + ++suffix;
+            return alias;
         }
 
         private sealed class BulkAliases : ExpressionVisitor

@@ -64,6 +64,19 @@ namespace PackageConsumer
                         || Regex.Matches(sql, @" = __ob_bulk_target.Id").Count != 2)
                         throw new Exception("Packed Oracle joined bulk update lost its source or key correlation.");
                 }
+                else
+                {
+                    count = async ? context.Set<Row>().ExecuteUpdateAsync(setters => setters.SetProperty(row => row.Count, row => row.Previous)
+                        .SetProperty(row => row.Previous, row => row.Count)).GetAwaiter().GetResult()
+                        : context.Set<Row>().ExecuteUpdate(setters => setters.SetProperty(row => row.Count, row => row.Previous)
+                            .SetProperty(row => row.Previous, row => row.Count));
+                    var sql = capture.Commands.Last();
+                    if (count != 4 || !sql.Contains("SELECT /*+ NO_MERGE */", StringComparison.Ordinal)
+                        || !sql.Contains(".Previous AS __ob_value_0", StringComparison.Ordinal)
+                        || !sql.Contains(".Count AS __ob_value_1", StringComparison.Ordinal)
+                        || !sql.Contains("SET __ob_bulk_target.Count = __ob_bulk_snapshot.__ob_value_0, __ob_bulk_target.Previous = __ob_bulk_snapshot.__ob_value_1", StringComparison.Ordinal))
+                        throw new Exception("Packed MySQL cyclic bulk update lost its original-value snapshot.");
+                }
             }
             Console.WriteLine($"{mode}: packed bulk update/delete, tags, assignment order and write bounds passed (offline).");
         }

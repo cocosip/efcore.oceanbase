@@ -11,7 +11,46 @@ each small group. Real database integration/tests and EF8/EF9 adaptation are exp
 [local development plan](efcore-10-local-development-plan.md) tracks the full remaining inventory, including
 an audit of locally feasible deferred families. Finishing one batch does not finish the overall goal.
 
-### Oracle joined/paged bulk update checkpoint (2026-11-11)
+### MySQL original-value snapshot checkpoint (2026-11-11)
+
+Batch9c aftere1ef05e replaces cyclic/dependent-join assignment rejection with a keyed derived-source
+rewrite. SELECT /*+ NO_MERGE */ projects every original physical key and each complete target-encoded
+setter expression. The outer UPDATE targets the physical table, joins all original keys and assigns
+only projected values. Ordinary acyclic single-table assignments keep their ordered native path.
+Derived joined sources use the rewrite conservatively: EF paging projections hide physical target
+reads behind new aliases, so inspecting only outer column names would miss dependencies. Both mode
+generators now accept normalized left joins directly, avoiding EF's anonymous-setter fallback failure.
+
+Four initial MySQL failures (two Oracle controls passed) establish the old rejection; two later
+left-join cases expose the inherited fallback and two paging cases expose hidden dependencies.
+Fourteen new BulkDmlTests cases cover exact complete SQL, current positional binds, write bounds,
+tags/timeouts, nullable Boolean swaps with/without left joins, key writes/paging, keyless rejection,
+failure/cancellation identity, zero-row retry and unchanged tracked state. Two caller-transaction
+cases and one SQL alias test cover no added savepoints/ownership changes and both alias namespaces.
+Existing cycle/dependent-join rejection tests now assert successful mode-specific SQL.
+
+Final Debug/Release atEF10.0.0 and isolated EF10.0.14 Release each pass3480=1653 unit+957 functional+
+868 specification+two consumer tests, zero failures/skips. Independent review has no actionable
+findings; the concurrent README update resolves its stale unsupported claim. Evidence:
+artifacts/bulk-snapshot-{red,debug,release,patch}.log. The intermediate focused log includes a test
+fixture mode mismatch, fixed by configuring the alias test with real MySQL services; final full runs
+include that regression and all90 focused functional/nine SQL cases.
+
+The same baseline-built 10.0.0-bulk-snapshot-20261111 nupkg passes both-mode consumers at both patches,
+contents, package-only graphs and Release/package/consumer SHA-256 identity:
+40933973781B0B3B89AB8814B2C8879170EEF33DF817C40D4EDC84DA715371AA.
+The prior Oracle-bulk package rejects the new cyclic MySQL smoke with caught NotSupportedException/
+exit1. Evidence artifacts/bulk-snapshot-{package,prior-package}.log and
+artifacts/verify-bulk-snapshot-package.ps1. Baseline source assets remainEF10.0.0; manual consumer
+execution stays outside CI.
+
+Pinned public OceanBase UPDATE/NO_MERGE docs and parser grammar establish the intended SQL contract,
+not actual optimizer/materialization/read consistency, duplicate-match choice, affected rows or costs.
+Those remain live gates. Arbitrary incompatible converter expressions, advanced model/JSON/complex
+bulk variants and the wider EF10 inventory remain work. No live tests, EF8/9, push or publication;
+no driver/server defect demonstrated. The overall goal remains active.
+
+### Historical Oracle joined/paged bulk update checkpoint (2026-11-11)
 
 Batch9b aftereb0c837 implements Oracle joined and pushed-down ExecuteUpdate using a scalar source
 SELECT per setter and an EXISTS target filter. Each source retains the complete translated tables,

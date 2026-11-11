@@ -11,6 +11,8 @@ namespace OceanBase.EntityFrameworkCore.Query
             if (_mode == OceanBaseCompatibilityMode.Oracle)
                 return OceanBaseBulkDmlVisitor.RequiresOracleRewrite(update) ? GenerateOracleCorrelatedUpdate(update) : base.VisitUpdate(update);
             var select = update.SelectExpression;
+            if (OceanBaseBulkDmlVisitor.GetMySqlAssignmentOrder(select, update.ColumnValueSetters) is null)
+                return GenerateMySqlSnapshotUpdate(update);
             if (select.Offset is not null || select.Limit is not null || select.IsDistinct || select.Having is not null
                 || select.Orderings.Count != 0 || select.GroupBy.Count != 0 || select.Projection.Count != 0
                 || select.Tables.Count == 0)

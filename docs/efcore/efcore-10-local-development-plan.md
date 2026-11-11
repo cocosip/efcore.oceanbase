@@ -306,6 +306,29 @@ query filters and nested paging. Keep the native single-table path unchanged.
 - Run both selected patches/full configurations, same-package checks and independent review, update
   support/evidence docs, commit locally. MySQL snapshot assignments and the wider DEF-03 inventory stay open.
 
+## Batch9c brief: MySQL original-value snapshot assignments
+
+DEF-03: replace cycle/dependent-join rejection with an update of a physical target joined by every
+primary-key column to a non-merged derived source. Project each complete, target-encoded setter once
+alongside provider-owned key/value column aliases. Keep the complete original source/predicate,
+including nested paging. Use the documented OceanBase SELECT /*+ NO_MERGE */ hint; never update the
+derived table itself. Ordinary acyclic single-table assignments retain their existing ordered path.
+Derived joined sources use the snapshot conservatively because projected aliases can hide target reads.
+
+- References: pinned OceanBase docs commit2a5ae3a23a51729d065cec716508eb26cb064106, MySQL UPDATE
+  and NO_MERGE query-transformation contracts; public MySQL parser grammar already inspected.
+  NO_MERGE forbids view merging; native evaluation/materialization/read consistency remains a live gate.
+- Require a physical primary key; reject unnormalized outer operators rather than dropping them.
+  Use fresh target/source aliases outside all nested source/setter scopes and quote identifiers.
+- Keep encoded Boolean/null semantics, captured write bounds, exact positional binding order,
+  query filters/tags/paging, affected rows, cancellation/errors and caller-owned transaction behavior.
+  Multiple matching source rows retain native MySQL joined-update semantics; do not invent ordering.
+- Both generators accept normalized left joins directly, avoiding EF's anonymous-setter fallback failure.
+- Cover cycles, dependent joins, converted nullable Boolean swaps, key writes, cached captures,
+  paging, keyless rejection and aliases. Update the old rejection tests and package smoke.
+- Run full selected configurations, same-package gates and independent review, update docs and commit.
+  This closes these local DEF-03 gaps, not advanced bulk variants or physical server acceptance.
+
 ## Batch8a brief: official relational model specification fixtures
 
 TST-01 / MOD-01/02/03 / DEF-07: consume the official EF10 relational specification package in a
@@ -965,6 +988,19 @@ returns empty on NULL in MySQL; Oracle represents empty as NULL under its existi
 
 ## Execution record
 
+- Batch9c final aftere1ef05e: MySQL cycles/dependent joins and derived joined sources use complete
+  encoded setter/key projections under NO_MERGE, joined by every original physical key to the real
+  target. Single-table acyclic ordering remains. Both modes accept normalized left joins directly.
+  Four initial MySQL RED cases and later left-join/paging regressions identify the missing branches.
+  Fourteen new bulk+two transaction+one SQL cases cover bind order/current values/write bounds,
+  Boolean NULL encodings, keys/paging/aliases, failures/cancellation/zero/tracker and transaction
+  ownership. Final Debug/Release/isolated14 each3480=1653+957+868+2 pass, zero failures/skips.
+  Source review reports no actionable findings; README's stale unsupported text is corrected.
+  Same bulk-snapshot-20261111 package passes both modes/patches/content/graphs/hash; prior Oracle
+  package fails the cyclic smoke with caught exit1. Baseline staysEF10.0.0. Native optimizer/read
+  consistency/duplicate-match/results/costs remain live gates, not demonstrated driver/server defects.
+  Broader converters/model/JSON bulk variants and the remaining local inventory stay open. No DB,
+  standalone live program, EF8/9, push or publication. Overall goal active.
 - Batch9b final aftereb0c837: Oracle joined/paged updates now use complete scalar source queries and
   EXISTS correlated by every physical primary-key column. Normalized left joins bypass EF's
   UPDATE/FROM fallback; native single-table behavior remains.26 intercepted, eight SQL and two
