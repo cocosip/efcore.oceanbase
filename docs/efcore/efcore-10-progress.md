@@ -11,6 +11,36 @@ each small group. Real database integration/tests and EF8/EF9 adaptation are exp
 [local development plan](efcore-10-local-development-plan.md) tracks the full remaining inventory, including
 an audit of locally feasible deferred families. Finishing one batch does not finish the overall goal.
 
+### Integer bitwise checkpoint (2026-11-11)
+
+Batch3u after42e45a8 implements integer AND/OR/XOR/complement for both modes with lifted nullable
+behavior, numeric enum storage and C# small-integer promotions. MySQL signed results are normalized
+from native unsigned64 results, unsigned complement retains its CLR width, and integer CAST targets
+use legal SIGNED/UNSIGNED syntax. Oracle uses BITAND plus exact NUMBER identities; UInt64 AND splits
+into two32-bit halves to avoid depending on an undocumented128-bit BITAND range. The audited public
+server source uses signed64 conversion; no live server limitation or connector defect is asserted.
+
+Initial focused RED14/18 exposes missing rendering/carrier rejection. Follow-up RED2 catches small
+binary promotion loss; RED2 protects ordinary converted-property casts from overly broad rejection.
+Independent review confirms both findings resolved. Focused22 unit and8 intercepted command cases pass,
+including synthetic511 for byte OR256, enum254, signed/null/full64 results and current parameter values.
+The first full run exposes old collection tests pinning illegal MySQL BIGINT/INT CAST targets; corrected
+expectations retain both nested casts and all original node/type/mapping identities. Re-review approves.
+Final Debug/Release and isolated EF10.0.14 Release each pass2217 (1529 unit,686 functional,two consumers),
+zero failures/skips. Evidence: artifacts/bitwise-{debug,release,patch}-final.log and focused RED/GREEN logs.
+
+The same baseline-built `10.0.0-bitwise-20261111` nupkg passes package content and both modes on
+EF10.0.0/10.0.14, with package-only dependency graphs and identical Release/package/consumer DLL SHA256
+`95F45678F1CC432C94AF209F467C78433B8865D98FEF44720F24A39B758BA2C2`.
+The preceding transaction-recovery package fails the new signed-result bitwise consumer assertion.
+Source baseline assets remain EF10.0.0. Evidence: artifacts/bitwise-package-final.log,
+bitwise-old-package-red.log and bitwise-package/.
+
+Shifts, overflow/narrowing/signedness-changing cast equivalence, arbitrary converter equivalence and
+volatile single evaluation remain separate local/semantic work; native result/coercion checks remain
+live gates. Standalone live testing, EF8/EF9, push and publication remain postponed. The complete local
+EF10 goal is still active.
+
 ### Multi-column generated readback checkpoint (2026-11-11)
 
 Batch5e after9d1f4d2 adds26 intercepted GeneratedValuesTests cases in both modes/sync/async. They characterize

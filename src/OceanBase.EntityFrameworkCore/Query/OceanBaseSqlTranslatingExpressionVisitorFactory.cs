@@ -59,6 +59,21 @@ namespace OceanBase.EntityFrameworkCore.Query
             QueryCompilationContext queryCompilationContext, QueryableMethodTranslatingExpressionVisitor queryableVisitor)
             : RelationalSqlTranslatingExpressionVisitor(dependencies, queryCompilationContext, queryableVisitor)
         {
+            protected override Expression VisitBinary(BinaryExpression expression)
+            {
+                if (expression.Method is null
+                    && expression.NodeType is ExpressionType.And or ExpressionType.Or or ExpressionType.ExclusiveOr
+                    && Unwrap(expression.Type) != typeof(bool))
+                {
+                    // EF removes small-integer promotions here, losing the bitwise result's width and sign.
+                    return Visit(expression.Left) is SqlExpression left && Visit(expression.Right) is SqlExpression right
+                        ? Dependencies.SqlExpressionFactory.MakeBinary(expression.NodeType, left, right, typeMapping: null)
+                            ?? QueryCompilationContext.NotTranslatedExpression
+                        : QueryCompilationContext.NotTranslatedExpression;
+                }
+                return base.VisitBinary(expression);
+            }
+
             protected override Expression VisitMethodCall(MethodCallExpression call)
             {
                 // The base visitor flattens nested Math extrema, losing intermediate native coercion and Single normalization.

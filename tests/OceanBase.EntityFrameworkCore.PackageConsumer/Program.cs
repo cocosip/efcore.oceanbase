@@ -96,6 +96,19 @@ namespace PackageConsumer
                     throw new Exception("Packed provider truncated fractional division.");
                 }
 
+                var bitwiseSql = context.Set<Row>().Where(row => (row.Id & -3) != 0).Select(row => new
+                {
+                    Or = row.Id | -3, Xor = row.Id ^ -3, Not = ~row.Id,
+                    Unsigned = ~row.Unsigned, Wide = row.Bits & 9223372036854775808UL,
+                    Enum = ~row.Flags, Promoted = row.Narrow | 256
+                }).ToQueryString();
+                var bitwiseFragments = mode == OceanBaseCompatibilityMode.MySql
+                    ? new[] { " AS SIGNED)", " ^ ", " | ", " & 4294967295", " & 255", " AS SIGNED)) | (256)", "9223372036854775808" }
+                    : new[] { "BITAND(", " - 2 * BITAND(", "(-1 - (", "4294967295 -", "255 -", "TRUNC(", "MOD(", "* 4294967296", " + (256)" };
+                foreach (var fragment in bitwiseFragments)
+                    if (!bitwiseSql.Contains(fragment, StringComparison.Ordinal))
+                        throw new Exception($"Packed provider did not preserve integer bitwise semantics: {fragment}");
+
                 var stringFunctionsSql = context.Set<Row>().Where(row => row.Name.Trim().ToLower() == "pkg")
                     .Select(row => new { Upper = row.Name.ToUpper(), Start = row.Name.TrimStart(),
                         End = row.Name.TrimEnd(), Length = row.Name.Length }).ToQueryString();
@@ -765,6 +778,13 @@ namespace PackageConsumer
             public DateTime LegacyStamp { get; set; }
             public decimal Amount { get; set; }
             public TimeSpan NarrowDuration { get; set; }
+            public uint Unsigned { get; set; }
+            public ulong Bits { get; set; }
+            public ByteFlags Flags { get; set; }
+            public byte Narrow { get; set; }
         }
+
+        [Flags]
+        private enum ByteFlags : byte { Low = 1 }
     }
 }

@@ -423,8 +423,8 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             var converted = new SqlUnaryExpression(ExpressionType.Convert, factory.Constant(17, integer), typeof(long), wide);
             var root = new ValuesExpression("v", new[] { new RowValueExpression(new[] { converted }) }, new[] { "Value" });
             var sql = new OceanBaseQuerySqlGenerator(context.GetService<QuerySqlGeneratorDependencies>(), mode).GetCommand(root).CommandText;
-            Assert.Contains("AS " + wide.StoreType + ")", sql);
-            if (mode == OceanBaseCompatibilityMode.MySql) Assert.DoesNotContain("AS SIGNED)", sql);
+            var wideTarget = mode == OceanBaseCompatibilityMode.MySql ? "SIGNED" : wide.StoreType;
+            Assert.Contains("CAST(17 AS " + wideTarget + ")", sql);
 
             var original = factory.Constant(17L, wide);
             var explicitConversion = new SqlUnaryExpression(ExpressionType.Convert, original, typeof(int), integer);
@@ -433,7 +433,8 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             var nestedSql = new OceanBaseQuerySqlGenerator(context.GetService<QuerySqlGeneratorDependencies>(), mode)
                 .GetCommand(nestedRoot).CommandText;
             var target = mode == OceanBaseCompatibilityMode.MySql ? "SIGNED" : "NUMBER";
-            Assert.Contains("CAST(CAST(17 AS " + integer.StoreType + ") AS " + target + ")", nestedSql);
+            var integerTarget = mode == OceanBaseCompatibilityMode.MySql ? "SIGNED" : integer.StoreType;
+            Assert.Contains("CAST(CAST(17 AS " + integerTarget + ") AS " + target + ")", nestedSql);
             Assert.Same(synthetic, nestedRoot.RowValues![0].Values[0]);
             Assert.Same(explicitConversion, synthetic.Operand);
             Assert.Same(original, explicitConversion.Operand);

@@ -73,6 +73,16 @@ content and both-mode/patch consumers; prior lifecycle package fails the new NUL
 Release and consumer DLL identities match. Independent review found and closed an async token-count test
 gap; no production findings remain. Transactions/live remain open.
 
+Integer bitwise local checkpoint (Batch3u after42e45a8): BitwiseQueryTests has22 cases and
+BasicRelationalTests adds8 intercepted sync/async cases. Both modes cover AND/OR/XOR/complement,
+negative/signed and full UInt64 values, small binary/unary promotions, numeric enums/converters,
+nullable compensation and refreshed captured binds. MySQL normalizes signed results and integer CAST
+syntax; Oracle uses signed64-safe BITAND halves for UInt64 and NUMBER identities for OR/XOR. The
+public server source audit is a range precaution, not a reported connector defect or deployed-server
+acceptance result. Full Debug/Release and isolated EF10.0.14 Release each pass2217=1529+686+2, zero
+failures/skips. Source/test review approves. Shifts, broader cast semantics, volatile single evaluation
+and native results remain open. Package validation is recorded in the progress handoff.
+
 Historical local lifecycle checkpoint: Batch6a after0b04af6 fixes failed provider Open/OpenAsync accounting
 and physical cleanup using isolated EF10 private-field contracts.36 focused cases and final full
 Debug/Release/isolated14 suites pass1962=1474+486+2, no failures/skips. Same final lifecycle nupkg passes
@@ -313,7 +323,7 @@ duplicates and mode-specific string semantics.
 | --- | --- | --- | --- | --- | --- |
 | SQL-01 | Escape identifiers, schema qualification and embedded delimiters; Oracle table aliases omit AS and table-free SELECT uses DUAL. | Required | In progress | In progress | UH now covers embedded delimiters, schema/Unicode/empty-name escaping and all builder overloads; UQ aliases pass; table-free/live SQL evidence still incomplete. |
 | SQL-02 | Parameter names/placeholders follow each dialect. | Required | Done | Done | UH Generates_mode_specific_identifiers_and_parameters. |
-| QRY-01 | SELECT/projection, arithmetic/comparison/Boolean predicates and null semantics bind values and materialize nullable/non-null results. | Required | In progress | In progress | UQ/FP cover Boolean/string/scalar handling; MySQL query parameters now use positional `?` ordering at the Connector 0.2.0 boundary. Bitwise/wider operators and live results remain open. |
+| QRY-01 | SELECT/projection, arithmetic/comparison/Boolean predicates and null semantics bind values and materialize nullable/non-null results. | Required | In progress | In progress | UQ/FP cover Boolean/string/scalar handling and integer AND/OR/XOR/complement, signed/unsigned widths, promotions, nullable/enums and bind refresh; MySQL query parameters use positional `?` ordering at the Connector 0.2.0 boundary. Shifts, broader cast/overflow semantics, wider operators and live results remain open. |
 | QRY-02 | OrderBy/ThenBy, Distinct, Skip/Take and offset-only queries return correct results, including deterministic paging/empty pages. | Required | In progress | In progress | UQ SQL shape only; live ordering/string/paging missing. |
 | QRY-03 | Inner/left joins, correlated subqueries, Any/All and scalar/collection Contains have verified results or explicit exclusions. | Required | In progress | In progress | URS/UTC/URC/FP cover ordinary joins/subqueries/quantifiers, bare integral/text membership, captured int/int? roots and nonempty/originally-empty inline roots. Typed zero-row metadata survives subqueries/pruning, including a bounded sole-ordinal repair. Consistent int-to-long bindings pass; converted Join Value projections can fail earlier EF inference. General text/other carriers and wider shapes remain local work; actual server results remain open. |
 | QRY-04 | GroupBy aggregates, Count/LongCount, Sum/Average/Min/Max handle empty and nullable inputs correctly. | Required | In progress | In progress | URS/UNA/FP cover Count/LongCount plus native numeric Sum/Average/Min/Max, all exact numeric/nullable selector families, filtered DISTINCT/HAVING/order, independent promoted Double, neutral Single results, converter-owned SUM zero and supplied empty/null/checked reads. Nonnumeric extrema and real aggregate execution remain open. |

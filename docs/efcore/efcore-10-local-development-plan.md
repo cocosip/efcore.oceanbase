@@ -682,8 +682,45 @@ explicit supported duplication contract, not inference from Scale's ambiguous ze
 4. Run full Debug/Release, isolated EF10.0.14 Release and packed consumers; independent source review,
    update remaining boundaries, then commit. No database, EF8/EF9 or publication work.
 
+## Batch3u brief: integer bitwise operators
+
+QRY-01: implement `&`, `|`, `^`, `~` for all eight mapped integer families, actual C# promotions,
+nullable operands and numeric enum storage in the existing SQL generator. Preserve EF's Boolean
+AND/OR/NOT and null processing. Integer numeric converters retain stored-space operations, as in the
+arithmetic contract; reject text/floating/decimal carriers instead of emitting native integer SQL.
+
+- MySQL: native binary operators with signed-result casts; unsigned complement is masked to its CLR
+  width below64 bits. Fully group operands and results independently of provider-neutral precedence.
+- Oracle: BITAND for AND; NUMBER arithmetic identities for OR/XOR and complement. Split UInt64 AND
+  into two32-bit halves: do not rely on Oracle-compatible128-bit BITAND. The audited public server
+  source uses signed64-bit conversion, independently of the wider NUMBER storage range.
+- Write BitwiseQueryTests first, observe missing/incorrect SQL, then implement at the shared generator.
+  Exercise all operators in actual predicates and projections, promoted small integers, negative/extreme
+  literals, enum/numeric converters, nullable and nested expressions, both null settings and mode order.
+- Add intercepted sync/async command/reader coverage and package-consumer assertions. Run full baseline
+  Debug/Release and isolated10.0.14 Release, package content/identity/consumer gates, independent review,
+  update design/checklist/progress and commit locally. No database or standalone test-program work.
+- Shifts require count masking and signed-width rules and remain a separate local slice. Native results,
+  physical BITAND range, SQL coercion and repeated volatile operand evaluation remain explicit live/
+  semantic boundaries; this batch does not finish QRY-01 or the overall goal.
+
 ## Execution record
 
+- Batch3u after42e45a8: integer AND/OR/XOR/complement, MySQL signed/unsigned width normalization,
+  Oracle signed64-safe UInt64 halves, numeric enum complement and original binary promotions. Initial
+  RED14/18; promotion RED2 and unrelated-cast-control RED2 corrected. Focused22 unit+8 intercepted pass;
+  full Debug/Release and isolated14 each2217=1529+686+2, zero failures/skips. Independent source review
+  approves. Same baseline-built bitwise-20261111 package passes both modes/patches, content, package-only
+  graphs and Release/package/consumer SHA equality; prior transaction-recovery package fails the new
+  signed-result consumer assertion. Baseline assets remain10.0.0. Evidence: artifacts/bitwise-*.log,
+  bitwise-research/, bitwise-compat/ and bitwise-package/.
+  Ruling: preserve integer operand promotions in the existing relational visitor — EF removes them
+  before factory inference, causing wrong narrow result mapping for e.g. byte OR256 and byte XOR-1.
+  Ruling: legal MySQL SIGNED/UNSIGNED integer CAST spelling also applies outside bitwise; ordinary
+  explicit converted-property casts remain allowed. Prior collection tests pinned illegal BIGINT/INT
+  CAST targets; replace their SQL spellings while retaining both cast nodes and all identity assertions.
+  Narrowing/overflow/signedness semantics remain separate; source review approves the test correction.
+  No database, connector defect, standalone program, EF8/EF9 or publication claim. Overall goal active.
 - Batch7a after8a4ad6a: offline GenerateCreateScript and27 schema fixtures. Full Debug/Release/isolated14
   final2 each2077=1501+574+2 pass, zero failures/skips. Same schema-script-20261111 package passes both
   modes/patches/content/package-only graphs and SHA-256 equality; preceding transactions package fails at

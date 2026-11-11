@@ -19,6 +19,12 @@ This is a development provider. Local tests cover model/type mappings, SQL gener
 pipelines and package consumption. Real OceanBase query, write, transaction and schema acceptance is still open
 for both modes. Passing local tests does not establish server compatibility or release readiness.
 
+Integer `&`, `|`, `^` and `~` have per-mode SQL translations, including nullable values, C# small-integer
+promotions and numeric enum storage. Text/floating/decimal converter carriers are rejected for these
+operations. Integer numeric converters operate in stored value space; arbitrary converter equivalence,
+overflowing/narrowing casts, shifts and single evaluation of volatile operands need separate contracts.
+Native bitwise results remain unverified on an OceanBase server.
+
 `Database.GenerateCreateScript()` generates supported relational DDL offline. To create tables in an already
 provisioned MySQL database or Oracle schema, explicitly name the target:
 

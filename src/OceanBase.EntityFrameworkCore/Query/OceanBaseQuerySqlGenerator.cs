@@ -63,6 +63,37 @@ namespace OceanBase.EntityFrameworkCore.Query
 
         protected override Expression VisitSqlBinary(SqlBinaryExpression sqlBinaryExpression)
         {
+            if (sqlBinaryExpression.OperatorType is ExpressionType.And or ExpressionType.Or or ExpressionType.ExclusiveOr
+                && IntegerCode(sqlBinaryExpression.Type) is { } code)
+            {
+                ValidateInteger(sqlBinaryExpression);
+                ValidateInteger(sqlBinaryExpression.Left);
+                ValidateInteger(sqlBinaryExpression.Right);
+                if (_mode == OceanBaseCompatibilityMode.MySql)
+                {
+                    var signed = UnsignedMaximum(code) is null;
+                    Sql.Append(signed ? "CAST(" : "(");
+                    BitwiseOperand(sqlBinaryExpression.Left);
+                    Sql.Append(sqlBinaryExpression.OperatorType == ExpressionType.And ? " & "
+                        : sqlBinaryExpression.OperatorType == ExpressionType.Or ? " | " : " ^ ");
+                    BitwiseOperand(sqlBinaryExpression.Right);
+                    Sql.Append(signed ? " AS SIGNED)" : ")");
+                }
+                else if (sqlBinaryExpression.OperatorType == ExpressionType.And)
+                    OracleBitAnd(sqlBinaryExpression, code);
+                else
+                {
+                    Sql.Append("(");
+                    BitwiseOperand(sqlBinaryExpression.Left);
+                    Sql.Append(" + ");
+                    BitwiseOperand(sqlBinaryExpression.Right);
+                    Sql.Append(sqlBinaryExpression.OperatorType == ExpressionType.Or ? " - " : " - 2 * ");
+                    OracleBitAnd(sqlBinaryExpression, code);
+                    Sql.Append(")");
+                }
+                return sqlBinaryExpression;
+            }
+
             if (sqlBinaryExpression.OperatorType == ExpressionType.Add && sqlBinaryExpression.Type == typeof(string))
             {
                 Sql.Append(_mode == OceanBaseCompatibilityMode.Oracle ? "(" : "CONCAT(");
@@ -100,6 +131,108 @@ namespace OceanBase.EntityFrameworkCore.Query
         protected override string GetOperator(SqlBinaryExpression binaryExpression)
             => _mode == OceanBaseCompatibilityMode.MySql && IsIntegerDivision(binaryExpression)
                 ? " DIV " : base.GetOperator(binaryExpression);
+
+        protected override Expression VisitSqlUnary(SqlUnaryExpression expression)
+        {
+            // C# lowers enum complement to underlying conversions, promoting byte/short to Int32 first.
+            if (expression is { OperatorType: ExpressionType.Convert, Operand: SqlUnaryExpression
+                { OperatorType: ExpressionType.Not, Operand: SqlUnaryExpression
+                    { OperatorType: ExpressionType.Convert } promotion } }
+                && IntegerCode(expression.Type) is { } enumCode && IntegerCode(promotion.Operand.Type) == enumCode)
+                return VisitSqlUnary(new SqlUnaryExpression(ExpressionType.Not, promotion.Operand,
+                    expression.Type, expression.TypeMapping));
+
+            if (expression.OperatorType is ExpressionType.Not or ExpressionType.OnesComplement
+                && IntegerCode(expression.Type) is { } code)
+            {
+                ValidateInteger(expression);
+                ValidateInteger(expression.Operand);
+                var maximum = UnsignedMaximum(code);
+                if (_mode == OceanBaseCompatibilityMode.Oracle)
+                {
+                    Sql.Append("(").Append(maximum ?? "-1").Append(" - ");
+                    BitwiseOperand(expression.Operand);
+                    Sql.Append(")");
+                }
+                else
+                {
+                    Sql.Append(maximum is null ? "CAST(~" : "(~");
+                    BitwiseOperand(expression.Operand);
+                    if (maximum is not null && code != TypeCode.UInt64)
+                        Sql.Append(" & ").Append(maximum);
+                    Sql.Append(maximum is null ? " AS SIGNED)" : ")");
+                }
+                return expression;
+            }
+
+            if (_mode == OceanBaseCompatibilityMode.MySql && expression.OperatorType == ExpressionType.Convert
+                && IntegerCode(expression.Type) is { } target && IntegerCode(expression.Operand.Type) is not null
+                && expression.TypeMapping is { } mapping && IntegerCode(mapping.Converter?.ProviderClrType ?? mapping.ClrType) is not null)
+            {
+                Sql.Append("CAST(");
+                Visit(expression.Operand);
+                Sql.Append(UnsignedMaximum(target) is null ? " AS SIGNED)" : " AS UNSIGNED)");
+                return expression;
+            }
+            return base.VisitSqlUnary(expression);
+        }
+
+        private void BitwiseOperand(SqlExpression operand)
+        {
+            Sql.Append("(");
+            Visit(operand);
+            Sql.Append(")");
+        }
+
+        private void OracleBitAnd(SqlBinaryExpression expression, TypeCode code)
+        {
+            if (code == TypeCode.UInt64)
+            {
+                // OceanBase's NUMBER BITAND path converts to Int64; each half must stay below 2^32.
+                Sql.Append("(BITAND(TRUNC(");
+                BitwiseOperand(expression.Left);
+                Sql.Append(" / 4294967296), TRUNC(");
+                BitwiseOperand(expression.Right);
+                Sql.Append(" / 4294967296)) * 4294967296 + BITAND(MOD(");
+                Visit(expression.Left);
+                Sql.Append(", 4294967296), MOD(");
+                Visit(expression.Right);
+                Sql.Append(", 4294967296)))");
+            }
+            else
+            {
+                Sql.Append("BITAND(");
+                Visit(expression.Left);
+                Sql.Append(", ");
+                Visit(expression.Right);
+                Sql.Append(")");
+            }
+        }
+
+        private static void ValidateInteger(SqlExpression expression)
+        {
+            var mapping = expression.TypeMapping;
+            if (mapping is null || mapping.Converter?.ConvertsNulls == true
+                || IntegerCode(mapping.Converter?.ProviderClrType ?? mapping.ClrType) is null)
+                throw new NotSupportedException("Integer bitwise operations require integer numeric storage carriers.");
+            if (expression is SqlUnaryExpression { OperatorType: ExpressionType.Convert } conversion
+                && IntegerCode(conversion.Operand.Type) is not null)
+                ValidateInteger(conversion.Operand);
+        }
+
+        private static TypeCode? IntegerCode(Type type)
+        {
+            var code = Type.GetTypeCode(Nullable.GetUnderlyingType(type) ?? type);
+            return code is TypeCode.SByte or TypeCode.Byte or TypeCode.Int16 or TypeCode.UInt16
+                or TypeCode.Int32 or TypeCode.UInt32 or TypeCode.Int64 or TypeCode.UInt64 ? code : null;
+        }
+
+        private static string? UnsignedMaximum(TypeCode code)
+            => code switch
+            {
+                TypeCode.Byte => "255", TypeCode.UInt16 => "65535", TypeCode.UInt32 => "4294967295",
+                TypeCode.UInt64 => "18446744073709551615", _ => null
+            };
 
         private static bool IsIntegerDivision(SqlBinaryExpression expression)
             => expression.OperatorType == ExpressionType.Divide

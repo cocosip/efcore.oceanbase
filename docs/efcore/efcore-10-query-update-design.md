@@ -585,6 +585,44 @@ This slice does not promise CLR checked overflow, minimum-integer divided by -1,
 unsigned subtraction, floating special values or bitwise width/sign equivalence. These require their own
 contract and tests; live arithmetic result/predicate tests remain open for both modes.
 
+## Integer bitwise local contract
+
+QRY-01 includes integer AND/OR/XOR/complement in predicates and projections. Reuse the EF10 binary/
+unary nodes and inherited null processing, including lifted nullable integer operations. Classification
+uses the translated numeric CLR type (or enum underlying type), never NUMBER/BIGINT names. Numeric
+integer converters retain stored-space semantics, not arbitrary converter equivalence; text, floating,
+decimal and null-converting carriers are rejected. Boolean AND/OR/NOT retain their existing paths.
+
+MySQL's documented numeric bitwise result is unsigned64. Signed results need `CAST(... AS SIGNED)`;
+unsigned complement below64 bits needs its CLR-width mask. Group every operand/result, preserving
+nested arithmetic and predicates. Preserve small binary operand promotions before EF removes their
+conversions and infers the wrong narrow result mapping. Integer-typed MySQL CAST nodes now use legal
+SIGNED/UNSIGNED targets, including the widening casts required by these operators. Ordinary explicit
+casts outside bitwise do not inherit its integer-carrier rejection. Collection renderer tests retain
+both nested casts and all original type/mapping identities, with the corrected MySQL spelling.
+Oracle AND uses BITAND, OR uses `a+b-BITAND(a,b)`, XOR uses
+`a+b-2*BITAND(a,b)`, signed complement uses `-1-a`, and unsigned complement uses `maximum-a`.
+NUMBER arithmetic keeps the OR/XOR intermediates exact, including signed64 endpoints. UInt64 AND
+splits into high/low32-bit halves with TRUNC/MOD, reconstructing the result with4294967296. This keeps
+every BITAND argument in0..4294967295 even when an operand exceeds Int64.MaxValue.
+
+Sources: EF Core v10.0.0 RelationalSqlTranslatingExpressionVisitor, SqlExpressionFactory,
+QuerySqlGenerator; OceanBase documentation revision `2a5ae3a23a51729d065cec716508eb26cb064106`
+([MySQL bitwise operators](https://github.com/oceanbase/oceanbase-doc/blob/2a5ae3a23a51729d065cec716508eb26cb064106/en-US/700.reference/500.sql-reference/100.sql-syntax/200.common-tenant-of-mysql-mode/200.operator-of-mysql-mode/400.bitwise-operators-of-mysql-mode.md),
+[Oracle BITAND](https://github.com/oceanbase/oceanbase-doc/blob/2a5ae3a23a51729d065cec716508eb26cb064106/en-US/700.reference/500.sql-reference/100.sql-syntax/300.common-tenant-of-oracle-mode/500.functions-of-oracle-mode/200.single-row-functions-of-oracle-mode/100.numeric-functions-of-oracle-mode/600.bitand-of-oracle-mode.md));
+public server source revision `5e8a63d29dae9fde5e962b8fcc7b167d438fc343`,
+`src/sql/engine/expr/ob_expr_operator.cpp` (`get_int64_from_number_type` and Oracle BITAND evaluation).
+That source audit is a range precaution, not live evidence for a deployed server version or a connector bug.
+
+Acceptance: BitwiseQueryTests pins all four operators, integer promotions/widths, enum and numeric
+converters, negative and boundary operands, nested grouping, captured parameters, nullable compensation,
+and Boolean controls. Intercepted readers and packaged consumers verify binding/materialization only.
+Shifts remain separate local development. Oracle OR/XOR and UInt64 splitting repeat operands; volatile
+single evaluation is not promised. Actual server results/coercion, physical BITAND limits and runtime
+overflow remain live gates. Arbitrary converter transformations are not CLR bitwise equivalence.
+Overflowing/narrowing and signedness-changing explicit casts have separate CLR wrapping/range semantics;
+this slice's canonical MySQL CAST syntax does not establish those broader conversion contracts.
+
 ## Tracked writes
 
 A modification batch contains one row operation. This permits command-level affected-row checks and keeps the

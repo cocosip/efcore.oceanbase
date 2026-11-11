@@ -1913,6 +1913,72 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
         [InlineData(OceanBaseCompatibilityMode.Oracle, true, false)]
         [InlineData(OceanBaseCompatibilityMode.Oracle, false, true)]
         [InlineData(OceanBaseCompatibilityMode.Oracle, true, true)]
+        public async Task Bitwise_commands_refresh_parameters_and_read_synthetic_signed_unsigned_enum_and_null_results(
+            OceanBaseCompatibilityMode mode, bool async, bool relationalNulls)
+        {
+            using var table = new DataTable();
+            foreach (var column in new[] { "And", "Or", "Xor", "Not", "Optional", "Unsigned", "WideAnd", "Flags", "Promoted", "Converted", "PromotedBinary" })
+                table.Columns.Add(column, typeof(object));
+            // Supplied values exercise client reading only; they do not evaluate the SQL or its predicate.
+            table.Rows.Add(-3m, -1m, -4m, 2m, DBNull.Value, (decimal)uint.MaxValue,
+                9223372036854775808m, 254m, -2m, -4m, 511m);
+            var commands = new CommandCapture { Results = table };
+            await using var context = CreateContext(mode, commands, relationalNulls);
+            var mask = -3;
+            var wideMask = 9223372036854775808UL;
+            var query = context.Set<ArithmeticRow>().Where(row => (row.Value & mask) != 0)
+                .Select(row => new { And = row.Value & mask, Or = row.Value | mask, Xor = row.Value ^ mask,
+                    Not = ~row.Value, Optional = row.Optional ^ mask, Unsigned = ~row.Unsigned,
+                    WideAnd = row.UnsignedWide & wideMask, Flags = ~row.Flags,
+                    Promoted = ~(int)row.Flags, Converted = row.Converted ^ mask, PromotedBinary = row.Byte | 256 });
+            foreach (var values in new[] { (-3, 9223372036854775808UL), (-7, ulong.MaxValue) })
+            {
+                (mask, wideMask) = values;
+                commands.Values.Clear();
+                var result = Assert.Single(async ? await query.ToListAsync() : query.ToList());
+                Assert.Equal(-3, result.And);
+                Assert.Equal(-1, result.Or);
+                Assert.Equal(-4, result.Xor);
+                Assert.Equal(2, result.Not);
+                Assert.Null(result.Optional);
+                Assert.Equal(uint.MaxValue, result.Unsigned);
+                Assert.Equal(9223372036854775808UL, result.WideAnd);
+                Assert.Equal((ByteFlags)254, result.Flags);
+                Assert.Equal(-2, result.Promoted);
+                Assert.Equal(-4, result.Converted);
+                Assert.Equal(511, result.PromotedBinary);
+                var sql = commands.Sql[^1];
+                Assert.Contains("WHERE", sql);
+                Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? " ^ " : "BITAND(", sql);
+                Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? " & 255" : "255 -", sql);
+                if (mode == OceanBaseCompatibilityMode.MySql)
+                {
+                    Assert.Equal(7, commands.Values.Count);
+                    Assert.Equal(new[] { (decimal)mask, mask, mask, mask, (decimal)wideMask, mask, mask },
+                        commands.Values.Select(value => Convert.ToDecimal(value)).ToArray());
+                    Assert.DoesNotContain("@", sql);
+                }
+                else
+                {
+                    // EF retains separate native/converted/nullable mapping-specific named parameters.
+                    Assert.Equal(5, commands.Values.Count);
+                    Assert.Single(commands.Values, value => Convert.ToDecimal(value) == wideMask);
+                    Assert.Equal(4, commands.Values.Count(value => Convert.ToDecimal(value) == mask));
+                    Assert.Contains("TRUNC(", sql);
+                    Assert.Contains("MOD(", sql);
+                }
+            }
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false, true)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true, true)]
         public async Task String_concat_commands_bind_parameters_and_materialize_synthetic_native_results(
             OceanBaseCompatibilityMode mode, bool async, bool relationalNulls)
         {
@@ -3256,7 +3322,14 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
             public int? Optional { get; set; }
             public int Converted { get; set; }
             public decimal Fraction { get; set; }
+            public uint Unsigned { get; set; }
+            public ulong UnsignedWide { get; set; }
+            public ByteFlags Flags { get; set; }
+            public byte Byte { get; set; }
         }
+
+        [Flags]
+        private enum ByteFlags : byte { Low = 1 }
 
         private sealed class BinaryRoundRow
         {
