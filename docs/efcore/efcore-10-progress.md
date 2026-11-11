@@ -11,6 +11,44 @@ each small group. Real database integration/tests and EF8/EF9 adaptation are exp
 [local development plan](efcore-10-local-development-plan.md) tracks the full remaining inventory, including
 an audit of locally feasible deferred families. Finishing one batch does not finish the overall goal.
 
+### Official relational model specifications checkpoint (2026-11-11)
+
+Batch8a afterd264667 adds the separate solution SpecificationTests project consuming the official
+Microsoft.EntityFrameworkCore.Relational.Specification.Tests package. The adapter derives complete
+inherited generic model families and uses real OceanBase services, conventions, validation, type
+mapping and diagnostic definitions in each mode. No provider assertion overrides, exclusions or skips
+were added. An EF connection-opening interceptor rejects sync/async access before network execution;
+two adapter tests verify the real service assemblies, enforced mode and rejection in both modes.
+
+| Official model family | MySQL passing | Oracle passing |
+| --- | --- | --- |
+| One-to-many | 90 | 90 |
+| Many-to-one | 59 | 59 |
+| One-to-one | 142 | 142 |
+| Many-to-many | 36 | 36 |
+| Inheritance | 31 | 31 |
+| Owned types | 75 | 75 |
+
+The inherited total is866, plus two adapter guards:868 specification tests, zero failures/skips.
+Full solution Debug/Release and isolated EF10.0.14 Release each pass3329=1644 unit+815 functional+
+868 specification+2 consumer tests, zero failures/skips. Both selected dependency graphs resolve the
+matching official specification, relational and core packages; baseline source assets remain10.0.0.
+Evidence: artifacts/specification-{restore,first,debug,release,patch}.log and
+artifacts/specification-results/specification-first.trx, with specification-compat/ isolated assets.
+
+No production behavior/package dependency changed, so this test/solution integration does not require a
+new runtime pack or repeated same-package consumer probes. Existing database-management-r2 package
+evidence remains scoped to its tested implementation. CI now discovers this project through the same
+solution command; current hosted Windows/Linux execution remains unverified. The local adapter was
+reviewed independently before commit.
+
+These results establish the selected metadata/model-building contracts, including inherited metadata
+paths for deferred families; they do not establish their runtime query/write/DDL support. Other model
+families and official query/update/transaction/runtime specification fixtures remain local work.
+TST-01 and the overall EF10 goal stay open. The user confirms database addresses were already supplied;
+the missing live fixture/configuration integration is our implementation gap, not missing user access.
+No live DB/application, EF8/EF9, push or publication occurred.
+
 ### Explicitly owned MySQL database namespace checkpoint (2026-11-11)
 
 Batch7c after89dd02e adds typed/untyped EnableOceanBaseDatabaseManagement(databaseName), separate

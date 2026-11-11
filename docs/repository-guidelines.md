@@ -83,12 +83,20 @@ Required test layers are:
 5. Required live tests for claimed runtime features against at least one declared supported environment in each
    MySQL and Oracle mode. Additional proxy, TLS, HA and server-version environments extend the evidence matrix.
 
+The solution's SpecificationTests project currently runs six complete inherited official relational
+model-building families (one-to-many, many-to-one, one-to-one, many-to-many, inheritance and owned types)
+against the real provider in both modes. It blocks EF connection opening and is safe for ordinary offline
+CI execution. Other official runtime/query/write fixtures remain separate work; passing metadata tests
+does not advertise their corresponding DDL or database execution support.
+
 An unavailable database, proxy, TLS or authentication environment is recorded as an unverified boundary; it is
 not converted into a client pass or a client defect.
 
 ### Live-test credentials and ownership
 
-The user will provide database access later. Store local live-test connection strings with .NET User Secrets,
+The user confirms database addresses were already supplied (2026-11-11). Reuse that access when wiring
+live tests; the missing provider fixture is implementation work, not evidence that access was not supplied.
+Store local live-test connection strings with .NET User Secrets,
 outside the repository, using `ConnectionStrings:OceanBaseMySql` and `ConnectionStrings:OceanBaseOracle`.
 When adding the live-test fixture, assign its project a stable `UserSecretsId` and explicitly load User Secrets
 in test configuration; a test project does not load them automatically. The ID is public metadata, not a secret.

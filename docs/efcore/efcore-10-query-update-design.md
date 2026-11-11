@@ -937,6 +937,22 @@ partial tables, with no automatic DROP rollback. Concurrent creation/deletion is
 Local tests and packaged consumers prove client control flow only; native privileges, selected-server
 syntax, database-name rules/case, sessions and pool invalidation still require declared live evidence.
 
+### Official relational model specifications (TST-01 / MOD-01/02/03)
+
+Use the official Microsoft.EntityFrameworkCore.Relational.Specification.Tests EF10 package and its
+ModelBuilderTest generic wrappers. A separate solution project derives the complete relational
+one-to-many, many-to-one, one-to-one, many-to-many, inheritance and owned model families for each
+compatibility mode. RelationalTestHelpers configures real OceanBase options and provider services
+through public IDbContextOptionsExtension contracts, preserving provider conventions, mapping,
+validation and diagnostic definitions. Do not replace the type mapper or validator with permissive
+doubles. Model construction performs no connection opening; guard that boundary in the adapter.
+
+Retain upstream assertions and report upstream skip reasons. Any provider-specific exclusion must
+identify its exact inherited method and checklist limitation. Metadata conformance does not promote
+deferred query/write/schema support. Native DDL/CRUD and the comprehensive standalone live application
+remain separate from this offline official-suite adapter. Resolve the minimum EF10 package and a
+selected later patch in isolated trees; no new runtime/provider package dependency is introduced.
+
 ### Transactions and savepoints (TXN-01..03)
 
 OceanBaseBatchExecutor retains EF10's automatic transaction selection and modification-command counts but owns

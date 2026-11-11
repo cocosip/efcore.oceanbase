@@ -220,6 +220,35 @@ do not infer tenant creation or attribute this unimplemented profile to connecto
   and a table-only namespace note correction. Same unchanged package reruns pass both patches/modes;
   provider DLL identity remains unchanged. Local slice is ready for commit; overall goal stays active.
 
+## Batch8a brief: official relational model specification fixtures
+
+TST-01 / MOD-01/02/03 / DEF-07: consume the official EF10 relational specification package in a
+separate solution test project. Reuse the published ModelBuilderTest wrappers and relational bases;
+configure the real OceanBase provider, conventions, validator, type mapper and logging in both modes.
+This implements the existing Batch8 requirement, without creating the postponed live-test application.
+
+- Add the specification package to central versions with the same EF10 range; retain the provider's
+  EF10.0.0 baseline. Restore new test dependencies to a workspace-local package directory where needed.
+- Add a small RelationalTestHelpers adapter using public provider option/service extension contracts.
+  Run the complete inherited one-to-many, many-to-one, one-to-one, many-to-many, inheritance and owned
+  model families in MySQL and Oracle modes. Keep upstream assertions and inherited skips visible.
+- First run the fixtures to expose actual gaps; fix reproduced provider defects with covering RED to
+  GREEN tests. Do not weaken inherited assertions or mark failures skipped to obtain a green result.
+  Any genuine profile-specific exclusion needs an exact test name, reason and checklist mapping.
+- Run the new project and existing full Debug/Release suites plus isolated EF10.0.14. Confirm package
+  dependency versions and zero network/database calls in fixture execution. Review source/config/docs
+  independently, then commit locally. Repack runtime assets only if production code changes.
+- Model metadata success is not runtime query/write/DDL support for inheritance, splitting or skip
+  navigations; those remaining contracts and live evidence stay open. Live access was already supplied
+  according to the user; fixture/configuration wiring remains our work, not a missing-user-input gate.
+
+- Batch8a initial fixture run passes868=866 inherited+two adapter guards, zero failures/skips. Six
+  families per mode:90 one-to-many,59 many-to-one,142 one-to-one,36 many-to-many,31 inheritance,
+  75 owned. No provider assertion overrides/exclusions. Both mode services/mappings and sync/async
+  network rejection have direct adapter checks. Full Debug/Release/isolated14 each3329=1644+815+868+2
+  pass; matching official package graphs verified and baseline remains10.0.0. No production behavior
+  or runtime dependencies changed; no new pack/consumer rerun is needed for this test-only slice.
+
 ## Batch5a brief: tracked graph writes and composite concurrency
 
 UPD-01..05 and DIA-02: exercise real EF SaveChanges in both modes, sync/async, with commands intercepted
