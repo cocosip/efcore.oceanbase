@@ -638,6 +638,37 @@ rejection is covered sync/async through BasicRelationalTests and does not imply 
 cover Oracle's multi-column `RETURNING` path. A future strategy would require an explicit generation contract
 and separate tests.
 
+### Transactions and savepoints (TXN-01..03)
+
+Reuse EF10 RelationalConnection/RelationalTransaction and BatchExecutor for isolation, transaction ownership,
+begin/commit/rollback, command attachment, automatic transaction selection and savepoint recovery. The provider
+registers a mode-specific IRelationalTransactionFactory. MySQL keeps EF's transaction implementation unchanged.
+Oracle overrides ReleaseSavepoint/Async as a logical no-op: it sends no RELEASE SAVEPOINT SQL, preserves
+releasing/released/error diagnostics and interceptors, and honors pre-cancelled async tokens. Oracle savepoints
+remain available until replacement or transaction end; logical release is not physical server release.
+
+Creation and rollback retain EF's quoted SAVEPOINT / ROLLBACK TO statements, including escaped identifiers and
+__EFSavePoint. This path intentionally uses EF commands rather than the connector's narrower public savepoint
+name policy. Connector 0.2.0 (package repository commit4734781) explicitly rejects Oracle Release and requires
+names beginning with a letter. That API boundary is not reported as a connector defect; the provider must adapt
+EF's automatic-savepoint contract. No client test establishes a server-wide version/capability guarantee.
+
+EF starts a transaction for multiple row batches and for a single MySQL write requiring a follow-up generated
+read. Successful owned batches commit; a failed batch/readback disposes the active owned transaction without
+committing. Actual rollback then depends on native Dispose/DisposeAsync and requires live evidence. A caller
+transaction remains owned by the caller: SaveChanges uses an automatic savepoint, attempts rollback on failure,
+and leaves the transaction attached for retry. Cancellation during recovery, native rollback/dispose failure,
+ambient/distributed enlistment and server transaction state remain separate required work; callers must roll back
+or dispose a transaction whose recovery failed. Do not claim unconditional atomicity from command doubles.
+
+The authoritative EF contracts are [RelationalTransaction v10.0.0](https://github.com/dotnet/efcore/blob/v10.0.0/src/EFCore.Relational/Storage/RelationalTransaction.cs)
+and [BatchExecutor v10.0.0](https://github.com/dotnet/efcore/blob/v10.0.0/src/EFCore.Relational/Update/Internal/BatchExecutor.cs).
+TransactionTests replaces only IRelationalConnection with deterministic native connection/transaction/command
+doubles while retaining the provider's transaction factory, SQL, mappings and update batches. It checks client
+control flow, async tokens, ownership, transaction attachment, release diagnostics and failure/retry boundaries.
+The packed consumer checks the registered factory and Oracle logical release without opening a connection.
+These are neither native driver execution nor real rollback/savepoint evidence.
+
 Update and delete conditions include the original key and concurrency-token values selected by EF. A result other
 than exactly one affected row raises `DbUpdateConcurrencyException` with the affected entries. Provider exceptions
 are wrapped in `DbUpdateException`; cancellation remains `OperationCanceledException`. An already-cancelled async

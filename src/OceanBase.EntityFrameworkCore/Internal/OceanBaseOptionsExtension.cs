@@ -106,6 +106,9 @@ namespace OceanBase.EntityFrameworkCore.Internal
             builder.TryAdd<IRelationalCommandBuilderFactory>(serviceProvider =>
                 new OceanBaseRelationalCommandBuilderFactory(
                     serviceProvider.GetRequiredService<RelationalCommandBuilderDependencies>(), CompatibilityMode));
+            builder.TryAdd<IRelationalTransactionFactory>(serviceProvider =>
+                new OceanBaseRelationalTransactionFactory(
+                    serviceProvider.GetRequiredService<RelationalTransactionFactoryDependencies>(), CompatibilityMode));
             builder.TryAdd<ISqlGenerationHelper>(serviceProvider =>
                 new OceanBaseSqlGenerationHelper(
                     serviceProvider.GetRequiredService<RelationalSqlGenerationHelperDependencies>(),

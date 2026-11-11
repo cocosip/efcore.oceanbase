@@ -11,6 +11,25 @@ each small group. Real database integration/tests and EF8/EF9 adaptation are exp
 [local development plan](efcore-10-local-development-plan.md) tracks the full remaining inventory, including
 an audit of locally feasible deferred families. Finishing one batch does not finish the overall goal.
 
+### Transactions and savepoints checkpoint (2026-11-11)
+
+Batch6b after456902f registers an EF10 transaction factory. Oracle release is a logical no-op with EF
+diagnostics/interceptors and async cancellation, avoiding unsupported RELEASE SAVEPOINT SQL; the savepoint
+survives until replacement or transaction end. Creation/rollback retain EF's quoted commands, including its
+internal __EFSavePoint name. MySQL and all begin/commit/rollback/ownership behavior stay inherited.
+
+TransactionTests adds38 cases using deterministic native doubles: ownership/disposal, isolation, async tokens,
+different-connection rejection, quoted savepoints, multi-batch commit/failure, caller transaction recovery/retry,
+and MySQL generated-readback attachment/failure. Four Oracle RED regressions fail before implementation;
+focused38 and full Debug/Release/isolated10.0.14 each pass2050 (1474 unit,574 functional,two consumers), zero
+failures/skips. Same baseline-built transactions-20261111 nupkg passes content, both-mode/patch consumers,
+package-only assets and assembly identity. Baseline assets remain10.0.0. Independent review approves with no
+actionable findings. Evidence: artifacts/transactions-*.log, transactions-compat/, transactions-package/.
+
+This proves client transaction control flow only. Active native disposal must actually roll back on the server;
+native cleanup failure, cancellation recovery and live state remain open. Oracle release is a known mode
+difference, not a reproduced connector defect. No database execution or standalone live test program added.
+
 ### Generated readback shape checkpoint (2026-11-11)
 
 Batch5d adds two MySQL sync/async cases for a composite key with two generated identity columns. Both fail

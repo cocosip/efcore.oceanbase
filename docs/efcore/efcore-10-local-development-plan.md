@@ -86,6 +86,27 @@ do not prove Connector/server behavior. Run full Debug/Release/isolated14, same-
 patches/modes, independent review, update evidence and commit. Broader transaction/lifecycle/live work
 remains open; EF8/EF9 are postponed.
 
+## Batch6b brief: transactions, savepoints and batch ownership
+
+TXN-01..03 / CON-03: continue in the existing authorized efcore/10.0 checkout. Reuse EF10's transaction
+implementation for begin/commit/rollback, enlistment and command attachment. A test-only relational connection
+with deterministic native connection/transaction/command doubles exercises the actual provider batch executor;
+it does not establish native connector state or server rollback. Keep the standalone live test program postponed
+at the user's explicit request on 2026-11-11.
+
+- Pin owned versus borrowed transaction disposal, same-connection validation, isolation and async tokens.
+- Pin automatic transaction selection for multiple batches and MySQL generated-value follow-up reads, failure
+  before commit, disposal, and caller-owned transaction savepoint/rollback/release with retry.
+- RED: Oracle releases must not send RELEASE SAVEPOINT. Register a mode-specific transaction factory and
+  override only Oracle release as a logical no-op, leaving creation and rollback SQL with EF's quoted helper.
+  Preserve transaction diagnostics/interceptors for the logical release; check async cancellation before it.
+  Oracle cannot physically discard an individual savepoint; it survives until replaced or transaction end.
+- The connector 0.2.0 public savepoint API rejects Oracle Release and restricts names, including EF's internal
+  __EFSavePoint. Retain EF's command-based create/rollback rather than changing driver API contracts. This is
+  a provider integration difference, not evidence of a driver defect. Live native state remains unverified.
+- Run focused RED/GREEN, full Debug/Release/isolated EF10.0.14, same-package both-mode/patch consumers after
+  production changes, independent read-only review, docs and a local commit. No network database execution.
+
 ## Batch5a brief: tracked graph writes and composite concurrency
 
 UPD-01..05 and DIA-02: exercise real EF SaveChanges in both modes, sync/async, with commands intercepted
@@ -578,6 +599,20 @@ explicit supported duplication contract, not inference from Scale's ambiguous ze
    update remaining boundaries, then commit. No database, EF8/EF9 or publication work.
 
 ## Execution record
+
+- Batch6b after456902f: TransactionTests adds38 cases for both-mode sync/async transaction ownership,
+  isolation/commit/rollback, different-connection rejection, savepoints, multi-batch failures/retry and MySQL
+  generated readback enlistment/failure. Four corrected RED cases reproduce Oracle RELEASE SAVEPOINT SQL;
+  the registered transaction factory now treats Oracle release as a logical no-op with cancellation and
+  diagnostics/interceptors, leaving other transaction behavior inherited. Focused38 and full Debug/Release/
+  isolated EF10.0.14 each2050=1474+574+2 pass, zero failures/skips. Same baseline-built transactions-20261111
+  package passes content/both-mode consumers at both patches, package-only graph and identical provider hashes.
+  Baseline assets stay10.0.0. The preceding graph-update package fails the new Oracle smoke when base
+  release tries to create a native command with the synthetic borrowed transaction, confirming the no-command
+  boundary (not a server failure). Independent read-only review approves without findings. Evidence:
+  artifacts/transactions-*.log, artifacts/transactions-compat/, artifacts/transactions-package/.
+  No native/server rollback, wire cancellation, live DDL or standalone live program claim. Required TXN rows
+  remain partial for native state/recovery/cancellation and live acceptance. EF8/EF9, push/publication excluded.
 
 - Batch5b: CommandExecutionBoundaryTests adds eight both-mode timeout/cancellation/retry cases. `SetCommandTimeout(17)`
   reaches the intercepted command; sync/async in-flight cancellation preserves the original exception and token,
