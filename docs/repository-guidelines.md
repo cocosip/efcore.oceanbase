@@ -98,7 +98,9 @@ The user confirms database addresses were already supplied (2026-11-11). Reuse t
 live tests; the missing provider fixture is implementation work, not evidence that access was not supplied.
 Store local live-test connection strings with .NET User Secrets,
 outside the repository, using `ConnectionStrings:OceanBaseMySql` and `ConnectionStrings:OceanBaseOracle`.
-When adding the live-test fixture, assign its project a stable `UserSecretsId` and explicitly load User Secrets
+The current local environment stores these keys plus `ConnectionStrings:OceanBaseOracleManagement`
+under User Secrets ID `OceanBase.EntityFrameworkCore.LiveTests`; the values are never repository content.
+When adding the live-test fixture, use that stable `UserSecretsId` and explicitly load User Secrets
 in test configuration; a test project does not load them automatically. The ID is public metadata, not a secret.
 This is the agreed fixture contract; the current intercepted tests do not load secrets or connect to a server.
 

@@ -12,6 +12,43 @@ each small group. Real database integration/tests and EF8/EF9 adaptation are exp
 [local development plan](efcore-10-local-development-plan.md) tracks the full remaining inventory, including
 an audit of locally feasible deferred families. Finishing one batch does not finish the overall goal.
 
+### Oracle owned user/schema lifecycle checkpoint (2026-11-11)
+
+Batch7f follows `698e30c`. Typed/untyped `EnableOceanBaseUserManagement(userName, Func<string>)`
+explicitly owns an Oracle user and all its schema objects. It requires a closed matching target login,
+a different independent administration login and the explicit management factory. Owned names exclude
+tenant-routing `@` and protected system users. Successful exact bound SYS.DBA_USERS probes establish
+absence; Oracle errors never use MySQL's unknown-database classification. CREATE USER is followed by
+only CREATE SESSION/CREATE TABLE grants; DROP USER targets exactly the quoted user with CASCADE.
+Existing users retain passwords/privileges and use existing-schema table creation. Namespace DDL remains
+non-atomic, so later failures require explicit repair instead of automatic destructive rollback.
+
+The password callback runs only for creation; unsupported quote/control/empty encodings reject before DDL.
+EF10 RelationalCommand.LogCommandText protects built-in command logs, including sensitive/error logging;
+trusted interceptors can still inspect executable SQL. Published Connector0.2.0 diagnostics and pinned
+V4.3.5 CREATE/DROP/GRANT/DBA_USERS docs were inspected. No native interoperability claim follows.
+
+Fourteen new options and 56 intercepted cases cover mode/scope/ownership, catalog values, SQL/binds,
+quoted names, callback timing, minimum grants, existing empty/populated users, target preservation,
+timeouts, cancellation, caller transactions, error identity, cleanup and log redaction. Missing-API,
+cross-mode error classification and routed-name regressions were observed failing before their fixes.
+Independent review identified the routed-name ambiguity; its regression/fix is verified and no actionable
+findings remain. A full-suite fixture cache threshold was resolved by isolating this test fixture's services.
+
+Final default EF10.0.0 Debug/Release and isolated EF10.0.14 Release each pass **3590** tests:
+1670 unit + 1050 intercepted functional + 868 model specification + two project-consumer cases,
+zero failures/skips, with warnings-as-errors enabled. The isolated snapshot was explicitly rebuilt
+to avoid retaining an older test assembly. Evidence: `artifacts/oracle-user-{red,error-code-red,routing-red,
+focused,options,debug,release,patch,patch-rebuild}.log`.
+
+The baseline-built `10.0.0-oracle-user-20261111` nupkg passes contents and both-mode manual consumers
+at EF10.0.0/10.0.14, including sync/async Oracle user lifecycle/redacted logs, package-only graphs and
+baseline Release DLL identity: SHA-256 `54C9C8EDEF396036DF1FC9B95096D7CE9304C4B875A8CA4E40A1258AD897A0EB`.
+Evidence: `artifacts/oracle-user-package.log` and `artifacts/verify-oracle-user-package.ps1`.
+The user-supplied live connections were saved outside the repository under User Secrets ID
+`OceanBase.EntityFrameworkCore.LiveTests`; no values were committed or printed. No live execution,
+EF8/EF9 adaptation, push or publication occurred. The overall EF10 goal remains incomplete.
+
 ### Default dependency audit gate restored (2026-11-11)
 
 Batch8b follows `9fa3fd0`. Default restore reproduced NU1902/NU1903 failures from the official
@@ -26,7 +63,7 @@ the original three runtime dependencies. Evidence: `artifacts/dependency-audit-{
 and `artifacts/dependency-audit-package/`. No new runtime functionality or live acceptance is claimed;
 the previous selected-patch and manual packed-consumer results remain historical and were not rerun here.
 Independent read-only review found no actionable issues in the diff, assets, logs or package boundary.
-Oracle namespace lifecycle remains the next functional module.
+At this checkpoint Oracle namespace lifecycle was the next functional module, completed locally by Batch7f above.
 
 ### Explicit management connection checkpoint (2026-11-11)
 
@@ -65,29 +102,24 @@ CI, catches errors and exits normally. No intentional crash or old-package negat
 Evidence: `artifacts/management-profile-{red,debug,release,patch,package}.log`, focused/options/functional
 logs and `artifacts/verify-management-profile-package.ps1`. Baseline assets remain EF10.0.0.
 
-### Resume here: Oracle namespace lifecycle and remaining EF10 work
+### Resume here: remaining EF10 local inventory
 
-1. Recheck branch/worktree and saved commit before editing. Batch7e management factories are implemented;
-   do not repeat them or the completed bulk-update work. Current source/test/package evidence is above;
+1. Recheck branch/worktree and saved commit before editing. Batch7f Oracle user lifecycle, Batch7e management
+   factories and bulk-update rewrites are implemented; do not repeat them. Current evidence is above;
    older sections below are historical checkpoints, not a new implementation backlog.
-2. Implement Oracle user/schema creation/deletion using the explicit independent management connection.
-   This is **not implemented** by Batch7e. Decide the credential-DDL logging contract before coding:
-   `CREATE USER ... IDENTIFIED BY ...` contains a password in SQL, so ordinary EF command logging cannot
-   receive that text. Do not assume password binds or ordinary identifier escaping handle passwords.
-   Establish exact catalog/absence error classification, target schema/login semantics, required grants,
-   scoped CASCADE deletion, pool effects and primary-error/cancellation/cleanup behavior.
-3. Reuse pinned public V4.3.5 docs at commit `2a5ae3a23a51729d065cec716508eb26cb064106`:
-   cached create/drop-user docs and `docs-tree.json` are under `artifacts/bulk-oracle-source/`.
-   Verify public Connector0.2.0 behavior from its package (ilspycmd is available); the adjacent local
-   connector source has not been established as identical to that package. No new driver/server defect
-   has been demonstrated. Research is incomplete, not an external access blocker.
+2. Continue QRY-03/04/06/07/11 and MAP-06/07: remaining general collection carriers and converter
+   projections, nonnumeric extrema, function/aggregate overloads and unsupported boundaries. Reuse
+   exact EF10 contracts; negative tests must not be mistaken for implementation of a feature family.
+3. Widen model/filter/materialization/graph-write contracts and official query/write/runtime specification
+   fixtures, then audit the full deferred inventory for locally feasible work. The pinned Oracle docs
+   and public assembly inspection remain under `artifacts/oracle-lifecycle-source/`; use public driver APIs.
 4. Continue the full checklist: remaining mapping/converter/collection/function combinations, wider
    model/filter/materialization contracts, advanced bulk variants, required runtime/specification coverage,
    then the documented deferred-family feasibility audit. Deferred labels do not complete the local goal.
    Migrations/tooling, JSON/complex types, advanced inheritance/splitting, split queries and retries/
    ambient/distributed transactions remain unimplemented or incomplete as listed in the checklist.
-5. Real database addresses were already supplied. Missing live configuration/fixtures are implementation
-   work, not missing user access. Keep the comprehensive standalone live-test program, live execution and
+5. Real database addresses were supplied again and stored in User Secrets. Missing live fixture integration
+   is implementation work, not missing user access. Keep the comprehensive standalone live-test program, live execution and
    EF8/EF9 postponed until the user resumes those phases. Do not infer driver/server support or defects
    from intercepted tests. No push, branch synchronization, tags or NuGet publication occurred.
 

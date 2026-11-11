@@ -58,6 +58,21 @@ one direct Xml reference if its dependency closes Pkcs as well; do not change pr
 - [x] Independently review the diff and dependency graphs, resolve findings, update checkpoint evidence
   and commit. Then continue the Oracle namespace lifecycle contract; this gate does not complete EF10.
 
+## Batch7f brief: Oracle owned user/schema lifecycle
+
+**Spec:** Oracle lifecycle section in efcore-10-technical-baseline.md. **IDs:** SCH-01/02/03, DIA-01, CFG-04.
+Implement in place on efcore/10.0, reusing the current creator, management factory and EF10 LogCommandText.
+
+- [x] Add failing typed/untyped options and sync/async functional cases for explicit Oracle user management,
+  exact scope, SYS.DBA_USERS binding, CREATE/GRANT/DROP order, absence and password log redaction.
+- [x] Extend options/clones and shared namespace orchestration; isolate only Oracle SQL/password handling
+  in OceanBaseDatabaseCreator.Oracle.cs. Preserve every MySQL guard and ownership contract.
+- [x] Cover invalid credentials/scopes/modes, callback timing, model prevalidation, failures/cleanup,
+  cancellation and target preservation. Run focused tests and then full Debug/Release and selected-patch
+  checks; validate the packed API/dependency boundary. Intercepted execution is not native acceptance.
+- [x] Independently review the completed module, resolve findings, update checklist/README/checkpoint and
+  commit only after the tests and review pass. Continue the remaining EF10 inventory afterward.
+
 ## Batch4a/4b/4c brief: relational model, graph materialization and filters
 
 Continue Batch 4 on the existing efcore/10.0 checkout. Reuse EF's relational conventions and

@@ -15,7 +15,8 @@ namespace OceanBase.EntityFrameworkCore.Storage
     internal sealed partial class OceanBaseDatabaseCreator(
         IRelationalConnection connection, IRawSqlCommandBuilder commands, ICurrentDbContext currentContext,
         IRelationalCommandDiagnosticsLogger logger, IDbContextOptions options,
-        RelationalConnectionDependencies connectionDependencies) : IRelationalDatabaseCreator
+        RelationalConnectionDependencies connectionDependencies,
+        RelationalCommandBuilderDependencies commandDependencies) : IRelationalDatabaseCreator
     {
         private readonly OceanBaseCompatibilityMode _mode = options.FindExtension<Internal.OceanBaseOptionsExtension>()!.CompatibilityMode;
 
@@ -91,7 +92,7 @@ namespace OceanBase.EntityFrameworkCore.Storage
                 : (long)OceanBaseNumericConversion.ConvertValue(value, typeof(long)) > 0;
 
         private static NotSupportedException SchemaNotSupported()
-            => new("Namespace management requires EnableOceanBaseDatabaseManagement for an owned MySQL database. Oracle user/schema creation and deletion are not implemented. Use EnableOceanBaseSchemaManagement for existing-schema table creation.");
+            => new("Namespace management requires EnableOceanBaseDatabaseManagement for an owned MySQL database or EnableOceanBaseUserManagement and an independent management factory for an owned Oracle user/schema. Use EnableOceanBaseSchemaManagement for existing-schema table creation.");
 
         public void Create() => ManageDatabase(delete: false, checkExists: false);
         public async Task CreateAsync(CancellationToken cancellationToken = default)

@@ -20,6 +20,43 @@ range, unless a consumer dependency requires a higher version. A range permits c
 automatically test those upgrades. The package-consumer gate must record the SDK, runtime, resolved EF Core patch,
 provider package and connector.
 
+## Oracle owned user/schema lifecycle (Batch7f)
+
+SCH-01/02/03 and DIA-01: `EnableOceanBaseUserManagement(userName, Func<string> passwordFactory)`
+explicitly owns the entire Oracle user/schema, including objects outside the EF model. It requires
+`UseOceanBaseManagementConnection` with a fresh independent administration connection to the same tenant.
+The closed target must configure that exact login (optionally followed by its `@tenant` routing suffix)
+and no different initial schema. Owned names cannot contain `@`, keeping the user separate from login routing.
+SYS, SYSTEM, PUBLIC, LBACSYS and ORAAUDITOR cannot be owned. MySQL
+database ownership remains a separate option. Existing-schema table permission grants no user ownership.
+
+Use `SYS.DBA_USERS` with a bound exact username. Only a successful absent catalog result proves absence;
+authentication, permission, transport, catalog mismatch and concurrent DDL errors propagate. Administrators
+need catalog visibility and the documented user-creation/deletion and grant privileges. Create the quoted
+user, then grant only CREATE SESSION and CREATE TABLE; do not grant DBA/RESOURCE. Drop exactly the quoted
+user CASCADE. Clear the target pool before namespace DDL and again after success. Existing sessions in other
+processes and concurrent namespace operations remain the application's responsibility.
+
+The password callback runs only when a user will be created. Quote its value with double quotes; reject
+empty values, double quotes and control characters before DDL because the pinned public syntax does not establish
+an escaping contract for these inputs. Do not put credentials in options logs/cache identity. EF10's separate
+RelationalCommand.LogCommandText redacts the credential clause even with sensitive logging enabled; retain
+the normal execution/interceptor/timeout/cancellation pipeline. Trusted application command interceptors and
+diagnostic listeners can inspect executable SQL and must use LogCommandText for logging. Native Connector0.2.0
+diagnostics log metadata rather than SQL (checked from the published assembly). Exception messages and custom
+application observers remain trusted application boundaries; do not claim arbitrary observer redaction.
+
+DDL is non-atomic: failure after user creation or privilege grant can leave a user or tables requiring manual
+repair. Do not drop users automatically, change existing passwords, reconcile existing privileges or retry
+unknown outcomes. Prevalidate EnsureCreated's table plan before requesting administration credentials.
+Reuse existing scoped seeding, transaction rejection, cancellation and original-error/cleanup policy.
+Existing users follow the existing empty/populated-schema table profile. Real syntax, privileges, native
+session/pool effects, physical seeding and rollback remain live acceptance gates.
+
+Source contract: public V4.3.5 docs at oceanbase/oceanbase-doc commit
+`2a5ae3a23a51729d065cec716508eb26cb064106`, Oracle CREATE USER/DROP USER/GRANT/DBA_USERS, cached under
+`artifacts/oracle-lifecycle-source/`. Review exact Connector0.2.0 and EF10.0.0 assemblies, not adjacent driver source.
+
 ## Provider entry points
 
 The first implementation must establish these contracts:

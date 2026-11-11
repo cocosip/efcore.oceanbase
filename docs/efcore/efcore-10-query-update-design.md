@@ -964,8 +964,9 @@ reject before any command; dispose independent invalid results and attach any di
 original validation error. Factory exceptions retain identity. Existing command/open/disposal error and
 pool invalidation policies remain unchanged. There is no automatic retry or distributed DDL transaction.
 
-This supplies the independently privileged connection required by future Oracle CREATE/DROP USER;
-Oracle namespace lifecycle and password-DDL logging contracts are not implemented by Batch7e.
+Batch7f builds Oracle CREATE/DROP USER on this independently privileged connection. See the
+[Oracle lifecycle contract](efcore-10-technical-baseline.md#oracle-owned-userschema-lifecycle-batch7f)
+for explicit user ownership, catalog/privilege requirements and EF10 credential-log redaction.
 
 ### EnsureCreated seeding callbacks (SCH-02 / DEF-09)
 
@@ -975,7 +976,8 @@ receives the same context plus the schema operationsPerformed result. Both deleg
 only the matching one runs. Only the opposite delegate configured is an InvalidOperationException
 with CoreStrings.MissingSeeder; validate that mismatch before opening/DDL. Direct CreateTables,
 Create/Delete and script generation do not invoke callbacks. This also applies to existing-schema
-creation and explicitly owned MySQL namespaces; Oracle namespace provisioning remains separate work.
+creation and explicitly owned MySQL databases or Oracle users. Namespace DDL itself remains outside
+the owned seeding transaction and is not rolled back by a callback failure.
 
 Run the callback once after successful schema processing, including an already populated schema or
 empty model. Begin a fresh owned target transaction, verify the current actual scope inside that

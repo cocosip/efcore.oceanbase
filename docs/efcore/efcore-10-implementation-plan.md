@@ -65,10 +65,11 @@ clone preservation of converters/native bindings. Required live gates stay open.
 - EF Core and EF Core Relational dependencies use the NuGet range [10.0.0, 11.0.0).
 - MySQL and Oracle compatibility mode is explicit and participates in the model-cache key.
 - Connector protocol, pooling, TLS, authentication and connection-string parsing remain in OceanBaseConnector.
-- Migrations, reverse engineering, JSON, LOB locators, OBJECT/REF CURSOR mappings and bulk APIs are deferred;
+- Migrations, reverse engineering, JSON, LOB locators and OBJECT/REF CURSOR mappings are deferred;
+  ordinary bulk APIs now have local implementations, with wider variants tracked under DEF-03.
   ordinary string/byte-array LOB storage remains required acceptance work.
 - All public behavior must be tested locally; live database evidence is reported separately.
-- The user will supply database access later; local live credentials must use .NET User Secrets under the
+- Database access was supplied and saved outside the repository; live credentials use .NET User Secrets under the
   [repository credential/ownership contract](../repository-guidelines.md#live-test-credentials-and-ownership).
 - Commit each completed task with a Gitmoji Conventional Commit before starting the next task.
 

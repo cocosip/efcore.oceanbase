@@ -72,7 +72,31 @@ the required privileges, routing and TLS policy. The provider does not infer ten
 different user names or callbacks. Returning the target rejects without disposing it. A factory alone
 does not grant namespace ownership. Without a factory, the original provider-created string-only path
 still rejects native-only configuration changes, hooks and unverifiable hidden credentials.
-Oracle user/schema provisioning and deletion remain unimplemented.
+Oracle can explicitly own an entire user/schema with an independent administrator connection:
+
+```csharp
+optionsBuilder.UseOceanBase(connectionString, OceanBaseCompatibilityMode.Oracle)
+    .EnableOceanBaseUserManagement("application_user", () => passwordFromSecretStore)
+    .UseOceanBaseManagementConnection(() => new OceanBaseConnector.OceanBaseConnection(administrationConnectionString));
+```
+
+The closed target must configure that exact user login, optionally with its `@tenant` routing suffix,
+and no different initial schema. Pass the user name without `@`/tenant routing to the ownership option.
+The administrator must use a different login in the same tenant, with
+access to `SYS.DBA_USERS` and the privileges needed to create/drop users and grant CREATE SESSION and
+CREATE TABLE. Built-in system users cannot be owned. A successful catalog query establishes whether the
+exact user exists; permission/authentication errors and concurrent DDL failures propagate. Existing users
+keep their passwords/privileges and follow the existing-schema table-creation profile. `EnsureDeleted`
+drops the entire declared user with CASCADE, including objects outside the EF model.
+
+The password callback runs only for user creation. Empty values, double quotes and control characters
+are rejected before DDL. Built-in EF command logs redact credential SQL even with sensitive logging enabled.
+Application command interceptors/diagnostic listeners are trusted: they can inspect executable SQL and
+must log `LogCommandText` instead. Do not log callback/server exception messages containing credentials.
+User creation grants only CREATE SESSION and CREATE TABLE. A later grant/table failure can leave a user
+requiring manual repair; no automatic deletion, password reset or privilege reconciliation occurs. The
+provider clears the target pool before namespace DDL and again after success; other processes/sessions require
+application coordination. Oracle tenants themselves are never created or deleted.
 DDL is non-atomic: failed table creation can leave a new database or partial objects; no automatic
 drop rollback or retry occurs. Actual server syntax, privileges and pool effects need live validation.
 

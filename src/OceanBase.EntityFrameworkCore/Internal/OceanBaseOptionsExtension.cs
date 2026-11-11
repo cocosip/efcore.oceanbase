@@ -54,12 +54,14 @@ namespace OceanBase.EntityFrameworkCore.Internal
             SchemaManagementScope = copyFrom.SchemaManagementScope;
             DatabaseManagementEnabled = copyFrom.DatabaseManagementEnabled;
             ManagementConnectionFactory = copyFrom.ManagementConnectionFactory;
+            OracleUserPasswordFactory = copyFrom.OracleUserPasswordFactory;
         }
 
         public OceanBaseCompatibilityMode CompatibilityMode { get; private set; }
         public string? SchemaManagementScope { get; private set; }
         public bool DatabaseManagementEnabled { get; private set; }
         public Func<OceanBaseConnection>? ManagementConnectionFactory { get; private set; }
+        public Func<string>? OracleUserPasswordFactory { get; private set; }
 
         public OceanBaseOptionsExtension WithManagementConnectionFactory(Func<OceanBaseConnection> factory)
         {
@@ -71,7 +73,8 @@ namespace OceanBase.EntityFrameworkCore.Internal
         {
             ArgumentException.ThrowIfNullOrWhiteSpace(scope);
             if (scope.Contains('\0')) throw new ArgumentException("The schema management scope cannot contain NUL.", nameof(scope));
-            return new OceanBaseOptionsExtension(this) { SchemaManagementScope = scope, DatabaseManagementEnabled = false };
+            return new OceanBaseOptionsExtension(this)
+                { SchemaManagementScope = scope, DatabaseManagementEnabled = false, OracleUserPasswordFactory = null };
         }
 
         public OceanBaseOptionsExtension WithDatabaseManagementScope(string scope)
@@ -80,6 +83,19 @@ namespace OceanBase.EntityFrameworkCore.Internal
             if (scope.ToLowerInvariant() is "mysql" or "oceanbase" or "sys" or "information_schema" or "performance_schema")
                 throw new ArgumentException("System databases cannot be owned by EF database management.", nameof(scope));
             clone.DatabaseManagementEnabled = true;
+            return clone;
+        }
+
+        public OceanBaseOptionsExtension WithUserManagementScope(string scope, Func<string> passwordFactory)
+        {
+            ArgumentNullException.ThrowIfNull(passwordFactory);
+            var clone = WithSchemaManagementScope(scope);
+            if (scope.Contains('@'))
+                throw new ArgumentException("Specify an Oracle user name without its tenant routing suffix.", nameof(scope));
+            if (scope.ToUpperInvariant() is "SYS" or "SYSTEM" or "PUBLIC" or "LBACSYS" or "ORAAUDITOR")
+                throw new ArgumentException("System users cannot be owned by EF user management.", nameof(scope));
+            clone.DatabaseManagementEnabled = true;
+            clone.OracleUserPasswordFactory = passwordFactory;
             return clone;
         }
 

@@ -13,6 +13,7 @@ namespace PackageConsumer
     {
         public static void Run(OceanBaseCompatibilityMode mode)
         {
+            if (mode == OceanBaseCompatibilityMode.Oracle) VerifyOracleUsers();
             using var context = new SchemaContext(new DbContextOptionsBuilder<SchemaContext>()
                 .UseOceanBase("Server=offline;Database=must_not_connect", mode).Options);
             var script = context.Database.GenerateCreateScript();
@@ -132,6 +133,40 @@ namespace PackageConsumer
             Console.WriteLine($"{mode}: packed provider namespace ownership and management connection guards passed.");
         }
 
+        private static void VerifyOracleUsers()
+        {
+            foreach (var async in new[] { false, true })
+            {
+                var capture = new Capture();
+                var messages = new List<string>();
+                var passwordCalls = 0;
+                using var target = new OceanBaseConnector.OceanBaseConnection("Server=offline;User Id=owned@tenant");
+                OceanBaseConnector.OceanBaseConnection? management = null;
+                using (var context = new SchemaContext(new DbContextOptionsBuilder<SchemaContext>()
+                    .UseOceanBase(target, OceanBaseCompatibilityMode.Oracle)
+                    .EnableOceanBaseUserManagement("owned", () => { passwordCalls++; return "synthetic-private-password"; })
+                    .UseOceanBaseManagementConnection(() => management = new OceanBaseConnector.OceanBaseConnection("Server=offline;User Id=administrator@tenant"))
+                    .AddInterceptors(capture).LogTo(messages.Add).EnableServiceProviderCaching(false).Options))
+                {
+                    capture.Target = target;
+                    var created = async ? context.Database.EnsureCreatedAsync().GetAwaiter().GetResult() : context.Database.EnsureCreated();
+                    if (!created || passwordCalls != 1 || capture.Commands[1] != "CREATE USER \"owned\" IDENTIFIED BY \"synthetic-private-password\""
+                        || capture.Commands[2] != "GRANT CREATE SESSION, CREATE TABLE TO \"owned\"")
+                        throw new Exception("Packed Oracle user creation/grants failed.");
+                    if (string.Join("\n", messages).Contains("synthetic-private-password", StringComparison.Ordinal)
+                        || !string.Join("\n", messages).Contains("IDENTIFIED BY <redacted>", StringComparison.Ordinal))
+                        throw new Exception("Packed Oracle credential logging was not redacted.");
+                    var deleted = async ? context.Database.EnsureDeletedAsync().GetAwaiter().GetResult() : context.Database.EnsureDeleted();
+                    if (!deleted || passwordCalls != 1 || capture.Commands[^1] != "DROP USER \"owned\" CASCADE")
+                        throw new Exception("Packed Oracle user deletion failed.");
+                }
+                using var stillUsable = target.CreateCommand();
+                try { using var invalid = management!.CreateCommand(); throw new Exception("Packed management connection was not disposed."); }
+                catch (ObjectDisposedException) { }
+            }
+            Console.WriteLine("Oracle: packed owned user lifecycle and credential log redaction passed.");
+        }
+
         private sealed class Capture : DbConnectionInterceptor, IDbCommandInterceptor
         {
             public DbConnection? Management { get; private set; }
@@ -148,6 +183,13 @@ namespace PackageConsumer
             public InterceptionResult<object> ScalarExecuting(DbCommand command, CommandEventData eventData, InterceptionResult<object> result)
             {
                 Commands.Add(command.CommandText);
+                if (command.CommandText.StartsWith("SELECT USERNAME", StringComparison.Ordinal))
+                {
+                    VerifyManagementConnection(command);
+                    if (command.Parameters.Count != 1 || !Equals(command.Parameters[0].Value, "owned"))
+                        throw new Exception("Packed Oracle catalog scope was not bound.");
+                    return InterceptionResult<object>.SuppressWithResult(NamespaceExists ? "owned" : DBNull.Value);
+                }
                 if (command.CommandText.StartsWith("SELECT SCHEMA_NAME", StringComparison.Ordinal))
                 {
                     VerifyManagementConnection(command);
@@ -166,7 +208,9 @@ namespace PackageConsumer
             {
                 Commands.Add(command.CommandText);
                 if (command.CommandText.StartsWith("CREATE DATABASE", StringComparison.Ordinal)
-                    || command.CommandText.StartsWith("DROP DATABASE", StringComparison.Ordinal))
+                    || command.CommandText.StartsWith("DROP DATABASE", StringComparison.Ordinal)
+                    || command.CommandText.StartsWith("CREATE USER", StringComparison.Ordinal)
+                    || command.CommandText.StartsWith("DROP USER", StringComparison.Ordinal))
                 {
                     VerifyManagementConnection(command);
                     NamespaceExists = command.CommandText.StartsWith("CREATE", StringComparison.Ordinal);

@@ -94,7 +94,7 @@ namespace Microsoft.EntityFrameworkCore
         /// Enables creation and deletion of the entire named MySQL database, including non-model objects.
         /// Requires a closed target connection for that exact database. UseOceanBaseManagementConnection
         /// supplies explicit administration credentials/routing; without it, only an unchanged provider-created
-        /// string-configured connection without native hooks is supported. Oracle namespace management is not implemented.
+        /// string-configured connection without native hooks is supported. Oracle uses EnableOceanBaseUserManagement.
         /// </summary>
         public static DbContextOptionsBuilder EnableOceanBaseDatabaseManagement(
             this DbContextOptionsBuilder optionsBuilder, string databaseName)
@@ -111,6 +111,31 @@ namespace Microsoft.EntityFrameworkCore
             where TContext : DbContext
             => (DbContextOptionsBuilder<TContext>)(object)((DbContextOptionsBuilder)optionsBuilder)
                 .EnableOceanBaseDatabaseManagement(databaseName);
+
+        /// <summary>
+        /// Owns the entire named Oracle user/schema, including non-model objects; deletion uses CASCADE.
+        /// The owned user name must not contain tenant routing (@). Requires an independent
+        /// UseOceanBaseManagementConnection and a closed target with the exact user login.
+        /// The password factory is invoked only when creating a user. Empty passwords, double quotes and control
+        /// characters reject before DDL. EF command logs redact the password even with sensitive logging enabled;
+        /// trusted application interceptors can inspect executable SQL and must log LogCommandText instead.
+        /// Creation grants CREATE SESSION and CREATE TABLE. DDL failures can require manual cleanup.
+        /// </summary>
+        public static DbContextOptionsBuilder EnableOceanBaseUserManagement(
+            this DbContextOptionsBuilder optionsBuilder, string userName, Func<string> passwordFactory)
+        {
+            ArgumentNullException.ThrowIfNull(optionsBuilder);
+            var extension = GetOrCreateExtension(optionsBuilder).WithUserManagementScope(userName, passwordFactory);
+            ((IDbContextOptionsBuilderInfrastructure)optionsBuilder).AddOrUpdateExtension(extension);
+            return optionsBuilder;
+        }
+
+        /// <summary>Declares ownership of an entire Oracle user/schema for creation and CASCADE deletion.</summary>
+        public static DbContextOptionsBuilder<TContext> EnableOceanBaseUserManagement<TContext>(
+            this DbContextOptionsBuilder<TContext> optionsBuilder, string userName, Func<string> passwordFactory)
+            where TContext : DbContext
+            => (DbContextOptionsBuilder<TContext>)(object)((DbContextOptionsBuilder)optionsBuilder)
+                .EnableOceanBaseUserManagement(userName, passwordFactory);
 
         /// <summary>
         /// Supplies a fresh, closed management connection for each explicitly enabled namespace operation.

@@ -17,7 +17,9 @@ namespace OceanBase.EntityFrameworkCore.Storage
         private OceanBaseRelationalConnection ManagementConnection(out string scope, out OceanBaseConnection target)
         {
             var extension = options.FindExtension<Internal.OceanBaseOptionsExtension>()!;
-            if (_mode != OceanBaseCompatibilityMode.MySql || !extension.DatabaseManagementEnabled) throw SchemaNotSupported();
+            if (!extension.DatabaseManagementEnabled
+                || (_mode == OceanBaseCompatibilityMode.Oracle) != (extension.OracleUserPasswordFactory is not null))
+                throw SchemaNotSupported();
             if (connection.CurrentTransaction is not null || System.Transactions.Transaction.Current is not null
                 || connection is ITransactionEnlistmentManager { EnlistedTransaction: not null })
                 throw new NotSupportedException("Database namespace management cannot run inside a caller transaction.");
@@ -26,6 +28,11 @@ namespace OceanBase.EntityFrameworkCore.Storage
             if (target.State != ConnectionState.Closed)
                 throw new InvalidOperationException("Close the target connection before database namespace management.");
             scope = extension.SchemaManagementScope!;
+            if (_mode == OceanBaseCompatibilityMode.Oracle)
+            {
+                ValidateOracleTarget(target, scope);
+                return CreateManagementConnection(extension.ManagementConnectionFactory ?? throw SchemaNotSupported(), target);
+            }
             if (!string.Equals(target.Database, scope, StringComparison.Ordinal))
                 throw new InvalidOperationException("The configured database does not match the declared database management scope. No DDL was executed.");
             if (extension.ManagementConnectionFactory is { } factory)
@@ -63,6 +70,8 @@ namespace OceanBase.EntityFrameworkCore.Storage
                     throw new InvalidOperationException("The management connection factory must return a closed connection.");
                 if (_mode == OceanBaseCompatibilityMode.MySql && management.Database.Length != 0)
                     throw new InvalidOperationException("The MySQL management connection must not select a database.");
+                if (_mode == OceanBaseCompatibilityMode.Oracle && IsOracleLogin(management, options.FindExtension<Internal.OceanBaseOptionsExtension>()!.SchemaManagementScope!))
+                    throw new InvalidOperationException("Oracle administration must use a different login from the owned user.");
                 var extension = options.FindExtension<Internal.OceanBaseOptionsExtension>()!
                     .WithConnection(management, owned: true);
                 var managementOptions = new DbContextOptionsBuilder((DbContextOptions)options);
@@ -79,7 +88,9 @@ namespace OceanBase.EntityFrameworkCore.Storage
         }
 
         private RawSqlCommand NamespaceProbe(string scope)
-            => commands.Build("SELECT SCHEMA_NAME FROM information_schema.schemata WHERE SCHEMA_NAME = {0}", [scope]);
+            => commands.Build(_mode == OceanBaseCompatibilityMode.MySql
+                ? "SELECT SCHEMA_NAME FROM information_schema.schemata WHERE SCHEMA_NAME = {0}"
+                : "SELECT USERNAME FROM SYS.DBA_USERS WHERE USERNAME = {0}", [scope]);
 
         private RelationalCommandParameterObject ManagementParameters(IRelationalConnection management, RawSqlCommand? command = null)
             => new(management, command?.ParameterValues, null, currentContext.Context, logger, CommandSource.Unknown);
@@ -91,9 +102,10 @@ namespace OceanBase.EntityFrameworkCore.Storage
             throw new InvalidOperationException("The database catalog did not return the exact declared namespace. No DDL was executed.");
         }
 
-        private string NamespaceStatement(string scope, bool delete)
-            => (delete ? "DROP DATABASE " : "CREATE DATABASE ")
-                + currentContext.Context.GetService<ISqlGenerationHelper>().DelimitIdentifier(scope);
+        private IRelationalCommand NamespaceStatement(string scope, bool delete)
+            => _mode == OceanBaseCompatibilityMode.Oracle ? OracleUserStatement(scope, delete)
+                : commands.Build((delete ? "DROP DATABASE " : "CREATE DATABASE ")
+                    + currentContext.Context.GetService<ISqlGenerationHelper>().DelimitIdentifier(scope));
 
         private bool ManageDatabase(bool delete, bool checkExists)
         {
@@ -107,14 +119,19 @@ namespace OceanBase.EntityFrameworkCore.Storage
                     var probe = NamespaceProbe(scope);
                     var exists = ReadNamespace(probe.RelationalCommand.ExecuteScalar(ManagementParameters(management, probe)), scope);
                     if (!delete && exists) return false;
+                    if (delete && !exists && _mode == OceanBaseCompatibilityMode.Oracle) return false;
                     // Catalog visibility is permission-dependent; only DROP's unknown-database error proves absence.
                 }
+                var statement = NamespaceStatement(scope, delete);
                 OceanBaseConnection.ClearPool(target);
                 try
                 {
-                    commands.Build(NamespaceStatement(scope, delete)).ExecuteNonQuery(ManagementParameters(management));
+                    statement.ExecuteNonQuery(ManagementParameters(management));
+                    if (!delete && _mode == OceanBaseCompatibilityMode.Oracle)
+                        OracleUserGrant(scope).ExecuteNonQuery(ManagementParameters(management));
                 }
-                catch (OceanBaseException error) when (delete && checkExists && error.ServerErrorCode == 1008 && !error.IsExecutionOutcomeUnknown)
+                catch (OceanBaseException error) when (_mode == OceanBaseCompatibilityMode.MySql && delete && checkExists
+                    && error.ServerErrorCode == 1008 && !error.IsExecutionOutcomeUnknown)
                 {
                     return false;
                 }
@@ -145,15 +162,21 @@ namespace OceanBase.EntityFrameworkCore.Storage
                 {
                     var probe = NamespaceProbe(scope);
                     var value = await probe.RelationalCommand.ExecuteScalarAsync(ManagementParameters(management, probe), cancellationToken).ConfigureAwait(false);
-                    if (ReadNamespace(value, scope) && !delete) return false;
+                    var exists = ReadNamespace(value, scope);
+                    if (!delete && exists) return false;
+                    if (delete && !exists && _mode == OceanBaseCompatibilityMode.Oracle) return false;
                 }
+                var statement = NamespaceStatement(scope, delete);
                 OceanBaseConnection.ClearPool(target);
                 try
                 {
-                    await commands.Build(NamespaceStatement(scope, delete))
+                    await statement
                         .ExecuteNonQueryAsync(ManagementParameters(management), cancellationToken).ConfigureAwait(false);
+                    if (!delete && _mode == OceanBaseCompatibilityMode.Oracle)
+                        await OracleUserGrant(scope).ExecuteNonQueryAsync(ManagementParameters(management), cancellationToken).ConfigureAwait(false);
                 }
-                catch (OceanBaseException error) when (delete && checkExists && error.ServerErrorCode == 1008 && !error.IsExecutionOutcomeUnknown)
+                catch (OceanBaseException error) when (_mode == OceanBaseCompatibilityMode.MySql && delete && checkExists
+                    && error.ServerErrorCode == 1008 && !error.IsExecutionOutcomeUnknown)
                 {
                     return false;
                 }
