@@ -66,6 +66,15 @@ An open row is not automatically waiting for a database. Track the remaining wor
 Development resumed at the user's request (2026-11-10) on efcore/10.0. See the
 [progress handoff](efcore-10-progress.md) for saved state, remaining work and the exact resume point.
 
+EnsureCreated seeding checkpoint (Batch7d afterc1dc62d): matching sync/async callbacks run inside an
+owned target transaction after successful schema processing and an in-transaction scope check,
+including populated/empty-model false results.46 focused cases cover actual SaveChanges through
+stateful doubles, ordering/identity/tokens, mismatch, scope changes after DDL, failures and cleanup.
+Full Debug/Release/isolated14 each3375=1644+861+868+2 pass without failures/skips. Same seeding-20261111
+package passes both-mode/patch consumers, content, package-only graphs and DLL identity. Independent
+review has no outstanding findings. Physical transactions/DDL, namespace seed success and migration
+locking/retries remain open. No live execution or connector/server defect was established.
+
 Latest local write checkpoint: Batch5a after6714626 fixes unused NULL original predicate binds while
 retaining NULL writes.24 focused graph/composite-concurrency/error/cancellation cases and full Debug,
 Release/isolated14 each1986=1474+510+2 pass, no failures/skips. Same graph-update-20261111 nupkg passes
@@ -247,7 +256,7 @@ comparands and reject lossy writes before DML. Oracle DateTime DATE comparands p
 DateOnly and MySQL native transport limits retain their existing semantics. Independent review found no concrete
 defect. Live comparison, server coercion and session behavior remain open.
 
-The user will supply live database access later. Follow the
+Database addresses were already supplied by the user. Follow the
 [live-test credentials and ownership contract](../repository-guidelines.md#live-test-credentials-and-ownership):
 use .NET User Secrets for local connection strings and confirm the test-owned schema/cleanup scope before DDL.
 The live fixture and secret loading are still to be implemented; credentials are not needed for local tests.
@@ -425,7 +434,7 @@ Creating an Oracle tenant is never inferred.
 | ID | Requirement and acceptance criteria | Priority | MySQL | Oracle | Existing evidence / gap |
 | --- | --- | --- | --- | --- | --- |
 | SCH-01 | DatabaseFacade services resolve; existence checks distinguish absence from authentication, permission and network failures. | Required | In progress | In progress | Scoped creator/read-only probes/error classification and Batch6a shared failed-open rollback exist. Physical cleanup has deterministic double evidence; live absence/authentication/permission/network and cleanup evidence remain open. Schema DDL is separate. |
-| SCH-02 | EnsureCreated/GenerateCreateScript implement schema profile and key generation; existing populated schemas are handled explicitly. | Required | In progress | In progress | Existing-schema table profile covers both modes. Batch7c adds explicitly owned MySQL namespace creation, empty models and full plan validation before DDL; 59 additional lifecycle and six additional option cases. Oracle provisioning, custom management connections, seeding callbacks and native/live DDL remain open. |
+| SCH-02 | EnsureCreated/GenerateCreateScript implement schema profile and key generation; existing populated schemas are handled explicitly. | Required | In progress | In progress | Existing-schema tables and explicitly owned MySQL namespace creation are locally implemented. Batch7d adds matching sync/async EnsureCreated seeding, owned target transactions and scope rechecks, including populated/empty-model false results. Positive callback/SaveChanges tests use stateful doubles; namespace coverage verifies the DDL-to-transaction-start boundary only. Oracle provisioning, custom management profiles and native/live DDL/seeding remain open. |
 | SCH-03 | EnsureDeleted has an explicit ownership/deletion boundary, preserves tenant objects outside that boundary and fails clearly outside supported profile. | Required | In progress | Planned | Batch7c explicitly owns the entire named MySQL database, including non-model objects; independent verified management connection, quoted DROP, known-outcome error1008 absence and local failure/cleanup/cancellation coverage exist. Oracle namespace deletion and custom management profiles remain unimplemented; actual isolated-fixture deletion, privileges and pool/session effects need live proof. |
 
 ## Packages, compatibility and release evidence
@@ -456,7 +465,7 @@ are difficult to implement. Promoting a deferred feature requires its own design
 | DEF-06 | Stored-procedure modification mappings; provider-specific sequence/HiLo strategies | Deferred | Deferred | Parameter/result/generation contracts; reject unsupported mappings clearly. |
 | DEF-07 | TPH/TPT/TPC inheritance, table/entity splitting, many-to-many skip navigations | Deferred | Deferred | Model/query/update specification fixtures. |
 | DEF-08 | Split queries, lazy loading, compiled-model/tooling optimizations | Deferred | Deferred | Graph/lifetime/generated-model consumer tests. |
-| DEF-09 | EF seeding callbacks, execution-strategy retries, ambient/distributed transactions | Deferred | Deferred | Callback/DDL lifecycle, retry safety and transaction capability designs respectively. |
+| DEF-09 | EF seeding callbacks, execution-strategy retries, ambient/distributed transactions | In progress | In progress | EnsureCreated callbacks are locally implemented under SCH-02; physical rollback/commit remains unverified. Migrate-time callbacks/locking, execution-strategy retries and ambient/distributed transactions remain unimplemented; no serialization or retry guarantee. |
 | DEF-10 | Provider full-text/vector/search functions, advanced batching optimizations | Deferred | Deferred | Server-version contract and independent tests/benchmarks. |
 
 Ordinary string/byte-array scalar values remain required even when advanced LOB locator APIs are deferred.
@@ -474,7 +483,7 @@ not an automatic feature claim.
 | Complex-type/JSON changes | DEF-04 | Stay deferred until a tested mapping profile is promoted. |
 | LINQ/operator and parameterized-collection changes | QRY-03/06/07/11 | Enumerate supported translations and negative cases. |
 | ExecuteUpdate changes | DEF-03 | Stay deferred until independent acceptance suite exists. |
-| Seeding/schema lifecycle changes | SCH-02/DEF-09 | Separate schema support from unverified seeding callbacks. |
+| Seeding/schema lifecycle changes | SCH-02/DEF-09 | Distinguish local EnsureCreated callbacks from native/live behavior and unimplemented Migrate-time seeding/locking. |
 | Diagnostics/security changes | DIA-01/02 | Verify events and sensitive-data protection. |
 
 ## Definition of complete and development order

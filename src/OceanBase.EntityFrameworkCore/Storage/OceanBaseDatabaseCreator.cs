@@ -111,19 +111,33 @@ namespace OceanBase.EntityFrameworkCore.Storage
 
         public bool EnsureCreated()
         {
-            if (!DatabaseManagementEnabled) return CreateTables(onlyIfEmpty: true);
-            ValidateTableCreation();
-            var created = ManageDatabase(delete: false, checkExists: true);
-            return CreateTables(onlyIfEmpty: !created) || created;
+            ValidateSeeder(async: false);
+            bool created;
+            if (!DatabaseManagementEnabled) created = CreateTables(onlyIfEmpty: true);
+            else
+            {
+                ValidateTableCreation();
+                created = ManageDatabase(delete: false, checkExists: true);
+                created = CreateTables(onlyIfEmpty: !created) || created;
+            }
+            Seed(created);
+            return created;
         }
 
         public async Task<bool> EnsureCreatedAsync(CancellationToken cancellationToken = default)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            if (!DatabaseManagementEnabled) return await CreateTablesAsync(onlyIfEmpty: true, cancellationToken).ConfigureAwait(false);
-            ValidateTableCreation();
-            var created = await ManageDatabaseAsync(delete: false, checkExists: true, cancellationToken).ConfigureAwait(false);
-            return await CreateTablesAsync(onlyIfEmpty: !created, cancellationToken).ConfigureAwait(false) || created;
+            ValidateSeeder(async: true);
+            bool created;
+            if (!DatabaseManagementEnabled) created = await CreateTablesAsync(onlyIfEmpty: true, cancellationToken).ConfigureAwait(false);
+            else
+            {
+                ValidateTableCreation();
+                created = await ManageDatabaseAsync(delete: false, checkExists: true, cancellationToken).ConfigureAwait(false);
+                created = await CreateTablesAsync(onlyIfEmpty: !created, cancellationToken).ConfigureAwait(false) || created;
+            }
+            await SeedAsync(created, cancellationToken).ConfigureAwait(false);
+            return created;
         }
 
         private IReadOnlyList<string> CreateStatements(IModel model)
@@ -140,11 +154,6 @@ namespace OceanBase.EntityFrameworkCore.Storage
                 || connection is ITransactionEnlistmentManager { EnlistedTransaction: not null })
             {
                 throw new NotSupportedException("OceanBase schema DDL cannot run inside a caller transaction in this profile.");
-            }
-            var core = options.FindExtension<CoreOptionsExtension>();
-            if (core?.Seeder is not null || core?.AsyncSeeder is not null)
-            {
-                throw new NotSupportedException("OceanBase schema creation does not yet support seeding callbacks.");
             }
             var model = currentContext.Context.GetService<IDesignTimeModel>().Model;
             var tables = model.GetRelationalModel().Tables.Where(t => !t.IsExcludedFromMigrations);
@@ -165,7 +174,7 @@ namespace OceanBase.EntityFrameworkCore.Storage
             var scope = options.FindExtension<Internal.OceanBaseOptionsExtension>()!.SchemaManagementScope;
             if (value is not string actual || !string.Equals(actual, scope, StringComparison.Ordinal))
             {
-                throw new InvalidOperationException("The current database/schema does not match the declared schema management scope. No DDL was executed.");
+                throw new InvalidOperationException("The current database/schema does not match the declared schema management scope.");
             }
         }
 

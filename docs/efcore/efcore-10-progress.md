@@ -11,6 +11,46 @@ each small group. Real database integration/tests and EF8/EF9 adaptation are exp
 [local development plan](efcore-10-local-development-plan.md) tracks the full remaining inventory, including
 an audit of locally feasible deferred families. Finishing one batch does not finish the overall goal.
 
+### EnsureCreated seeding callbacks checkpoint (2026-11-11)
+
+Batch7d afterc1dc62d implements matching UseSeeding/UseAsyncSeeding callbacks after successful
+EnsureCreated schema processing. Both delegates can coexist; only the matching one runs, while
+opposite-only configuration rejects before opening or DDL. The callback receives the context and
+operationsPerformed flag even when false for populated schemas or empty models. A fresh owned target
+transaction verifies the actual scope before application code, commits after callback success and
+disposes on all paths. Async forwards cancellation to begin/probe/callback/commit. Primary failures
+retain secondary disposal errors in Data["OceanBase.SeedingCleanupError"]. No automatic retry or DDL
+rollback is attempted; callbacks must be idempotent and concurrency-aware.
+
+SeedingTests adds46 cases across both modes with real SaveChanges pipeline work under stateful
+connection/command/transaction doubles. It covers delegate selection, flags/order/identity, empty
+models, DDL/probe/callback/commit/cleanup failures and cancellation after callback return. Four
+additional RED-to-GREEN cases remove the misleading "No DDL was executed" message when a scope
+change is detected after successful DDL. The owned MySQL namespace case retains native identity and
+proves DDL precedes a synthetic target transaction-start failure; positive physical namespace seeding
+is not established. Existing invalid-plan coverage now uses unsupported HasData model data rather
+than rejecting valid callback configuration. New test-only replacements avoid EF's process-wide
+provider cache: the initial full run exceeded its twenty-provider warning threshold, fixed by fixture
+isolation without changing production options or suppressing warnings globally.
+
+Final full Debug/Release at EF10.0.0 and isolated EF10.0.14 Release each pass3375=1644 unit+861
+functional+868 specification+two consumer tests, zero failures/skips. Focused46 pass. Evidence:
+artifacts/seeding-{focused,debug,release,patch,scope-red,prior-package,package}.log. Independent
+source/test/final-documentation review has no outstanding findings.
+
+The baseline-built 10.0.0-seeding-20261111 nupkg passes content, both-mode consumers on both patches,
+package-only dependency graphs and Release/package/consumer SHA-256 identity:
+8C211BACF7A83652DE439BADFA55F3042F592CC86647BA3D9B4BB6DF87095B34.
+SeedingSmoke covers callbacks/true-false flags/transactional scope/commit/disposal with native doubles.
+The preceding database-management-r2 package rejects the new callback smoke with a handled
+NotSupportedException and exit1, without Windows crash reporting. PackageConsumer remains manual and
+outside CI execution. Baseline assets remain EF10.0.0; no dependency range changes.
+
+SCH-02/DEF-09 remain incomplete: real DDL/transactions/rollback, Oracle namespace management,
+custom management profiles, Migrate-time seeding/locking, retries and ambient/distributed transactions
+remain work. Previously supplied database access is not the reason local features remain incomplete.
+No live database, EF8/9, push or publication occurred; no connector/server defect is demonstrated.
+
 ### Official relational model specifications checkpoint (2026-11-11)
 
 Batch8a afterd264667 adds the separate solution SpecificationTests project consuming the official
@@ -1064,12 +1104,12 @@ Continue in this order:
 
 1. Recheck efcore/10.0/worktree state and read the checklist plus this handoff.
 2. Continue the documented local query slices after the scalar checkpoint; audit newly exposed scalar gaps as needed.
-3. Define per-mode text/byte/session acceptance fixtures when live access is supplied. Cover empty/NULL,
+3. Define per-mode text/byte/session acceptance fixtures using the previously supplied access when the live phase resumes. Cover empty/NULL,
    supplementary characters, trailing spaces, byte capacity and ordinary LOB values; preserve query transport.
 4. Finish opened-connection ownership, diagnostics and cancellation, followed by the wider query/update/transaction
    and schema inventory. Repeat suites/package validation after provider changes.
 
-The user will provide live database access later. Save local connections with .NET User Secrets under
+The user has already supplied database addresses. Save local connections with .NET User Secrets under
 `ConnectionStrings:OceanBaseMySql` and `ConnectionStrings:OceanBaseOracle`; do not put values in source, shell
 history, documentation, logs or test artifacts. Add a stable public UserSecretsId and explicit secret loading to
 the future live fixture. Obtain the authorized test-owned database/schema and cleanup scope before live DDL.

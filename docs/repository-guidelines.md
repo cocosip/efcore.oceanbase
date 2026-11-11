@@ -108,7 +108,7 @@ disabled for live acceptance runs and redact connector errors before recording e
 local input path that avoids echoing them into tool output or shell history.
 
 Before tests create or delete objects, record the user-authorized database/schema and cleanup scope for each mode.
-Use only test-owned objects within that scope. Until access and scope are provided, live gates remain unverified;
+Use only test-owned objects within that scope. Until the live fixture and authorized scope are configured, live gates remain unverified;
 continue local implementation and tests without treating unavailable infrastructure as a successful acceptance run.
 
 ## Documentation and review

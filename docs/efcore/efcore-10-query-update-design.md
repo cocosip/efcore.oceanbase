@@ -871,8 +871,9 @@ through typed/untyped option clones without partitioning singleton services or m
 database or Oracle user/schema externally, with privileges to inspect/create the supported model objects.
 The option neither grants privileges nor creates an Oracle tenant, user or database.
 
-Before opening, require opt-in; reject current EF, enlisted or ambient transactions and either seeding callback;
-validate the full design-time DDL plan. Created tables and their FK principal tables must have no explicit schema
+Before opening, require opt-in; reject current EF, enlisted or ambient transactions and
+validate the full design-time DDL plan. EnsureCreated validates matching seeding delegates separately as described
+below; direct CreateTables does not invoke them. Created tables and their FK principal tables must have no explicit schema
 or the exact declared scope, including excluded principals. Explicit SQL default/computed/check expressions are
 trusted application SQL, so the scope option is not a sandbox for arbitrary model SQL or interceptors.
 
@@ -880,7 +881,8 @@ Hold one EF connection lease across SELECT DATABASE() (MySQL) or SELECT SYS_CONT
 FROM DUAL (Oracle), table detection and individual DDL commands. The actual scope must equal the declaration
 ordinally, including case. EnsureCreated returns false when any ordinary table exists; it does not reconcile a
 partially matching schema. Explicit IRelationalDatabaseCreator.CreateTables skips the emptiness check. An empty
-create plan returns false without opening. A missing namespace fails to open rather than being created implicitly.
+create plan returns false without opening for DDL; configured EnsureCreated seeding still opens a transaction and
+checks the actual scope. A missing namespace fails to open rather than being created implicitly.
 
 Async operations check pre-cancellation and pass the caller token through opening, probes and each DDL command.
 The final lease close has no cancellation token. Preserve the original DDL/cancellation exception if final close
@@ -936,6 +938,38 @@ manual cleanup. DDL is non-atomic and is not retried: a later table failure may 
 partial tables, with no automatic DROP rollback. Concurrent creation/deletion is not serialized.
 Local tests and packaged consumers prove client control flow only; native privileges, selected-server
 syntax, database-name rules/case, sessions and pool invalidation still require declared live evidence.
+
+### EnsureCreated seeding callbacks (SCH-02 / DEF-09)
+
+Consume EF10 CoreOptionsExtension.Seeder/AsyncSeeder as the official EF10.0.0 relational creator does:
+the synchronous EnsureCreated uses Seeder, the asynchronous variant uses AsyncSeeder, and the callback
+receives the same context plus the schema operationsPerformed result. Both delegates can coexist;
+only the matching one runs. Only the opposite delegate configured is an InvalidOperationException
+with CoreStrings.MissingSeeder; validate that mismatch before opening/DDL. Direct CreateTables,
+Create/Delete and script generation do not invoke callbacks. This also applies to existing-schema
+creation and explicitly owned MySQL namespaces; Oracle namespace provisioning remains separate work.
+
+Run the callback once after successful schema processing, including an already populated schema or
+empty model. Begin a fresh owned target transaction, verify the current actual scope inside that
+transaction before application code, invoke the callback and commit on success. Async forwards the
+caller token through begin, scope query, callback and commit, with pre-cancellation checks. DDL failure
+never invokes the callback. Caller/enlisted/ambient transactions retain the existing pre-open rejection.
+
+Dispose only the owned seed transaction; preserve a callback/probe/commit failure if disposal also
+fails, recording the secondary error as Data["OceanBase.SeedingCleanupError"]. Disposal after success
+reports its own failure. EF/native transaction disposal supplies rollback for uncommitted work; actual
+rollback, cleanup and unknown commit outcomes remain live evidence gates. Do not retry callbacks or
+undo preceding DDL. The inspected EF10 EnsureCreated contract does not acquire a migration lock;
+this profile adds no cross-process serialization, so application seeding must handle concurrent calls
+and be idempotent. Migrate-time locking/seeding/retry/distributed transaction support remains open.
+
+SeedingTests uses stateful connection/command/transaction doubles for positive both-mode callback and real
+SaveChanges pipeline coverage. Its owned-MySQL-namespace case retains the actual provider-created native identity
+and verifies that namespace/table DDL precedes a synthetic target transaction-start failure; it does not prove
+positive physical namespace seeding. A scope mismatch after successful DDL must not claim that no DDL ran.
+The package-only SeedingSmoke covers matching callbacks, true/false results, transactional scope checks and
+commit/disposal with native doubles; it does not contact a server. Test-only service replacements are isolated
+from EF's process-wide service-provider cache.
 
 ### Official relational model specifications (TST-01 / MOD-01/02/03)
 

@@ -220,6 +220,38 @@ do not infer tenant creation or attribute this unimplemented profile to connecto
   and a table-only namespace note correction. Same unchanged package reruns pass both patches/modes;
   provider DLL identity remains unchanged. Local slice is ready for commit; overall goal stays active.
 
+## Batch7d brief: EnsureCreated seeding callbacks
+
+SCH-02 / DEF-09: support EF10 UseSeeding/UseAsyncSeeding after successful EnsureCreated for both
+existing-schema modes and the owned MySQL namespace profile. Match the official EF10.0.0
+RelationalDatabaseCreator callback/context/operationsPerformed/owned-transaction contract; keep the
+existing explicit scope and caller-transaction guards. The source contract was inspected from the
+published EF10.0.0 assembly (artifacts/seeding-ef-source/).
+
+- Validate matching sync/async callback availability before DDL; when only the opposite delegate exists,
+  throw CoreStrings.MissingSeeder without opening. Do not run callbacks from CreateTables/Create/Delete.
+- Run the selected callback once after successful schema work, including populated-schema false and
+  empty models. Begin a new owned transaction on the target connection; recheck actual scope inside it
+  before invoking application code. Commit only after the callback returns successfully. Pass async
+  cancellation to begin/probe/callback/commit, and never retry callback or DDL automatically.
+- Dispose the owned transaction on all paths. Preserve callback/commit/scope errors over disposal;
+  attach a secondary failure as OceanBase.SeedingCleanupError. Native disposal/implicit rollback can
+  fail and remain live gates. A seed failure does not roll back already executed non-atomic DDL.
+- Add both-mode sync/async intercepted real SaveChanges coverage, return flags/order/transaction
+  identity, wrong delegates, failures/cancellation/cleanup, empty models/scope guards and retained
+  namespace behavior. Replace prior unsupported-seeding tests with the new precise contract.
+- Full Debug/Release/isolated14 and same-package/content/graph/hash gates, independent review, docs and
+  local commit. No migration lock, retry strategy, distributed transaction or live acceptance claim.
+
+Execution afterc1dc62d:46 new cases pass, including callback SaveChanges, wrong delegate prevalidation,
+false flags, transactional scope changes/probe failure, cancellation after return and cleanup. Initial
+full-suite provider-cache warning was traced to new test replacement combinations and fixed with
+fixture-only cache isolation. Full Debug/Release/isolated14 each3375=1644+861+868+2 pass, zero skips.
+Same seeding-20261111 package passes both modes/patches/content/graphs/DLL identity; prior package
+rejects the new callback smoke with handled exit1. Reviewer approved source/tests/docs with no
+outstanding findings. Evidence artifacts/seeding-*.log; provider/package SHA-256 recorded in progress.
+No live execution; namespace-positive callback and physical rollback/commit remain unproven.
+
 ## Batch8a brief: official relational model specification fixtures
 
 TST-01 / MOD-01/02/03 / DEF-07: consume the official EF10 relational specification package in a

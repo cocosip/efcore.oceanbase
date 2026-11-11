@@ -388,8 +388,8 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
         [Theory]
         [InlineData(false, "cross-scope")]
         [InlineData(true, "cross-scope")]
-        [InlineData(false, "seeder")]
-        [InlineData(true, "seeder")]
+        [InlineData(false, "model-data")]
+        [InlineData(true, "model-data")]
         public async Task Invalid_table_plans_reject_before_creating_a_database(bool async, string profile)
         {
             var capture = new Capture();
@@ -427,23 +427,24 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
             if (profile == "table-only") builder.EnableOceanBaseSchemaManagement(scope);
             else builder.EnableOceanBaseDatabaseManagement(scope);
             if (profile == "supplied") builder.UseOceanBase(new OceanBaseConnection(native.ConnectionString), OceanBase.EntityFrameworkCore.OceanBaseCompatibilityMode.MySql);
-            if (profile == "seeder") builder.UseSeeding((_, _) => throw new InvalidOperationException("Must not seed."));
-            return new TestContext(builder.Options, empty, profile == "cross-scope");
+            return new TestContext(builder.Options, empty, profile == "cross-scope", profile == "model-data");
         }
 
         public sealed class ShapeKey(ModelCacheKeyFactoryDependencies dependencies) : ModelCacheKeyFactory(dependencies)
         {
             public override object Create(DbContext context, bool designTime)
-                => (base.Create(context, designTime), ((TestContext)context).Empty, ((TestContext)context).CrossScope);
+                => (base.Create(context, designTime), ((TestContext)context).Empty, ((TestContext)context).CrossScope, ((TestContext)context).ModelData);
         }
 
-        private sealed class TestContext(DbContextOptions<TestContext> options, bool empty, bool crossScope) : DbContext(options)
+        private sealed class TestContext(DbContextOptions<TestContext> options, bool empty, bool crossScope, bool modelData) : DbContext(options)
         {
             public bool Empty => empty;
             public bool CrossScope => crossScope;
+            public bool ModelData => modelData;
             protected override void OnModelCreating(ModelBuilder model)
             {
                 if (!Empty) model.Entity<Row>().ToTable("Rows", CrossScope ? "other" : null);
+                if (ModelData) model.Entity<Row>().HasData(new Row { Id = 1 });
             }
         }
         private sealed class Row { public int Id { get; set; } }

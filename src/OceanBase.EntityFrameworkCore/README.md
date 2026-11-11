@@ -43,8 +43,14 @@ optionsBuilder.UseOceanBase(connectionString, OceanBaseCompatibilityMode.MySql)
 
 The current database/schema must match the declared name exactly, including case. `EnsureCreated` returns false
 if any ordinary table exists; it does not reconcile or upgrade existing schemas. DDL is not atomic and a failure
-can leave partially created objects requiring manual cleanup. Caller transactions and seeding callbacks are
-rejected. This option enables table creation only.
+can leave partially created objects requiring manual cleanup. Caller transactions are rejected. This option
+enables table creation only.
+
+`UseSeeding` and `UseAsyncSeeding` run after successful `EnsureCreated` schema processing, including when it
+returns false. Configure the callback matching the sync/async operation; configuring only the opposite callback
+fails before schema work. The callback runs in a new owned transaction after a fresh target-scope check. Failure
+disposes that transaction but does not undo preceding DDL. No migration lock or automatic retry is supplied;
+callbacks must handle concurrent calls and be idempotent. Physical rollback and commit behavior need live tests.
 
 For an application-owned MySQL database, `EnableOceanBaseDatabaseManagement("application_database")`
 also enables namespace creation and `EnsureDeleted`. It declares ownership of the **entire database**,

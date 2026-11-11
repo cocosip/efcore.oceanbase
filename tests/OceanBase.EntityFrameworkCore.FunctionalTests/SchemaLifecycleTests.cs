@@ -122,7 +122,7 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
 
         [Theory]
         [MemberData(nameof(Modes))]
-        public async Task Ambient_transactions_and_seeding_callbacks_are_rejected_before_open(OceanBaseCompatibilityMode mode, bool async)
+        public async Task Ambient_transactions_are_rejected_before_open(OceanBaseCompatibilityMode mode, bool async)
         {
             var capture = new Capture();
             await using var context = Create(mode, capture);
@@ -130,12 +130,6 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
             {
                 if (async) await Assert.ThrowsAsync<NotSupportedException>(() => context.Database.EnsureCreatedAsync());
                 else Assert.Throws<NotSupportedException>(() => context.Database.EnsureCreated());
-            }
-            foreach (var shape in new[] { "seeder", "async-seeder" })
-            {
-                await using var seeded = Create(mode, capture, shape);
-                if (async) await Assert.ThrowsAsync<NotSupportedException>(() => seeded.Database.EnsureCreatedAsync());
-                else Assert.Throws<NotSupportedException>(() => seeded.Database.EnsureCreated());
             }
             Assert.Equal(0, capture.Opens);
             Assert.Empty(capture.Commands);
@@ -242,8 +236,6 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
             var builder = new DbContextOptionsBuilder<TestContext>().UseOceanBase("Server=offline;Database=owned", mode)
                 .AddInterceptors(capture).ReplaceService<IModelCacheKeyFactory, ShapeKey>();
             if (shape != "no-opt-in") builder.EnableOceanBaseSchemaManagement("owned");
-            if (shape == "seeder") builder.UseSeeding((_, _) => throw new InvalidOperationException("Must not invoke seeder."));
-            if (shape == "async-seeder") builder.UseAsyncSeeding((_, _, _) => throw new InvalidOperationException("Must not invoke seeder."));
             if (shape == "cleanup") builder.ReplaceService<IRelationalConnection, CleanupConnection>();
             return new TestContext(builder.Options, shape);
         }
