@@ -14,6 +14,8 @@ namespace OceanBase.EntityFrameworkCore.Query
     internal sealed class OceanBaseSqlTranslatingExpressionVisitorFactory(
         RelationalSqlTranslatingExpressionVisitorDependencies dependencies) : IRelationalSqlTranslatingExpressionVisitorFactory
     {
+        internal const string LeftShiftMarker = "__oceanbase_internal_left_shift";
+        internal const string RightShiftMarker = "__oceanbase_internal_right_shift";
         private static readonly MethodInfo Least =
             ((Func<DbFunctions, int[], int>)RelationalDbFunctionsExtensions.Least<int>).Method.GetGenericMethodDefinition();
         private static readonly MethodInfo Greatest =
@@ -61,6 +63,16 @@ namespace OceanBase.EntityFrameworkCore.Query
         {
             protected override Expression VisitBinary(BinaryExpression expression)
             {
+                if (expression.Method is null && expression.NodeType is ExpressionType.LeftShift or ExpressionType.RightShift)
+                {
+                    if (Visit(expression.Left) is not SqlExpression value || Visit(expression.Right) is not SqlExpression count)
+                        return QueryCompilationContext.NotTranslatedExpression;
+                    var factory = Dependencies.SqlExpressionFactory;
+                    value = factory.ApplyDefaultTypeMapping(value);
+                    count = factory.ApplyDefaultTypeMapping(count);
+                    return factory.Function(expression.NodeType == ExpressionType.LeftShift ? LeftShiftMarker : RightShiftMarker,
+                        [value, count], nullable: true, argumentsPropagateNullability: [true, true], value.Type, value.TypeMapping);
+                }
                 if (expression.Method is null
                     && expression.NodeType is ExpressionType.And or ExpressionType.Or or ExpressionType.ExclusiveOr
                     && Unwrap(expression.Type) != typeof(bool))

@@ -11,6 +11,38 @@ each small group. Real database integration/tests and EF8/EF9 adaptation are exp
 [local development plan](efcore-10-local-development-plan.md) tracks the full remaining inventory, including
 an audit of locally feasible deferred families. Finishing one batch does not finish the overall goal.
 
+### Integer shift checkpoint (2026-11-11)
+
+Batch3v after e52a4d3 implements LINQ integer left/right shifts in both modes. It preserves C# small
+integer promotions, masks negative/oversized counts by31/63, handles signed32 wrap and signed right
+extension, and maps each count as Int32 independently of the left storage/result. EF10 SQL binary
+nodes reject shifts, so the relational visitor uses strict internal function markers with inherited
+NULL propagation; a focused generator partial emits native MySQL shifts or Oracle NUMBER identities.
+Oracle discards high bits before multiplication, keeping intermediates below2^65. Integer-exponent
+ObNumber POWER source uses repeated squaring; deployed native precision/results remain unverified.
+
+Initial RED32 cases confirm missing translation. A later exact SQL-prefix RED1 catches and fixes the
+MySQL signed32 CAST grouping; fragments alone would not prove that syntax. Final35 unit/8 intercepted
+cases pass, including malformed markers, count boundaries and Int32 binding, full-width synthetic
+readers, current parameters and NULL/non-NULL cache transitions. EF retains NULL within the shift
+formula instead of replacing the entire projection; assertions pin NULL masks and removed binds.
+Independent source/test/consumer review approves. Full Debug/Release and isolated EF10.0.14 Release
+each pass2260 (1564 unit,694 functional,two consumers), zero failures/skips. Evidence:
+artifacts/shift-{focused,debug,release,patch}-final.log, shift-red.log, shift-cast-red.log and shift-research/.
+
+The same baseline-built `10.0.0-shift-20261111` nupkg passes content checks and both-mode consumers
+at EF10.0.0/10.0.14, including changed captured counts and independent Int32 parameter metadata.
+Package-only dependency graphs and Release/package/consumer DLL hashes match:
+`A647275298ED6C2DA79B6AD43BF8F7F7CD41602902A4F0EFB903866450F5CF0D`.
+The preceding bitwise package fails the new shift predicate translation as intended. Source baseline
+assets remain EF10.0.0. Evidence: artifacts/shift-package-final.log, shift-old-package-red.log and shift-package/.
+
+A .NET10 compiler probe rejects expression-tree `>>>` with CS7053 before EF executes. This is a
+language boundary, not an ADO.NET defect or unsupported OceanBase server feature. No new public
+unsigned-right-shift function is introduced. Boolean XOR, broader numeric casts/overflow and wider
+query/model/write/schema/specification/deferred inventory still need local development. No live DB,
+standalone testing program, EF8/EF9, push or publication; the complete EF10 goal remains active.
+
 ### Integer bitwise checkpoint (2026-11-11)
 
 Batch3u after42e45a8 implements integer AND/OR/XOR/complement for both modes with lifted nullable

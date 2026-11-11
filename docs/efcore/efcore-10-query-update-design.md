@@ -623,6 +623,46 @@ overflow remain live gates. Arbitrary converter transformations are not CLR bitw
 Overflowing/narrowing and signedness-changing explicit casts have separate CLR wrapping/range semantics;
 this slice's canonical MySQL CAST syntax does not establish those broader conversion contracts.
 
+## Integer shift local contract
+
+QRY-01 extends integer expressions with `<<` and `>>`. C# first promotes small integers to Int32;
+Int32/UInt32 use count&31 and Int64/UInt64 use count&63, including negative/oversized counts. Preserve
+the original operand conversions and map the Int32 count independently of the left expression/result.
+Nullable operands/counts propagate NULL. Numeric integer converters retain stored-space semantics;
+text/floating/decimal/null-converting carriers are not supported for these operations.
+
+EF10 SqlBinaryExpression excludes shift nodes. The relational visitor constructs strict internal
+two-argument built-in function markers with the left type/mapping and true/true null propagation;
+the SQL generator renders them without sending a fictitious function to the server.
+
+MySQL shifts use native unsigned64 operators after count masking. Left32-bit results are masked to
+4294967295; signed32 results are rotated with XOR2147483648 then signed subtraction2147483648.
+Signed64 uses CAST AS SIGNED. Signed right shift uses CASE: negative values become
+`CAST(~((~value) >> maskedCount) AS SIGNED)`, nonnegative values use the native shift and signed cast.
+Unsigned right shift uses the native logical shift directly. Do not use floating division for Int64.
+
+Oracle right shift uses `FLOOR(value / POWER(2, maskedCount))`, including negative signed values.
+For left shift, b=2^(width-count), u=MOD(MOD(value,b)+b,b)*2^count. Discard high bits before multiplication,
+so u stays below2^width and normalization intermediates stay below2^65. Signed results use
+`MOD(u+2^(width-1),2^width)-2^(width-1)`. NUMBER literal arguments keep POWER on the numeric path.
+The public server source at5e8a63d29dae9fde5e962b8fcc7b167d438fc343,
+`src/sql/engine/expr/ob_expr_power.cpp`, selects ObNumber.power for Oracle NUMBER input rather than
+the MySQL double POW path. Its `deps/oblib/src/lib/number/ob_number_v2.cpp` integer-exponent path
+uses integer power by repeated squaring, preserving these small integer powers at NUMBER precision.
+This audit supports the translation design, not a deployed-server pass.
+The pinned MySQL bitwise operator documentation in the preceding section defines unsigned/logical
+native shifts and zero output for counts>=64; masking is therefore required for C# semantics.
+
+Acceptance: ShiftQueryTests pins mode/result width, sign extension/truncation/count masks, promotions,
+literal boundaries, nested queries, current captured values, NULL compensation and invalid storage.
+Intercepted command tests cover mapped/nullable signed/unsigned reader results and count transport;
+packaged consumers exercise the same translation seam. Native POWER/FLOOR/MOD precision, actual shift
+results and repeated volatile operand evaluation remain live/semantic boundaries. Arbitrary converter
+equivalence and overflowing explicit numeric casts remain separate contracts.
+C# expression trees cannot represent `>>>`: a .NET10 compiler probe fails with CS7053 before EF is
+invoked. This is a language-expression-tree boundary, not a connector/server defect; no fictitious
+LINQ translation or new public function is advertised for that operator.
+
 ## Tracked writes
 
 A modification batch contains one row operation. This permits command-level affected-row checks and keeps the

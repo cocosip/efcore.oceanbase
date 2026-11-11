@@ -7,7 +7,7 @@ using Microsoft.EntityFrameworkCore.Storage;
 
 namespace OceanBase.EntityFrameworkCore.Query
 {
-    internal sealed class OceanBaseQuerySqlGenerator : QuerySqlGenerator
+    internal sealed partial class OceanBaseQuerySqlGenerator : QuerySqlGenerator
     {
         private readonly OceanBaseCompatibilityMode _mode;
 
@@ -242,6 +242,10 @@ namespace OceanBase.EntityFrameworkCore.Query
 
         protected override Expression VisitSqlFunction(SqlFunctionExpression sqlFunctionExpression)
         {
+            if (sqlFunctionExpression.Name is OceanBaseSqlTranslatingExpressionVisitorFactory.LeftShiftMarker
+                or OceanBaseSqlTranslatingExpressionVisitorFactory.RightShiftMarker)
+                return GenerateShift(sqlFunctionExpression);
+
             if (sqlFunctionExpression.Name == OceanBaseMathTranslator.SingleResultMarker)
             {
                 var mapping = sqlFunctionExpression.TypeMapping;

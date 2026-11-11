@@ -1971,6 +1971,89 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
         }
 
         [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true)]
+        public async Task Shift_commands_keep_Int32_count_mapping_and_read_synthetic_promoted_full_width_results(
+            OceanBaseCompatibilityMode mode, bool async)
+        {
+            using var table = new DataTable();
+            foreach (var column in new[] { "Left", "Right", "WideLeft", "WideRight", "Unsigned", "UnsignedWide", "Optional", "Converted", "Promoted" })
+                table.Columns.Add(column, typeof(object));
+            // Synthetic values validate mapping/reading, independently of physical shift evaluation.
+            table.Rows.Add((decimal)int.MinValue, -1m, (decimal)long.MinValue, -1m,
+                (decimal)uint.MaxValue, (decimal)ulong.MaxValue, DBNull.Value, -2m, 256m);
+            var commands = new CommandCapture { Results = table };
+            await using var context = CreateContext(mode, commands);
+            var count = 0;
+            var query = context.Set<ArithmeticRow>().Where(row => (row.Value << count) != 0)
+                .Select(row => new { Left = row.Value << count, Right = row.Value >> count,
+                    WideLeft = row.Wide << count, WideRight = row.Wide >> count,
+                    Unsigned = row.Unsigned << count, UnsignedWide = row.UnsignedWide >> count,
+                    Optional = row.Optional >> row.OptionalCount, Converted = row.Converted << count,
+                    Promoted = row.Byte << count });
+            foreach (var value in new[] { 0, 31, 32, 63, 64, -1, int.MinValue, int.MaxValue })
+            {
+                count = value;
+                commands.Values.Clear();
+                commands.Inputs.Clear();
+                var result = Assert.Single(async ? await query.ToListAsync() : query.ToList());
+                Assert.Equal(int.MinValue, result.Left);
+                Assert.Equal(-1, result.Right);
+                Assert.Equal(long.MinValue, result.WideLeft);
+                Assert.Equal(-1L, result.WideRight);
+                Assert.Equal(uint.MaxValue, result.Unsigned);
+                Assert.Equal(ulong.MaxValue, result.UnsignedWide);
+                Assert.Null(result.Optional);
+                Assert.Equal(-2, result.Converted);
+                Assert.Equal(256, result.Promoted);
+                Assert.All(commands.Values, parameter => Assert.Equal(value, Assert.IsType<int>(parameter)));
+                Assert.All(commands.Inputs, parameter => Assert.Equal(DbType.Int32, parameter.DbType));
+                Assert.Equal(mode == OceanBaseCompatibilityMode.MySql ? 11 : 1, commands.Values.Count);
+                var sql = commands.Sql[^1];
+                Assert.Contains("WHERE", sql);
+                Assert.DoesNotContain("__oceanbase_internal_", sql);
+                Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? " & 31)" : "BITAND(:count, 31)", sql);
+                Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? " & 63)" : "BITAND(:count, 63)", sql);
+            }
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true)]
+        public async Task Shift_null_count_transitions_refresh_SQL_and_preserve_nullable_reader_results(
+            OceanBaseCompatibilityMode mode, bool async)
+        {
+            using var table = new DataTable();
+            table.Columns.Add("Value", typeof(object));
+            table.Rows.Add(DBNull.Value);
+            var commands = new CommandCapture { Results = table };
+            await using var context = CreateContext(mode, commands);
+            int? count = 1;
+            var query = context.Set<ArithmeticRow>().Select(row => row.Optional << count);
+            foreach (var value in new int?[] { 1, null, -1, 32, null, 63 })
+            {
+                count = value;
+                commands.Values.Clear();
+                Assert.Null(Assert.Single(async ? await query.ToListAsync() : query.ToList()));
+                var sql = commands.Sql[^1];
+                if (count is null)
+                {
+                    Assert.Empty(commands.Values);
+                    Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? "((NULL) & 31)" : "BITAND(NULL, 31)", sql);
+                }
+                else
+                {
+                    Assert.Equal(value, Assert.IsType<int>(Assert.Single(commands.Values)));
+                    Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? " << " : "MOD(MOD(", sql);
+                }
+            }
+        }
+
+        [Theory]
         [InlineData(OceanBaseCompatibilityMode.MySql, false, false)]
         [InlineData(OceanBaseCompatibilityMode.MySql, true, false)]
         [InlineData(OceanBaseCompatibilityMode.MySql, false, true)]
@@ -3326,6 +3409,8 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
             public ulong UnsignedWide { get; set; }
             public ByteFlags Flags { get; set; }
             public byte Byte { get; set; }
+            public long Wide { get; set; }
+            public int? OptionalCount { get; set; }
         }
 
         [Flags]

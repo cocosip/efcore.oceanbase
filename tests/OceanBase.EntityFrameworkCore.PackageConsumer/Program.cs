@@ -109,6 +109,31 @@ namespace PackageConsumer
                     if (!bitwiseSql.Contains(fragment, StringComparison.Ordinal))
                         throw new Exception($"Packed provider did not preserve integer bitwise semantics: {fragment}");
 
+                var shiftCount = -1;
+                var shiftQuery = context.Set<Row>().Where(row => (row.Id << shiftCount) != 0).Select(row => new
+                {
+                    Left = row.Id << shiftCount, Right = row.Id >> shiftCount, WideLeft = row.Count << shiftCount,
+                    WideRight = row.Count >> shiftCount, Unsigned = row.Unsigned << shiftCount,
+                    Bits = row.Bits >> shiftCount, Promoted = row.Narrow << shiftCount
+                });
+                foreach (var value in new[] { -1, 0, 32, 64, int.MaxValue })
+                {
+                    shiftCount = value;
+                    using var shiftCommand = shiftQuery.CreateDbCommand();
+                    var shiftSql = shiftCommand.CommandText;
+                    var fragments = mode == OceanBaseCompatibilityMode.MySql
+                        ? new[] { " << ", " >> ", " & 31)", " & 63)", "CASE WHEN", "THEN CAST(~", " ^ 2147483648) AS SIGNED)" }
+                        : new[] { "MOD(MOD(", "FLOOR(", "POWER(2, ", ", 31)", ", 63)", "18446744073709551616" };
+                    foreach (var fragment in fragments)
+                        if (!shiftSql.Contains(fragment, StringComparison.Ordinal))
+                            throw new Exception($"Packed provider did not preserve integer shift semantics: {fragment}");
+                    if (shiftCommand.Parameters.Count != (mode == OceanBaseCompatibilityMode.MySql ? 10 : 1)
+                        || shiftCommand.Parameters.Cast<DbParameter>().Any(parameter => parameter.DbType != DbType.Int32
+                            || parameter.Value is not int count || count != value)
+                        || shiftSql.Contains("__oceanbase_internal_", StringComparison.Ordinal))
+                        throw new Exception("Packed shift count mapping or captured-value refresh failed.");
+                }
+
                 var stringFunctionsSql = context.Set<Row>().Where(row => row.Name.Trim().ToLower() == "pkg")
                     .Select(row => new { Upper = row.Name.ToUpper(), Start = row.Name.TrimStart(),
                         End = row.Name.TrimEnd(), Length = row.Name.Length }).ToQueryString();

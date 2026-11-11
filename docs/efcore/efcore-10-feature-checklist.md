@@ -73,6 +73,14 @@ content and both-mode/patch consumers; prior lifecycle package fails the new NUL
 Release and consumer DLL identities match. Independent review found and closed an async token-count test
 gap; no production findings remain. Transactions/live remain open.
 
+Integer shift local checkpoint (Batch3v after e52a4d3): ShiftQueryTests adds35 cases and
+BasicRelationalTests adds8 intercepted sync/async cases. Both modes cover `<<`/`>>`, C# small-integer
+promotion, negative/oversized count masking, signed right shift, signed32 wrap and full64-bit results,
+independent Int32 count binding, nullable/current captures, nested operations and carrier/marker rejection.
+The C# expression-tree compiler rejects `>>>` with CS7053 before EF; this is not a driver/server defect.
+Native numeric precision/coercion/results and volatile single evaluation remain unverified; QRY-01
+stays In progress. Source/test review approves. Current full/package evidence is in the progress handoff.
+
 Integer bitwise local checkpoint (Batch3u after42e45a8): BitwiseQueryTests has22 cases and
 BasicRelationalTests adds8 intercepted sync/async cases. Both modes cover AND/OR/XOR/complement,
 negative/signed and full UInt64 values, small binary/unary promotions, numeric enums/converters,
@@ -323,7 +331,7 @@ duplicates and mode-specific string semantics.
 | --- | --- | --- | --- | --- | --- |
 | SQL-01 | Escape identifiers, schema qualification and embedded delimiters; Oracle table aliases omit AS and table-free SELECT uses DUAL. | Required | In progress | In progress | UH now covers embedded delimiters, schema/Unicode/empty-name escaping and all builder overloads; UQ aliases pass; table-free/live SQL evidence still incomplete. |
 | SQL-02 | Parameter names/placeholders follow each dialect. | Required | Done | Done | UH Generates_mode_specific_identifiers_and_parameters. |
-| QRY-01 | SELECT/projection, arithmetic/comparison/Boolean predicates and null semantics bind values and materialize nullable/non-null results. | Required | In progress | In progress | UQ/FP cover Boolean/string/scalar handling and integer AND/OR/XOR/complement, signed/unsigned widths, promotions, nullable/enums and bind refresh; MySQL query parameters use positional `?` ordering at the Connector 0.2.0 boundary. Shifts, broader cast/overflow semantics, wider operators and live results remain open. |
+| QRY-01 | SELECT/projection, arithmetic/comparison/Boolean predicates and null semantics bind values and materialize nullable/non-null results. | Required | In progress | In progress | UQ/FP cover Boolean/string/scalar handling, integer AND/OR/XOR/complement and left/right shifts, signed/unsigned widths, promotions, nullable/enums and bind refresh; MySQL query parameters use positional `?` ordering at the Connector 0.2.0 boundary. Boolean XOR, broader cast/overflow semantics, wider operators and live results remain open. |
 | QRY-02 | OrderBy/ThenBy, Distinct, Skip/Take and offset-only queries return correct results, including deterministic paging/empty pages. | Required | In progress | In progress | UQ SQL shape only; live ordering/string/paging missing. |
 | QRY-03 | Inner/left joins, correlated subqueries, Any/All and scalar/collection Contains have verified results or explicit exclusions. | Required | In progress | In progress | URS/UTC/URC/FP cover ordinary joins/subqueries/quantifiers, bare integral/text membership, captured int/int? roots and nonempty/originally-empty inline roots. Typed zero-row metadata survives subqueries/pruning, including a bounded sole-ordinal repair. Consistent int-to-long bindings pass; converted Join Value projections can fail earlier EF inference. General text/other carriers and wider shapes remain local work; actual server results remain open. |
 | QRY-04 | GroupBy aggregates, Count/LongCount, Sum/Average/Min/Max handle empty and nullable inputs correctly. | Required | In progress | In progress | URS/UNA/FP cover Count/LongCount plus native numeric Sum/Average/Min/Max, all exact numeric/nullable selector families, filtered DISTINCT/HAVING/order, independent promoted Double, neutral Single results, converter-owned SUM zero and supplied empty/null/checked reads. Nonnumeric extrema and real aggregate execution remain open. |

@@ -704,8 +704,49 @@ arithmetic contract; reject text/floating/decimal carriers instead of emitting n
   physical BITAND range, SQL coercion and repeated volatile operand evaluation remain explicit live/
   semantic boundaries; this batch does not finish QRY-01 or the overall goal.
 
+## Batch3v brief: integer shifts
+
+QRY-01: implement LINQ `<<` and `>>` for all eight integer property types after C# promotion,
+nullable values/counts, captured counts and integer storage converters. Count uses its own Int32
+mapping independently of the left result mapping; mask it with31 (Int32/UInt32) or63 (Int64/UInt64),
+including negative and oversized counts. Reject non-integer storage carriers for either operand.
+
+- EF10 SqlBinaryExpression does not accept shifts. Translate the original binary operands to two
+  strict internal function markers in the existing relational visitor and render them in a focused
+  QuerySqlGenerator partial file. Retain EF function null propagation and the left result mapping.
+- MySQL: native unsigned64 shifts; truncate left32-bit results and normalize signed results. Signed
+  right shift uses complemented-negative/native-logical shifts to preserve sign extension exactly.
+- Oracle: right shift uses FLOOR(value / POWER(2, maskedCount)); left shift first reduces modulo
+  2^(width-count), normalizes the negative remainder, then multiplies by2^count. Rotate the completed
+  unsigned result around2^(width-1) to restore signed results. Keep intermediates below2^65; do not
+  multiply a full64-bit operand by2^63 and rely on NUMBER rounding. POWER uses numeric NUMBER literals.
+- Add ShiftQueryTests first, reproduce missing predicate translation, then implement. Cover all promoted
+  result families, count boundaries/current parameters, signed extremes, nested operands, nullable/null
+  settings, carrier rejection and unchanged ordinary arithmetic/bitwise/Boolean paths. Add intercepted
+  sync/async readers/binds plus package consumer assertions. Run full baseline Debug/Release and isolated
+  EF10.0.14 Release, same-package consumers/content/identity gates, independent review, docs and local commit.
+- Native execution/coercion and repeated volatile operand evaluation remain unverified. Investigate the
+  C# expression-tree boundary for `>>>`; do not advertise a translation the compiler cannot represent.
+  No live DB, standalone testing application, EF8/EF9, push or publication work.
+
 ## Execution record
 
+- Batch3v after e52a4d3: LINQ shifts via strict internal functions, original promotions/left result
+  mapping and independent Int32 count mapping. MySQL native shifts normalize width/sign; Oracle
+  NUMBER formulas reduce before multiplying. Initial missing-translation RED32; exact signed32 CAST
+  grouping RED1 corrected. Focused35 unit+8 intercepted and full Debug/Release/isolated14 each
+  2260=1564+694+2 pass, zero failures/skips. Independent source/test/consumer review approves.
+  Same baseline-built shift-20261111 package passes both modes/patches, content, package-only graphs
+  and Release/package/consumer SHA equality; prior bitwise package fails the new shift predicate.
+  Baseline assets stay10.0.0. Package evidence: artifacts/shift-package-final.log and shift-package/.
+  Ruling: retain EF's NULL argument within the marker/formula rather than require whole-projection
+  constant folding — actual cached-count transitions inline NULL, remove binds and preserve nullable
+  reading; no production change was required for the initial over-specific SELECT NULL assertion.
+  Ruling: C# expression trees reject >>> with CS7053 in the .NET10 compiler probe. Record this language
+  boundary without inventing a connector/server limitation or adding an unsolicited public API.
+  Source audit: Oracle ObNumber POWER uses integer-exponent repeated squaring, not the double/exp-ln
+  path for these counts; actual native evaluation remains a live gate. Evidence: artifacts/shift-*.log,
+  shift-research/ and shift-compat/. Overall goal active; Boolean XOR and broader inventory remain local.
 - Batch3u after42e45a8: integer AND/OR/XOR/complement, MySQL signed/unsigned width normalization,
   Oracle signed64-safe UInt64 halves, numeric enum complement and original binary promotions. Initial
   RED14/18; promotion RED2 and unrelated-cast-control RED2 corrected. Focused22 unit+8 intercepted pass;
