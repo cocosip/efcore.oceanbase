@@ -26,8 +26,9 @@ for these operations. Integer numeric converters operate in stored value space; 
 equivalence, overflowing/narrowing casts and single evaluation of volatile operands need separate
 contracts. C# expression trees reject `>>>` (CS7053). Native results remain unverified on OceanBase.
 
-Boolean `^` normalizes each operand's numeric/text true/false encoding and preserves nullable XOR.
-Its result uses the native Boolean mapping even when the operands have different converters.
+Boolean `^`, `==`, `!=`, `!`, AND/OR, Boolean conditions, conditional arms and coalesce normalize
+each operand's numeric/text true/false encoding. Nullable logic and configured equality null semantics
+remain distinct. Results use the native Boolean mapping even when operands have different converters.
 Null-converting, ambiguous and Oracle empty-string encodings are rejected. Valid stored encodings,
 native collation/coercion and repeated volatile operand evaluation remain acceptance boundaries.
 

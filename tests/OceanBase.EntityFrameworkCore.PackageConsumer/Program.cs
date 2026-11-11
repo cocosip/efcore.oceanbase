@@ -140,6 +140,41 @@ namespace PackageConsumer
                     }
                 }
 
+                bool? logicalFlag = true;
+                var logicalQuery = context.Set<Row>().Where(row => row.BooleanText == row.BooleanNumber)
+                    .Select(row => new { Not = !row.BooleanText, And = row.BooleanText && row.BooleanNumber,
+                        Or = row.BooleanText || row.BooleanNumber, Equal = row.BooleanText == row.BooleanNumber,
+                        Different = row.BooleanText != row.Enabled, Optional = row.OptionalBoolean & logicalFlag,
+                        NullableOr = row.OptionalBoolean | logicalFlag, NullableEqual = row.OptionalBoolean == logicalFlag,
+                        Conditional = row.BooleanText ? row.OptionalBoolean : logicalFlag,
+                        Fallback = row.OptionalBoolean ?? logicalFlag });
+                foreach (var value in new bool?[] { true, false, null, true, null, false })
+                {
+                    logicalFlag = value;
+                    using var logicalCommand = logicalQuery.CreateDbCommand();
+                    var logicalSql = logicalCommand.CommandText;
+                    foreach (var fragment in new[] { "CASE WHEN", "ELSE NULL", " = 2 THEN 1", " = -1 THEN 0", "COALESCE(",
+                        mode == OceanBaseCompatibilityMode.MySql ? " = 'Y' THEN 1" : " = N'Y' THEN 1" })
+                        if (!logicalSql.Contains(fragment, StringComparison.Ordinal))
+                            throw new Exception($"Packed provider lost converted Boolean logical normalization: {fragment}");
+                    if (logicalSql.Contains("__oceanbase_internal_", StringComparison.Ordinal))
+                        throw new Exception("Packed provider emitted an internal Boolean function.");
+                    if (value is null)
+                    {
+                        if (logicalCommand.Parameters.Count != 0)
+                            throw new Exception("Packed provider retained a stale logical Boolean capture.");
+                    }
+                    else
+                    {
+                        if (logicalCommand.Parameters.Count == 0)
+                            throw new Exception("Packed provider omitted a non-null logical Boolean capture.");
+                        foreach (DbParameter parameter in logicalCommand.Parameters)
+                            if (Convert.ToDecimal(parameter.Value) != (value.Value ? 1m : 0m)
+                                || parameter.DbType != (mode == OceanBaseCompatibilityMode.MySql ? DbType.Boolean : DbType.Decimal))
+                                throw new Exception("Packed provider changed a logical Boolean capture's value or mapping.");
+                    }
+                }
+
                 var shiftCount = -1;
                 var shiftQuery = context.Set<Row>().Where(row => (row.Id << shiftCount) != 0).Select(row => new
                 {

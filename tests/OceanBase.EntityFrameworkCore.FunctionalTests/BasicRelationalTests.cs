@@ -3308,6 +3308,96 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
             Assert.DoesNotContain("THEN N'Y'", commands.Sql[^1]);
         }
 
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false, true)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true, true)]
+        public async Task Boolean_logical_results_stay_native_with_global_converters_and_null_compensation(
+            OceanBaseCompatibilityMode mode, bool async, bool relationalNulls)
+        {
+            using var table = new DataTable();
+            foreach (var column in new[] { "Not", "And", "Or", "Equal", "Different", "Conditional", "Fallback", "Comparison", "Like", "Exists" })
+                table.Columns.Add(column, typeof(object));
+            table.Rows.Add(0m, DBNull.Value, 1m, 1m, 0m, DBNull.Value, 1m, 1m, 0m, 1m);
+            var commands = new CommandCapture { Results = table };
+            var builder = new DbContextOptionsBuilder<GlobalBooleanContext>()
+                .UseOceanBase("Server=localhost;Database=test", mode)
+                .AddInterceptors(new NoNetworkConnection(), commands);
+            ((IDbContextOptionsBuilderInfrastructure)builder).AddOrUpdateExtension(
+                builder.Options.Extensions.OfType<RelationalOptionsExtension>().Single().WithUseRelationalNulls(relationalNulls));
+            await using var context = new GlobalBooleanContext(builder.Options);
+            bool? flag = true;
+            var query = context.Set<BooleanXorRow>().Select(row => new { Not = !row.OptionalText,
+                And = row.OptionalText & flag, Or = row.OptionalText | flag,
+                Equal = (bool?)(row.OptionalText == flag), Different = (bool?)(row.OptionalText != flag),
+                Conditional = row.Native ? row.OptionalText : flag, Fallback = row.OptionalText ?? flag,
+                Comparison = row.Id > 0, Like = EF.Functions.Like(row.Label, "A%"),
+                Exists = context.Set<BooleanXorRow>().Any(other => other.Id > row.Id) });
+            foreach (var value in new bool?[] { true, false, null, true, null, false })
+            {
+                flag = value;
+                commands.Values.Clear();
+                var row = Assert.Single(async ? await query.ToListAsync() : query.ToList());
+                Assert.Equal(false, row.Not);
+                Assert.Null(row.And);
+                Assert.Equal(true, row.Or);
+                Assert.Equal(true, row.Equal);
+                Assert.Equal(false, row.Different);
+                Assert.Null(row.Conditional);
+                Assert.Equal(true, row.Fallback);
+                Assert.True(row.Comparison);
+                Assert.False(row.Like);
+                Assert.True(row.Exists);
+                var sql = commands.Sql[^1];
+                Assert.DoesNotContain("THEN 'Y'", sql);
+                Assert.DoesNotContain("THEN N'Y'", sql);
+                Assert.DoesNotContain("__oceanbase_internal_", sql);
+                if (value is null)
+                    Assert.Empty(commands.Values);
+                else
+                {
+                    Assert.NotEmpty(commands.Values);
+                    Assert.All(commands.Values, parameter => Assert.Equal(value.Value ? "Y" : "N", Assert.IsType<string>(parameter)));
+                }
+            }
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle)]
+        public void Global_Boolean_defaults_do_not_turn_native_predicates_into_text_storage_comparisons(OceanBaseCompatibilityMode mode)
+        {
+            using var context = new GlobalBooleanContext(new DbContextOptionsBuilder<GlobalBooleanContext>()
+                .UseOceanBase("Server=localhost;Database=test", mode).Options);
+            var rows = context.Set<BooleanXorRow>();
+            IQueryable[] queries =
+            [
+                rows.Where(row => row.Id > 0),
+                rows.Where(row => !(row.Id > 0)),
+                rows.Where(row => (row.Id > 0) && row.Native),
+                rows.Where(row => (row.Id > 0) || row.Native),
+                rows.Where(row => (row.Id > 0) == row.Native),
+                rows.Select(row => row.Id > 0 ? 10 : 20),
+                rows.Select(row => row.Native ? row.Id > 0 : row.Id < 0),
+                rows.Where(row => EF.Functions.Like(row.Label, "A%")),
+                rows.Where(row => rows.Any(other => other.Id > row.Id)),
+                rows.Where(row => new[] { 1, 2 }.Contains(row.Id))
+            ];
+            foreach (var query in queries)
+            {
+                var sql = query.ToQueryString();
+                Assert.DoesNotContain(" = 'Y'", sql);
+                Assert.DoesNotContain(" = N'Y'", sql);
+                Assert.DoesNotContain("THEN 'Y'", sql);
+                Assert.DoesNotContain("THEN N'Y'", sql);
+            }
+        }
+
         private sealed class GlobalBooleanContext(DbContextOptions<GlobalBooleanContext> options) : DbContext(options)
         {
             protected override void ConfigureConventions(ModelConfigurationBuilder builder)
@@ -3319,6 +3409,73 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
 
         private sealed class GlobalBooleanConverter() : Microsoft.EntityFrameworkCore.Storage.ValueConversion.ValueConverter<bool, string>(
             value => value ? "Y" : "N", value => value == "Y");
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false, true)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true, true)]
+        public async Task Converted_Boolean_commands_bind_native_captures_and_read_native_nullable_results(
+            OceanBaseCompatibilityMode mode, bool async, bool relationalNulls)
+        {
+            using var table = new DataTable();
+            foreach (var column in new[] { "Equal", "Different", "And", "Or", "Not", "Conditional", "Fallback" })
+                table.Columns.Add(column, typeof(object));
+            var commands = new CommandCapture { Results = table };
+            await using var context = CreateContext(mode, commands, relationalNulls);
+            bool? flag = true;
+            var query = context.Set<BooleanXorRow>().Where(row => row.Text == row.Number)
+                .Select(row => new { Equal = (bool?)(row.OptionalText == flag), Different = (bool?)(row.OptionalText != flag),
+                    And = row.OptionalText & flag, Or = row.OptionalText | flag, Not = !row.OptionalText,
+                    Conditional = row.Native ? row.OptionalText : row.OptionalNumber,
+                    Fallback = row.OptionalText ?? row.OptionalNumber });
+            foreach (var value in new bool?[] { true, false, null, false, null, true })
+            {
+                flag = value;
+                table.Rows.Clear();
+                // These independent supplied values verify result mappings, not server truth tables.
+                table.Rows.Add(1m, 0m, DBNull.Value, 1m, 0m, DBNull.Value, 1m);
+                table.Rows.Add(relationalNulls ? DBNull.Value : 0m, relationalNulls ? DBNull.Value : 1m,
+                    0m, DBNull.Value, DBNull.Value, 0m, DBNull.Value);
+                commands.Values.Clear();
+                commands.Inputs.Clear();
+                var rows = async ? await query.ToListAsync() : query.ToList();
+                Assert.Equal(2, rows.Count);
+                Assert.Equal(true, rows[0].Equal);
+                Assert.Equal(false, rows[0].Different);
+                Assert.Null(rows[0].And);
+                Assert.Equal(true, rows[0].Or);
+                Assert.Equal(false, rows[0].Not);
+                Assert.Null(rows[0].Conditional);
+                Assert.Equal(true, rows[0].Fallback);
+                Assert.Equal(relationalNulls ? null : (bool?)false, rows[1].Equal);
+                Assert.Equal(relationalNulls ? null : (bool?)true, rows[1].Different);
+                Assert.Equal(false, rows[1].And);
+                Assert.Null(rows[1].Or);
+                Assert.Null(rows[1].Not);
+                Assert.Equal(false, rows[1].Conditional);
+                Assert.Null(rows[1].Fallback);
+                var sql = commands.Sql[^1];
+                Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? " = 'Y' THEN 1" : " = N'Y' THEN 1", sql);
+                Assert.Contains(" = 2 THEN 1", sql);
+                Assert.Contains("COALESCE(", sql);
+                Assert.Contains("WHERE", sql);
+                Assert.DoesNotContain("__oceanbase_internal_", sql);
+                if (value is null)
+                    Assert.Empty(commands.Values);
+                else
+                {
+                    Assert.NotEmpty(commands.Values);
+                    Assert.All(commands.Values, parameter => Assert.Equal(value.Value ? 1m : 0m, Convert.ToDecimal(parameter)));
+                    Assert.All(commands.Inputs, parameter => Assert.Equal(
+                        mode == OceanBaseCompatibilityMode.MySql ? DbType.Boolean : DbType.Decimal, parameter.DbType));
+                }
+            }
+        }
 
         private static TestContext CreateContext(OceanBaseCompatibilityMode mode, CommandCapture commands, bool relationalNulls = false)
         {
@@ -3373,6 +3530,9 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
                     .HasConversion(new Microsoft.EntityFrameworkCore.Storage.ValueConversion.BoolToStringConverter("N", "Y"));
                 modelBuilder.Entity<BooleanXorRow>().Property(row => row.Number)
                     .HasConversion(value => value ? 2 : -1, value => value == 2);
+                modelBuilder.Entity<BooleanXorRow>().Property(row => row.OptionalNumber)
+                    .HasConversion(new Microsoft.EntityFrameworkCore.Storage.ValueConversion.ValueConverter<bool, int>(
+                        value => value ? 2 : -1, value => value == 2));
                 modelBuilder.Entity<MathRow>().Property(row => row.Converted).HasConversion<long>();
                 modelBuilder.Entity<MathRow>().Property(row => row.Transformed)
                     .HasConversion(value => value * -2m, value => value / -2m).HasPrecision(5, 2);
@@ -3504,10 +3664,12 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
         private sealed class BooleanXorRow
         {
             public int Id { get; set; }
+            public string Label { get; set; } = "";
             public bool Text { get; set; }
             public bool Number { get; set; }
             public bool Native { get; set; }
             public bool? OptionalText { get; set; }
+            public bool? OptionalNumber { get; set; }
         }
 
         private sealed class ArithmeticRow

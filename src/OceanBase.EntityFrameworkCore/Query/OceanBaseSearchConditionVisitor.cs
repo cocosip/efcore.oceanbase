@@ -2,10 +2,11 @@ using System.Linq;
 using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore.Query;
 using Microsoft.EntityFrameworkCore.Query.SqlExpressions;
+using Microsoft.EntityFrameworkCore.Storage;
 
 namespace OceanBase.EntityFrameworkCore.Query
 {
-    internal sealed class OceanBaseSearchConditionVisitor(ISqlExpressionFactory factory) : ExpressionVisitor
+    internal sealed class OceanBaseSearchConditionVisitor(ISqlExpressionFactory factory, RelationalTypeMapping boolean) : ExpressionVisitor
     {
         private bool _condition;
 
@@ -90,9 +91,9 @@ namespace OceanBase.EntityFrameworkCore.Query
             {
                 // A single ELSE 0 would turn SQL UNKNOWN into false for nullable Boolean projections.
                 return factory.Case(
-                    [new CaseWhenClause(expression, factory.Constant(true, expression.TypeMapping)),
-                        new CaseWhenClause(factory.Not(expression), factory.Constant(false, expression.TypeMapping))],
-                    factory.Constant(null, typeof(bool), expression.TypeMapping));
+                    [new CaseWhenClause(expression, factory.Constant(true, boolean)),
+                        new CaseWhenClause(factory.Not(expression), factory.Constant(false, boolean))],
+                    factory.Constant(null, typeof(bool), boolean));
             }
 
             return expression;

@@ -747,8 +747,39 @@ Boolean result mapping, never a converted operand's storage mapping.
   Repeated operand evaluation and native collation/coercion/results remain explicit boundaries.
   No standalone live-test application, database access, EF8/EF9, push or publication work.
 
+## Batch3x brief: converted Boolean comparisons and logical operations
+
+QRY-01: complete ==/!=, NOT, AND/OR (including lifted &/|), Boolean conditions and conditional
+tests when operands use independent numeric/text encodings. Numeric/text storage equality is not
+logical Boolean equality; MySQL also cannot use a Y/N column directly as a truth condition.
+
+- Normalize noncanonical Boolean scalar operands to native 0/1/NULL before EF null processing, using
+  a strict internal single-argument function rendered with the existing CASE normalization. Canonical
+  numeric 1/0 operands keep their ordinary SQL. Preserve nullable equality compensation, lifted &/|
+  truth tables and each operand's original mapping/converter. Results use the native Boolean mapping.
+- Normalize predicate and conditional-test roots during translation. Oracle scalar predicate CASE
+  output uses native Boolean constants independently of global DefaultTypeMapping<bool> converters.
+  Existing XOR and integer bitwise paths must remain covered. No public function/API is added.
+- Tests first: mixed/inverted/native/nullable fields, captures and global Boolean defaults, predicates/
+  projections/NOT/CASE/nesting, both null settings, real binds/readers and negative storage cases.
+  Run full Debug/Release/isolated14, same-package consumers and independent review, docs and commit.
+  Keep valid encodings/native collation/coercion and repeated volatile evaluation as explicit boundaries.
+  Broader global Boolean defaults on unrelated translator families remain separately audited local work.
+
 ## Execution record
 
+- Batch3x after4ce40a8: independently converted Boolean comparisons/logical operators, predicate/order
+  roots, ternary and coalesce normalize to native Boolean carriers before EF null processing. Oracle
+  scalar predicate CASE uses native constants even with global Boolean defaults. Initial RED18/20;
+  focused24 new unit+18 new functional cases pass, with existing XOR controls. Review fix round1
+  resolves exact decimal canonical classification and global-default native-predicate misclassification;
+  near-one mutation RED2/global predicate RED1 and expanded global reader checks cover both. Scoped
+  re-review reports no remaining actionable findings. Final Debug/Release/isolated14 each2330=1604+724+2,
+  zero failures/skips. Same boolean-20261111 package passes both modes/patches/content/package-only
+  graphs and DLL identity; prior Boolean-XOR package fails logical normalization. Baseline assets
+  stay10.0.0. Native results/coercion/collation and repeated volatile evaluation remain open, as do
+  additional Boolean methods/translator families and broader inventory. Evidence: artifacts/boolean-*.log,
+  boolean-package/ and boolean-compat/. Overall goal active; no connector/server defect established.
 - Batch3w after e47892c: bool/bool? XOR retains EF null propagation, independently mapped operand
   normalization and native result mapping; Oracle uses existing three-valued search-condition conversion.
   Initial query RED16, null-carrier RED2 and review-found global-default-converter reader RED4 were

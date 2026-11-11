@@ -28,7 +28,8 @@ namespace OceanBase.EntityFrameworkCore.Query
 
                 var result = base.Process(queryExpression, parametersDecorator);
                 return mode == OceanBaseCompatibilityMode.Oracle
-                    ? new OceanBaseSearchConditionVisitor(Dependencies.SqlExpressionFactory).Visit(result)
+                    ? new OceanBaseSearchConditionVisitor(Dependencies.SqlExpressionFactory,
+                        Dependencies.TypeMappingSource.FindMapping(typeof(bool))!).Visit(result)
                     : result;
             }
         }

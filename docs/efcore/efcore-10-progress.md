@@ -11,6 +11,37 @@ each small group. Real database integration/tests and EF8/EF9 adaptation are exp
 [local development plan](efcore-10-local-development-plan.md) tracks the full remaining inventory, including
 an audit of locally feasible deferred families. Finishing one batch does not finish the overall goal.
 
+### Converted Boolean comparison and logic checkpoint (2026-11-11)
+
+Batch3x after4ce40a8 extends independently converted Boolean ==/!=, NOT, AND/OR and lifted &/|,
+predicate/order roots, ternary tests/Boolean arms and Boolean coalesce in both modes. Noncanonical
+numeric/text encodings use the existing NULL-preserving CASE through a strict internal scalar marker;
+native Boolean/numeric1/0 operands keep simple SQL. EF still owns nullable equality compensation.
+Computed results use native Boolean mapping, while plain converted properties keep their converter.
+
+BooleanQueryTests adds24 cases; BasicRelationalTests adds18 command/reader/SQL-shape cases, including
+native true/false/null supplied results, current captures under both null settings and global Y/N
+defaults. Existing XOR/integer paths remain covered. Initial RED18/20 establishes missing behavior.
+Independent review finds two issues: Double narrowing misclassifies an exact decimal near1, and
+global Y/N defaults misclassify native SQL predicates as text storage. Exact per-carrier checks and
+native predicate result mapping resolve both. Near-one mutation RED2 and global predicate RED1
+(MySQL, with Oracle positive control) pin those failures. Expanded numeric comparison/LIKE/EXISTS
+reader checks pass with global defaults. Scoped re-review reports no additional actionable findings.
+
+Final Debug/Release and isolated EF10.0.14 Release each pass2330=1604 unit+724 functional+2 consumers,
+zero failures/skips. The same baseline-built `10.0.0-boolean-20261111` package passes both modes on
+EF10.0.0/10.0.14, content, package-only graphs and Release/package/consumer DLL SHA-256 equality:
+`C7BA526827BD9DD80AEC9EE8F373ABF44C3B0960C775CD5041B1EA8176DFC6CB`.
+The prior Boolean-XOR package fails the new logical-normalization assertion as intended; source
+baseline assets remain EF10.0.0. Evidence: artifacts/boolean-{focused,functional,debug-final,
+release-final,patch-final,package-final}.log, boolean-{red,decimal-canonical-red,global-predicate-red,
+global-predicate-green,old-package-red}.log, boolean-package/ and boolean-compat/.
+
+Native results/coercion/collation and repeated volatile evaluation remain acceptance boundaries;
+wider Boolean method/translator families and the remaining Required/deferred local inventory are
+still open. No connector defect or deployed-server limitation was established. Overall goal active;
+no live database/test application, EF8/EF9, push or publication work occurred.
+
 ### Boolean XOR checkpoint (2026-11-11)
 
 Batch3w after e47892c implements bool/bool? XOR in both modes, retaining the ExclusiveOr node
@@ -37,8 +68,8 @@ release-final,patch-final,package-final}.log, boolean-xor-{red,null-carrier-red,
 old-package-red}.log, boolean-xor-package/ and boolean-xor-compat/.
 
 Valid stored encodings, native collation/coercion/results and repeated volatile evaluation remain
-acceptance boundaries. Broader inherited comparisons between independently converted Boolean
-values remain local follow-up work. No connector defect or deployed-server limitation was established.
+acceptance boundaries. The later Batch3x above covers converted comparison/logical operators;
+wider Boolean APIs remain local follow-up work. No connector defect or deployed-server limitation was established.
 The overall goal remains active; no live tests, EF8/EF9 adaptation, push or publication occurred.
 
 ### Integer shift checkpoint (2026-11-11)

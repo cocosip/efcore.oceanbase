@@ -16,11 +16,34 @@ namespace OceanBase.EntityFrameworkCore.Query
     {
         internal const string LeftShiftMarker = "__oceanbase_internal_left_shift";
         internal const string RightShiftMarker = "__oceanbase_internal_right_shift";
+        internal const string BooleanValueMarker = "__oceanbase_internal_boolean_value";
         private static readonly MethodInfo Least =
             ((Func<DbFunctions, int[], int>)RelationalDbFunctionsExtensions.Least<int>).Method.GetGenericMethodDefinition();
         private static readonly MethodInfo Greatest =
             ((Func<DbFunctions, int[], int>)RelationalDbFunctionsExtensions.Greatest<int>).Method.GetGenericMethodDefinition();
         private static readonly Dictionary<MethodInfo, string> ScalarMethods = CreateScalarMethods();
+
+        internal static bool IsCanonicalBoolean(RelationalTypeMapping? mapping)
+        {
+            if (mapping is null || mapping.ClrType != typeof(bool) || mapping.Converter?.ConvertsNulls == true)
+                return false;
+            var converter = mapping.Converter;
+            var trueValue = converter is null ? true : converter.ConvertToProvider(true);
+            var falseValue = converter is null ? false : converter.ConvertToProvider(false);
+            if (trueValue is true && falseValue is false)
+                return true;
+            var carrier = converter?.ProviderClrType ?? mapping.ClrType;
+            var code = Type.GetTypeCode(Nullable.GetUnderlyingType(carrier) ?? carrier);
+            return code switch
+            {
+                TypeCode.Single => trueValue is 1f && falseValue is 0f,
+                TypeCode.Double => trueValue is 1d && falseValue is 0d,
+                TypeCode.SByte or TypeCode.Byte or TypeCode.Int16 or TypeCode.UInt16 or TypeCode.Int32 or TypeCode.UInt32
+                    or TypeCode.Int64 or TypeCode.UInt64 or TypeCode.Decimal => trueValue is not null && falseValue is not null
+                        && Convert.ToDecimal(trueValue) == 1m && Convert.ToDecimal(falseValue) == 0m,
+                _ => false
+            };
+        }
 
         public RelationalSqlTranslatingExpressionVisitor Create(QueryCompilationContext queryCompilationContext,
             QueryableMethodTranslatingExpressionVisitor queryableMethodTranslatingExpressionVisitor)
@@ -61,8 +84,86 @@ namespace OceanBase.EntityFrameworkCore.Query
             QueryCompilationContext queryCompilationContext, QueryableMethodTranslatingExpressionVisitor queryableVisitor)
             : RelationalSqlTranslatingExpressionVisitor(dependencies, queryCompilationContext, queryableVisitor)
         {
+            public override Expression? Visit(Expression? expression)
+            {
+                var visited = base.Visit(expression);
+                if (visited is not SqlExpression { Type: var type } || type != typeof(bool))
+                    return visited;
+                var mapping = Dependencies.TypeMappingSource.FindMapping(typeof(bool));
+                // SQL predicates produce native truth even when the model's default Boolean mapping is text.
+                return visited switch
+                {
+                    SqlBinaryExpression binary when binary.OperatorType is ExpressionType.Equal or ExpressionType.NotEqual
+                        or ExpressionType.LessThan or ExpressionType.LessThanOrEqual or ExpressionType.GreaterThan
+                        or ExpressionType.GreaterThanOrEqual or ExpressionType.AndAlso or ExpressionType.OrElse
+                        or ExpressionType.ExclusiveOr => new SqlBinaryExpression(binary.OperatorType, binary.Left, binary.Right, typeof(bool), mapping),
+                    SqlUnaryExpression unary when unary.OperatorType is ExpressionType.Equal or ExpressionType.NotEqual
+                        || unary.OperatorType == ExpressionType.Not && unary.Operand.Type == typeof(bool)
+                        => new SqlUnaryExpression(unary.OperatorType, unary.Operand, typeof(bool), mapping),
+                    LikeExpression like => new LikeExpression(like.Match, like.Pattern, like.EscapeChar, mapping),
+                    ExistsExpression exists => new ExistsExpression(exists.Subquery, mapping),
+                    InExpression @in => @in.ApplyTypeMapping(mapping),
+                    _ => visited
+                };
+            }
+
+            public override SqlExpression? Translate(Expression expression, bool applyDefaultTypeMapping = true)
+            {
+                var result = base.Translate(expression, applyDefaultTypeMapping);
+                return result?.Type == typeof(bool) && (applyDefaultTypeMapping || result.TypeMapping is not null)
+                    ? BooleanOperand(result) : result;
+            }
+
+            private SqlExpression BooleanOperand(SqlExpression expression)
+            {
+                var factory = Dependencies.SqlExpressionFactory;
+                expression = factory.ApplyDefaultTypeMapping(expression);
+                return IsCanonicalBoolean(expression.TypeMapping) ? expression
+                    : factory.Function(BooleanValueMarker, [expression], nullable: true,
+                        argumentsPropagateNullability: [true], typeof(bool),
+                        Dependencies.TypeMappingSource.FindMapping(typeof(bool)));
+            }
+
+            protected override Expression VisitUnary(UnaryExpression expression)
+                => expression.NodeType == ExpressionType.Not && Unwrap(expression.Type) == typeof(bool)
+                    ? Visit(expression.Operand) is SqlExpression operand
+                        ? new SqlUnaryExpression(ExpressionType.Not, BooleanOperand(operand), typeof(bool),
+                            Dependencies.TypeMappingSource.FindMapping(typeof(bool)))
+                        : QueryCompilationContext.NotTranslatedExpression
+                    : base.VisitUnary(expression);
+
+            protected override Expression VisitConditional(ConditionalExpression expression)
+            {
+                if (Visit(expression.Test) is not SqlExpression test || Visit(expression.IfTrue) is not SqlExpression ifTrue
+                    || Visit(expression.IfFalse) is not SqlExpression ifFalse)
+                    return QueryCompilationContext.NotTranslatedExpression;
+                if (Unwrap(expression.Type) == typeof(bool))
+                {
+                    ifTrue = BooleanOperand(ifTrue);
+                    ifFalse = BooleanOperand(ifFalse);
+                }
+                return Dependencies.SqlExpressionFactory.Case(
+                    [new CaseWhenClause(BooleanOperand(test), ifTrue)], ifFalse);
+            }
+
             protected override Expression VisitBinary(BinaryExpression expression)
             {
+                if (expression.Method is null && Unwrap(expression.Left.Type) == typeof(bool)
+                    && Unwrap(expression.Right.Type) == typeof(bool)
+                    && expression.NodeType is ExpressionType.Equal or ExpressionType.NotEqual or ExpressionType.And
+                        or ExpressionType.AndAlso or ExpressionType.Or or ExpressionType.OrElse or ExpressionType.Coalesce)
+                {
+                    if (Visit(expression.Left) is not SqlExpression left || Visit(expression.Right) is not SqlExpression right)
+                        return QueryCompilationContext.NotTranslatedExpression;
+                    left = BooleanOperand(left);
+                    right = BooleanOperand(right);
+                    var mapping = Dependencies.TypeMappingSource.FindMapping(typeof(bool));
+                    if (expression.NodeType == ExpressionType.Coalesce)
+                        return Dependencies.SqlExpressionFactory.Coalesce(left, right, mapping);
+                    var operation = expression.NodeType == ExpressionType.And ? ExpressionType.AndAlso
+                        : expression.NodeType == ExpressionType.Or ? ExpressionType.OrElse : expression.NodeType;
+                    return new SqlBinaryExpression(operation, left, right, typeof(bool), mapping);
+                }
                 if (expression.Method is null && expression.NodeType == ExpressionType.ExclusiveOr
                     && Unwrap(expression.Type) == typeof(bool))
                 {

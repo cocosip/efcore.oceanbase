@@ -642,11 +642,44 @@ An XOR IS NULL predicate may be simplified by EF to operand null tests without e
 
 Reject null-converting and nonnumeric/nontext carriers, equal/null true/false representations and
 Oracle empty-string representations. Data must use the converter's valid encodings; equality of
-text representations also depends on the configured native collation. This slice does not repair
-the broader inherited comparison behavior between independently converted Boolean values outside
-XOR. Normalization repeats operands and Oracle scalar conversion repeats the entire predicate;
+text representations also depends on the configured native collation. The following converted
+Boolean contract extends comparisons and logical operations beyond XOR. Normalization repeats
+operands and Oracle scalar conversion repeats the entire predicate;
 single evaluation of volatile expressions is not promised. SQL generation, intercepted parameter/
 reader tests and packaged consumers are local evidence, not native result/coercion/collation proof.
+
+## Converted Boolean comparison and logic contract
+
+QRY-01 extends ==/!=, NOT, AND/OR (both conditional and lifted &/|), Boolean predicate/order roots,
+conditional tests/Boolean arms and Boolean coalesce to independently mapped native/numeric/text
+operands. Normalize noncanonical operands to native 0/1/NULL before applying the operator. A numeric
+1/0 or native Boolean mapping is already canonical; keep its simple SQL. Plain converted property
+projections retain their original converter. Canonical classification compares integer/decimal values
+exactly, without narrowing them to Double; a true encoding of1.0000000000000000000000000001m is not1.
+No global rewrite of stored properties is performed.
+
+The relational visitor independently default-maps scalar operands and uses a strict internal
+single-argument Boolean value marker only when normalization is required. The SQL generator renders
+the same CASE used by XOR, with each operand's mapped true/false literals; no invented SQL function
+reaches the server. The marker has nullable=true with argument null propagation. Thus EF retains
+its normal compensation for ==/!= and can simplify normalized IS NULL to operand IS NULL, while
+SQL three-valued AND/OR preserves lifted Boolean behavior (false AND NULL=false, true OR NULL=true).
+The configured relational-null setting still governs surrounding equality, separately from logic.
+
+New logical/comparison results use the provider-native Boolean mapping, excluding model-wide default
+converters. Recognize native SQL predicate shapes (comparisons, logical operators, null tests, LIKE,
+EXISTS and IN) before normalization; a model Y/N default does not make their SQL result text. Scalar
+property/constant/parameter mappings remain converter-owned. Oracle predicate-to-scalar CASE constants also use the native mapping, including predicates
+rebuilt by EF's parameter/null processing. Captured operands retain their independently inferred
+mapping: ordinary captures bind native Boolean/Decimal, while a model default Y/N capture binds text
+and is normalized before use. Ternary Boolean arms and coalesce normalize independently to the same
+native result carrier. Reuse existing EF services; add no public API or dependency.
+
+Acceptance includes BooleanQueryTests, intercepted sync/async readers with independent supplied
+true/false/null results, current captured values/global defaults and the packed consumer. Rejected
+encodings and valid-data/collation/coercion/volatile-evaluation boundaries are the same as XOR.
+Broader global Boolean defaults on unrelated translator families and additional Boolean method
+overloads remain local audit work; this bounded operator contract does not advertise all Boolean APIs.
 
 ## Integer shift local contract
 
