@@ -175,6 +175,36 @@ namespace PackageConsumer
                     }
                 }
 
+                bool? methodFlag = true;
+                var methodFallback = true;
+                var methodsQuery = context.Set<Row>().Where(row => row.BooleanText.Equals(row.BooleanNumber))
+                    .Select(row => new { Equal = row.BooleanText.Equals((object)row.BooleanNumber),
+                        NullableEqual = Nullable.Equals(row.OptionalBoolean, methodFlag),
+                        Default = row.OptionalBoolean.GetValueOrDefault(),
+                        Fallback = row.OptionalBoolean.GetValueOrDefault(methodFallback),
+                        ConvertedFallback = row.OptionalBoolean.GetValueOrDefault(row.BooleanText) });
+                foreach (var value in new bool?[] { true, false, null, true, null, false })
+                {
+                    methodFlag = value;
+                    methodFallback = value == true;
+                    using var methodsCommand = methodsQuery.CreateDbCommand();
+                    var methodsSql = methodsCommand.CommandText;
+                    foreach (var fragment in new[] { " = 2 THEN 1", " = -1 THEN 0", "COALESCE(",
+                        mode == OceanBaseCompatibilityMode.MySql ? " = 'Y' THEN 1" : " = N'Y' THEN 1" })
+                        if (!methodsSql.Contains(fragment, StringComparison.Ordinal))
+                            throw new Exception($"Packed provider lost Boolean method translation: {fragment}");
+                    if (methodsSql.Contains("__oceanbase_internal_", StringComparison.Ordinal)
+                        || methodsCommand.Parameters.Count == 0)
+                        throw new Exception("Packed provider lost Boolean method captures or emitted an internal function.");
+                    foreach (DbParameter parameter in methodsCommand.Parameters)
+                        if (Convert.ToDecimal(parameter.Value) != (methodFallback ? 1m : 0m)
+                            || parameter.DbType != (mode == OceanBaseCompatibilityMode.MySql ? DbType.Boolean : DbType.Decimal))
+                            throw new Exception("Packed provider changed Boolean method parameter values or mappings.");
+                }
+                if (!context.Set<Row>().Where(row => row.OptionalBoolean.HasValue).ToQueryString()
+                    .Contains("IS NOT NULL", StringComparison.Ordinal))
+                    throw new Exception("Packed provider lost the nullable Boolean HasValue predicate.");
+
                 var shiftCount = -1;
                 var shiftQuery = context.Set<Row>().Where(row => (row.Id << shiftCount) != 0).Select(row => new
                 {

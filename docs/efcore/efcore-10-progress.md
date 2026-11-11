@@ -11,6 +11,38 @@ each small group. Real database integration/tests and EF8/EF9 adaptation are exp
 [local development plan](efcore-10-local-development-plan.md) tracks the full remaining inventory, including
 an audit of locally feasible deferred families. Finishing one batch does not finish the overall goal.
 
+### Boolean equality methods and nullable defaults checkpoint (2026-11-11)
+
+Batch3y after6aa90d9 adds exact framework Boolean typed/boxed/nullable Equals and both
+Nullable<bool>.GetValueOrDefault overloads. Equality reuses independently normalized == and its
+configured null semantics; defaults use native Boolean COALESCE. Nullable instance Equals arrives
+through System.Object's instance identity, handled only with statically Boolean operands. Dynamic
+objects/other method identities keep inherited EF behavior. A custom same-name Equals control pins
+inherited name-based translation without new normalization; arbitrary method bodies are not supported.
+
+BooleanQueryTests adds18 cases; BasicRelationalTests adds16 sync/async intercepted cases with both
+null settings, global Y/N defaults, current true/false/null captures and supplied native reader values.
+Initial14 RED includes12 missing-method cases, two boundary tests subsequently distinguish valid
+MySQL WHERE0 spelling from a real HasValue defect. Inherited EF converter compensation descends into
+unary IS NOT NULL, truth-converts its nullable storage operand and erases the filter. A binary != typed
+NULL survives that pass and becomes the correct direct null test during ordinary EF null processing.
+Both modes cover positive/negated native/numeric/text HasValue; raw Value retains storage conversion.
+
+Full Debug/Release and isolated EF10.0.14 Release each pass2364=1622 unit+740 functional+2 consumers,
+zero failures/skips. The same baseline-built `10.0.0-boolean-method-20261111` package passes both modes
+on EF10.0.0/10.0.14, package-content checks, package-only graphs and Release/package/consumer DLL identity:
+`51F43B1866E922E783DB1BEE4C4631E4B5782D47CC0191B9C5CB8BB731F25B6B`.
+The previous Boolean package fails the new method-normalization consumer assertion; baseline assets
+remain10.0.0. Independent source review approves and confirms preservation of inherited custom-method
+behavior. Evidence: artifacts/boolean-method-{red,boundary-red,focused,functional,debug-final,
+release-final,patch-final,package-final,old-package-red}.log, artifacts/boolean-member-red.log,
+boolean-method-package/ and boolean-method-compat/.
+
+Native execution, coercion/collation and repeated volatile evaluation remain unverified. Wider Boolean
+APIs and other Required/deferred local work remain open. No connector defect or deployed-server limit
+was established; the HasValue fault belongs to EF/provider query integration. Overall goal stays active;
+no live test application/database, EF8/EF9, push or publication work occurred.
+
 ### Converted Boolean comparison and logic checkpoint (2026-11-11)
 
 Batch3x after4ce40a8 extends independently converted Boolean ==/!=, NOT, AND/OR and lifted &/|,

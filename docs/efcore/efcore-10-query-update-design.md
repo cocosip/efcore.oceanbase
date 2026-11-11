@@ -681,6 +681,28 @@ encodings and valid-data/collation/coercion/volatile-evaluation boundaries are t
 Broader global Boolean defaults on unrelated translator families and additional Boolean method
 overloads remain local audit work; this bounded operator contract does not advertise all Boolean APIs.
 
+## Boolean equality methods and nullable defaults contract
+
+QRY-01/QRY-11 extends exact framework bool.Equals(bool/object), Nullable<bool>.Equals(object),
+object.Equals(object, object) with statically Boolean operands and Nullable.Equals<bool> to the
+same independently normalized equality and configured null semantics as ==. Strip only built-in
+boxing conversions; Boolean-versus-null operands use typed nullable Boolean NULL. Genuinely dynamic
+object comparisons and other types retain inherited EF inference. Custom identities do not gain
+Boolean normalization: EF's inherited name-based Equals translator can still translate a custom
+same-name method, without inspecting its body; that is not a supported arbitrary-method contract.
+Other unrecognized methods reject predicates and can use EF top-level client projection.
+Both Nullable<bool>.GetValueOrDefault overloads normalize receiver and
+fallback independently and return native Boolean COALESCE; the no-argument default is native false.
+Plain .Value projections retain storage converters; .HasValue tests nullable storage directly.
+Keep its null test as binary != typed NULL until EF's converter-compensation pass completes;
+the inherited unary IS NOT NULL path otherwise truth-converts its operand and can erase the filter.
+
+Acceptance covers both modes/null settings, captured true/false/null transitions, global Boolean
+defaults, intercepted sync/async native readers and the same packed provider on selected EF10 patches.
+Supplied reader values do not prove server evaluation. Existing valid-encoding, coercion/collation and
+repeated volatile evaluation boundaries apply. CompareTo/string/parsing/conversion APIs remain local
+follow-up work; no connector defect or native database acceptance is established by these tests.
+
 ## Integer shift local contract
 
 QRY-01 extends integer expressions with `<<` and `>>`. C# first promotes small integers to Int32;

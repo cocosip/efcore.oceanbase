@@ -22,6 +22,17 @@ namespace OceanBase.EntityFrameworkCore.Query
         private static readonly MethodInfo Greatest =
             ((Func<DbFunctions, int[], int>)RelationalDbFunctionsExtensions.Greatest<int>).Method.GetGenericMethodDefinition();
         private static readonly Dictionary<MethodInfo, string> ScalarMethods = CreateScalarMethods();
+        private static readonly HashSet<MethodInfo> BooleanEqualsMethods =
+        [
+            typeof(bool).GetMethod(nameof(bool.Equals), [typeof(bool)])!,
+            typeof(bool).GetMethod(nameof(bool.Equals), [typeof(object)])!,
+            typeof(bool?).GetMethod(nameof(bool.Equals), [typeof(object)])!,
+            typeof(object).GetMethod(nameof(object.Equals), [typeof(object)])!,
+            typeof(object).GetMethod(nameof(object.Equals), [typeof(object), typeof(object)])!,
+            ((Func<bool?, bool?, bool>)Nullable.Equals<bool>).Method
+        ];
+        private static readonly MethodInfo BooleanDefault = typeof(bool?).GetMethod(nameof(Nullable<bool>.GetValueOrDefault), Type.EmptyTypes)!;
+        private static readonly MethodInfo BooleanFallback = typeof(bool?).GetMethod(nameof(Nullable<bool>.GetValueOrDefault), [typeof(bool)])!;
 
         internal static bool IsCanonicalBoolean(RelationalTypeMapping? mapping)
         {
@@ -124,6 +135,20 @@ namespace OceanBase.EntityFrameworkCore.Query
                         Dependencies.TypeMappingSource.FindMapping(typeof(bool)));
             }
 
+            protected override Expression VisitMember(MemberExpression expression)
+            {
+                if (expression.Member == typeof(bool?).GetProperty(nameof(Nullable<bool>.HasValue)))
+                {
+                    if (Visit(expression.Expression) is not SqlExpression operand)
+                        return QueryCompilationContext.NotTranslatedExpression;
+                    // EF's converter compensation recurses through unary IS NULL and changes its operand to a truth test.
+                    return new SqlBinaryExpression(ExpressionType.NotEqual, operand,
+                        new SqlConstantExpression(null, typeof(bool), operand.TypeMapping), typeof(bool),
+                        Dependencies.TypeMappingSource.FindMapping(typeof(bool)));
+                }
+                return base.VisitMember(expression);
+            }
+
             protected override Expression VisitUnary(UnaryExpression expression)
                 => expression.NodeType == ExpressionType.Not && Unwrap(expression.Type) == typeof(bool)
                     ? Visit(expression.Operand) is SqlExpression operand
@@ -200,6 +225,34 @@ namespace OceanBase.EntityFrameworkCore.Query
 
             protected override Expression VisitMethodCall(MethodCallExpression call)
             {
+                if (BooleanEqualsMethods.Contains(call.Method))
+                {
+                    var left = Unbox(call.Object ?? call.Arguments[0]);
+                    var right = Unbox(call.Arguments[call.Object is null ? 1 : 0]);
+                    if (left is ConstantExpression { Value: null } && Unwrap(right.Type) == typeof(bool))
+                        left = Expression.Constant(null, typeof(bool?));
+                    if (right is ConstantExpression { Value: null } && Unwrap(left.Type) == typeof(bool))
+                        right = Expression.Constant(null, typeof(bool?));
+                    if (Unwrap(left.Type) == typeof(bool) && Unwrap(right.Type) == typeof(bool))
+                    {
+                        if (left.Type != right.Type)
+                        {
+                            left = Expression.Convert(left, typeof(bool?));
+                            right = Expression.Convert(right, typeof(bool?));
+                        }
+                        return Visit(Expression.Equal(left, right))!;
+                    }
+                }
+                if (call.Method == BooleanDefault || call.Method == BooleanFallback)
+                {
+                    if (Visit(call.Object) is not SqlExpression instance)
+                        return QueryCompilationContext.NotTranslatedExpression;
+                    var mapping = Dependencies.TypeMappingSource.FindMapping(typeof(bool));
+                    var fallback = call.Arguments.Count == 0
+                        ? new SqlConstantExpression(false, typeof(bool), mapping) : Visit(call.Arguments[0]) as SqlExpression;
+                    return fallback is null ? QueryCompilationContext.NotTranslatedExpression
+                        : Dependencies.SqlExpressionFactory.Coalesce(BooleanOperand(instance), BooleanOperand(fallback), mapping);
+                }
                 // The base visitor flattens nested Math extrema, losing intermediate native coercion and Single normalization.
                 if (ScalarMethods.TryGetValue(call.Method, out var function))
                     return TranslateArguments(function, call.Type, call.Arguments);
@@ -220,6 +273,14 @@ namespace OceanBase.EntityFrameworkCore.Query
                 for (var i = 0; i < operands.Length; i++)
                     operands[i] = new SqlConstantExpression(values.GetValue(i), type, typeMapping: null);
                 return Build(function, type, operands) ?? QueryCompilationContext.NotTranslatedExpression;
+            }
+
+            private static Expression Unbox(Expression expression)
+            {
+                while (expression is UnaryExpression { NodeType: ExpressionType.Convert, Method: null } conversion
+                    && conversion.Type == typeof(object))
+                    expression = conversion.Operand;
+                return expression;
             }
 
             private Expression TranslateArguments(string function, Type type, IReadOnlyList<Expression> arguments)

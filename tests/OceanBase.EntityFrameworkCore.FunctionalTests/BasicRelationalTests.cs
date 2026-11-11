@@ -3398,6 +3398,87 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
             }
         }
 
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false, false, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true, false, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false, true, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true, true, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false, false, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true, false, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false, true, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true, true, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false, false, true)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true, false, true)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false, true, true)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true, true, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false, false, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true, false, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false, true, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true, true, true)]
+        public async Task Boolean_equality_methods_and_defaults_bind_current_captures_and_read_native_results(
+            OceanBaseCompatibilityMode mode, bool async, bool relationalNulls, bool global)
+        {
+            using var table = new DataTable();
+            foreach (var column in new[] { "Equal", "Boxed", "Static", "Default", "Fallback", "HasValue" })
+                table.Columns.Add(column, typeof(object));
+            table.Rows.Add(1m, 0m, relationalNulls ? DBNull.Value : 1m, 0m, 1m, 0m);
+            table.Rows.Add(relationalNulls ? DBNull.Value : 0m, 1m, 0m, 1m, 0m, 1m);
+            var commands = new CommandCapture { Results = table };
+            var builder = new DbContextOptionsBuilder<GlobalBooleanContext>()
+                .UseOceanBase("Server=localhost;Database=test", mode)
+                .AddInterceptors(new NoNetworkConnection(), commands);
+            ((IDbContextOptionsBuilderInfrastructure)builder).AddOrUpdateExtension(
+                builder.Options.Extensions.OfType<RelationalOptionsExtension>().Single().WithUseRelationalNulls(relationalNulls));
+            await using DbContext context = global ? new GlobalBooleanContext(builder.Options) : CreateContext(mode, commands, relationalNulls);
+            bool? flag = true;
+            var fallback = true;
+            var query = context.Set<BooleanXorRow>()
+                .Where(row => row.OptionalText.HasValue || object.Equals(row.OptionalNumber, flag))
+                .Select(row => new { Equal = (bool?)row.OptionalText.Equals(flag), Boxed = row.Text.Equals((object)row.Number),
+                    Static = (bool?)Nullable.Equals(row.OptionalText, row.OptionalNumber),
+                    Default = row.OptionalText.GetValueOrDefault(), Fallback = row.OptionalText.GetValueOrDefault(fallback),
+                    HasValue = row.OptionalText.HasValue });
+            foreach (var value in new bool?[] { true, false, null, true, null, false })
+            {
+                flag = value;
+                fallback = value == true;
+                commands.Values.Clear();
+                var rows = async ? await query.ToListAsync() : query.ToList();
+                Assert.Equal(2, rows.Count);
+                Assert.Equal(true, rows[0].Equal);
+                Assert.False(rows[0].Boxed);
+                Assert.Equal(relationalNulls ? null : (bool?)true, rows[0].Static);
+                Assert.False(rows[0].Default);
+                Assert.True(rows[0].Fallback);
+                Assert.False(rows[0].HasValue);
+                Assert.Equal(relationalNulls ? null : (bool?)false, rows[1].Equal);
+                Assert.True(rows[1].Boxed);
+                Assert.Equal(false, rows[1].Static);
+                Assert.True(rows[1].Default);
+                Assert.False(rows[1].Fallback);
+                Assert.True(rows[1].HasValue);
+                var sql = commands.Sql[^1];
+                Assert.Contains("COALESCE(", sql);
+                Assert.Contains("IS NOT NULL", sql);
+                Assert.DoesNotContain("THEN 'Y'", sql);
+                Assert.DoesNotContain("THEN N'Y'", sql);
+                Assert.DoesNotContain("__oceanbase_internal_", sql);
+                if (!global)
+                {
+                    Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? " = 'Y' THEN 1" : " = N'Y' THEN 1", sql);
+                    Assert.Contains(" = 2 THEN 1", sql);
+                }
+                Assert.NotEmpty(commands.Values);
+                Assert.All(commands.Values, parameter =>
+                {
+                    if (global)
+                        Assert.Equal(fallback ? "Y" : "N", Assert.IsType<string>(parameter));
+                    else
+                        Assert.Equal(fallback ? 1m : 0m, Convert.ToDecimal(parameter));
+                });
+            }
+        }
+
         private sealed class GlobalBooleanContext(DbContextOptions<GlobalBooleanContext> options) : DbContext(options)
         {
             protected override void ConfigureConventions(ModelConfigurationBuilder builder)

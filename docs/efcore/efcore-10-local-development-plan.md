@@ -766,8 +766,43 @@ logical Boolean equality; MySQL also cannot use a Y/N column directly as a truth
   Keep valid encodings/native collation/coercion and repeated volatile evaluation as explicit boundaries.
   Broader global Boolean defaults on unrelated translator families remain separately audited local work.
 
+## Batch3y brief: Boolean equality methods and nullable defaults
+
+QRY-01/QRY-11: bool.Equals(bool/object), Boolean/nullable operands of object.Equals(object,object),
+Nullable<bool>.Equals(object) and Nullable.Equals<bool> must use the same independently normalized
+Boolean comparison as ==. Remove only boxing conversions; other types/custom methods keep inherited
+translation or unsupported behavior. Preserve the configured equality null semantics.
+
+- Add both Nullable<bool>.GetValueOrDefault overloads using normalized operands and native Boolean
+  COALESCE result mapping; the no-argument overload supplies native false. EF's numeric-only default
+  translator currently does not handle Boolean. Retain .Value converters; .HasValue tests storage NULL.
+- Match exact framework methods, not names. Leave genuinely dynamic object operands to existing EF
+  inference; do not reinterpret arbitrary converted objects as Boolean. Normalization must precede
+  inherited equality/null processing, preserve current captured values and avoid new SQL functions.
+- Tests first, mixed numeric/text/inverted/nullable fields, constants/boxing/null/custom controls,
+  both null settings, global defaults and sync/async readers. Full baseline Debug/Release/isolated14,
+  package consumers/content/identity, independent review, docs and local commit remain required.
+  Boolean comparison/string/conversion methods beyond these exact identities remain further local work;
+  no live testing application, database access, EF8/EF9, push or publication work.
+
 ## Execution record
 
+- Batch3y final:18 added unit/16 intercepted cases; full Debug/Release/isolated EF10.0.14 each
+ 2364=1622+740+2 pass with no failures/skips. Same baseline-built boolean-method-20261111 nupkg passes
+ both modes/patches/content/package-only graphs and DLL identity; baseline assets remain10.0.0.
+ Previous Boolean package fails the new method-normalization consumer. Independent source and final
+ docs/consumer review approve; one stale log pointer corrected. No connector/server defect established.
+ Native execution/coercion/collation/volatile single evaluation, wider Boolean APIs and remaining
+ Required/deferred inventory stay open. Overall goal active; no live tests, EF8/9, push or publication.
+- Batch3y rulings: .HasValue RED2 exposes inherited converter compensation changing nullable storage
+  into a truth comparison under unary IS NOT NULL, then erasing the filter. Emit binary != typed NULL
+  until that pass completes; EF's normal null processor restores the direct storage null test.
+  Nullable instance Equals arrives as System.Object.Equals(object), so include that exact identity
+  with statically Boolean operands. The first false-predicate MySQL assertion was over-specific:
+  WHERE0 is valid there; Oracle keeps WHERE0=1. Actual custom Equals RED2 proves inherited name-based
+  translation; preserve it as the brief requires, characterize absence of new normalization, and
+  explicitly document that arbitrary method bodies are not interpreted. Keep CustomEquals predicate
+  rejection/top-level client controls separately. No DbFunction/plugin API is intercepted or disabled.
 - Batch3x after4ce40a8: independently converted Boolean comparisons/logical operators, predicate/order
   roots, ternary and coalesce normalize to native Boolean carriers before EF null processing. Oracle
   scalar predicate CASE uses native constants even with global Boolean defaults. Initial RED18/20;
