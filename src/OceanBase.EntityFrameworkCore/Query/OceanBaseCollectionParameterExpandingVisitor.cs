@@ -29,7 +29,7 @@ namespace OceanBase.EntityFrameworkCore.Query
             {
                 if (root.TypeMapping?.ElementTypeMapping is not RelationalTypeMapping elementMapping
                     || !IsSupportedIntegral(elementMapping))
-                    throw new NotSupportedException("General collection roots currently require int/int? elements with signed int or long storage carriers.");
+                    throw new NotSupportedException("General collection roots require integer elements with non-null-converting integer storage carriers.");
                 if (!(valuesExpression.ColumnNames.SequenceEqual(new[] { "Value" })
                     || valuesExpression.ColumnNames.SequenceEqual(new[] { "_ord", "Value" })))
                     throw new NotSupportedException("Unsupported general collection column layout.");
@@ -88,8 +88,13 @@ namespace OceanBase.EntityFrameworkCore.Query
         }
 
         internal static bool IsSupportedIntegral(RelationalTypeMapping mapping)
-            => mapping.ClrType == typeof(int)
-                && mapping is OceanBaseIntegerTypeMapping<int> or OceanBaseIntegerTypeMapping<long>;
+            => mapping.Converter?.ConvertsNulls != true
+                && Type.GetTypeCode(Nullable.GetUnderlyingType(mapping.ClrType) ?? mapping.ClrType) is (TypeCode.SByte or TypeCode.Byte or TypeCode.Int16
+                    or TypeCode.UInt16 or TypeCode.Int32 or TypeCode.UInt32 or TypeCode.Int64 or TypeCode.UInt64)
+                && mapping is OceanBaseIntegerTypeMapping<sbyte> or OceanBaseIntegerTypeMapping<byte>
+                    or OceanBaseIntegerTypeMapping<short> or OceanBaseIntegerTypeMapping<ushort>
+                    or OceanBaseIntegerTypeMapping<int> or OceanBaseIntegerTypeMapping<uint>
+                    or OceanBaseIntegerTypeMapping<long> or OceanBaseIntegerTypeMapping<ulong>;
 
         private List<object?> Snapshot(SqlParameterExpression source)
         {
@@ -105,12 +110,15 @@ namespace OceanBase.EntityFrameworkCore.Query
             return values;
         }
 
-        private static Type ScalarType(SqlParameterExpression source, RelationalTypeMapping mapping)
-        {
-            var elementType = source.Type.IsArray ? source.Type.GetElementType()
-                : source.Type.GetInterfaces().Append(source.Type)
+        internal static Type? ElementType(Type collectionType)
+            => collectionType.IsArray ? collectionType.GetElementType()
+                : collectionType.GetInterfaces().Append(collectionType)
                     .FirstOrDefault(type => type.IsGenericType && type.GetGenericTypeDefinition() == typeof(IEnumerable<>))
                     ?.GenericTypeArguments[0];
+
+        private static Type ScalarType(SqlParameterExpression source, RelationalTypeMapping mapping)
+        {
+            var elementType = ElementType(source.Type);
             var type = mapping.ClrType;
             if (Nullable.GetUnderlyingType(elementType ?? type) is not null && type.IsValueType
                 && Nullable.GetUnderlyingType(type) is null)

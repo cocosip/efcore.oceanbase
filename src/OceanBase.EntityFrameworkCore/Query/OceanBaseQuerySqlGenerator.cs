@@ -27,7 +27,7 @@ namespace OceanBase.EntityFrameworkCore.Query
             var prototypes = empty ? valuesExpression.FindAnnotation(OceanBaseCollectionParameterExpandingVisitor.EmptyColumnsAnnotation)
                 ?.Value as IReadOnlyList<SqlExpression> : null;
             if (empty && (prototypes is null || prototypes.Count != valuesExpression.ColumnNames.Count))
-                throw new NotSupportedException("An empty collection root requires retained integral element mapping metadata.");
+                throw new NotSupportedException("An empty collection root requires retained integer element mapping metadata.");
             for (var row = 0; row < (empty ? 1 : rows.Count); row++)
             {
                 if (row > 0) Sql.AppendLine().Append("UNION ALL ");
@@ -54,11 +54,13 @@ namespace OceanBase.EntityFrameworkCore.Query
         private void GenerateCollectionCast(SqlExpression expression)
         {
             if (expression.TypeMapping is not { } mapping || !OceanBaseCollectionParameterExpandingVisitor.IsSupportedIntegral(mapping))
-                throw new NotSupportedException("Collection typing casts currently require int/int? elements with signed int or long storage carriers.");
+                throw new NotSupportedException("Collection typing casts require integer elements with non-null-converting integer storage carriers.");
             // Use the lossless query carrier, not a property's narrower physical write declaration.
             Sql.Append("CAST(");
             Visit(expression);
-            Sql.Append(_mode == OceanBaseCompatibilityMode.MySql ? " AS SIGNED)" : " AS NUMBER)");
+            Sql.Append(_mode == OceanBaseCompatibilityMode.Oracle ? " AS NUMBER)"
+                : UnsignedMaximum(IntegerCode(mapping.Converter?.ProviderClrType ?? mapping.ClrType)!.Value) is null
+                    ? " AS SIGNED)" : " AS UNSIGNED)");
         }
 
         protected override Expression VisitSqlBinary(SqlBinaryExpression sqlBinaryExpression)

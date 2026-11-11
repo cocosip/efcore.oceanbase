@@ -42,6 +42,41 @@ Do not mark the goal complete while any locally developable item below remains u
 | 9. Deferred inventory audit | DEF-01..10 | Revisit every documented deferred family after Required local implementation stabilizes. Implement locally feasible families under explicit per-mode contracts and tests; record precise architectural/connector/server blockers for any unimplementable family. Do not treat a Deferred label alone as evidence it cannot be developed. |
 | 10. Completion audit | All IDs | Compare docs/public API/source/tests/package evidence. Every locally feasible feature is implemented/reviewed/committed; only specifically evidenced database or external blockers may remain. |
 
+## Batch3aa brief: complete integer collection-root carriers
+
+**Feature IDs:** QRY-03/11, MAP-06/07. Continue after the reviewed Oracle lifecycle commit a891959.
+Expand the existing general VALUES-root pipeline to all eight signed/unsigned CLR integer types,
+nullable forms and integer-backed enums. Retain one snapshot per capture, exact duplicate/order
+preservation, current-value binding, mapping/converter identity and the original empty-inline type.
+Use MySQL SIGNED/UNSIGNED according to the actual provider carrier; Oracle NUMBER is the lossless
+integer query cast. Never use a property's narrower physical declaration as the query cast.
+
+Ruling: widen the existing integral path rather than introduce a second collection translator. This
+preserves the already tested parameter/null-processing and zero-row metadata seams. Integer-to-integer
+converters participate; text/decimal/floating carriers and null-converting converters require separate
+contracts. Direct converted Join projections can still encounter EF's earlier mapping-inference conflict.
+
+Ruling: standalone projected parameter roots also need a derived type-mapping postprocessor. New
+native root tests reproduce EF10's UnreachableException when no comparison supplies inference.
+Prefer contextual inference, then existing element mapping/default original CLR mapping; keep the
+base conflict check. This fixes a demonstrated required query path rather than weakening the tests.
+
+1. Add failing both-mode SQL cases for arrays/lists, native/nullable extrema, duplicate/null/empty
+   transitions, originally empty/nonempty inline roots, joins and ordinal access under both null settings
+   and Constant/MultipleParameters/default modes. Characterize explicit single-parameter rejection.
+2. Widen the shared validation and carrier casts, retaining early rejection and immutable metadata.
+3. Add sync/async intercepted commands for exact parameter types/values, native reader conversion,
+   unsigned boundaries, converter ownership and zero-row bodies. Supplied rows do not prove SQL results.
+4. Run focused and full Debug/Release suites, isolated EF10.0.14 and the same baseline-built package
+   consumers. Independent review, fix regressions, update evidence and commit locally. No live execution.
+
+Verified checkpoint: final Debug/Release and isolated EF10.0.14 Release each pass3652=1708+1074+868+2,
+zero failures/skips. Focused95 unit/24 functional cover the wider path. Review's nullable-model/provider
+converter defect has separate captured/inline RED evidence, a two-guard fix and independently verified
+re-review. The same baseline-built integer-roots-r1 package passes both modes/patches, content, package-only
+graphs and Release/archive/consumer DLL identity. Previous Oracle package rejects the new root smoke with
+caught exit1. Native execution and remaining carriers/projections stay open; overall goal remains active.
+
 ## Batch8b brief: restore the default dependency audit gate
 
 **Feature IDs:** PKG-01/02, TST-01, REL-02. The ordinary solution restore currently fails because the

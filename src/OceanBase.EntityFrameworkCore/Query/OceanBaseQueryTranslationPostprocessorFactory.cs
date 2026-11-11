@@ -24,19 +24,20 @@ namespace OceanBase.EntityFrameworkCore.Query
 
             protected override Expression ProcessTypeMappings(Expression expression)
             {
-                var mapped = base.ProcessTypeMappings(expression);
+                var mapped = new IntegerCollectionTypeMappingPostprocessor(Dependencies, RelationalDependencies,
+                    RelationalQueryCompilationContext).Process(expression);
                 var metadata = new MetadataVisitor();
                 metadata.Visit(mapped);
                 foreach (var values in metadata.EmptyRoots)
                 {
                     var elementType = (Type)values.FindAnnotation(
                         OceanBaseQueryableMethodTranslatingExpressionVisitorFactory.EmptyElementTypeAnnotation)!.Value!;
-                    if ((Nullable.GetUnderlyingType(elementType) ?? elementType) != typeof(int))
-                        throw new NotSupportedException("Empty inline collection roots currently require int/int? elements.");
                     var mapping = metadata.Mappings.GetValueOrDefault((values.Alias, "Value"))
                         ?? RelationalDependencies.TypeMappingSource.FindMapping(elementType);
-                    if (mapping is null || !OceanBaseCollectionParameterExpandingVisitor.IsSupportedIntegral(mapping))
-                        throw new NotSupportedException("Empty inline collection roots require signed int or long storage carriers.");
+                    if (mapping is null || (Nullable.GetUnderlyingType(mapping.ClrType) ?? mapping.ClrType)
+                            != (Nullable.GetUnderlyingType(elementType) ?? elementType)
+                        || !OceanBaseCollectionParameterExpandingVisitor.IsSupportedIntegral(mapping))
+                        throw new NotSupportedException("Empty inline collection roots require integer elements with non-null-converting integer storage carriers.");
                     var ordinal = RelationalDependencies.TypeMappingSource.FindMapping(typeof(int))!;
                     _emptyColumns.Add(values.Alias, (elementType, new Dictionary<string, SqlExpression>
                     {
@@ -55,6 +56,28 @@ namespace OceanBase.EntityFrameworkCore.Query
                 remaining.Visit(pruned);
                 // EF's pruning reconstructs VALUES without annotations; match the surviving column identities.
                 return new EmptyColumnsVisitor(_emptyColumns, remaining.Mappings.Keys.ToHashSet()).Visit(pruned);
+            }
+        }
+
+        private sealed class IntegerCollectionTypeMappingPostprocessor(QueryTranslationPostprocessorDependencies dependencies,
+            RelationalQueryTranslationPostprocessorDependencies relationalDependencies,
+            RelationalQueryCompilationContext queryCompilationContext)
+            : RelationalTypeMappingPostprocessor(dependencies, relationalDependencies, queryCompilationContext)
+        {
+            protected override ValuesExpression ApplyTypeMappingsOnValuesExpression(ValuesExpression values)
+            {
+                if (values.ValuesParameter is not { } parameter) return base.ApplyTypeMappingsOnValuesExpression(values);
+                // EF10 requires an inferred comparison mapping even for already mapped standalone roots.
+                var element = TryGetInferredTypeMapping(values.Alias, "Value", out var inferred) ? inferred
+                    : parameter.TypeMapping?.ElementTypeMapping as RelationalTypeMapping
+                        ?? RelationalDependencies.TypeMappingSource.FindMapping(
+                            OceanBaseCollectionParameterExpandingVisitor.ElementType(parameter.Type)!);
+                if (element is null || !OceanBaseCollectionParameterExpandingVisitor.IsSupportedIntegral(element))
+                    return base.ApplyTypeMappingsOnValuesExpression(values);
+                var collection = RelationalDependencies.TypeMappingSource.FindMapping(parameter.Type,
+                    QueryCompilationContext.Model, element)
+                    ?? throw new InvalidOperationException("An integer collection mapping is required for the query root.");
+                return values.Update(parameter.ApplyTypeMapping(collection));
             }
         }
 

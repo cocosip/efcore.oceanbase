@@ -7,6 +7,40 @@ execution, transactions, complete scalar mappings and package validation remain 
 [feature checklist](efcore-10-feature-checklist.md). SQL-generation tests and intercepted commands do not prove
 that a server accepts the SQL, generates identity values or commits and rolls back correctly.
 
+## Wider integer collection-root contract (Batch3aa, QRY-03/11, MAP-06/07)
+
+Extend the existing VALUES expansion/UNION ALL renderer and empty-inline metadata path to sbyte,
+byte, short, ushort, int, uint, long and ulong, their nullable forms and integer-backed enums.
+This supersedes the narrower int/int? carrier boundary in the earlier collection-slice records below.
+The supported model and provider types must both be integral; preserve the mapping and converter
+instance rather than converting values eagerly or stripping reader hooks. Null-converting and
+noninteger storage mappings reject before opening. Both MySQL query casts use the provider carrier's
+signedness (SIGNED or UNSIGNED), and Oracle uses NUMBER independently of column precision.
+This prevents UInt64 values above Int64.MaxValue from becoming signed or narrowing to column facets.
+Explicit nullable-model/provider converters retain nullable mapping CLR types; unwrap those types only
+for validation, retaining the original converter, parameter binding and reader NULL handling.
+
+EF10's base type-mapping postprocessor throws UnreachableException for a parameter VALUES root
+without an inferred comparison mapping, including standalone projected roots. A derived mapping
+postprocessor keeps TryGetInferredTypeMapping authoritative (and preserves conflicting-mapping
+errors), then uses the parameter's element mapping or original sequence element CLR type as the
+fallback for supported integer roots. It uses the provider's ordinary collection mapping and retains
+the base processor for other families. No default mapping is forced before contextual inference.
+
+Captured roots keep exact sequence length/order/duplicates, including NULL cells; do not pad UNION
+rows as IN-list bucketing does. Empty roots retain both ordinal and element mapping metadata and
+render a typed SELECT with WHERE 1 = 0. The original inline CLR element type survives when the
+element column is pruned. Existing Constant/MultipleParameters/default policy, capture snapshots,
+unique parameter names and command-cache invalidation remain unchanged. Explicit single-parameter
+JSON-style roots and EF's direct converted-Join mapping conflicts are not promoted by this work.
+
+Verify both modes, both null settings, all three supported collection policies, min/max and nullable
+inputs, arrays/lists, inline/captured zero rows, joins/count/ordinal shapes and runtime rebinding.
+Intercepted reader values establish shaping and exact native parameter values/types, not server
+cardinality or UNION coercion. Native execution, text/other carriers and wider converter projections
+remain separate work. The source contracts are the published EF10.0.0 VALUES/collection pipeline
+already inspected for Batch3j/3k; selected EF10.0.14 and package consumers must cover this extension.
+
 ## EF Core 10 contracts
 
 The implementation was checked against the EF Core Relational 10.0.0 assembly and these upstream sources:

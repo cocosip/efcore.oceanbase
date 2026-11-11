@@ -10,6 +10,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Storage;
+using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using OceanBase.EntityFrameworkCore;
 using OceanBaseCommand = OceanBaseConnector.OceanBaseCommand;
 using OceanBaseDecimal = OceanBaseConnector.OceanBaseDecimal;
@@ -427,6 +428,30 @@ namespace PackageConsumer
                         throw new Exception("Oracle collection SELECT arms do not each have FROM DUAL.");
                 }
 
+                VerifyIntegerRoots(context, mode, sbyte.MinValue, sbyte.MaxValue, false);
+                VerifyIntegerRoots(context, mode, byte.MinValue, byte.MaxValue, true);
+                VerifyIntegerRoots(context, mode, short.MinValue, short.MaxValue, false);
+                VerifyIntegerRoots(context, mode, ushort.MinValue, ushort.MaxValue, true);
+                VerifyIntegerRoots(context, mode, int.MinValue, int.MaxValue, false);
+                VerifyIntegerRoots(context, mode, uint.MinValue, uint.MaxValue, true);
+                VerifyIntegerRoots(context, mode, long.MinValue, long.MaxValue, false);
+                VerifyIntegerRoots(context, mode, ulong.MinValue, ulong.MaxValue, true);
+                int?[] nullableConvertedValues = [null, 17, 17];
+                var nullableConverted = context.Set<Row>().Where(row => nullableConvertedValues
+                    .Where(value => value > row.NullableInteger).Contains(row.NullableInteger)).Select(row => row.NullableInteger);
+                foreach (var input in new int?[][] { nullableConvertedValues, [], [null, null], [] })
+                {
+                    nullableConvertedValues = input;
+                    var convertedSql = nullableConverted.ToQueryString();
+                    if (!convertedSql.Contains(mode == OceanBaseCompatibilityMode.MySql ? " AS UNSIGNED)" : " AS NUMBER)", StringComparison.Ordinal)
+                        || convertedSql.Contains("WHERE 1 = 0", StringComparison.Ordinal) != (input.Length == 0))
+                        throw new Exception("Packed nullable integer converter lost its unsigned carrier or current root values.");
+                }
+                var nullableEmpty = context.Set<Row>().Select(row => new int?[] { }
+                    .Count(value => value > row.NullableInteger)).ToQueryString();
+                if (!nullableEmpty.Contains(mode == OceanBaseCompatibilityMode.MySql ? "CAST(NULL AS UNSIGNED)" : "CAST(NULL AS NUMBER)", StringComparison.Ordinal))
+                    throw new Exception("Packed nullable converter lost its original empty-inline type.");
+
                 foreach (var emptyRoot in new IQueryable[]
                 {
                     context.Set<Row>().Select(row => new int[] { }.Count(value => value > row.Id)),
@@ -788,6 +813,28 @@ namespace PackageConsumer
             }
         }
 
+        private static void VerifyIntegerRoots<T>(ConsumerContext context, OceanBaseCompatibilityMode mode,
+            T minimum, T maximum, bool unsigned) where T : struct
+        {
+            T?[] values = [];
+            var query = context.Set<Row>().SelectMany(row => values.Where(value => row.Id > 0));
+            foreach (var input in new T?[][] { [], [minimum, maximum, minimum, null], [null, null], [maximum], [] })
+            {
+                values = input;
+                var sql = query.ToQueryString();
+                var target = mode == OceanBaseCompatibilityMode.Oracle ? "NUMBER" : unsigned ? "UNSIGNED" : "SIGNED";
+                if (!sql.Contains(" AS " + target + ")", StringComparison.Ordinal)
+                    || sql.Split("UNION ALL SELECT", StringSplitOptions.None).Length - 1 != Math.Max(0, input.Length - 1)
+                    || sql.Contains("WHERE 1 = 0", StringComparison.Ordinal) != (input.Length == 0))
+                    throw new Exception("Packed integer root lost its carrier, current values or zero-row SQL.");
+            }
+            var empty = context.Set<Row>().Select(row => new T[] { }.Count(value => row.Id > 0)).ToQueryString();
+            if (!empty.Contains("WHERE 1 = 0", StringComparison.Ordinal)
+                || !empty.Contains(mode == OceanBaseCompatibilityMode.Oracle ? "CAST(NULL AS NUMBER)"
+                    : unsigned ? "CAST(NULL AS UNSIGNED)" : "CAST(NULL AS SIGNED)", StringComparison.Ordinal))
+                throw new Exception("Packed inline-empty root used the Count result type instead of its integer element type.");
+        }
+
         private static void VerifyNullableConcurrency(OceanBaseCompatibilityMode mode)
         {
             var commands = new CaptureWrite();
@@ -919,6 +966,8 @@ namespace PackageConsumer
                     .HasConversion(value => value ? "Y" : "N", value => value == "Y");
                 modelBuilder.Entity<Row>().Property(row => row.BooleanNumber)
                     .HasConversion(value => value ? 2 : -1, value => value == 2);
+                modelBuilder.Entity<Row>().Property(row => row.NullableInteger).HasConversion(
+                    new ValueConverter<int?, ulong?>(value => (ulong?)value, value => (int?)value));
                 modelBuilder.Entity<Row>().Property(row => row.ExplicitToken).HasColumnType(mode == OceanBaseCompatibilityMode.Oracle ? "VARCHAR2(36)" : "BINARY(16)");
                 modelBuilder.Entity<Row>().Property(row => row.Amplitude).HasColumnType(mode == OceanBaseCompatibilityMode.Oracle ? "BINARY_FLOAT" : "FLOAT(24)");
                 modelBuilder.Entity<Row>().Property(row => row.Wide).HasColumnType(mode == OceanBaseCompatibilityMode.Oracle ? "BINARY_DOUBLE" : "DOUBLE PRECISION");
@@ -940,6 +989,7 @@ namespace PackageConsumer
             public bool BooleanText { get; set; }
             public bool BooleanNumber { get; set; }
             public bool? OptionalBoolean { get; set; }
+            public int? NullableInteger { get; set; }
             public Guid Token { get; set; }
             public Guid ExplicitToken { get; set; }
             public DateTime OccurredAt { get; set; }

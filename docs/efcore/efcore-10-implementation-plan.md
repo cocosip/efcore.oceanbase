@@ -20,6 +20,12 @@ checklist rows, implementation, tests and package impact are updated together.
 Development resumed on 2026-11-10 at the user's request on efcore/10.0. The
 [progress handoff](efcore-10-progress.md) records the current checkpoint, verification and next work.
 
+Latest local slice Batch3aa extends general integer collection roots to all eight carriers, nullable forms,
+integer enums/converters and standalone projected roots. Explicit nullable converter validation was corrected
+after independent review. Full Debug/Release/isolated EF10.0.14 each pass3652; the same baseline-built
+integer-roots-r1 package passes both modes/patches/content/graphs/DLL identity. Other collection carriers,
+converter projections, broader query/model/write families and all live gates remain incomplete.
+
 The feature checklist is the release authority. Task checkboxes describe work steps, not proof that all features
 in a category are supported. Before starting a step, name its checklist IDs and required evidence; after it,
 update MySQL and Oracle statuses independently. Generated SQL and intercepted tests do not close live gates.

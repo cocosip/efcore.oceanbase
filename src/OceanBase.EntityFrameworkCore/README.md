@@ -19,6 +19,14 @@ This is a development provider. Local tests cover model/type mappings, SQL gener
 pipelines and package consumption. Real OceanBase query, write, transaction and schema acceptance is still open
 for both modes. Passing local tests does not establish server compatibility or release readiness.
 
+General query collection roots support all eight CLR integer types, nullable forms and integer-backed
+enums through scalar parameters or constants and SELECT/UNION ALL. Empty roots retain their original
+element type and produce zero-row SQL. Integer-to-integer converters keep their parameter/read hooks;
+typing casts use the provider carrier's signedness in MySQL and NUMBER in Oracle. Single-parameter
+JSON-style roots, noninteger carriers and null-converting converters are not supported by this path.
+Some directly projected converted joins still fail EF's mapping-inference check. Native UNION typing,
+results and query costs remain unverified.
+
 Integer `&`, `|`, `^`, `~`, `<<` and `>>` have per-mode SQL translations, including nullable values and
 C# small-integer promotions. Bitwise enum storage must be numeric. Shift counts use C# width masking,
 and signed right shifts preserve sign extension. Text/floating/decimal converter carriers are rejected

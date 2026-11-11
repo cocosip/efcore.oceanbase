@@ -187,17 +187,17 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
         [Theory]
         [InlineData(OceanBaseCompatibilityMode.MySql)]
         [InlineData(OceanBaseCompatibilityMode.Oracle)]
-        public void Originally_empty_inline_count_does_not_guess_other_element_types_from_its_int_result(OceanBaseCompatibilityMode mode)
+        public void Originally_empty_inline_count_does_not_guess_noninteger_element_types_from_its_int_result(OceanBaseCompatibilityMode mode)
         {
             using var context = CreateContext(mode);
             foreach (var query in new IQueryable[]
             {
                 context.Rows.Select(row => new string[] { }.Count(value => row.Id > 0)),
-                context.Rows.Select(row => new long[] { }.Count(value => row.Id > 0)),
                 context.Rows.Select(row => new decimal[] { }.Count(value => row.Id > 0)),
-                context.Rows.Select(row => new byte[] { }.Count(value => row.Id > 0))
+                context.Rows.Select(row => new bool[] { }.Count(value => row.Id > 0)),
+                context.Rows.Select(row => new double[] { }.Count(value => row.Id > 0))
             })
-                Assert.Contains("int/int?", Assert.Throws<NotSupportedException>(() => query.ToQueryString()).Message);
+                Assert.Contains("integer", Assert.Throws<NotSupportedException>(() => query.ToQueryString()).Message);
             Assert.Contains("Conflicting type mappings", Assert.Throws<InvalidOperationException>(() => context.Rows
                 .Join(new int[] { }, row => row.Converted, value => value, (row, value) => value).ToQueryString()).Message);
         }
@@ -396,11 +396,11 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             var parameter = new SqlParameterExpression("values", typeof(int[]), source.FindMapping(typeof(int[]), context.Model, mapping));
             Assert.Contains("column layout", Assert.Throws<NotSupportedException>(() => visitor.Visit(
                 new ValuesExpression("v", parameter, new[] { "Unknown" }))).Message);
-            Assert.Contains("int/int?", Assert.Throws<NotSupportedException>(() => visitor.Visit(
+            Assert.Contains("integer", Assert.Throws<NotSupportedException>(() => visitor.Visit(
                 new ValuesExpression("v", new SqlParameterExpression("values", typeof(int[]), null), new[] { "Value" }))).Message);
             var textMapping = source.FindMapping(typeof(string))!;
             var texts = new SqlParameterExpression("texts", typeof(string[]), source.FindMapping(typeof(string[]), context.Model, textMapping));
-            Assert.Contains("int/int?", Assert.Throws<NotSupportedException>(() => visitor.Visit(
+            Assert.Contains("integer", Assert.Throws<NotSupportedException>(() => visitor.Visit(
                 new ValuesExpression("v", texts, new[] { "Value" }))).Message);
             var membership = factory.In(new ColumnExpression("Text", "r", typeof(string), textMapping, true), texts);
             if (mode == OceanBaseCompatibilityMode.MySql) Assert.Same(membership, visitor.Visit(membership));

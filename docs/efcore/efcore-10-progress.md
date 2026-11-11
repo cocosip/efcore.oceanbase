@@ -12,9 +12,47 @@ each small group. Real database integration/tests and EF8/EF9 adaptation are exp
 [local development plan](efcore-10-local-development-plan.md) tracks the full remaining inventory, including
 an audit of locally feasible deferred families. Finishing one batch does not finish the overall goal.
 
+### Wider integer collection-root checkpoint (2026-11-11)
+
+Batch3aa follows Oracle lifecycle commit `a891959`. General collection roots now support all eight
+signed/unsigned CLR integers, nullable forms and integer-backed enums. MySQL typing casts use the
+actual provider carrier's SIGNED/UNSIGNED category; Oracle uses NUMBER. Column write precision does
+not narrow query inputs. Captured arrays/lists retain exact row counts, duplicates, NULL cells,
+current values and mapping-owned bindings/readers; originally empty inline roots retain their type
+through pruning, including the ordinal-only case. Noninteger/null-converting carriers remain separate.
+
+A derived EF type-mapping postprocessor handles standalone parameter roots without a comparison's
+inferred mapping, a path that otherwise reaches EF10's UnreachableException. Contextual inference
+remains authoritative, and existing converted-Join conflicts still reject. The source contracts are
+the published EF10.0.0 classes cached for Batch3j/3k. No early default mapping or driver changes added.
+
+Independent review reproduced an explicit ValueConverter<int?,ulong?> rejection in both captured
+and originally empty roots. Separate RED stages establish the expansion and inline-type defects;
+validation now unwraps nullable types while retaining the original mapping/converter. Read-only
+re-review independently reran the reproduction and reports no unresolved actionable findings.
+
+Final EF10.0.0 Debug/Release and isolated EF10.0.14 Release each pass **3652** tests:
+1708 unit + 1074 intercepted functional + 868 model specification + two project-consumer cases,
+zero failures/skips. This adds 38 unit and 24 functional cases; focused collection runs pass95/24.
+Evidence: `artifacts/integer-roots-{red,nullable-red,nullable-inline-red,focused,debug,release,patch}.log`.
+The new fixtures disable global provider caching. Earlier fixture corrections retained closure-backed
+captures (direct Join arguments retain their original sequence) and translated collection selectors.
+
+The same baseline-built `10.0.0-integer-roots-r1-20261111` package passes both-mode manual consumers
+at EF10.0.0/10.0.14, all-eight/nullable/empty-root smoke, nullable converters, contents, package-only
+graphs and Release/archive/consumer DLL identity. SHA-256:
+`7BB309A8A0F8F253D65F3C839BBF74156112162CCFDC8109194E0A482E2454D4`.
+Evidence: `artifacts/integer-roots-package.log` and `artifacts/verify-integer-roots-package.ps1`.
+The preceding Oracle package rejects the new root smoke with caught exit1; the initial integer-root
+package predates the nullable fix and is superseded by r1. Isolated restore required the normal user
+network after sandbox TLS/SSPI failure; NuGet audit and warnings-as-errors remain enabled.
+
+Native UNION coercion/results/cost, other collection carriers, broader converter projections and
+the rest of the EF10 inventory remain open. No live database, EF8/EF9, push or publication occurred.
+
 ### Oracle owned user/schema lifecycle checkpoint (2026-11-11)
 
-Batch7f follows `698e30c`. Typed/untyped `EnableOceanBaseUserManagement(userName, Func<string>)`
+Batch7f is committed as `a891959` after `698e30c`. Typed/untyped `EnableOceanBaseUserManagement(userName, Func<string>)`
 explicitly owns an Oracle user and all its schema objects. It requires a closed matching target login,
 a different independent administration login and the explicit management factory. Owned names exclude
 tenant-routing `@` and protected system users. Successful exact bound SYS.DBA_USERS probes establish
@@ -104,10 +142,11 @@ logs and `artifacts/verify-management-profile-package.ps1`. Baseline assets rema
 
 ### Resume here: remaining EF10 local inventory
 
-1. Recheck branch/worktree and saved commit before editing. Batch7f Oracle user lifecycle, Batch7e management
-   factories and bulk-update rewrites are implemented; do not repeat them. Current evidence is above;
+1. Recheck branch/worktree and saved commit before editing. Batch3aa integer collection carriers,
+   Batch7f Oracle user lifecycle, Batch7e management factories and bulk-update rewrites are implemented;
+   do not repeat them. Current evidence is above;
    older sections below are historical checkpoints, not a new implementation backlog.
-2. Continue QRY-03/04/06/07/11 and MAP-06/07: remaining general collection carriers and converter
+2. Continue QRY-03/04/06/07/11 and MAP-06/07: remaining text/other collection carriers and converter
    projections, nonnumeric extrema, function/aggregate overloads and unsupported boundaries. Reuse
    exact EF10 contracts; negative tests must not be mistaken for implementation of a feature family.
 3. Widen model/filter/materialization/graph-write contracts and official query/write/runtime specification
