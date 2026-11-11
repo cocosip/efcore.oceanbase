@@ -1,9 +1,11 @@
 using System;
 using System.Data;
 using System.Data.Common;
+using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Storage;
 using OceanBaseConnector;
 
@@ -71,6 +73,72 @@ namespace OceanBase.EntityFrameworkCore.Storage
                 await entry.RestoreAsync(error).ConfigureAwait(false);
                 throw;
             }
+        }
+
+        public override IDbContextTransaction BeginTransaction(IsolationLevel isolationLevel)
+        {
+            ValidateConnection(DbConnection);
+            ValidateTransactionStart();
+            var entry = new OceanBaseConnectionOpenState(this);
+            DbTransaction? transaction = null;
+            try
+            {
+                Open();
+                var id = Guid.NewGuid();
+                var start = DateTimeOffset.UtcNow;
+                var watch = Stopwatch.StartNew();
+                var intercepted = Dependencies.TransactionLogger.TransactionStarting(this, isolationLevel, id, start);
+                transaction = intercepted.HasResult ? intercepted.Result : ConnectionBeginTransaction(isolationLevel);
+                transaction = Dependencies.TransactionLogger.TransactionStarted(this, transaction, id, start, watch.Elapsed);
+                return CurrentTransaction = Dependencies.RelationalTransactionFactory.Create(
+                    this, transaction, id, Dependencies.TransactionLogger, transactionOwned: true);
+            }
+            catch (Exception error)
+            {
+                try { transaction?.Dispose(); }
+                catch (Exception cleanup) { error.Data["OceanBase.TransactionStartCleanupError"] = cleanup; }
+                entry.Restore(error);
+                throw;
+            }
+        }
+
+        public override async Task<IDbContextTransaction> BeginTransactionAsync(
+            IsolationLevel isolationLevel, CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            ValidateConnection(DbConnection);
+            ValidateTransactionStart();
+            var entry = new OceanBaseConnectionOpenState(this);
+            DbTransaction? transaction = null;
+            try
+            {
+                await OpenAsync(cancellationToken).ConfigureAwait(false);
+                var id = Guid.NewGuid();
+                var start = DateTimeOffset.UtcNow;
+                var watch = Stopwatch.StartNew();
+                var intercepted = await Dependencies.TransactionLogger.TransactionStartingAsync(
+                    this, isolationLevel, id, start, cancellationToken).ConfigureAwait(false);
+                transaction = intercepted.HasResult ? intercepted.Result
+                    : await ConnectionBeginTransactionAsync(isolationLevel, cancellationToken).ConfigureAwait(false);
+                transaction = await Dependencies.TransactionLogger.TransactionStartedAsync(
+                    this, transaction, id, start, watch.Elapsed, cancellationToken).ConfigureAwait(false);
+                return CurrentTransaction = Dependencies.RelationalTransactionFactory.Create(
+                    this, transaction, id, Dependencies.TransactionLogger, transactionOwned: true);
+            }
+            catch (Exception error)
+            {
+                try { if (transaction is not null) await transaction.DisposeAsync().ConfigureAwait(false); }
+                catch (Exception cleanup) { error.Data["OceanBase.TransactionStartCleanupError"] = cleanup; }
+                await entry.RestoreAsync(error).ConfigureAwait(false);
+                throw;
+            }
+        }
+
+        private void ValidateTransactionStart()
+        {
+            if (CurrentTransaction is not null) throw new InvalidOperationException(RelationalStrings.TransactionAlreadyStarted);
+            if (CurrentAmbientTransaction is not null) throw new InvalidOperationException(RelationalStrings.ConflictingAmbientTransaction);
+            if (EnlistedTransaction is not null) throw new InvalidOperationException(RelationalStrings.ConflictingEnlistedTransaction);
         }
 
         private string ValidateConnectionString(string connectionString)

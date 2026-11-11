@@ -39,6 +39,7 @@ namespace PackageConsumer
                 }
             }
             if (native.Disposed) throw new Exception("Packed transaction disposed its borrowed native transaction.");
+            RecoverySmoke.Run(mode);
             Console.WriteLine($"{mode}: packed transaction factory/ownership and Oracle logical release passed (offline).");
         }
 

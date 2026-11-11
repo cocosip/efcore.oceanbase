@@ -700,9 +700,38 @@ client SQL/control flow, not real DDL, physical session continuity, server permi
 
 ### Transactions and savepoints (TXN-01..03)
 
-Reuse EF10 RelationalConnection/RelationalTransaction and BatchExecutor for isolation, transaction ownership,
-begin/commit/rollback, command attachment, automatic transaction selection and savepoint recovery. The provider
-registers a mode-specific IRelationalTransactionFactory. MySQL keeps EF's transaction implementation unchanged.
+OceanBaseBatchExecutor retains EF10's automatic transaction selection and modification-command counts but owns
+the sync/async loops because EF exposes no protected recovery/cleanup seam. After an async write fails, automatic
+savepoint rollback and release use CancellationToken.None; the caller's cancelled token still reaches opening,
+savepoint creation, writes and commit. Explicit public savepoint/transaction operations continue honoring their
+own tokens. AutoSavepointsEnabled=false leaves partial caller-transaction writes for caller rollback. A closed
+connection prevents savepoint commands; successful client recovery does not establish server rollback.
+
+Track a successful connection lease separately from transaction ownership. A failed open must not close the
+caller's existing transaction/outer lease. Owned transaction disposal and final close never reuse the cancelled
+token. Preserve the original write/cancellation exception when cleanup or diagnostic escalation fails; secondary
+exceptions are attached in Data under OceanBase.SavepointRollbackError, OceanBase.SavepointReleaseError,
+OceanBase.SavepointDiagnosticsError or OceanBase.BatchCleanupError. After a successful write, savepoint-release
+failures retain EF's warning policy, including configured warning escalation. No automatic retry/commit occurs.
+
+The registered connection's transaction-start loops reject known transaction conflicts before opening, reuse
+EF's starting/started callbacks and transaction factory, and capture the candidate native handle until it becomes
+CurrentTransaction. A callback/factory failure disposes that handle without cancellation and restores entry
+connection accounting; a secondary disposal error is attached as OceanBase.TransactionStartCleanupError.
+The existing open snapshot handles physical close failures separately as OceanBase.OpenCleanupError. Interceptors
+that replace a transaction retain EF's responsibility for the replaced handle. These version-local loops and the
+snapshot's private-field contract must be rechecked when upgrading EF10 patches or majors.
+
+Native disposal failure or disposal diagnostics can leave EF's transaction wrapper marked disposed while still
+installed, with its lease retained. Such a context/transaction is potentially unusable and is not safe to retry;
+the application must perform explicit native cleanup/discard it. Recording an exception does not prove rollback
+or successful cleanup. TransactionTests uses both registered-provider interception and stateful native doubles;
+the package consumer pins automatic cancellation recovery with native doubles. All physical rollback/atomicity
+and network/server state remain live acceptance gates.
+
+Reuse EF10's relational transaction implementation for isolation, ownership, commit/rollback and command
+attachment. The provider owns the failure-safe start/execution loops described above and registers a
+mode-specific IRelationalTransactionFactory. MySQL keeps EF's transaction implementation unchanged.
 Oracle overrides ReleaseSavepoint/Async as a logical no-op: it sends no RELEASE SAVEPOINT SQL, preserves
 releasing/released/error diagnostics and interceptors, and honors pre-cancelled async tokens. Oracle savepoints
 remain available until replacement or transaction end; logical release is not physical server release.
@@ -717,16 +746,17 @@ EF starts a transaction for multiple row batches and for a single MySQL write re
 read. Successful owned batches commit; a failed batch/readback disposes the active owned transaction without
 committing. Actual rollback then depends on native Dispose/DisposeAsync and requires live evidence. A caller
 transaction remains owned by the caller: SaveChanges uses an automatic savepoint, attempts rollback on failure,
-and leaves the transaction attached for retry. Cancellation during recovery, native rollback/dispose failure,
-ambient/distributed enlistment and server transaction state remain separate required work; callers must roll back
+and leaves a successfully recovered transaction attached for retry. Automatic cancellation recovery is locally
+covered; native rollback/dispose behavior, ambient/distributed enlistment and server state remain required live work. Callers must roll back
 or dispose a transaction whose recovery failed. Do not claim unconditional atomicity from command doubles.
 
 The authoritative EF contracts are [RelationalTransaction v10.0.0](https://github.com/dotnet/efcore/blob/v10.0.0/src/EFCore.Relational/Storage/RelationalTransaction.cs)
 and [BatchExecutor v10.0.0](https://github.com/dotnet/efcore/blob/v10.0.0/src/EFCore.Relational/Update/Internal/BatchExecutor.cs).
-TransactionTests replaces only IRelationalConnection with deterministic native connection/transaction/command
-doubles while retaining the provider's transaction factory, SQL, mappings and update batches. It checks client
-control flow, async tokens, ownership, transaction attachment, release diagnostics and failure/retry boundaries.
-The packed consumer checks the registered factory and Oracle logical release without opening a connection.
+TransactionTests combines deterministic native connection/transaction/command doubles with registered-provider
+interception for transaction-start failures/ownership. It retains the provider's transaction factory, SQL, mappings
+and update batches and checks client control flow, tokens, ownership, attachment, diagnostics and failure/retry
+boundaries. The packed consumer checks factory/Oracle logical release plus automatic cancellation recovery with
+native doubles; it never opens a network connection.
 These are neither native driver execution nor real rollback/savepoint evidence.
 
 Update and delete conditions include the original key and concurrency-token values selected by EF. A result other

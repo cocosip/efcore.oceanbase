@@ -33,6 +33,10 @@ if any ordinary table exists; it does not reconcile or upgrade existing schemas.
 can leave partially created objects requiring manual cleanup. Caller transactions and seeding callbacks are
 rejected. Database/user creation and `EnsureDeleted` remain unsupported; this option enables table creation only.
 
+Automatic savepoint recovery after cancellation uses an uncancelled cleanup token and preserves the original
+save error. Recovery or native disposal can still fail; discard an unusable context/transaction and explicitly
+resolve native state. Local command doubles do not establish physical rollback or transaction atomicity.
+
 Migrations, reverse engineering and the wider EF feature inventory remain under development.
 EF Core 8/9 adaptation is postponed until the EF10 provider stabilizes. Review the repository's EF10
 feature checklist and progress documents before choosing a development checkpoint for an application.

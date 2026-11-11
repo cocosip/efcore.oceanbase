@@ -11,6 +11,27 @@ each small group. Real database integration/tests and EF8/EF9 adaptation are exp
 [local development plan](efcore-10-local-development-plan.md) tracks the full remaining inventory, including
 an audit of locally feasible deferred families. Finishing one batch does not finish the overall goal.
 
+### Save cancellation and cleanup checkpoint (2026-11-11)
+
+Batch6c after16b1d92 specializes EF10's batch execution loops: automatic async rollback/release use an uncancelled
+token, failed opens do not consume caller leases, and cleanup/diagnostic failures retain the original save error.
+Public explicit transaction methods keep their cancellation contracts. Registered transaction-start loops dispose
+untracked native handles after callback/factory failure and restore entry accounting. Native disposal failure can
+leave an unusable context/transaction; neither retry safety in that branch nor physical rollback is established.
+
+Initial cancelled-write RED2, broader RED8, sync RED6 and transaction-start RED4 confirm the failures. Independent
+review found a later Started-callback allocation leak; its RED4/GREEN correction captures/disposes the untracked
+handle. Final source review approves. TransactionTests now passes70, including positive registered transaction
+ownership/nested rejection and default/escalated cleanup diagnostics. Debug/Release and isolated EF10.0.14 Release
+each pass2161 (1507 unit,652 functional,two consumers), zero failures/skips.
+
+The same baseline-built transaction-recovery-20261111 package passes content and both-mode/patch consumers,
+including native-double automatic cancellation recovery; package-only graphs and Release/package/consumer DLL
+hashes match. The preceding schema-lifecycle package fails the new automatic-recovery smoke. Baseline source
+assets remain EF10.0.0. Evidence: artifacts/transaction-recovery-*.log, -compat/, -package/.
+No real database execution, standalone live test program, EF8/EF9, push or publication. The full EF10 goal remains
+active; namespace lifecycle, wider query/model/write/specification and deferred inventory still need development.
+
 ### Existing-schema creation checkpoint (2026-11-11)
 
 Batch7b after ed11c8b implements EnsureCreated/CreateTables, sync/async, behind the explicit per-context

@@ -110,6 +110,7 @@ namespace OceanBase.EntityFrameworkCore.Internal
                 .TryAdd<IQueryTranslationPostprocessorFactory, OceanBaseQueryTranslationPostprocessorFactory>()
                 .TryAdd<IRelationalConnection, OceanBaseRelationalConnection>()
                 .TryAdd<IRelationalDatabaseCreator, OceanBaseDatabaseCreator>()
+                .TryAdd<IBatchExecutor, OceanBaseBatchExecutor>()
                 .TryAdd<IModificationCommandBatchFactory, OceanBaseModificationCommandBatchFactory>();
 
             builder.TryAdd<IRelationalCommandBuilderFactory>(serviceProvider =>

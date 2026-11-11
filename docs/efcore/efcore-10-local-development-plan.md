@@ -107,6 +107,31 @@ at the user's explicit request on 2026-11-11.
 - Run focused RED/GREEN, full Debug/Release/isolated EF10.0.14, same-package both-mode/patch consumers after
   production changes, independent read-only review, docs and a local commit. No network database execution.
 
+## Batch6c brief: save cancellation and cleanup recovery
+
+TXN-02/03 / CON-03: continue from16b1d92, using the existing transaction doubles. Reproduce a cancelled
+second write in a caller transaction: EF10's inherited BatchExecutor reuses the cancelled token for rollback
+and release, so recovery may never reach the native command. Automatic cleanup must use CancellationToken.None;
+public explicit transaction methods must still honor their supplied cancellation tokens.
+
+- Preserve the caller transaction, original cancellation identity and tracked states. Attempt rollback only to a
+  successfully created automatic savepoint on an open connection. Do not automatically commit, retry or own the
+  caller transaction. AutoSavepointsEnabled=false remains an explicit user choice.
+- Retain EF's batching/auto-transaction/diagnostic policies. If regression confirms no protected recovery seam,
+  specialize ExecuteAsync in a version-local BatchExecutor. Six additional sync regressions justify also owning
+  Execute for failed-open leases and error-preserving cleanup. Acquire and close only this operation's lease.
+  Cleanup failures must not replace the original error; record
+  recovery failures on that error and keep normal EF rollback/release diagnostics. Successful savepoint-release
+  failures retain EF's warning policy. Owned-transaction cleanup uses its uncancelled DisposeAsync contract.
+- Cover both modes, async tokens, successful recovery/retry, recovery failure, pre-open failure/outer leases,
+  savepoints-disabled and owned cancellation. No native rollback or live atomicity claim. Run full baseline/patch
+  suites, same-package consumers, independent review, docs and local commit. No standalone/live program.
+- Transaction-start failures must restore entry accounting and dispose a newly allocated, not-yet-tracked native
+  transaction after a Started callback/factory error. Reuse the shared open-state snapshot; retain EF10 logger,
+  protected native begin calls and factory. Interceptors replacing a transaction retain ownership of the replaced
+  handle as in EF. A native disposal failure is best effort, may leave unusable context/transaction state, and
+  does not establish rollback. Keep original errors and attach secondary cleanup details.
+
 ## Batch7a brief: offline relational create scripts
 
 SCH-02 / MOD-03: implement Database.GenerateCreateScript from the design-time relational model, without
@@ -661,6 +686,21 @@ explicit supported duplication contract, not inference from Scale's ambiguous ze
   later needs a deliberate contract. Trusted SQL model expressions/interceptors remain application-owned.
   Minor (deferred): explicit-enlistment and stateful physical-session/caller-opened lifecycle fixtures; active EF
   and both seeding callback variants are now covered. Physical/native/live DDL and namespace deletion remain open.
+- Batch7b committed as16b1d92 after source/consumer/docs review and baseline/patch/package gates; no push.
+- Batch6c after16b1d92: registered batch executor and transaction-start failure cleanup. Initial RED2 cancellation,
+  broader RED8, sync RED6, registered-start RED4 and review Started-callback RED4; final70 transaction cases pass.
+  Debug/Release/isolated14 each2161=1507+652+2 pass, zero failures/skips. Same transaction-recovery-20261111 package
+  passes both modes/patches, content, package-only graph and Release/package/consumer SHA equality; preceding
+  schema-lifecycle package fails the new recovery smoke. Source assets stay10.0.0. Independent source/fix review
+  approves. Evidence: artifacts/transaction-recovery-*.log, -compat/, -package/.
+  Ruling: specialize both EF10 execution loops — sync REDs prove masking/outer-lease defects too; no protected
+  recovery seam exists. This adds a version-local maintenance obligation across EF upgrades.
+  Ruling: capture the native start candidate through callbacks/factory — account restoration alone cannot clean
+  a Started-callback failure on a caller-opened session. Replacing interceptors retain EF's original ownership.
+  Native disposal/diagnostic failure can still leave a disposed wrapper installed/lease retained; discard unusable
+  context/transaction state and explicitly clean native resources. No physical rollback guarantee.
+  Minor (deferred): transaction conflicts are checked before opening; repeating the guard after opening would
+  additionally cover unsupported transaction-state mutation from reentrant connection interception.
 
 - Batch6b after456902f: TransactionTests adds38 cases for both-mode sync/async transaction ownership,
   isolation/commit/rollback, different-connection rejection, savepoints, multi-batch failures/retry and MySQL

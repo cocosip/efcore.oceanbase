@@ -222,6 +222,303 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
         }
 
         [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle)]
+        public async Task Cancelled_write_recovers_the_caller_savepoint_with_an_uncancelled_token(OceanBaseCompatibilityMode mode)
+        {
+            await using var context = Create(mode);
+            var native = Native(context);
+            await using var transaction = await context.Database.BeginTransactionAsync();
+            var physical = Assert.IsType<NativeTransaction>(transaction.GetDbTransaction());
+            using var source = new CancellationTokenSource();
+            var failure = new OperationCanceledException(source.Token);
+            native.WriteFailure = failure;
+            native.BeforeWriteFailure = source.Cancel;
+            context.AddRange(new Row { Id = 1, Name = "one" }, new Row { Id = 2, Name = "two" });
+            var actual = await Assert.ThrowsAnyAsync<OperationCanceledException>(() => context.SaveChangesAsync(source.Token));
+            Assert.Same(failure, actual);
+            var rollback = Assert.Single(native.Commands, c => c.Sql.StartsWith("ROLLBACK TO", StringComparison.Ordinal));
+            Assert.Equal(CancellationToken.None, rollback.Token);
+            Assert.All(native.Commands.Where(c => c.Sql.StartsWith("INSERT", StringComparison.Ordinal)), c => Assert.Equal(source.Token, c.Token));
+            if (mode == OceanBaseCompatibilityMode.MySql)
+                Assert.Equal(CancellationToken.None, Assert.Single(native.Commands, c => c.Sql.StartsWith("RELEASE", StringComparison.Ordinal)).Token);
+            Assert.Equal(0, physical.Commits);
+            Assert.Equal(0, physical.Disposals);
+            Assert.Same(transaction, context.Database.CurrentTransaction);
+            Assert.Equal(ConnectionState.Open, native.State);
+            Assert.All(context.ChangeTracker.Entries(), e => Assert.Equal(EntityState.Added, e.State));
+            native.WriteFailure = null;
+            Assert.Equal(2, await context.SaveChangesAsync());
+            await transaction.RollbackAsync();
+        }
+
+        [Theory]
+        [MemberData(nameof(Modes))]
+        public async Task Recovery_failure_and_warning_escalation_do_not_replace_cancellation(OceanBaseCompatibilityMode mode, bool async)
+        {
+            foreach (var escalate in new[] { false, true })
+            {
+                var builder = new DbContextOptionsBuilder<TestContext>().UseOceanBase("Server=offline;Database=offline", mode)
+                    .ReplaceService<IRelationalConnection, TestConnection>();
+                if (escalate) builder.ConfigureWarnings(w => w.Throw(RelationalEventId.BatchExecutorFailedToRollbackToSavepoint));
+                await using var context = new TestContext(builder.Options);
+                var native = Native(context);
+                await using var transaction = await context.Database.BeginTransactionAsync();
+                using var source = new CancellationTokenSource();
+                var failure = new OperationCanceledException(source.Token);
+                var recovery = new InvalidOperationException("rollback failed");
+                native.WriteFailure = failure;
+                native.BeforeWriteFailure = source.Cancel;
+                native.SavepointRollbackFailure = recovery;
+                context.AddRange(new Row { Id = 1, Name = "one" }, new Row { Id = 2, Name = "two" });
+                var actual = async ? await Assert.ThrowsAnyAsync<OperationCanceledException>(() => context.SaveChangesAsync(source.Token))
+                    : Assert.ThrowsAny<OperationCanceledException>(() => context.SaveChanges());
+                Assert.Same(failure, actual);
+                Assert.Same(recovery, actual.Data["OceanBase.SavepointRollbackError"]);
+                Assert.Equal(escalate, actual.Data.Contains("OceanBase.SavepointDiagnosticsError"));
+                Assert.Single(native.Commands, c => c.Sql.StartsWith("ROLLBACK TO", StringComparison.Ordinal));
+                Assert.Same(transaction, context.Database.CurrentTransaction);
+                Assert.Equal(ConnectionState.Open, native.State);
+            }
+        }
+
+        [Theory]
+        [MemberData(nameof(Modes))]
+        public async Task Failed_open_during_save_does_not_consume_the_caller_transaction_lease(OceanBaseCompatibilityMode mode, bool async)
+        {
+            await using var context = Create(mode);
+            await using var transaction = await context.Database.BeginTransactionAsync();
+            var native = Native(context);
+            var physical = Assert.IsType<NativeTransaction>(transaction.GetDbTransaction());
+            var connection = Assert.IsType<TestConnection>(context.GetService<IRelationalConnection>());
+            var failure = new OperationCanceledException("open failed before acquiring a lease");
+            connection.OpenFailure = failure;
+            context.Add(new Row { Id = 1, Name = "one" });
+            var actual = async ? await Assert.ThrowsAnyAsync<OperationCanceledException>(() => context.SaveChangesAsync())
+                : Assert.ThrowsAny<OperationCanceledException>(() => context.SaveChanges());
+            Assert.Same(failure, actual);
+            Assert.Empty(native.Commands);
+            Assert.Same(transaction, context.Database.CurrentTransaction);
+            Assert.Equal(0, physical.Disposals);
+            Assert.Equal(ConnectionState.Open, native.State);
+            connection.OpenFailure = null;
+            Assert.Equal(1, async ? await context.SaveChangesAsync() : context.SaveChanges());
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle)]
+        public async Task Disabled_savepoints_leave_cancelled_caller_transaction_for_explicit_rollback(OceanBaseCompatibilityMode mode)
+        {
+            await using var context = Create(mode);
+            context.Database.AutoSavepointsEnabled = false;
+            var native = Native(context);
+            await using var transaction = await context.Database.BeginTransactionAsync();
+            using var source = new CancellationTokenSource();
+            native.WriteFailure = new OperationCanceledException(source.Token);
+            native.BeforeWriteFailure = source.Cancel;
+            context.AddRange(new Row { Id = 1, Name = "one" }, new Row { Id = 2, Name = "two" });
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => context.SaveChangesAsync(source.Token));
+            Assert.Equal(2, native.Commands.Count);
+            Assert.All(native.Commands, c => Assert.StartsWith("INSERT", c.Sql));
+            Assert.Same(transaction, context.Database.CurrentTransaction);
+            await transaction.RollbackAsync();
+        }
+
+        [Theory]
+        [MemberData(nameof(Modes))]
+        public async Task Owned_transaction_cancellation_preserves_the_error_even_if_disposal_fails(OceanBaseCompatibilityMode mode, bool async)
+        {
+            foreach (var failCleanup in new[] { false, true })
+            {
+                await using var context = Create(mode);
+                var native = Native(context);
+                using var source = new CancellationTokenSource();
+                var failure = new OperationCanceledException(source.Token);
+                var cleanup = new InvalidOperationException("native disposal failed");
+                native.WriteFailure = failure;
+                native.BeforeWriteFailure = source.Cancel;
+                native.TransactionDisposeFailure = failCleanup ? cleanup : null;
+                context.AddRange(new Row { Id = 1, Name = "one" }, new Row { Id = 2, Name = "two" });
+                var actual = async ? await Assert.ThrowsAnyAsync<OperationCanceledException>(() => context.SaveChangesAsync(source.Token))
+                    : Assert.ThrowsAny<OperationCanceledException>(() => context.SaveChanges());
+                Assert.Same(failure, actual);
+                var physical = Assert.Single(native.Transactions);
+                Assert.Equal(0, physical.Commits);
+                Assert.Equal(1, physical.Disposals);
+                Assert.True(physical.DisposedActive);
+                Assert.All(context.ChangeTracker.Entries(), e => Assert.Equal(EntityState.Added, e.State));
+                if (failCleanup) Assert.Same(cleanup, actual.Data["OceanBase.BatchCleanupError"]);
+                else
+                {
+                    Assert.Null(context.Database.CurrentTransaction);
+                    Assert.Equal(ConnectionState.Closed, native.State);
+                }
+            }
+        }
+
+        [Theory]
+        [MemberData(nameof(Modes))]
+        public async Task Failed_transaction_start_restores_the_registered_provider_connection_lease(OceanBaseCompatibilityMode mode, bool async)
+        {
+            var failure = new OperationCanceledException("transaction start failed");
+            var interceptor = new BeginFailure(failure);
+            var builder = new DbContextOptionsBuilder<TestContext>().UseOceanBase("Server=offline;Database=offline", mode)
+                .AddInterceptors(interceptor).ConfigureWarnings(w => w.Ignore(RelationalEventId.AmbientTransactionWarning));
+            await using var context = new TestContext(builder.Options);
+            context.Database.AutoTransactionBehavior = AutoTransactionBehavior.Always;
+            context.Add(new Row { Id = 1, Name = "one" });
+            var actual = async ? await Assert.ThrowsAnyAsync<OperationCanceledException>(() => context.SaveChangesAsync())
+                : Assert.ThrowsAny<OperationCanceledException>(() => context.SaveChanges());
+            Assert.Same(failure, actual);
+            var connection = context.GetService<IRelationalConnection>();
+            Assert.Equal(0, (int)typeof(RelationalConnection).GetField("_openedCount",
+                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.GetValue(connection)!);
+            Assert.Null(connection.CurrentTransaction);
+            Assert.Equal(1, interceptor.Starts);
+        }
+
+        [Theory]
+        [MemberData(nameof(Modes))]
+        public async Task Savepoint_release_failure_respects_warning_policy_and_preserves_primary_errors(OceanBaseCompatibilityMode mode, bool async)
+        {
+            foreach (var failWrite in new[] { false, true })
+            foreach (var escalate in new[] { false, true })
+            {
+                var release = new InvalidOperationException("release callback failed");
+                var write = new InvalidOperationException("write failed");
+                var events = new ReleaseEvents { Failure = release, FailurePhase = "starting" };
+                var builder = new DbContextOptionsBuilder<TestContext>().UseOceanBase("Server=offline;Database=offline", mode)
+                    .ReplaceService<IRelationalConnection, TestConnection>().AddInterceptors(events);
+                if (escalate) builder.ConfigureWarnings(w => w.Throw(RelationalEventId.BatchExecutorFailedToReleaseSavepoint));
+                await using var context = new TestContext(builder.Options);
+                var native = Native(context);
+                await using var transaction = await context.Database.BeginTransactionAsync();
+                native.WriteFailure = failWrite ? write : null;
+                context.AddRange(new Row { Id = 1, Name = "one" }, new Row { Id = 2, Name = "two" });
+                var error = await Record.ExceptionAsync(async () =>
+                {
+                    if (async) await context.SaveChangesAsync();
+                    else context.SaveChanges();
+                });
+                if (failWrite)
+                {
+                    Assert.Same(write, Assert.IsType<DbUpdateException>(error).InnerException);
+                    Assert.Same(release, error!.Data["OceanBase.SavepointReleaseError"]);
+                    Assert.Equal(escalate, error.Data.Contains("OceanBase.SavepointDiagnosticsError"));
+                }
+                else if (escalate) Assert.IsType<InvalidOperationException>(error);
+                else Assert.Null(error);
+                Assert.Same(transaction, context.Database.CurrentTransaction);
+                Assert.Equal(ConnectionState.Open, native.State);
+                Assert.Equal(0, Assert.Single(native.Transactions).Disposals);
+                var connection = context.GetService<IRelationalConnection>();
+                Assert.Equal(1, (int)typeof(RelationalConnection).GetField("_openedCount",
+                    System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.GetValue(connection)!);
+            }
+        }
+
+        private sealed class BeginFailure(Exception failure, bool failStarting = true) : DbConnectionInterceptor, IDbTransactionInterceptor
+        {
+            public int Starts { get; private set; }
+            public override InterceptionResult ConnectionOpening(DbConnection connection, ConnectionEventData eventData, InterceptionResult result)
+                => InterceptionResult.Suppress();
+            public override ValueTask<InterceptionResult> ConnectionOpeningAsync(DbConnection connection, ConnectionEventData eventData,
+                InterceptionResult result, CancellationToken cancellationToken = default) => ValueTask.FromResult(InterceptionResult.Suppress());
+            public InterceptionResult<DbTransaction> TransactionStarting(DbConnection connection, TransactionStartingEventData eventData,
+                InterceptionResult<DbTransaction> result) { Starts++; if (failStarting) throw failure; return result; }
+            public ValueTask<InterceptionResult<DbTransaction>> TransactionStartingAsync(DbConnection connection, TransactionStartingEventData eventData,
+                InterceptionResult<DbTransaction> result, CancellationToken cancellationToken = default)
+                => ValueTask.FromResult(TransactionStarting(connection, eventData, result));
+        }
+
+        [Theory]
+        [MemberData(nameof(Modes))]
+        public async Task Failed_started_callback_disposes_untracked_transaction_and_preserves_outer_lease(OceanBaseCompatibilityMode mode, bool async)
+        {
+            foreach (var outerLease in new[] { false, true })
+            foreach (var failDispose in new[] { false, true })
+            {
+                var failure = new OperationCanceledException("started callback failed");
+                var cleanup = new InvalidOperationException("untracked transaction disposal failed");
+                var interceptor = new StartedFailure(failure, failDispose ? cleanup : null);
+                await using var context = new DbContext(new DbContextOptionsBuilder().UseOceanBase("Server=offline;Database=offline", mode)
+                    .AddInterceptors(new BeginFailure(failure, failStarting: false), interceptor).Options);
+                // The later transaction interceptor supplies the transaction; opening is suppressed by BeginFailure.
+                if (outerLease) await context.Database.OpenConnectionAsync();
+                var actual = async ? await Assert.ThrowsAnyAsync<OperationCanceledException>(() => context.Database.BeginTransactionAsync())
+                    : Assert.ThrowsAny<OperationCanceledException>(() => context.Database.BeginTransaction());
+                Assert.Same(failure, actual);
+                Assert.NotNull(interceptor.Transaction);
+                Assert.Equal(1, interceptor.Transaction!.Disposals);
+                if (failDispose) Assert.Same(cleanup, actual.Data["OceanBase.TransactionStartCleanupError"]);
+                Assert.Null(context.Database.CurrentTransaction);
+                var connection = context.GetService<IRelationalConnection>();
+                Assert.Equal(outerLease ? 1 : 0, (int)typeof(RelationalConnection).GetField("_openedCount",
+                    System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.GetValue(connection)!);
+                if (outerLease) await context.Database.CloseConnectionAsync();
+            }
+        }
+
+        [Theory]
+        [MemberData(nameof(Modes))]
+        public async Task Registered_transaction_start_owns_returned_handle_and_rejects_nested_start_without_new_lease(OceanBaseCompatibilityMode mode, bool async)
+        {
+            foreach (var outerLease in new[] { false, true })
+            {
+                var interceptor = new StartedFailure(null, null);
+                await using var context = new DbContext(new DbContextOptionsBuilder().UseOceanBase("Server=offline;Database=offline", mode)
+                    .AddInterceptors(new BeginFailure(new Exception("unused"), failStarting: false), interceptor).Options);
+                if (outerLease) await context.Database.OpenConnectionAsync();
+                var transaction = async ? await context.Database.BeginTransactionAsync() : context.Database.BeginTransaction();
+                var physical = interceptor.Transaction;
+                Assert.Same(transaction, context.Database.CurrentTransaction);
+                Assert.Same(physical, transaction.GetDbTransaction());
+                if (async) await Assert.ThrowsAsync<InvalidOperationException>(() => context.Database.BeginTransactionAsync());
+                else Assert.Throws<InvalidOperationException>(() => context.Database.BeginTransaction());
+                Assert.Same(physical, interceptor.Transaction);
+                if (async) await transaction.DisposeAsync();
+                else transaction.Dispose();
+                Assert.Equal(1, physical!.Disposals);
+                Assert.Null(context.Database.CurrentTransaction);
+                var connection = context.GetService<IRelationalConnection>();
+                Assert.Equal(outerLease ? 1 : 0, (int)typeof(RelationalConnection).GetField("_openedCount",
+                    System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.GetValue(connection)!);
+                if (outerLease) await context.Database.CloseConnectionAsync();
+            }
+        }
+
+        private sealed class StartedFailure(Exception? failure, Exception? disposeFailure) : DbTransactionInterceptor
+        {
+            public StartTransaction? Transaction { get; private set; }
+            public override InterceptionResult<DbTransaction> TransactionStarting(DbConnection connection, TransactionStartingEventData eventData,
+                InterceptionResult<DbTransaction> result)
+                => InterceptionResult<DbTransaction>.SuppressWithResult(Transaction = new StartTransaction(connection, disposeFailure));
+            public override ValueTask<InterceptionResult<DbTransaction>> TransactionStartingAsync(DbConnection connection, TransactionStartingEventData eventData,
+                InterceptionResult<DbTransaction> result, CancellationToken cancellationToken = default)
+                => ValueTask.FromResult(TransactionStarting(connection, eventData, result));
+            public override DbTransaction TransactionStarted(DbConnection connection, TransactionEndEventData eventData, DbTransaction result)
+                => failure is null ? result : throw failure;
+            public override ValueTask<DbTransaction> TransactionStartedAsync(DbConnection connection, TransactionEndEventData eventData,
+                DbTransaction result, CancellationToken cancellationToken = default)
+                => ValueTask.FromResult(TransactionStarted(connection, eventData, result));
+        }
+
+        private sealed class StartTransaction(DbConnection connection, Exception? failure) : DbTransaction
+        {
+            public int Disposals { get; private set; }
+            public override IsolationLevel IsolationLevel => IsolationLevel.Unspecified;
+            protected override DbConnection DbConnection => connection;
+            public override void Commit() => throw new NotSupportedException();
+            public override void Rollback() => throw new NotSupportedException();
+            protected override void Dispose(bool disposing)
+            {
+                if (disposing) { Disposals++; if (failure is not null) throw failure; }
+                base.Dispose(disposing);
+            }
+        }
+
+        [Theory]
         [MemberData(nameof(Modes))]
         public async Task Generated_key_readback_is_enlisted_and_MySql_starts_a_transaction_for_the_followup_read(
             OceanBaseCompatibilityMode mode, bool async)
@@ -317,7 +614,15 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
 
         public sealed class TestConnection(RelationalConnectionDependencies dependencies) : RelationalConnection(dependencies)
         {
+            public Exception? OpenFailure { get; set; }
             protected override DbConnection CreateDbConnection() => new NativeConnection();
+            public override bool Open(bool errorsExpected = false)
+            {
+                if (OpenFailure is { } failure) throw failure;
+                return base.Open(errorsExpected);
+            }
+            public override Task<bool> OpenAsync(CancellationToken cancellationToken, bool errorsExpected = false)
+                => OpenFailure is { } failure ? Task.FromException<bool>(failure) : base.OpenAsync(cancellationToken, errorsExpected);
         }
 
         private sealed class TestContext(DbContextOptions<TestContext> options) : DbContext(options)
@@ -376,6 +681,9 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
             public List<Command> Commands { get; } = [];
             public List<NativeTransaction> Transactions { get; } = [];
             public Exception? WriteFailure { get; set; }
+            public Action? BeforeWriteFailure { get; set; }
+            public Exception? SavepointRollbackFailure { get; set; }
+            public Exception? TransactionDisposeFailure { get; set; }
             public Exception? ReadFailure { get; set; }
             public CancellationToken LastBeginToken { get; private set; }
             private int _writes;
@@ -406,10 +714,16 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
             {
                 token.ThrowIfCancellationRequested();
                 Commands.Add(new Command(command.CommandText, command.Transaction, async, token));
+                if (command.CommandText.StartsWith("ROLLBACK TO", StringComparison.Ordinal) && SavepointRollbackFailure is not null)
+                    throw SavepointRollbackFailure;
                 if (command.CommandText.StartsWith("SELECT", StringComparison.Ordinal) && ReadFailure is not null) throw ReadFailure;
                 if (command.CommandText.StartsWith("INSERT", StringComparison.Ordinal))
                 {
-                    if (++_writes == 2 && WriteFailure is not null) throw WriteFailure;
+                    if (++_writes == 2 && WriteFailure is not null)
+                    {
+                        BeforeWriteFailure?.Invoke();
+                        throw WriteFailure;
+                    }
                     foreach (DbParameter parameter in command.Parameters)
                         if (parameter.Direction == ParameterDirection.Output) parameter.Value = 101;
                 }
@@ -434,7 +748,20 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
             public override Task RollbackAsync(CancellationToken cancellationToken = default)
             { cancellationToken.ThrowIfCancellationRequested(); AsyncEnds++; LastToken = cancellationToken; Rollback(); return Task.CompletedTask; }
             protected override void Dispose(bool disposing)
-            { if (disposing) { Disposals++; DisposedActive = !_ended; _ended = true; } base.Dispose(disposing); }
+            {
+                if (disposing)
+                {
+                    Disposals++;
+                    DisposedActive = !_ended;
+                    _ended = true;
+                    if (connection.TransactionDisposeFailure is { } failure)
+                    {
+                        connection.TransactionDisposeFailure = null;
+                        throw failure;
+                    }
+                }
+                base.Dispose(disposing);
+            }
             public override ValueTask DisposeAsync() { Dispose(); return ValueTask.CompletedTask; }
         }
 
