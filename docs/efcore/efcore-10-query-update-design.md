@@ -53,6 +53,31 @@ in the [technical baseline](efcore-10-technical-baseline.md). Larger Oracle stri
 generating an order or group operation over LOB storage does not establish valid execution. Live mapping and query
 evidence remains required before advertising support.
 
+## Model and materialization local contract
+
+Batch4a/4b/4c uses the existing EF10 relational conventions, initialized model and query materializers.
+There is no new provider convention, tracking implementation or model-dependent service lifetime.
+ModelMaterializationTests covers both modes:
+
+- Composite primary and alternate keys; required composite alternate-key relationships and optional
+  composite primary-key relationships; explicit table/column/index names, shadow concurrency metadata,
+  owned table sharing and a separately mapped owned collection with a shadow ownership key.
+- Single-command collection Include then optional reference ThenInclude, required/optional reference
+  Include and automatic owned reference/collection loading. Supplied duplicate principal rows must group
+  into one graph; equal Id/Code values in different tenants must remain distinct. SQL assertions pin
+  composite joins and reader projection order. TrackAll, NoTracking and NoTrackingWithIdentityResolution
+  check fixup, object identity and context tracker entries, synchronously and asynchronously.
+- First/Single and default variants check empty/one/two supplied rows where appropriate and assert the
+  dialect's one/two-row limit. First receives at most one row, reflecting its required server limit;
+  the reader does not simulate the server applying that limit.
+- EF10 named Tenant/Active filters compose with a captured Name predicate. Selectively disabling either
+  filter and disabling all filters preserves the user predicate; changing TenantId and Name between
+  executions must bind current values without inserting those values into SQL.
+
+These are inherited-provider characterization tests, not a claim that the server executes joins, filters,
+ordering or limits correctly. Graph writes, schema/generation validation, broader graph/query shapes and
+live results remain open under MOD/QRY/UPD. Split queries and lazy loading retain their separate boundary.
+
 ## Raw SQL local contract
 
 QRY-10 uses EF Core 10's relational raw-command builder and FromSql translation through the provider's

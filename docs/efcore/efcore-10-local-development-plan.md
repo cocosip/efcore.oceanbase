@@ -38,6 +38,26 @@ Do not mark the goal complete while any locally developable item below remains u
 | 9. Deferred inventory audit | DEF-01..10 | Revisit every documented deferred family after Required local implementation stabilizes. Implement locally feasible families under explicit per-mode contracts and tests; record precise architectural/connector/server blockers for any unimplementable family. Do not treat a Deferred label alone as evidence it cannot be developed. |
 | 10. Completion audit | All IDs | Compare docs/public API/source/tests/package evidence. Every locally feasible feature is implemented/reviewed/committed; only specifically evidenced database or external blockers may remain. |
 
+## Batch4a/4b/4c brief: relational model, graph materialization and filters
+
+Continue Batch 4 on the existing efcore/10.0 checkout. Reuse EF's relational conventions and
+materializers; add provider behavior only for a reproduced failure. No database access or new dependency.
+
+- Batch4a (MOD-01/02/03): characterize composite/alternate keys, required/optional composite foreign
+  keys, explicit index/column/table names, owned reference/collection and shadow-property metadata through
+  the initialized provider model. These checks do not establish DDL or graph-save support.
+- Batch4b (QRY-05/08): feed deterministic readers through real sync/async EF commands for reference and
+  collection Include/ThenInclude, absent optional dependents, repeated rows, tracking/no-tracking and
+  identity resolution. Pin SQL joins/projection order and inspect object identity, fixup and tracker state.
+  Cover entity cardinality separately; supplied rows do not establish server filtering/order/cardinality.
+- Batch4c (QRY-09): characterize EF10 named global-filter composition, selective/all disable and fresh
+  context/captured-predicate parameters through real sync/async provider commands. Synthetic scalar rows
+  prove materialization only; assert filter SQL and bound values independently of those rows.
+- Run focused characterization first. Confirmed provider defects require a failing regression before
+  implementation. Run full Debug/Release and isolated EF10.0.14 Release, independent read-only review,
+  update evidence and commit. No production/package rebuild is needed if only tests/docs change.
+- Keep Required rows partial until the remaining local and live acceptance criteria are satisfied.
+
 ## Batch 1 brief
 
 **Files:** OptionsTests.cs; SqlGenerationHelperTests.cs; ConsumerTests/ProviderConfigurationTests.cs;
@@ -483,6 +503,18 @@ explicit supported duplication contract, not inference from Scale's ambiguous ze
    update remaining boundaries, then commit. No database, EF8/EF9 or publication work.
 
 ## Execution record
+
+- Batch4a/4b/4c: 58 model/materialization/filter characterization cases pass without a production
+  change. Both-mode metadata, composite/alternate relationships, owned/shadow reads, Include/ThenInclude,
+  tracking/fixup/identity resolution, cardinality/limits and named-filter disable/current binding are covered.
+  Full Debug/Release and isolated EF10.0.14 Release each pass 1926 (1438+486+2), zero failures/skips.
+  Independent review identified incomplete joined-column and filter predicate/binding assertions; both
+  are corrected and scoped re-review approves, zero findings. Final covering 58 pass in all three
+  configurations. Logs: artifacts/model-materialization-*.log; isolated build/props:
+  artifacts/model-materialization-compat/. Baseline assets stay10.0.0. No production change, repack or
+  fresh hosted/live claim. Corrected stale SCH-01 creator-absent status; its cleanup/live gates stay open.
+  Next: remaining model/generation validation and unnamed/graph filters, then write/diagnostic/transaction
+  inventory. Finishing these local slices does not finish the full goal; EF8/EF9/live work stays postponed.
 
 - Batch3s: four raw query cases passed initially; twelve execute cases exposed missing creator DI.
   After registration, prefixed raw parameters exposed doubled SQL prefixes and Oracle scalar tests

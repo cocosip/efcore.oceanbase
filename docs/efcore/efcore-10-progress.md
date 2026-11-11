@@ -11,6 +11,24 @@ each small group. Real database integration/tests and EF8/EF9 adaptation are exp
 [local development plan](efcore-10-local-development-plan.md) tracks the full remaining inventory, including
 an audit of locally feasible deferred families. Finishing one batch does not finish the overall goal.
 
+### Model, graph materialization and filters checkpoint (2026-11-11)
+
+Batch4a/4b/4c adds 58 inherited-provider characterization cases in ModelMaterializationTests.
+Both modes cover composite/alternate keys, required/optional relationships, owned/shadow metadata,
+Include/ThenInclude and owned graph reads, three tracking modes, First/Single/default cardinality,
+and EF10 named-filter composition/disable with current context and user-predicate parameters.
+No provider production change was necessary; schema/generation validation, graph writes, unnamed
+filters, wider graph shapes and actual server results remain open.
+
+Full EF10.0.0 Debug/Release and isolated EF10.0.14 Release each pass 1926 tests (1438 unit,
+486 intercepted, two project consumers), zero failures/skips. Independent review found two
+test-assertion gaps: complete joined projections and filter logic/binding order. Both were fixed;
+the final covering 58 cases pass in all three configurations and scoped re-review approves with
+no remaining findings. Evidence: artifacts/model-materialization-*.log and the isolated
+artifacts/model-materialization-compat/ build. Baseline assets remain EF10.0.0.
+No new nupkg or hosted-runner evidence is claimed for this test/docs-only checkpoint.
+The full EF10 local goal remains active; EF8/EF9 and live database tests remain postponed.
+
 ### Hosted Windows/Linux CI evidence (2026-11-11)
 
 Read-only GitHub inspection confirms [run 42865290840](https://github.com/cocosip/efcore.oceanbase/actions/runs/42865290840)

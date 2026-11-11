@@ -55,7 +55,7 @@ so that an undocumented feature is not accidentally advertised.
 An open row is not automatically waiting for a database. Track the remaining work explicitly:
 
 - **Local implementation or coverage:** remaining collection families/converter projections, wider functions/aggregates,
-  model/materialization/Include/filter contracts, writes/transactions and the missing database creator still
+  wider model/materialization/Include/filter contracts, writes/transactions and schema creation/deletion still
   have locally feasible work. No live connection is needed to continue those implementation and pipeline tests.
 - **Live validation:** implemented mappings and SQL still need OceanBase round trips and execution in both
   modes, including server coercion/ranges, collation/padding/LOB behavior, transactions and schema lifecycle.
@@ -66,7 +66,14 @@ An open row is not automatically waiting for a database. Track the remaining wor
 Development resumed at the user's request (2026-11-10) on efcore/10.0. See the
 [progress handoff](efcore-10-progress.md) for saved state, remaining work and the exact resume point.
 
-Snapshot: 2026-11-11, `efcore/10.0` floating Round after dbb14ee;
+Latest local model/materialization checkpoint: Batch4a/4b/4c after 02a3e3d adds 58 inherited-provider
+characterization cases without changing production code. Full Debug/Release and isolated EF10.0.14 Release
+each pass 1926 (1438 unit, 486 intercepted, two project consumers), zero failures/skips. Independent review
+found and closed complete-projection and filter-logic/binding assertion gaps; final covering58 pass all three
+configurations. See the progress handoff and local plan for evidence. Required runtime rows remain partial;
+there is no new package, hosted or live claim for this test/docs-only change.
+
+Historical scalar snapshot: 2026-11-11, `efcore/10.0` floating Round after dbb14ee;
 source/patch/package gates and independent source review pass.
 The same baseline-built package passes both tested EF patches. This is not a release result.
 
@@ -253,9 +260,9 @@ explicitly; silent truncation or lossy fallback is not acceptable.
 
 | ID | Requirement and acceptance criteria | Priority | MySQL | Oracle | Existing evidence / gap |
 | --- | --- | --- | --- | --- | --- |
-| MOD-01 | Relational conventions initialize tables, primary/composite/alternate keys, foreign keys and indexes. | Required | In progress | In progress | UQ/FP simple models; composite/relationship metadata tests missing. |
-| MOD-02 | Required/optional relationships, owned references/collections and shadow properties preserve model and CRUD behavior. | Required | Planned | Planned | Missing. |
-| MOD-03 | Generated/default/computed metadata, explicit names and schema settings produce supported SQL or validation errors. | Required | In progress | In progress | FP generated integer key only; complete generation/schema contract missing. |
+| MOD-01 | Relational conventions initialize tables, primary/composite/alternate keys, foreign keys and indexes. | Required | In progress | In progress | ModelMaterializationTests initializes composite primary/alternate keys, required/optional composite FKs, explicit table/column/index names and owned/shadow metadata in both modes; complete model/write/schema acceptance remains open. |
+| MOD-02 | Required/optional relationships, owned references/collections and shadow properties preserve model and CRUD behavior. | Required | In progress | In progress | ModelMaterializationTests covers metadata and sync/async intercepted required/optional/owned graph reads, fixup and shadow values under all three tracking modes. Graph CRUD and live behavior remain open. |
+| MOD-03 | Generated/default/computed metadata, explicit names and schema settings produce supported SQL or validation errors. | Required | In progress | In progress | FP generated integer key; ModelMaterializationTests pins explicit names and ValueGenerated.Never metadata. Complete default/computed/schema/generation validation is still missing. |
 | MAP-01 | Boolean and signed/unsigned integers bind/round-trip in documented ranges; predicates use valid Boolean SQL. | Required | In progress | In progress | US/UI all-eight nullable endpoints, decimal/finite-floating fraction rejection, numeric property facets and Boolean false/null binding pass; FP exact key/enum outputs and scalar Boolean cells pass. Full Boolean operators/null SQL and all live evidence remain open. |
 | MAP-02 | Decimal precision/scale and float/double round-trip; default decimal storage preserves documented fractional precision. | Required | In progress | In progress | UT/UD decimal declarations/exact write bounds/query transport/clones and alias independence pass; UF/FP native floating and direct wide OceanBaseDecimal normalization/Single midpoint/range/scale/converter paths pass. Decimal-backed storage/REAL promotion and all live coverage remain open. |
 | MAP-03 | Unicode/non-Unicode, fixed/variable and bounded/unbounded text honor length and key/index constraints. | Required | In progress | In progress | UT/UX complete supported declarations, character bounds, Unicode, LOB index rejection and FP converted writes pass; BYTE/charset/index/padding/LOB live behavior missing. |
@@ -297,11 +304,11 @@ duplicates and mode-specific string semantics.
 | QRY-02 | OrderBy/ThenBy, Distinct, Skip/Take and offset-only queries return correct results, including deterministic paging/empty pages. | Required | In progress | In progress | UQ SQL shape only; live ordering/string/paging missing. |
 | QRY-03 | Inner/left joins, correlated subqueries, Any/All and scalar/collection Contains have verified results or explicit exclusions. | Required | In progress | In progress | URS/UTC/URC/FP cover ordinary joins/subqueries/quantifiers, bare integral/text membership, captured int/int? roots and nonempty/originally-empty inline roots. Typed zero-row metadata survives subqueries/pruning, including a bounded sole-ordinal repair. Consistent int-to-long bindings pass; converted Join Value projections can fail earlier EF inference. General text/other carriers and wider shapes remain local work; actual server results remain open. |
 | QRY-04 | GroupBy aggregates, Count/LongCount, Sum/Average/Min/Max handle empty and nullable inputs correctly. | Required | In progress | In progress | URS/UNA/FP cover Count/LongCount plus native numeric Sum/Average/Min/Max, all exact numeric/nullable selector families, filtered DISTINCT/HAVING/order, independent promoted Double, neutral Single results, converter-owned SUM zero and supplied empty/null/checked reads. Nonnumeric extrema and real aggregate execution remain open. |
-| QRY-05 | First/Single/default variants enforce cardinality; entity/scalar async materialization matches sync. | Required | In progress | In progress | FP ToList scalar only; entity/cardinality cases missing. |
+| QRY-05 | First/Single/default variants enforce cardinality; entity/scalar async materialization matches sync. | Required | In progress | In progress | FP scalar reads and ModelMaterializationTests entity/graph sync/async reads; First/Single/default variants assert limits and empty/one/two reader cardinality. Native limits/results and wider materialization cases remain open. |
 | QRY-06 | String translations have a supported-overload matrix: equality, Contains, StartsWith/EndsWith, length, substring, case and trim. | Required | In progress | In progress | Exact local equality/concat, unary/Length, search and both Substring arities have unit/FP coverage. Safe long origin/mapping/converter/null cases and computed Oracle NULL needles pass. Live collation/character/space/padding/LOB results and NCLOB capability remain open; native semantics/unsupported overloads are explicit. |
 | QRY-07 | Date/time members, numeric functions, conditional/coalesce expressions have a supported-overload matrix. | Required | In progress | In progress | Sixteen temporal parts, including Gregorian DayOfYear/DayOfWeek, 92 exact numeric methods and numeric Least/Greatest have local coverage. Round supports five rules and constant digits for Decimal (0..28), Double (0..15) and Single (0..6). Runtime digits/rules, wider temporal/math coverage and native result behavior remain open. |
-| QRY-08 | Include/ThenInclude for reference/collection navigations, tracking/no-tracking and identity resolution preserve related entities. | Required | Planned | Planned | Missing; split queries are listed separately below. |
-| QRY-09 | Global query filters compose with parameterized predicates and can be disabled using supported EF APIs. | Required | Planned | Planned | Missing; named filters require EF10 review below. |
+| QRY-08 | Include/ThenInclude for reference/collection navigations, tracking/no-tracking and identity resolution preserve related entities. | Required | In progress | In progress | ModelMaterializationTests covers composite/alternate-key collection/reference Include/ThenInclude, absent dependents, owned graphs, fixup and three tracking modes through sync/async intercepted commands. Wider graphs and actual server results remain open; split queries stay separate. |
+| QRY-09 | Global query filters compose with parameterized predicates and can be disabled using supported EF APIs. | Required | In progress | In progress | ModelMaterializationTests covers EF10 Tenant/Active named filters, selective/all disable and current context/user-predicate parameters in sync/async commands. Inherited unnamed filters, graph composition and live filtering remain open. |
 | QRY-10 | FromSqlRaw/FromSqlInterpolated and ExecuteSqlRaw/ExecuteSqlInterpolated bind values; hostile parameter values cannot change SQL shape. | Required | In progress | In progress | Sync/async intercepted tests cover all four APIs, composed queries, named inputs and NULL. MySQL positional command conversion has offline connector coverage; repeated caller-owned native parameters require distinct instances until a clone contract exists. Live execution remains unverified in both modes. |
 | QRY-11 | Unsupported predicates fail with actionable translation errors; preserve EF's allowed top-level client projection evaluation. | Required | In progress | In progress | StringQueryTests/StringFunctionQueryTests/FP cover StringComparison/custom/Concat/culture/Invariant/trim-overload predicates and permitted client projections. Wider function boundaries remain open. |
 
@@ -328,7 +335,7 @@ commit/transaction behavior per mode.
 
 | ID | Requirement and acceptance criteria | Priority | MySQL | Oracle | Existing evidence / gap |
 | --- | --- | --- | --- | --- | --- |
-| SCH-01 | DatabaseFacade services resolve; existence checks distinguish absence from authentication, permission and network failures. | Required | Planned | Planned | Provider database creator absent. |
+| SCH-01 | DatabaseFacade services resolve; existence checks distinguish absence from authentication, permission and network failures. | Required | In progress | In progress | Scoped creator and intercepted read-only probes/error classification exist since Batch3s. Post-physical-open cleanup and live absence/authentication/permission/network evidence remain open; schema DDL is separate. |
 | SCH-02 | EnsureCreated/GenerateCreateScript implement schema profile and key generation; existing populated schemas are handled explicitly. | Required | Planned | Planned | Mode-specific DDL design/live fixtures missing. |
 | SCH-03 | EnsureDeleted has an explicit ownership/deletion boundary, preserves unrelated tenant objects and fails clearly outside supported profile. | Required | Planned | Planned | Destructive-operation contract missing; tests must use isolated owned fixtures. |
 
