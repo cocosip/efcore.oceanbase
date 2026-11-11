@@ -1,5 +1,10 @@
 using System;
+using System.Collections.Generic;
+using System.Data.Common;
+using System.Threading;
+using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using OceanBase.EntityFrameworkCore;
 
 namespace PackageConsumer
@@ -19,6 +24,55 @@ namespace PackageConsumer
                 throw new Exception("Packed create script lost identity, default, key or index SQL.");
             }
             Console.WriteLine($"{mode}: packed provider offline relational create script passed.");
+            foreach (var async in new[] { false, true })
+            {
+                var capture = new Capture();
+                using var managed = new SchemaContext(new DbContextOptionsBuilder<SchemaContext>()
+                    .UseOceanBase("Server=offline;Database=owned", mode)
+                    .EnableOceanBaseSchemaManagement("owned").AddInterceptors(capture).Options);
+                var created = async ? managed.Database.EnsureCreatedAsync().GetAwaiter().GetResult() : managed.Database.EnsureCreated();
+                if (!created || capture.Commands.Count != 4
+                    || capture.Commands[0] != (mode == OceanBaseCompatibilityMode.MySql ? "SELECT DATABASE()"
+                        : "SELECT SYS_CONTEXT('USERENV', 'CURRENT_SCHEMA') FROM DUAL")
+                    || !capture.Commands[1].StartsWith("SELECT COUNT", StringComparison.Ordinal)
+                    || !capture.Commands[2].Contains(identity, StringComparison.Ordinal)
+                    || !capture.Commands[3].StartsWith("CREATE UNIQUE INDEX", StringComparison.Ordinal))
+                    throw new Exception("Packed schema creation lost its scope, emptiness or DDL contract.");
+                capture.Commands.Clear();
+                capture.HasTables = true;
+                created = async ? managed.Database.EnsureCreatedAsync().GetAwaiter().GetResult() : managed.Database.EnsureCreated();
+                if (created || capture.Commands.Count != 2)
+                    throw new Exception("Packed schema creation changed an existing populated schema.");
+            }
+            Console.WriteLine($"{mode}: packed provider intercepted sync/async existing-schema creation passed.");
+        }
+
+        private sealed class Capture : DbConnectionInterceptor, IDbCommandInterceptor
+        {
+            public List<string> Commands { get; } = [];
+            public bool HasTables { get; set; }
+            public override InterceptionResult ConnectionOpening(DbConnection connection, ConnectionEventData eventData, InterceptionResult result)
+                => InterceptionResult.Suppress();
+            public override ValueTask<InterceptionResult> ConnectionOpeningAsync(DbConnection connection, ConnectionEventData eventData,
+                InterceptionResult result, CancellationToken cancellationToken = default)
+                => ValueTask.FromResult(InterceptionResult.Suppress());
+            public InterceptionResult<object> ScalarExecuting(DbCommand command, CommandEventData eventData, InterceptionResult<object> result)
+            {
+                Commands.Add(command.CommandText);
+                return InterceptionResult<object>.SuppressWithResult(command.CommandText.StartsWith("SELECT COUNT", StringComparison.Ordinal)
+                    ? HasTables ? 1 : 0 : "owned");
+            }
+            public ValueTask<InterceptionResult<object>> ScalarExecutingAsync(DbCommand command, CommandEventData eventData,
+                InterceptionResult<object> result, CancellationToken cancellationToken = default)
+                => ValueTask.FromResult(ScalarExecuting(command, eventData, result));
+            public InterceptionResult<int> NonQueryExecuting(DbCommand command, CommandEventData eventData, InterceptionResult<int> result)
+            {
+                Commands.Add(command.CommandText);
+                return InterceptionResult<int>.SuppressWithResult(0);
+            }
+            public ValueTask<InterceptionResult<int>> NonQueryExecutingAsync(DbCommand command, CommandEventData eventData,
+                InterceptionResult<int> result, CancellationToken cancellationToken = default)
+                => ValueTask.FromResult(NonQueryExecuting(command, eventData, result));
         }
 
         private sealed class SchemaContext(DbContextOptions<SchemaContext> options) : DbContext(options)

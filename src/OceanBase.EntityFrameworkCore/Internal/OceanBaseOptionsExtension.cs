@@ -50,9 +50,18 @@ namespace OceanBase.EntityFrameworkCore.Internal
             : base(copyFrom)
         {
             CompatibilityMode = copyFrom.CompatibilityMode;
+            SchemaManagementScope = copyFrom.SchemaManagementScope;
         }
 
         public OceanBaseCompatibilityMode CompatibilityMode { get; private set; }
+        public string? SchemaManagementScope { get; private set; }
+
+        public OceanBaseOptionsExtension WithSchemaManagementScope(string scope)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(scope);
+            if (scope.Contains('\0')) throw new ArgumentException("The schema management scope cannot contain NUL.", nameof(scope));
+            return new OceanBaseOptionsExtension(this) { SchemaManagementScope = scope };
+        }
 
         public override DbContextOptionsExtensionInfo Info
             => _info ??= new ExtensionInfo(this);

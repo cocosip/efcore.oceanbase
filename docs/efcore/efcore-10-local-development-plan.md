@@ -128,6 +128,28 @@ deletion under an undocumented default.
 - Add offline positive/negative model fixtures, full Debug/Release/isolated14, same-package consumers,
   independent read-only review and local commit. No live schema operation or standalone test program.
 
+## Batch7b brief: explicit existing-schema table creation
+
+SCH-02 / CFG-04: add EnableOceanBaseSchemaManagement(databaseOrSchema) on typed/untyped options builders.
+The immutable scope is per context (not a singleton/model-cache input); clone it across all existing UseOceanBase
+and relational option calls. Do not log connection strings or the scope. The first execution profile is table
+creation inside an already provisioned MySQL database or Oracle schema. Namespace creation/deletion remain
+guarded until the next slice; Oracle tenant creation is never inferred.
+
+- Before opening, require opt-in, reject active/enlisted/ambient transactions and configured unsupported seeding
+  callbacks, validate the entire DDL plan and reject created-table/FK-principal schemas outside the declared scope.
+- Hold one EF connection lease while checking SELECT DATABASE() / SYS_CONTEXT CURRENT_SCHEMA against the exact
+  declared scope. EnsureCreated returns false when any ordinary table exists; otherwise executes individual
+  validated DDL commands. Explicit CreateTables executes the same plan without the emptiness shortcut.
+- Async checks pre-cancellation and forwards the caller token to opening/probes/every DDL. Preserve the original
+  DDL/cancellation exception and balance the lease on failure. Attach a final close failure to the original
+  exception as Data["OceanBase.SchemaCleanupError"]; successful-operation close errors propagate normally.
+  Existing caller/outer connection ownership remains.
+- DDL is not transactionally atomic. Never auto-delete partially created objects after a failure. No retry/schema
+  reconciliation is claimed; user cleanup may be needed. Scope options do not yet enable EnsureDeleted.
+- Add deterministic both-mode sync/async connection/command fixtures and option-clone tests, RED/GREEN, full
+  suites, same-package consumer smoke, independent review, docs and a local commit. No actual DB access.
+
 ## Batch5a brief: tracked graph writes and composite concurrency
 
 UPD-01..05 and DIA-02: exercise real EF SaveChanges in both modes, sync/async, with commands intercepted
@@ -628,6 +650,17 @@ explicit supported duplication contract, not inference from Scale's ambiguous ze
   collation omission and TPT/split duplicate-identity findings are fixed with RED/GREEN cases; re-review approves.
   Evidence: artifacts/schema-script-*.log, schema-script-compat/, schema-script-package/. Mutating namespace
   ownership/lifecycle, native DDL and full runtime relationship/generation evidence remain open. Next: Batch7b.
+- Batch7b after ed11c8b: explicit existing-schema EnsureCreated/CreateTables and immutable target options.
+  Initial missing-API/behavior RED, then eight scope/cleanup RED failures; final46 lifecycle+six option cases pass.
+  Full Debug/Release/isolated14 each2129=1507+620+2 pass, zero failures/skips; later async-seeder coverage gets
+  covering reruns. Same schema-lifecycle-20261111 package passes content, both modes/patches, package-only graph
+  and verified Release/package/consumer SHA equality; source assets stay10.0.0. Independent source review
+  approves without blocking findings. Evidence: artifacts/schema-lifecycle-*.log, -compat/, -package/.
+  Ruling: reject explicit cross-scope FK principals even when excluded from migrations — table creation adds
+  constraints referencing them, so they belong to the declared target boundary; supporting cross-scope references
+  later needs a deliberate contract. Trusted SQL model expressions/interceptors remain application-owned.
+  Minor (deferred): explicit-enlistment and stateful physical-session/caller-opened lifecycle fixtures; active EF
+  and both seeding callback variants are now covered. Physical/native/live DDL and namespace deletion remain open.
 
 - Batch6b after456902f: TransactionTests adds38 cases for both-mode sync/async transaction ownership,
   isolation/commit/rollback, different-connection rejection, savepoints, multi-batch failures/retry and MySQL

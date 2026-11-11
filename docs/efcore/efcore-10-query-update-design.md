@@ -108,9 +108,9 @@ non-DDL calls. `Exists` opens the configured connection and balances its success
 only MySQL error 1049 means an absent database. `CanConnect` returns false on failures and
 propagates cancellation. `HasTables` probes the current MySQL database or Oracle `CURRENT_SCHEMA`
 using metadata visible to the current account. Oracle counts can use the connector's exact
-numeric carrier. Creation/deletion/script methods reject without opening the connection while
-the SCH-02/SCH-03 ownership and schema contracts remain unfinished.
-Post-open interceptor and ambient transaction failures still require ownership tests under CON-03.
+numeric carrier. Offline scripts and explicitly scoped existing-schema table creation are implemented below;
+namespace creation/deletion remain guarded. Batch6a covers failed-open ownership/accounting with deterministic
+connection doubles; native cleanup and server acceptance remain open under CON-03.
 
 ## String concatenation local contract
 
@@ -665,9 +665,38 @@ computed syntax versions, DDL implicit commits and type/index capacity still req
 
 SchemaScriptTests covers both-mode scripts and explicit exclusions, including one-to-one, many-to-many, owned
 collections/references and cyclic foreign keys at the DDL level only. It does not claim those families' complete
-query/write support. The packed consumer generates a small identity/default/index script offline. Mutating
-EnsureCreated/EnsureDeleted/CreateTables remain guarded until the separate ownership profile is implemented;
-offline script generation does not authorize deletion or establish SCH-03 completion.
+query/write support. The packed consumer generates a small identity/default/index script offline.
+Offline script generation does not authorize deletion or establish SCH-03 completion.
+
+### Existing-schema table creation (SCH-02 / CFG-04)
+
+EnableOceanBaseSchemaManagement(databaseOrSchema) is an explicit per-context table-creation opt-in, preserved
+through typed/untyped option clones without partitioning singleton services or model caches. Provision the MySQL
+database or Oracle user/schema externally, with privileges to inspect/create the supported model objects.
+The option neither grants privileges nor creates an Oracle tenant, user or database.
+
+Before opening, require opt-in; reject current EF, enlisted or ambient transactions and either seeding callback;
+validate the full design-time DDL plan. Created tables and their FK principal tables must have no explicit schema
+or the exact declared scope, including excluded principals. Explicit SQL default/computed/check expressions are
+trusted application SQL, so the scope option is not a sandbox for arbitrary model SQL or interceptors.
+
+Hold one EF connection lease across SELECT DATABASE() (MySQL) or SELECT SYS_CONTEXT('USERENV', 'CURRENT_SCHEMA')
+FROM DUAL (Oracle), table detection and individual DDL commands. The actual scope must equal the declaration
+ordinally, including case. EnsureCreated returns false when any ordinary table exists; it does not reconcile a
+partially matching schema. Explicit IRelationalDatabaseCreator.CreateTables skips the emptiness check. An empty
+create plan returns false without opening. A missing namespace fails to open rather than being created implicitly.
+
+Async operations check pre-cancellation and pass the caller token through opening, probes and each DDL command.
+The final lease close has no cancellation token. Preserve the original DDL/cancellation exception if final close
+also fails, recording the latter in Exception.Data["OceanBase.SchemaCleanupError"]; cleanup after a successful
+operation still reports its own failure. Physical cleanup can fail and must not be inferred from a balanced EF
+lease alone. Caller/outer connection ownership follows EF's connection accounting.
+
+DDL may implicitly commit and the plan is not atomic. No automatic retry, DROP rollback, destructive cleanup or
+schema upgrade occurs; failure can leave partially created objects requiring explicit manual cleanup. Concurrent
+creation is not serialized. Create/Delete/EnsureDeleted and async variants remain unsupported pending namespace
+ownership/deletion design. SchemaLifecycleTests and package consumers intercept all commands: they establish
+client SQL/control flow, not real DDL, physical session continuity, server permissions or cleanup.
 
 ### Transactions and savepoints (TXN-01..03)
 

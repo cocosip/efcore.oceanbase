@@ -341,15 +341,16 @@ duplicates and mode-specific string semantics.
 ## Database creation and schema profile
 
 The acceptance target is an isolated test-owned database/schema with ordinary tables, scalar columns,
-primary/foreign keys, non-unique/unique indexes and supported identity/default definitions. This is not implemented
-support yet. Before SCH-02/SCH-03 implementation, define database/schema naming, ownership and permissions per mode.
-Creating an Oracle tenant must not be inferred to be an EF database-creation operation. Document DDL implicit
-commit/transaction behavior per mode.
+primary/foreign keys, non-unique/unique indexes and supported identity/default definitions. Offline DDL and
+EnableOceanBaseSchemaManagement's existing-schema table-creation profile are locally implemented. Provision the
+database/schema externally and declare its exact case-sensitive name; EnsureCreated skips any populated schema.
+DDL is not atomic and can leave partial objects; no automatic retry or destructive rollback is attempted.
+Namespace creation/deletion and live DDL acceptance remain open. Creating an Oracle tenant is never inferred.
 
 | ID | Requirement and acceptance criteria | Priority | MySQL | Oracle | Existing evidence / gap |
 | --- | --- | --- | --- | --- | --- |
 | SCH-01 | DatabaseFacade services resolve; existence checks distinguish absence from authentication, permission and network failures. | Required | In progress | In progress | Scoped creator/read-only probes/error classification and Batch6a shared failed-open rollback exist. Physical cleanup has deterministic double evidence; live absence/authentication/permission/network and cleanup evidence remain open. Schema DDL is separate. |
-| SCH-02 | EnsureCreated/GenerateCreateScript implement schema profile and key generation; existing populated schemas are handled explicitly. | Required | In progress | In progress | GenerateCreateScript emits offline relational tables/keys/indexes/checks/FKs/identity/default/computed definitions with explicit unsupported-shape errors. Ownership, mutating lifecycle and live DDL remain open; script tests do not establish execution. |
+| SCH-02 | EnsureCreated/GenerateCreateScript implement schema profile and key generation; existing populated schemas are handled explicitly. | Required | In progress | In progress | Offline scripts and explicitly scoped existing-schema EnsureCreated/CreateTables are implemented; 46 intercepted lifecycle cases plus six option cases cover both modes/sync/async, scope/FK boundaries, existing tables, transactions/callback rejection, cancellation, partial failure and cleanup errors. Namespace creation and native/live DDL remain open. |
 | SCH-03 | EnsureDeleted has an explicit ownership/deletion boundary, preserves unrelated tenant objects and fails clearly outside supported profile. | Required | Planned | Planned | Destructive-operation contract missing; tests must use isolated owned fixtures. |
 
 ## Packages, compatibility and release evidence
@@ -357,9 +358,9 @@ commit/transaction behavior per mode.
 | ID | Requirement and acceptance criteria | Priority | MySQL | Oracle | Existing evidence / gap |
 | --- | --- | --- | --- | --- | --- |
 | PKG-01 | Build net10.0 assets against published OceanBaseConnector 0.2.0 with warnings as errors. | Required | Done | Done | Current solution test command builds assets; not a package-content assertion. |
-| PKG-02 | Packed nuspec uses OceanBase.EntityFrameworkCore and EF ranges [10.0.0,11.0.0). | Required | Done | Done | Verify-Package.ps1 passes transactions-20261111 identity/net10.0/README/ranges; prior negative probes reject as expected. Rerun on every release pack; runtime/live gates are separate. |
-| PKG-03 | Isolated packed consumer restores/executes provider API without project/local connector references. | Required | Done | Done | Same transactions nupkg passes both modes/selected patches, including transaction factory/borrowed ownership/Oracle no-command release and prior smoke; package-only graph and DLL identity inspected; rerun after changes. |
-| PKG-04 | Minimum EF10 and selected later available EF10 patch restore/build/test without pinning the EF patch in the provider package; EF11 cannot satisfy dependencies. | Required | Done | Done | Final source suites pass2050 at10.0.0/10.0.14; same baseline-built transactions nupkg passes both consumers, including prior private-field runtime probes. Ranges rechecked; prior parser rejects11.0.0. Future patches need fresh private-contract evidence. |
+| PKG-02 | Packed nuspec uses OceanBase.EntityFrameworkCore and EF ranges [10.0.0,11.0.0). | Required | Done | Done | Verify-Package.ps1 passes schema-lifecycle-20261111 identity/net10.0/README/ranges; prior negative probes reject as expected. Rerun on every release pack; runtime/live gates are separate. |
+| PKG-03 | Isolated packed consumer restores/executes provider API without project/local connector references. | Required | Done | Done | Same schema-lifecycle nupkg passes both modes/selected patches, including scoped sync/async EnsureCreated, existing-table skips and all prior smoke; package-only graph and DLL identity inspected; rerun after changes. |
+| PKG-04 | Minimum EF10 and selected later available EF10 patch restore/build/test without pinning the EF patch in the provider package; EF11 cannot satisfy dependencies. | Required | Done | Done | Final source suites pass2129 at10.0.0/10.0.14; same baseline-built schema-lifecycle nupkg passes both consumers, including prior private-field runtime probes. Ranges rechecked; prior parser rejects11.0.0. Future patches need fresh private-contract evidence. |
 | TST-01 | Selected EF relational specification classes pass; exclusions map to checklist IDs and limitations. | Required | Planned | Planned | Specification project/selection absent. |
 | TST-02 | Live core query/write/transaction/schema/scalar suites pass in at least one declared supported environment per mode. | Required | Planned | Planned | User will supply access later; User Secrets fixture and authorized schema/cleanup scope required; no live provider execution recorded. |
 | REL-01 | Support notes record server/connector/runtime/EF versions, tenant mode, direct/proxy endpoint, transport/options without credentials. | Required | Planned | Planned | Release evidence record missing. |

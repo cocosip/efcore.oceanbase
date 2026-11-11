@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
@@ -88,23 +90,129 @@ namespace OceanBase.EntityFrameworkCore.Storage
                 : (long)OceanBaseNumericConversion.ConvertValue(value, typeof(long)) > 0;
 
         private static NotSupportedException SchemaNotSupported()
-            => new("OceanBase schema creation and deletion require the not-yet-implemented schema ownership profile. Apply schema externally until SCH-02/SCH-03 are implemented.");
+            => new("OceanBase database/user creation and deletion are not implemented. Provision the database/schema externally; opt in to existing-schema table creation with EnableOceanBaseSchemaManagement.");
 
         public void Create() => throw SchemaNotSupported();
         public Task CreateAsync(CancellationToken cancellationToken = default) => throw SchemaNotSupported();
         public void Delete() => throw SchemaNotSupported();
         public Task DeleteAsync(CancellationToken cancellationToken = default) => throw SchemaNotSupported();
-        public void CreateTables() => throw SchemaNotSupported();
-        public Task CreateTablesAsync(CancellationToken cancellationToken = default) => throw SchemaNotSupported();
+        public void CreateTables() => CreateTables(onlyIfEmpty: false);
+        public async Task CreateTablesAsync(CancellationToken cancellationToken = default)
+            => await CreateTablesAsync(onlyIfEmpty: false, cancellationToken).ConfigureAwait(false);
+
         public string GenerateCreateScript()
         {
-            var context = currentContext.Context;
-            var statements = new OceanBaseSchemaSqlGenerator(context.GetService<ISqlGenerationHelper>(), _mode)
-                .Generate(context.GetService<IDesignTimeModel>().Model);
+            var statements = CreateStatements(currentContext.Context.GetService<IDesignTimeModel>().Model);
             return string.Join(";\n\n", statements) + (statements.Count > 0 ? ";\n" : "");
         }
-        public bool EnsureCreated() => throw SchemaNotSupported();
-        public Task<bool> EnsureCreatedAsync(CancellationToken cancellationToken = default) => throw SchemaNotSupported();
+
+        public bool EnsureCreated() => CreateTables(onlyIfEmpty: true);
+        public Task<bool> EnsureCreatedAsync(CancellationToken cancellationToken = default)
+            => CreateTablesAsync(onlyIfEmpty: true, cancellationToken);
+
+        private IReadOnlyList<string> CreateStatements(IModel model)
+            => new OceanBaseSchemaSqlGenerator(currentContext.Context.GetService<ISqlGenerationHelper>(), _mode).Generate(model);
+
+        private IReadOnlyList<string> ValidateTableCreation()
+        {
+            var scope = options.FindExtension<Internal.OceanBaseOptionsExtension>()!.SchemaManagementScope;
+            if (scope is null)
+            {
+                throw new NotSupportedException("Explicitly opt in with EnableOceanBaseSchemaManagement before creating tables.");
+            }
+            if (connection.CurrentTransaction is not null || System.Transactions.Transaction.Current is not null
+                || connection is ITransactionEnlistmentManager { EnlistedTransaction: not null })
+            {
+                throw new NotSupportedException("OceanBase schema DDL cannot run inside a caller transaction in this profile.");
+            }
+            var core = options.FindExtension<CoreOptionsExtension>();
+            if (core?.Seeder is not null || core?.AsyncSeeder is not null)
+            {
+                throw new NotSupportedException("OceanBase schema creation does not yet support seeding callbacks.");
+            }
+            var model = currentContext.Context.GetService<IDesignTimeModel>().Model;
+            var tables = model.GetRelationalModel().Tables.Where(t => !t.IsExcludedFromMigrations);
+            if (tables.Any(t => t.Schema is not null && !string.Equals(t.Schema, scope, StringComparison.Ordinal)
+                || t.ForeignKeyConstraints.Any(f => f.PrincipalTable.Schema is not null
+                    && !string.Equals(f.PrincipalTable.Schema, scope, StringComparison.Ordinal))))
+            {
+                throw new NotSupportedException("The model contains a table outside the declared schema management scope.");
+            }
+            return CreateStatements(model);
+        }
+
+        private IRelationalCommand ScopeProbe() => commands.Build(_mode == OceanBaseCompatibilityMode.MySql
+            ? "SELECT DATABASE()" : "SELECT SYS_CONTEXT('USERENV', 'CURRENT_SCHEMA') FROM DUAL");
+
+        private void ValidateCurrentScope(object? value)
+        {
+            var scope = options.FindExtension<Internal.OceanBaseOptionsExtension>()!.SchemaManagementScope;
+            if (value is not string actual || !string.Equals(actual, scope, StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException("The current database/schema does not match the declared schema management scope. No DDL was executed.");
+            }
+        }
+
+        private bool CreateTables(bool onlyIfEmpty)
+        {
+            var statements = ValidateTableCreation();
+            if (statements.Count == 0) return false;
+            connection.Open();
+            Exception? failure = null;
+            try
+            {
+                ValidateCurrentScope(ScopeProbe().ExecuteScalar(Parameters()));
+                if (onlyIfEmpty && HasTables()) return false;
+                foreach (var statement in statements) commands.Build(statement).ExecuteNonQuery(Parameters());
+                return true;
+            }
+            catch (Exception error)
+            {
+                failure = error;
+                throw;
+            }
+            finally
+            {
+                try { connection.Close(); }
+                catch (Exception cleanup) when (failure is not null)
+                {
+                    failure.Data["OceanBase.SchemaCleanupError"] = cleanup;
+                }
+            }
+        }
+
+        private async Task<bool> CreateTablesAsync(bool onlyIfEmpty, CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var statements = ValidateTableCreation();
+            if (statements.Count == 0) return false;
+            await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+            Exception? failure = null;
+            try
+            {
+                ValidateCurrentScope(await ScopeProbe().ExecuteScalarAsync(Parameters(), cancellationToken).ConfigureAwait(false));
+                if (onlyIfEmpty && await HasTablesAsync(cancellationToken).ConfigureAwait(false)) return false;
+                foreach (var statement in statements)
+                {
+                    await commands.Build(statement).ExecuteNonQueryAsync(Parameters(), cancellationToken).ConfigureAwait(false);
+                }
+                return true;
+            }
+            catch (Exception error)
+            {
+                failure = error;
+                throw;
+            }
+            finally
+            {
+                try { await connection.CloseAsync().ConfigureAwait(false); }
+                catch (Exception cleanup) when (failure is not null)
+                {
+                    failure.Data["OceanBase.SchemaCleanupError"] = cleanup;
+                }
+            }
+        }
+
         public bool EnsureDeleted() => throw SchemaNotSupported();
         public Task<bool> EnsureDeletedAsync(CancellationToken cancellationToken = default) => throw SchemaNotSupported();
     }

@@ -11,6 +11,28 @@ each small group. Real database integration/tests and EF8/EF9 adaptation are exp
 [local development plan](efcore-10-local-development-plan.md) tracks the full remaining inventory, including
 an audit of locally feasible deferred families. Finishing one batch does not finish the overall goal.
 
+### Existing-schema creation checkpoint (2026-11-11)
+
+Batch7b after ed11c8b implements EnsureCreated/CreateTables, sync/async, behind the explicit per-context
+EnableOceanBaseSchemaManagement target. The database/user/schema must already exist. Validate all model DDL,
+transactions/callbacks and table/FK scopes before opening; verify the exact current scope before commands.
+EnsureCreated returns false when any ordinary table exists; CreateTables skips that check. No retry, DROP
+rollback or reconciliation occurs. Partial DDL can remain after failure. Namespace creation/deletion remain
+guarded; the option enables table creation only.
+
+Initial missing-API/behavior RED evidence is followed by eight reproduced boundary failures: excluded cross-scope
+FK principals and final cleanup masking the DDL error. Both are fixed; cleanup errors are attached to the original
+exception. Focused46 lifecycle and six option cases pass. Full Debug/Release and isolated EF10.0.14 Release pass
+2129 (1507 unit,620 functional,two consumers), zero failures/skips. The later async-seeder coverage addition
+receives focused checks. Independent source review approves with no blocking findings. Explicit-enlistment and
+stateful physical-session/caller-opened lifecycle fixtures remain nonblocking coverage follow-ups; current
+intercepted fixtures prove EF leases/control flow only.
+
+The same baseline-built schema-lifecycle-20261111 nupkg passes content, both-mode sync/async schema consumers on
+EF10.0.0/10.0.14, package-only graphs and identical DLL hashes. Source baseline assets remain10.0.0.
+Evidence: artifacts/schema-lifecycle-*.log, schema-lifecycle-compat/, schema-lifecycle-package/.
+No live DDL, standalone live test program, EF8/EF9, push or publication. The broader EF10 goal remains active.
+
 ### Offline create scripts checkpoint (2026-11-11)
 
 Batch7a after8a4ad6a implements GenerateCreateScript without opening a connection. It emits ordinary scalar

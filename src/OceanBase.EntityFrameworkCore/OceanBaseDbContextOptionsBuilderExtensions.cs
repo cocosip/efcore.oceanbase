@@ -69,6 +69,26 @@ namespace Microsoft.EntityFrameworkCore
                     ? new OceanBaseOptionsExtension(extension)
                     : new OceanBaseOptionsExtension();
 
+        /// <summary>
+        /// Enables table creation in the named, already provisioned MySQL database or Oracle schema.
+        /// The current schema must match exactly. This does not enable database/user creation or deletion.
+        /// </summary>
+        public static DbContextOptionsBuilder EnableOceanBaseSchemaManagement(
+            this DbContextOptionsBuilder optionsBuilder, string databaseOrSchema)
+        {
+            ArgumentNullException.ThrowIfNull(optionsBuilder);
+            var extension = GetOrCreateExtension(optionsBuilder).WithSchemaManagementScope(databaseOrSchema);
+            ((IDbContextOptionsBuilderInfrastructure)optionsBuilder).AddOrUpdateExtension(extension);
+            return optionsBuilder;
+        }
+
+        /// <summary>Enables table creation within an explicitly named existing database or schema.</summary>
+        public static DbContextOptionsBuilder<TContext> EnableOceanBaseSchemaManagement<TContext>(
+            this DbContextOptionsBuilder<TContext> optionsBuilder, string databaseOrSchema)
+            where TContext : DbContext
+            => (DbContextOptionsBuilder<TContext>)(object)((DbContextOptionsBuilder)optionsBuilder)
+                .EnableOceanBaseSchemaManagement(databaseOrSchema);
+
         private static void ConfigureWarnings(DbContextOptionsBuilder optionsBuilder)
         {
             var coreOptions = optionsBuilder.Options.FindExtension<CoreOptionsExtension>()
