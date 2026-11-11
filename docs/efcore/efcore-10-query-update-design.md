@@ -971,6 +971,48 @@ The package-only SeedingSmoke covers matching callbacks, true/false results, tra
 commit/disposal with native doubles; it does not contact a server. Test-only service replacements are isolated
 from EF's process-wide service-provider cache.
 
+### Bulk relational update/delete (DEF-03)
+
+Use EF10's published relational ExecuteUpdate/ExecuteDelete translation and immediate nonquery command
+pipeline. Both APIs return affected rows and bypass change tracking; zero rows are not a concurrency
+exception. Multiple API calls have no implicit shared transaction. Existing named query filters and
+explicit predicates apply normally; applications supply concurrency predicates themselves.
+
+MySQL UPDATE uses its table-reference list before SET, including EF-produced joins; UPDATE/FROM is
+not the MySQL contract. SET targets are qualified to avoid joined-column ambiguity. Oracle retains
+ordinary single-table UPDATE with unqualified SET targets and native target aliases. Joined Oracle
+UPDATE and EF fallback update joins require a future native rewrite and must fail before execution.
+DELETE retains EF's single-target/predicate rewrite. Source contracts are the published EF10.0.0
+QuerySqlGenerator and relational method translator plus OceanBase's public MySQL parser grammar,
+downloaded for inspection in artifacts/bulk-dml-ef-source/. Public grammar is not deployed-server proof.
+
+EF setter expressions refer to the pre-update row. MySQL's assignment order must not change a later
+RHS read of another assigned target column. Topologically order assignments so readers precede writers;
+ignore a setter's self-reference, and reject cycles before execution until snapshot assignment is
+implemented. Joined MySQL updates cannot rely on assignment order, so cross-assignment dependencies
+also require a snapshot and currently reject. Oracle's native simultaneous assignment retains the declared order. Duplicate target
+columns reject rather than depend on assignment precedence.
+
+For direct constant/parameter setter values, reuse the target mapping's IOceanBaseWriteValidation
+before opening. Runtime parameter reads disable SQL caching so current values are checked every time;
+predicates keep query transport independent of column capacity. Arbitrary server-computed expressions
+cannot be client-validated against write bounds. Converter, SQL, physical affected-row, collation and
+transaction outcomes remain live gates. No new driver or server limitation is inferred without evidence.
+
+Server-computed Boolean setters and Boolean column copies with different storage converters are encoded
+using CASE with independent source true/false comparisons and target true/false literals; SQL NULL remains
+NULL. Do not copy canonical numeric truth or a source T/F representation directly into a Y/N target.
+Other server expressions whose source/target converter instances differ reject until an explicit
+translation exists. Direct literal/captured values keep EF's target-mapped parameter path.
+
+Retain root UpdateExpression/DeleteExpression tags across parameter processing: the published EF10.0.0
+UpdateExpression.VisitChildren can reconstruct an expression without its Tags after a child changes.
+The wrapper captures/restores those statement tags; no connector or server change is needed.
+
+Remaining DEF-03 work includes Oracle joined/paged update rewrites, MySQL cyclic/snapshot assignments,
+advanced JSON/complex/inheritance/table-split shapes and complete live acceptance; this stage does not
+establish complete bulk support. Rejecting an unimplemented shape is a provider gap, not a server defect.
+
 ### Official relational model specifications (TST-01 / MOD-01/02/03)
 
 Use the official Microsoft.EntityFrameworkCore.Relational.Specification.Tests EF10 package and its

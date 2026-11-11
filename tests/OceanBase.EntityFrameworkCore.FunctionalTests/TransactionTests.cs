@@ -603,6 +603,36 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
             Assert.Same(transaction, context.Database.CurrentTransaction);
         }
 
+        [Theory]
+        [MemberData(nameof(Modes))]
+        public async Task Bulk_commands_attach_to_the_caller_transaction_without_savepoints_or_committing_it(OceanBaseCompatibilityMode mode, bool async)
+        {
+            await using var context = Create(mode);
+            var native = Native(context);
+            using var source = new CancellationTokenSource();
+            await using var transaction = await context.Database.BeginTransactionAsync(source.Token);
+            var physical = Assert.IsType<NativeTransaction>(transaction.GetDbTransaction());
+            Assert.Equal(1, async ? await context.Set<Row>().Where(row => row.Id > 2)
+                .ExecuteUpdateAsync(setters => setters.SetProperty(row => row.Name, "bulk"), source.Token)
+                : context.Set<Row>().Where(row => row.Id > 2).ExecuteUpdate(setters => setters.SetProperty(row => row.Name, "bulk")));
+            Assert.Equal(1, async ? await context.Set<Row>().Where(row => row.Id == 5).ExecuteDeleteAsync(source.Token)
+                : context.Set<Row>().Where(row => row.Id == 5).ExecuteDelete());
+            Assert.Equal(2, native.Commands.Count);
+            Assert.StartsWith("UPDATE", native.Commands[0].Sql);
+            Assert.StartsWith("DELETE", native.Commands[1].Sql);
+            Assert.All(native.Commands, command =>
+            {
+                Assert.Same(physical, command.Transaction);
+                Assert.Equal(async, command.Async);
+                Assert.Equal(async ? source.Token : default, command.Token);
+            });
+            Assert.Equal(1, native.Begins);
+            Assert.Equal(0, physical.Commits);
+            Assert.Equal(0, physical.Rollbacks);
+            Assert.Same(transaction, context.Database.CurrentTransaction);
+            Assert.Equal(ConnectionState.Open, native.State);
+        }
+
         private static TestContext Create(OceanBaseCompatibilityMode mode, params IInterceptor[] interceptors)
             => new(new DbContextOptionsBuilder<TestContext>()
                 .UseOceanBase("Server=localhost;Database=offline", mode)

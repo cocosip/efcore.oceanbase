@@ -1,5 +1,6 @@
 using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore.Query;
+using Microsoft.EntityFrameworkCore.Query.SqlExpressions;
 
 namespace OceanBase.EntityFrameworkCore.Query
 {
@@ -17,6 +18,9 @@ namespace OceanBase.EntityFrameworkCore.Query
         {
             public override Expression Process(Expression queryExpression, ParametersCacheDecorator parametersDecorator)
             {
+                // EF10 bulk expression VisitChildren can recreate a statement without its tags.
+                var tags = queryExpression switch { UpdateExpression update => update.Tags, DeleteExpression delete => delete.Tags, _ => null };
+                queryExpression = new OceanBaseBulkDmlVisitor(mode, parametersDecorator, Dependencies.SqlExpressionFactory).Visit(queryExpression);
                 queryExpression = new OceanBaseCollectionParameterExpandingVisitor(
                     Dependencies.SqlExpressionFactory, Parameters, parametersDecorator,
                     Dependencies.TypeMappingSource, mode).Visit(queryExpression);
@@ -27,10 +31,16 @@ namespace OceanBase.EntityFrameworkCore.Query
                 }
 
                 var result = base.Process(queryExpression, parametersDecorator);
-                return mode == OceanBaseCompatibilityMode.Oracle
+                result = mode == OceanBaseCompatibilityMode.Oracle
                     ? new OceanBaseSearchConditionVisitor(Dependencies.SqlExpressionFactory,
                         Dependencies.TypeMappingSource.FindMapping(typeof(bool))!).Visit(result)
                     : result;
+                return result switch
+                {
+                    UpdateExpression update when tags is not null => update.ApplyTags(tags),
+                    DeleteExpression delete when tags is not null => delete.ApplyTags(tags),
+                    _ => result
+                };
             }
         }
     }

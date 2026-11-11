@@ -11,6 +11,47 @@ each small group. Real database integration/tests and EF8/EF9 adaptation are exp
 [local development plan](efcore-10-local-development-plan.md) tracks the full remaining inventory, including
 an audit of locally feasible deferred families. Finishing one batch does not finish the overall goal.
 
+### Bulk relational update/delete checkpoint (2026-11-11)
+
+Batch9a after5f56125 promotes ordinary ExecuteUpdate/ExecuteDelete into active development, reusing
+EF10's relational setter translation and immediate nonquery pipeline. MySQL UPDATE now renders
+native table references/joins before SET with qualified targets, replacing the base UPDATE/FROM
+syntax. Single-table dependent assignments are topologically ordered to read original values before
+another setter overwrites them. Cyclic assignments and dependent joined assignments require a
+snapshot rewrite and reject before opening. Oracle ordinary single-table UPDATE/DELETE retain native
+aliases; joined/fallback UPDATE shapes reject until a native rewrite is implemented. These rejections
+are implementation gaps, not demonstrated server restrictions.
+
+Direct constant/current-parameter setters use target mapping write validation before opening, while
+predicate inputs keep independent query bounds. Parameter reads disable SQL caching to recheck each
+captured value. Bulk operations bypass tracking, do not automatically enforce concurrency or create a
+shared transaction, and return affected rows including zero. Caller transactions are attached without
+savepoints/commit/rollback. Statement tags survive EF10 UpdateExpression.VisitChildren reconstruction.
+
+Independent review reproduced wrong storage for computed/cross-encoded Boolean setters: canonical
+0/1 or source T/F could be written directly into Y/N. Eight RED cases now pass after target-aware
+CASE re-encoding; four nullable cases retain SQL NULL. Arbitrary incompatible non-Boolean converter
+server expressions reject before opening pending explicit translation. No new connector dependency.
+
+BulkDmlTests adds48 cases; TransactionTests adds four caller-transaction cases. Final full EF10.0.0
+Debug/Release and isolated EF10.0.14 Release each pass3427=1644 unit+913 functional+868 specification+
+two consumer tests, zero failures/skips. Focused52 pass; original30-case suite exposed20 failures,
+followed by joined dependency and converter regressions. Source/test/fix review has no outstanding
+findings. Evidence artifacts/bulk-dml-{red,boundary-red,converter-red,focused,debug,release,patch}.log.
+
+The same baseline-built 10.0.0-bulk-dml-20261111 package passes both-mode consumers at both patches,
+content, package-only dependency graphs and Release/package/consumer SHA-256 identity:
+4A386A69D2B92C2448405A419AF861B58309577D5B1107BF0BBB2F84D1D0F3F5.
+BulkDmlSmoke adds assignment order/tags/binding/write bounds/delete/computed-Boolean checks. The prior
+seeding package fails the new smoke with handled exit1; no crash dialog is requested. PackageConsumer
+is still manual, outside CI execution. Evidence artifacts/bulk-dml-{prior-package,package}.log and
+artifacts/verify-bulk-dml-package.ps1. Baseline assets remain EF10.0.0.
+
+DEF-03 stays In progress: Oracle joined/paged update rewrites, MySQL cyclic/dependent-joined snapshots,
+arbitrary converter expression translation, wider model/JSON/complex shapes and native bulk execution
+remain work. Public OceanBase parser grammar inspection does not prove deployed-server acceptance.
+No live database, EF8/9, push or publication occurred; no driver/server defect was demonstrated.
+
 ### EnsureCreated seeding callbacks checkpoint (2026-11-11)
 
 Batch7d afterc1dc62d implements matching UseSeeding/UseAsyncSeeding callbacks after successful

@@ -66,6 +66,15 @@ An open row is not automatically waiting for a database. Track the remaining wor
 Development resumed at the user's request (2026-11-10) on efcore/10.0. See the
 [progress handoff](efcore-10-progress.md) for saved state, remaining work and the exact resume point.
 
+Bulk DML checkpoint (Batch9a after5f56125): ordinary both-mode sync/async ExecuteUpdate/ExecuteDelete,
+MySQL native joined UPDATE syntax, single-table assignment ordering and direct setter write validation
+have local coverage. Computed/cross-encoded Boolean setters emit target encodings and preserve NULL;
+arbitrary incompatible converter expressions, cyclic/dependent-joined MySQL assignments and Oracle
+joined updates reject before opening.48 bulk+four transaction cases pass. Full Debug/Release/isolated14
+each3427=1644+913+868+2 pass, zero failures/skips. Same bulk-dml-20261111 package passes both-mode/patch
+consumers/content/graphs/DLL identity. Independent review found/fixed wrong Boolean encoding; no
+outstanding findings. Native execution and remaining DEF-03 rewrites stay open; no driver/server defect.
+
 EnsureCreated seeding checkpoint (Batch7d afterc1dc62d): matching sync/async callbacks run inside an
 owned target transaction after successful schema processing and an in-transaction scope check,
 including populated/empty-model false results.46 focused cases cover actual SaveChanges through
@@ -459,7 +468,7 @@ are difficult to implement. Promoting a deferred feature requires its own design
 | --- | --- | --- | --- | --- |
 | DEF-01 | Migrations/history table/scripts/idempotent scripts/bundles | Deferred | Deferred | DDL/history/design-time plan; upgrade/downgrade tests. |
 | DEF-02 | Reverse engineering/provider design-time services/dotnet ef tooling | Deferred | Deferred | Live schema fixtures; packed tooling consumer tests. |
-| DEF-03 | ExecuteUpdate/ExecuteDelete, including EF10 lambda/JSON variants | Deferred | Deferred | Translation/live affected-row contract. |
+| DEF-03 | ExecuteUpdate/ExecuteDelete, including EF10 lambda/JSON variants | In progress | In progress | Batch9a locally implements ordinary bulk operations: both-mode immediate affected-row/tracking/filter contracts, MySQL joined SQL and single-table assignment ordering, Oracle single-table guards, direct setter write validation and Boolean target re-encoding.48 bulk+four transaction cases and full3427 pass on both selected patches. Oracle joined rewrites, cyclic/dependent-joined MySQL snapshots, arbitrary cross-converter expressions, wider model/JSON shapes and native/live behavior remain open. |
 | DEF-04 | JSON, primitive collections/arrays and complex types, including JSON-owned/complex mappings | Deferred | Deferred | Per-mode mapping/query/update design. |
 | DEF-05 | Spatial, XML, native enum types, OBJECT, LOB locators, REF CURSOR | Deferred | Deferred | Connector capability review/live mappings; ordinary enum converters belong to MAP-07. |
 | DEF-06 | Stored-procedure modification mappings; provider-specific sequence/HiLo strategies | Deferred | Deferred | Parameter/result/generation contracts; reject unsupported mappings clearly. |
@@ -482,7 +491,7 @@ not an automatic feature claim.
 | Named query filters | QRY-09 | Supported composition/disable tests or an explicit named-filter limitation. |
 | Complex-type/JSON changes | DEF-04 | Stay deferred until a tested mapping profile is promoted. |
 | LINQ/operator and parameterized-collection changes | QRY-03/06/07/11 | Enumerate supported translations and negative cases. |
-| ExecuteUpdate changes | DEF-03 | Stay deferred until independent acceptance suite exists. |
+| ExecuteUpdate changes | DEF-03 | Ordinary relational operations have a local independent suite; keep native acceptance, snapshot/join rewrites and JSON/complex variants open. |
 | Seeding/schema lifecycle changes | SCH-02/DEF-09 | Distinguish local EnsureCreated callbacks from native/live behavior and unimplemented Migrate-time seeding/locking. |
 | Diagnostics/security changes | DIA-01/02 | Verify events and sensitive-data protection. |
 

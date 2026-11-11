@@ -252,6 +252,39 @@ rejects the new callback smoke with handled exit1. Reviewer approved source/test
 outstanding findings. Evidence artifacts/seeding-*.log; provider/package SHA-256 recorded in progress.
 No live execution; namespace-positive callback and physical rollback/commit remain unproven.
 
+## Batch9a brief: bulk relational update/delete
+
+DEF-03: promote ordinary ExecuteUpdate/ExecuteDelete from the deferred inventory into active development.
+Reuse EF10's relational setter translation, query filters, command execution, affected-row and tracking
+contracts. Source: official execute-insert-update-delete documentation and published EF10.0.0
+QuerySqlGenerator/RelationalQueryableMethodTranslatingExpressionVisitor (artifacts/bulk-dml-ef-source/).
+
+- Characterize both-mode sync/async filtered/unfiltered operations, multiple/captured/expression setters,
+  nullable and converted fields, named filters, hostile inputs, result counts and unchanged tracked state.
+- Implement MySQL UPDATE table-reference/join SQL, not the base generator's UPDATE/FROM syntax. Preserve
+  original-row values across dependent assignments by topological ordering. Reject dependency cycles
+  until snapshot-based simultaneous assignment is implemented; never silently apply sequential values.
+- Keep Oracle ordinary single-table UPDATE/DELETE; reject joined UPDATE/pushed-down update shapes before
+  any open until a native rewrite is implemented. Retain EF's delete predicate/subquery translation.
+- Apply existing column write validation to direct literal/captured setter values before opening; keep
+  predicate operands independent of column bounds. Server-computed expression bounds remain live work.
+- Cover current captures across cached queries, cancellation/errors, command transaction attachment and
+  no implicit transaction/concurrency/tracker updates. Do not invent tracked SaveChanges semantics.
+- Run full Debug/Release/isolated14, packed consumers, independent review, docs and local commit.
+  This is the initial bulk implementation stage: Oracle joined updates, cyclic MySQL assignments,
+  complete advanced/model/paging shapes and live execution remain on DEF-03 until separately implemented.
+
+Execution after5f56125:48 bulk and four caller-transaction cases pass. Initial30 exposed20 failures;
+additional RED cases cover joined assignment dependencies and the reviewer's computed/cross-encoded
+Boolean storage finding. Target-aware CASE now preserves nullable Boolean encodings; arbitrary
+incompatible converter server expressions reject before open. Restore root statement tags lost by
+EF10 VisitChildren reconstruction. Full Debug/Release/isolated14 each3427=1644+913+868+2 pass with
+zero failures/skips. Same bulk-dml-20261111 package passes both modes/patches/content/graphs/hash;
+prior seeding package fails new smoke with handled exit1. Independent final source/test review has
+no outstanding findings. See progress for package identity/hash and artifacts/bulk-dml-*.log evidence.
+Oracle join rewrites, MySQL snapshot assignments, wider converter/model shapes and live tests remain
+open; this stage does not complete DEF-03 or the overall goal. No driver/server defect demonstrated.
+
 ## Batch8a brief: official relational model specification fixtures
 
 TST-01 / MOD-01/02/03 / DEF-07: consume the official EF10 relational specification package in a

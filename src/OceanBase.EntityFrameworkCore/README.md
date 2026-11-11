@@ -66,6 +66,14 @@ Automatic savepoint recovery after cancellation uses an uncancelled cleanup toke
 save error. Recovery or native disposal can still fail; discard an unusable context/transaction and explicitly
 resolve native state. Local command doubles do not establish physical rollback or transaction atomicity.
 
+`ExecuteUpdate` and `ExecuteDelete` have local sync/async coverage for ordinary relational operations.
+They execute immediately, return affected rows and bypass the change tracker; applications supply concurrency
+predicates and a transaction when several calls must share one. MySQL joined updates use native table-reference
+syntax. Single-table dependent assignments preserve old values through ordering; cyclic assignments and dependent
+joined assignments still require an unimplemented snapshot rewrite. Oracle joined/paged updates remain unsupported.
+Direct literal/captured setters use column write bounds; server-computed expression bounds and physical bulk SQL
+execution remain unverified. These limits are provider implementation gaps, not demonstrated server defects.
+
 Migrations, reverse engineering and the wider EF feature inventory remain under development.
 EF Core 8/9 adaptation is postponed until the EF10 provider stabilizes. Review the repository's EF10
 feature checklist and progress documents before choosing a development checkpoint for an application.
