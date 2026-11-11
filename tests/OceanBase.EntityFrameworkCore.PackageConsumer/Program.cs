@@ -19,7 +19,22 @@ namespace PackageConsumer
 {
     internal static class Program
     {
-        private static void Main()
+        private static int Main()
+        {
+            try
+            {
+                VerifyPackage();
+                return 0;
+            }
+            catch (Exception error)
+            {
+                // Expected negative package probes must fail normally, without Windows crash reporting.
+                Console.Error.WriteLine($"Package consumer failed ({error.GetType().Name}): {error.Message}");
+                return 1;
+            }
+        }
+
+        private static void VerifyPackage()
         {
             foreach (var mode in new[] { OceanBaseCompatibilityMode.MySql, OceanBaseCompatibilityMode.Oracle })
             {
@@ -204,6 +219,41 @@ namespace PackageConsumer
                 if (!context.Set<Row>().Where(row => row.OptionalBoolean.HasValue).ToQueryString()
                     .Contains("IS NOT NULL", StringComparison.Ordinal))
                     throw new Exception("Packed provider lost the nullable Boolean HasValue predicate.");
+
+                var orderFlag = true;
+                var orderTextQuery = context.Set<Row>()
+                    .Where(row => row.BooleanText.CompareTo(row.BooleanNumber) > 0 && row.BooleanText.ToString() == "True")
+                    .Select(row => new { Typed = row.BooleanNumber.CompareTo(orderFlag),
+                        Boxed = row.BooleanText.CompareTo((object)row.OptionalBoolean!), Text = row.BooleanText.ToString(),
+                        Formatted = row.BooleanNumber.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                        Optional = row.OptionalBoolean.ToString() });
+                foreach (var value in new[] { true, false, true, false })
+                {
+                    orderFlag = value;
+                    using var orderCommand = orderTextQuery.CreateDbCommand();
+                    foreach (var fragment in new[] { "'True'", "'False'", "ELSE -1", " = 2 THEN 1", " = -1 THEN 0",
+                        mode == OceanBaseCompatibilityMode.MySql ? " = 'Y' THEN 1" : " = N'Y' THEN 1" })
+                        if (!orderCommand.CommandText.Contains(fragment, StringComparison.Ordinal))
+                            throw new Exception($"Packed provider lost Boolean ordering/string translation: {fragment}");
+                    if (orderCommand.CommandText.Contains("__oceanbase_internal_", StringComparison.Ordinal)
+                        || orderCommand.Parameters.Count == 0)
+                        throw new Exception("Packed provider lost Boolean ordering captures or emitted an internal function.");
+                    foreach (DbParameter parameter in orderCommand.Parameters)
+                        if (Convert.ToDecimal(parameter.Value) != (value ? 1m : 0m))
+                            throw new Exception("Packed provider changed a Boolean ordering parameter value.");
+                }
+                bool? boxedFlag = true;
+                var boxedOrder = context.Set<Row>().Select(row => row.BooleanText.CompareTo((object?)boxedFlag));
+                foreach (var value in new bool?[] { true, false, null, true, null })
+                {
+                    boxedFlag = value;
+                    using var boxedCommand = boxedOrder.CreateDbCommand();
+                    if (value is null && (!boxedCommand.CommandText.Contains("SELECT 1", StringComparison.Ordinal)
+                        || boxedCommand.Parameters.Count != 0))
+                        throw new Exception("Packed provider lost the boxed nullable-null CompareTo result.");
+                    if (value is not null && boxedCommand.Parameters.Count == 0)
+                        throw new Exception("Packed provider lost a current boxed ordering capture.");
+                }
 
                 var shiftCount = -1;
                 var shiftQuery = context.Set<Row>().Where(row => (row.Id << shiftCount) != 0).Select(row => new

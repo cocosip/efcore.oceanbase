@@ -703,6 +703,31 @@ Supplied reader values do not prove server evaluation. Existing valid-encoding, 
 repeated volatile evaluation boundaries apply. CompareTo/string/parsing/conversion APIs remain local
 follow-up work; no connector defect or native database acceptance is established by these tests.
 
+## Boolean ordering and string representation contract
+
+QRY-01/QRY-11 adds exact bool.CompareTo(bool/object) on statically Boolean arguments. CLR Boolean
+ordering is false<true regardless of converter storage order. A CASE over independently normalized
+native 0/1 values returns signed Int32 -1/0/1 without MySQL unsigned subtraction. Leading null guards
+preserve SQL NULL propagation from nullable.Value receivers/typed arguments before any compensated
+equality branch. Object-null (including a boxed nullable field/capture) compares below any non-null Boolean; other
+object types and genuinely dynamic objects are unsupported in predicates and retain client projection.
+Other method identities retain inherited EF behavior, including its name-based ComparisonTranslator.
+
+Exact bool.ToString(), bool.ToString(IFormatProvider), Nullable<bool>.ToString() and object.ToString()
+on statically Boolean boxed values return native strings True/False using normalized truth. The
+framework ignores IFormatProvider; the translation does too. A nullable receiver produces empty for
+NULL in MySQL; Oracle's empty-string-is-NULL rule produces NULL, as elsewhere in this provider. A
+nullable.Value receiver keeps SQL NULL propagation rather than emulating CLR exceptions. Results use
+model-free Int32/string mappings, retaining plain property converters. EF10's inherited comparison
+translator compares storage directly; it does not provide these independently normalized semantics.
+
+Reference contracts: [Boolean.CompareTo](https://learn.microsoft.com/dotnet/api/system.boolean.compareto),
+[Boolean.ToString](https://learn.microsoft.com/dotnet/api/system.boolean.tostring), and
+[Nullable.ToString](https://learn.microsoft.com/dotnet/api/system.nullable-1.tostring). Tests cover both
+modes/null settings, current captures, global defaults, supplied native readers and packed consumers.
+They do not prove native comparisons, collation/coercion, string lengths or volatile single evaluation.
+Parse/TryParse/Convert families remain separate local work. No new SQL function or dependency is added.
+
 ## Integer shift local contract
 
 QRY-01 extends integer expressions with `<<` and `>>`. C# first promotes small integers to Int32;

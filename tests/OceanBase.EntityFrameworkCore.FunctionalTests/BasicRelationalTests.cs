@@ -3479,6 +3479,92 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
             }
         }
 
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false, false, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true, false, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false, true, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true, true, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false, false, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true, false, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false, true, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true, true, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false, false, true)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true, false, true)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false, true, true)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true, true, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false, false, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true, false, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false, true, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true, true, true)]
+        public async Task Boolean_ordering_and_strings_read_native_results_with_current_captures(
+            OceanBaseCompatibilityMode mode, bool async, bool relationalNulls, bool global)
+        {
+            using var table = new DataTable();
+            // EF shares the Text projection with BoxedText; supply each SQL column once.
+            foreach (var column in new[] { "Typed", "Boxed", "Null", "Text", "Formatted", "Optional", "Value", "BoxedOptional", "TypedOptional" })
+                table.Columns.Add(column, typeof(object));
+            object Integer(int value) => mode == OceanBaseCompatibilityMode.Oracle ? (object)(decimal)value : value;
+            table.Rows.Add(Integer(-1), Integer(0), Integer(1), "True", "False",
+                mode == OceanBaseCompatibilityMode.Oracle ? DBNull.Value : "", DBNull.Value, DBNull.Value, DBNull.Value);
+            table.Rows.Add(Integer(1), Integer(-1), DBNull.Value, "False", "True", "True", "False", Integer(1), Integer(0));
+            var commands = new CommandCapture { Results = table };
+            var builder = new DbContextOptionsBuilder<GlobalBooleanContext>()
+                .UseOceanBase("Server=localhost;Database=test", mode)
+                .AddInterceptors(new NoNetworkConnection(), commands);
+            ((IDbContextOptionsBuilderInfrastructure)builder).AddOrUpdateExtension(
+                builder.Options.Extensions.OfType<RelationalOptionsExtension>().Single().WithUseRelationalNulls(relationalNulls));
+            await using DbContext context = global ? new GlobalBooleanContext(builder.Options) : CreateContext(mode, commands, relationalNulls);
+            var flag = true;
+            var query = context.Set<BooleanXorRow>().Where(row => row.Text.CompareTo(flag) < 1)
+                .Select(row => new { Typed = row.Number.CompareTo(flag), Boxed = row.Text.CompareTo((object)row.Number),
+                    Null = (int?)row.OptionalText!.Value.CompareTo(null), Text = row.Text.ToString(),
+                    Formatted = row.Number.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                    Optional = row.OptionalText.ToString(), Value = row.OptionalText!.Value.ToString(),
+                    BoxedText = ((object)row.Text).ToString(),
+                    BoxedOptional = (int?)row.OptionalText!.Value.CompareTo((object)row.OptionalNumber!),
+                    TypedOptional = (int?)row.OptionalText!.Value.CompareTo(row.OptionalNumber!.Value) });
+            foreach (var value in new[] { true, false, true, false })
+            {
+                flag = value;
+                commands.Values.Clear();
+                var rows = async ? await query.ToListAsync() : query.ToList();
+                Assert.Equal(2, rows.Count);
+                Assert.Equal(-1, rows[0].Typed);
+                Assert.Equal(0, rows[0].Boxed);
+                Assert.Equal(1, rows[0].Null);
+                Assert.Equal("True", rows[0].Text);
+                Assert.Equal("False", rows[0].Formatted);
+                Assert.Equal(mode == OceanBaseCompatibilityMode.Oracle ? null : "", rows[0].Optional);
+                Assert.Null(rows[0].Value);
+                Assert.Equal("True", rows[0].BoxedText);
+                Assert.Null(rows[0].BoxedOptional);
+                Assert.Null(rows[0].TypedOptional);
+                Assert.Equal(1, rows[1].Typed);
+                Assert.Equal(-1, rows[1].Boxed);
+                Assert.Null(rows[1].Null);
+                Assert.Equal("False", rows[1].Text);
+                Assert.Equal("True", rows[1].Formatted);
+                Assert.Equal("True", rows[1].Optional);
+                Assert.Equal("False", rows[1].Value);
+                Assert.Equal("False", rows[1].BoxedText);
+                Assert.Equal(1, rows[1].BoxedOptional);
+                Assert.Equal(0, rows[1].TypedOptional);
+                var sql = commands.Sql[^1];
+                Assert.Contains("CASE", sql);
+                Assert.Contains("'True'", sql);
+                Assert.Contains("'False'", sql);
+                Assert.DoesNotContain("__oceanbase_internal_", sql);
+                Assert.NotEmpty(commands.Values);
+                Assert.All(commands.Values, parameter =>
+                {
+                    if (global)
+                        Assert.Equal(value ? "Y" : "N", Assert.IsType<string>(parameter));
+                    else
+                        Assert.Equal(value ? 1m : 0m, Convert.ToDecimal(parameter));
+                });
+            }
+        }
+
         private sealed class GlobalBooleanContext(DbContextOptions<GlobalBooleanContext> options) : DbContext(options)
         {
             protected override void ConfigureConventions(ModelConfigurationBuilder builder)

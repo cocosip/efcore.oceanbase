@@ -11,6 +11,44 @@ each small group. Real database integration/tests and EF8/EF9 adaptation are exp
 [local development plan](efcore-10-local-development-plan.md) tracks the full remaining inventory, including
 an audit of locally feasible deferred families. Finishing one batch does not finish the overall goal.
 
+### Boolean ordering and string representation checkpoint (2026-11-11)
+
+Batch3z after7235f38 adds exact bool.CompareTo(bool/object) and Boolean/nullable/boxed ToString
+identities, including the ignored IFormatProvider overload. Independent operand normalization makes
+ordering and True/False strings independent of native/numeric/text/inverted storage encodings. Signed
+Int32 CASE results avoid MySQL unsigned arithmetic. Leading NULL guards preserve nullable.Value SQL
+NULL propagation; object-overload NULL, including boxed nullable fields/captures, compares below a
+non-null Boolean and returns1. Nullable ToString NULL becomes empty in MySQL and NULL in Oracle.
+
+Initial10 RED cases establish missing normalization/string translation. Independent review identifies
+unsigned subtraction and boxed nullable-null behavior; six additional RED cases pin both. CASE/null
+guards resolve them. EF may retain equality compensation after the guards; tests assert guard order.
+BooleanQueryTests adds16 cases; BasicRelationalTests adds16 sync/async cases with both null settings,
+global defaults, current captures and supplied native int/string/NULL reads. The synthetic fixture
+supplies Text/BoxedText's shared SQL column once, respecting EF projection deduplication.
+
+Full Debug/Release and isolated EF10.0.14 Release each pass2396=1638 unit+756 functional+2 consumers,
+zero failures/skips. The same baseline-built `10.0.0-boolean-order-text-20261111` package passes both
+modes on EF10.0.0/10.0.14, package-content checks, package-only graphs and DLL identity:
+`5ABF877AF83A4FD8B4F28AF467009F7B76D8DC08E26CAEFF6692C3646B8D5CFE`.
+Previous Boolean-method package rejects the new ToString predicate; baseline assets remain10.0.0.
+Independent fix review approves. Evidence: artifacts/boolean-order-text-{red,review-red,focused,
+functional,debug-final,release-final,patch-final,package-final,old-package-red}.log and corresponding
+boolean-order-text-package/ and boolean-order-text-compat/ directories.
+
+Following the user's crash-report observation, PackageConsumer now catches managed verification
+failures at its executable entry point, prints stderr diagnostics and returns1 rather than raising an
+unhandled process exception. The previous-package rejection passes an explicit exit1/no-unhandled
+assertion; the unchanged new package passes both modes/patches with exit0 after this consumer-only
+change (artifacts/consumer-handled-{failure,success}.log). CI does not execute PackageConsumer;
+it only reads package content through Verify-Package.ps1. The solution's two ConsumerTests configuration
+tests remain ordinary CI tests. This is separate from the postponed live test application.
+
+Native comparisons/coercion/collation, string representation semantics and volatile single evaluation
+remain unverified. Parsing/Convert APIs and the wider local Required/deferred inventory remain open;
+no connector defect or deployed-server limitation was established. Overall goal stays active; no live
+DB/application, EF8/EF9, push or publication work occurred.
+
 ### Boolean equality methods and nullable defaults checkpoint (2026-11-11)
 
 Batch3y after6aa90d9 adds exact framework Boolean typed/boxed/nullable Equals and both

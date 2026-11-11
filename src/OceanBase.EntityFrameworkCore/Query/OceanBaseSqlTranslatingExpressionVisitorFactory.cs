@@ -33,6 +33,15 @@ namespace OceanBase.EntityFrameworkCore.Query
         ];
         private static readonly MethodInfo BooleanDefault = typeof(bool?).GetMethod(nameof(Nullable<bool>.GetValueOrDefault), Type.EmptyTypes)!;
         private static readonly MethodInfo BooleanFallback = typeof(bool?).GetMethod(nameof(Nullable<bool>.GetValueOrDefault), [typeof(bool)])!;
+        private static readonly MethodInfo BooleanCompare = typeof(bool).GetMethod(nameof(bool.CompareTo), [typeof(bool)])!;
+        private static readonly MethodInfo BooleanObjectCompare = typeof(bool).GetMethod(nameof(bool.CompareTo), [typeof(object)])!;
+        private static readonly HashSet<MethodInfo> BooleanStringMethods =
+        [
+            typeof(bool).GetMethod(nameof(bool.ToString), Type.EmptyTypes)!,
+            typeof(bool).GetMethod(nameof(bool.ToString), [typeof(IFormatProvider)])!,
+            typeof(bool?).GetMethod(nameof(bool.ToString), Type.EmptyTypes)!,
+            typeof(object).GetMethod(nameof(object.ToString), Type.EmptyTypes)!
+        ];
 
         internal static bool IsCanonicalBoolean(RelationalTypeMapping? mapping)
         {
@@ -225,6 +234,52 @@ namespace OceanBase.EntityFrameworkCore.Query
 
             protected override Expression VisitMethodCall(MethodCallExpression call)
             {
+                if (call.Method == BooleanCompare || call.Method == BooleanObjectCompare)
+                {
+                    if (Visit(call.Object) is not SqlExpression instance)
+                        return QueryCompilationContext.NotTranslatedExpression;
+                    var argument = Unbox(call.Arguments[0]);
+                    var mapping = Dependencies.TypeMappingSource.FindMapping(typeof(int));
+                    var boolean = Dependencies.TypeMappingSource.FindMapping(typeof(bool));
+                    var left = BooleanOperand(instance);
+                    var nullBoolean = new SqlConstantExpression(null, typeof(bool), boolean);
+                    SqlExpression right;
+                    if (argument is ConstantExpression { Value: null })
+                        right = nullBoolean;
+                    else if (Unwrap(argument.Type) == typeof(bool) && Visit(argument) is SqlExpression translated)
+                        right = BooleanOperand(translated);
+                    else
+                        return QueryCompilationContext.NotTranslatedExpression;
+                    var nullInteger = new SqlConstantExpression(null, typeof(int), mapping);
+                    // Signed CASE results avoid MySQL unsigned subtraction, even for canonical 0/1 storage.
+                    return Dependencies.SqlExpressionFactory.Case(
+                        [new CaseWhenClause(new SqlBinaryExpression(ExpressionType.Equal, left, nullBoolean, typeof(bool), boolean), nullInteger),
+                        new CaseWhenClause(new SqlBinaryExpression(ExpressionType.Equal, right, nullBoolean, typeof(bool), boolean),
+                            call.Method == BooleanObjectCompare ? new SqlConstantExpression(1, typeof(int), mapping) : nullInteger),
+                        new CaseWhenClause(new SqlBinaryExpression(ExpressionType.Equal, left, right, typeof(bool), boolean),
+                            new SqlConstantExpression(0, typeof(int), mapping)),
+                        new CaseWhenClause(new SqlBinaryExpression(ExpressionType.GreaterThan, left, right, typeof(bool), boolean),
+                            new SqlConstantExpression(1, typeof(int), mapping))],
+                        new SqlConstantExpression(-1, typeof(int), mapping));
+                }
+                if (BooleanStringMethods.Contains(call.Method) && call.Object is { } receiver
+                    && Unwrap(Unbox(receiver).Type) == typeof(bool))
+                {
+                    receiver = Unbox(receiver);
+                    if (Visit(receiver) is not SqlExpression instance)
+                        return QueryCompilationContext.NotTranslatedExpression;
+                    var value = BooleanOperand(instance);
+                    var boolean = Dependencies.TypeMappingSource.FindMapping(typeof(bool));
+                    var text = Dependencies.TypeMappingSource.FindMapping(typeof(string));
+                    return Dependencies.SqlExpressionFactory.Case(
+                        [new CaseWhenClause(new SqlBinaryExpression(ExpressionType.Equal, value,
+                            new SqlConstantExpression(true, typeof(bool), boolean), typeof(bool), boolean),
+                            new SqlConstantExpression(bool.TrueString, typeof(string), text)),
+                        new CaseWhenClause(new SqlBinaryExpression(ExpressionType.Equal, value,
+                            new SqlConstantExpression(false, typeof(bool), boolean), typeof(bool), boolean),
+                            new SqlConstantExpression(bool.FalseString, typeof(string), text))],
+                        new SqlConstantExpression(receiver.Type == typeof(bool?) ? string.Empty : null, typeof(string), text));
+                }
                 if (BooleanEqualsMethods.Contains(call.Method))
                 {
                     var left = Unbox(call.Object ?? call.Arguments[0]);

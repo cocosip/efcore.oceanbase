@@ -73,6 +73,15 @@ content and both-mode/patch consumers; prior lifecycle package fails the new NUL
 Release and consumer DLL identities match. Independent review found and closed an async token-count test
 gap; no production findings remain. Transactions/live remain open.
 
+Boolean ordering/text local checkpoint (Batch3z after7235f38):16 unit/16 intercepted cases add exact
+CompareTo and ToString identities with independent normalization, signed CASE results and distinct
+typed.Value versus boxed-object NULL behavior. Covers inverted/unsigned/nullable mappings, current
+captures/global defaults and supplied native int/string/NULL reads. Full Debug/Release/isolated14
+each2396=1638+756+2 pass, zero failures/skips; same package passes both modes/patches/content/graphs/
+DLL identity. Independent review closed unsigned subtraction and boxed-null issues. QRY-01/QRY-11
+stay In progress; parsing/conversion/wider APIs and native evaluation remain open. PackageConsumer
+managed failures now return1 with stderr; this manual offline executable is not run by CI.
+
 Boolean methods local checkpoint (Batch3y after6aa90d9):18 unit/16 intercepted cases add exact
 framework typed/boxed/nullable Equals, both nullable Boolean defaults and storage HasValue tests.
 Fix inherited converter compensation erasing HasValue predicates; preserve Value converters and
@@ -358,7 +367,7 @@ duplicates and mode-specific string semantics.
 | --- | --- | --- | --- | --- | --- |
 | SQL-01 | Escape identifiers, schema qualification and embedded delimiters; Oracle table aliases omit AS and table-free SELECT uses DUAL. | Required | In progress | In progress | UH now covers embedded delimiters, schema/Unicode/empty-name escaping and all builder overloads; UQ aliases pass; table-free/live SQL evidence still incomplete. |
 | SQL-02 | Parameter names/placeholders follow each dialect. | Required | Done | Done | UH Generates_mode_specific_identifiers_and_parameters. |
-| QRY-01 | SELECT/projection, arithmetic/comparison/Boolean predicates and null semantics bind values and materialize nullable/non-null results. | Required | In progress | In progress | UQ/FP cover Boolean/string/scalar handling, converted Boolean XOR/comparison/logical operators/Equals/nullable defaults/HasValue/CASE/coalesce and native predicate results under global Boolean defaults, integer AND/OR/XOR/complement and left/right shifts, signed/unsigned widths, promotions, nullable/enums and bind refresh; MySQL query parameters use positional `?` ordering at the Connector 0.2.0 boundary. Wider Boolean method/translator families, cast/overflow semantics, wider operators and live results remain open. |
+| QRY-01 | SELECT/projection, arithmetic/comparison/Boolean predicates and null semantics bind values and materialize nullable/non-null results. | Required | In progress | In progress | UQ/FP cover Boolean/string/scalar handling, converted Boolean XOR/comparison/logical operators/Equals/CompareTo/ToString/nullable defaults/HasValue/CASE/coalesce and native predicate results under global Boolean defaults, integer AND/OR/XOR/complement and left/right shifts, signed/unsigned widths, promotions, nullable/enums and bind refresh; MySQL query parameters use positional `?` ordering at the Connector 0.2.0 boundary. Wider Boolean method/translator families, cast/overflow semantics, wider operators and live results remain open. |
 | QRY-02 | OrderBy/ThenBy, Distinct, Skip/Take and offset-only queries return correct results, including deterministic paging/empty pages. | Required | In progress | In progress | UQ SQL shape only; live ordering/string/paging missing. |
 | QRY-03 | Inner/left joins, correlated subqueries, Any/All and scalar/collection Contains have verified results or explicit exclusions. | Required | In progress | In progress | URS/UTC/URC/FP cover ordinary joins/subqueries/quantifiers, bare integral/text membership, captured int/int? roots and nonempty/originally-empty inline roots. Typed zero-row metadata survives subqueries/pruning, including a bounded sole-ordinal repair. Consistent int-to-long bindings pass; converted Join Value projections can fail earlier EF inference. General text/other carriers and wider shapes remain local work; actual server results remain open. |
 | QRY-04 | GroupBy aggregates, Count/LongCount, Sum/Average/Min/Max handle empty and nullable inputs correctly. | Required | In progress | In progress | URS/UNA/FP cover Count/LongCount plus native numeric Sum/Average/Min/Max, all exact numeric/nullable selector families, filtered DISTINCT/HAVING/order, independent promoted Double, neutral Single results, converter-owned SUM zero and supplied empty/null/checked reads. Nonnumeric extrema and real aggregate execution remain open. |

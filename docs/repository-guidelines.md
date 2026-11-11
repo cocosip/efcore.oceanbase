@@ -38,6 +38,13 @@ passed for e41981e in [run 42865290840](https://github.com/cocosip/efcore.oceanb
 That evidence applies to that commit; subsequent changes need their own run. Local Windows checks alone do
 not establish Linux or hosted-runner compatibility.
 
+The standalone PackageConsumer executable is a manually run, offline NuGet-consumer smoke check;
+it is not included in the solution or executed by CI. CI only invokes its Verify-Package.ps1 archive
+content check. The solution's ConsumerTests project contains ordinary provider configuration tests.
+PackageConsumer reports managed verification failures on stderr with exit code1, including expected
+negative probes against older packages; it must not use unhandled exceptions as a failure signal.
+This executable is separate from the postponed comprehensive real-database test application.
+
 ### C# conventions
 
 - Use the repository's existing block namespace style, four-space indentation and braces on all non-trivial

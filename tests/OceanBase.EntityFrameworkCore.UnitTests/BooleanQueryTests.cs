@@ -319,6 +319,114 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
         private static string TrueText(OceanBaseCompatibilityMode mode)
             => mode == OceanBaseCompatibilityMode.MySql ? " = 'Y' THEN 1" : " = N'Y' THEN 1";
 
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true)]
+        public void Boolean_CompareTo_uses_logical_order_and_independent_operands(OceanBaseCompatibilityMode mode, bool relationalNulls)
+        {
+            using var context = CreateContext(mode, relationalNulls);
+            var sql = context.Rows.Where(row => row.Text.CompareTo(row.Number) > 0)
+                .Select(row => new { Typed = row.Text.CompareTo(row.Number), Boxed = row.Text.CompareTo((object)row.Inverted),
+                    Nullable = (int?)row.OptionalText!.Value.CompareTo(row.OptionalNumber!.Value),
+                    NullObject = row.Text.CompareTo(null) }).ToQueryString();
+            Assert.Contains(TrueText(mode), sql);
+            Assert.Contains(" = 2 THEN 1", sql);
+            Assert.Contains(" = 0 THEN 1", sql);
+            Assert.Contains("CASE WHEN", sql);
+            Assert.Contains("IS NULL THEN NULL", sql);
+            var compensatedNulls = sql.IndexOf("IS NULL AND", StringComparison.Ordinal);
+            Assert.True(compensatedNulls < 0 || sql.IndexOf("IS NULL THEN NULL", StringComparison.Ordinal) < compensatedNulls, sql);
+            Assert.DoesNotContain("__oceanbase_internal_", sql);
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true)]
+        public void Boolean_ToString_outputs_framework_spelling_and_nullable_empty(OceanBaseCompatibilityMode mode, bool relationalNulls)
+        {
+            using var context = CreateContext(mode, relationalNulls);
+            var sql = context.Rows.Where(row => row.Text.ToString() == "True")
+                .Select(row => new { Text = row.Text.ToString(), Number = row.Number.ToString(),
+                    Inverted = row.Inverted.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                    Nullable = row.OptionalText.ToString(), Value = row.OptionalText!.Value.ToString(),
+                    Boxed = ((object)row.Text).ToString() }).ToQueryString();
+            Assert.Contains(TrueText(mode), sql);
+            Assert.Contains(" = 2 THEN 1", sql);
+            Assert.Contains(" = 0 THEN 1", sql);
+            Assert.Contains("'True'", sql);
+            Assert.Contains("'False'", sql);
+            Assert.Equal(mode == OceanBaseCompatibilityMode.MySql, sql.Contains("''", StringComparison.Ordinal));
+            Assert.DoesNotContain("__oceanbase_internal_", sql);
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle)]
+        public void Boolean_ordering_and_text_refresh_captures_and_preserve_wrong_type_boundaries(OceanBaseCompatibilityMode mode)
+        {
+            using var context = CreateContext(mode);
+            var flag = true;
+            var query = context.Rows.Where(row => row.Text.CompareTo(flag) < 1)
+                .Select(row => new { Comparison = row.Number.CompareTo(flag), Text = (row.Text ^ flag).ToString() });
+            foreach (var value in new[] { true, false, true, false })
+            {
+                flag = value;
+                using var command = query.CreateDbCommand();
+                Assert.Contains("'True'", command.CommandText);
+                Assert.Contains("'False'", command.CommandText);
+                Assert.Contains("CASE WHEN", command.CommandText);
+                Assert.NotEmpty(command.Parameters);
+                foreach (System.Data.Common.DbParameter parameter in command.Parameters)
+                    Assert.Equal(value ? 1m : 0m, Convert.ToDecimal(parameter.Value));
+            }
+            Assert.Throws<InvalidOperationException>(() => context.Rows.Where(row => row.Text.CompareTo((object)row.Id) > 0).ToQueryString());
+            var client = context.Rows.Select(row => row.Text.CompareTo((object)row.Id)).ToQueryString();
+            Assert.DoesNotContain("CASE", client);
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle)]
+        public void Boolean_CompareTo_avoids_unsigned_subtraction(OceanBaseCompatibilityMode mode)
+        {
+            using var context = CreateContext(mode);
+            var sql = context.Rows.Select(row => row.CanonicalUnsigned.CompareTo(row.Native)).ToQueryString();
+            Assert.DoesNotContain(" - ", sql);
+            Assert.Contains("CASE", sql);
+            Assert.Contains("-1", sql);
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true)]
+        public void Boolean_CompareTo_boxed_nullable_NULL_is_below_nonnull_receiver(OceanBaseCompatibilityMode mode, bool relationalNulls)
+        {
+            using var context = CreateContext(mode, relationalNulls);
+            bool? flag = true;
+            var query = context.Rows.Select(row => row.Text.CompareTo((object?)flag));
+            foreach (var value in new bool?[] { true, false, null, true, null, false })
+            {
+                flag = value;
+                using var command = query.CreateDbCommand();
+                if (value is null)
+                {
+                    Assert.True(command.CommandText.Contains("SELECT 1", StringComparison.Ordinal), command.CommandText);
+                    Assert.Empty(command.Parameters);
+                }
+                else
+                    Assert.NotEmpty(command.Parameters);
+            }
+            var nullable = context.Rows.Select(row => (int?)row.OptionalText!.Value.CompareTo((object)row.OptionalNumber!)).ToQueryString();
+            Assert.Contains("IS NULL", nullable);
+            Assert.Contains("THEN 1", nullable);
+        }
+
         private static TestContext CreateContext(OceanBaseCompatibilityMode mode, bool relationalNulls = false)
         {
             var builder = new DbContextOptionsBuilder<TestContext>().UseOceanBase("Server=localhost;Database=test", mode);
@@ -340,6 +448,7 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
                 model.Entity<Row>().Property(row => row.Ambiguous).HasConversion(value => "same", value => value == "same");
                 model.Entity<Row>().Property(row => row.NearOne).HasConversion(
                     value => value ? 1.0000000000000000000000000001m : 0m, value => value != 0m).HasPrecision(38, 28);
+                model.Entity<Row>().Property(row => row.CanonicalUnsigned).HasConversion(value => value ? 1u : 0u, value => value == 1u);
             }
         }
 
@@ -356,6 +465,7 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             public bool? OptionalNative { get; set; }
             public bool Ambiguous { get; set; }
             public bool NearOne { get; set; }
+            public bool CanonicalUnsigned { get; set; }
         }
     }
 }

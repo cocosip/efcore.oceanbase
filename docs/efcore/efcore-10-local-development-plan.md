@@ -785,8 +785,41 @@ translation or unsupported behavior. Preserve the configured equality null seman
   Boolean comparison/string/conversion methods beyond these exact identities remain further local work;
   no live testing application, database access, EF8/EF9, push or publication work.
 
+## Batch3z brief: Boolean ordering and string representations
+
+QRY-01/QRY-11: exact bool.CompareTo(bool/object) with statically Boolean arguments normalizes each
+operand and compares native 0/1 carriers in a signed CASE to produce -1/0/1. This avoids comparing converter storage
+order (including inverted encodings) and preserves SQL NULL propagation from nullable.Value inputs.
+An object-null argument yields1 for non-null receivers; dynamic/wrong-type object arguments cannot
+gain translation. Exact bool.ToString(), bool.ToString(IFormatProvider), nullable Boolean ToString
+and statically Boolean boxed object.ToString output True/False independently of stored encodings.
+The framework ignores the format provider; no general formatting API is added. Nullable ToString
+returns empty on NULL in MySQL; Oracle represents empty as NULL under its existing string contract.
+
+- Reuse BooleanOperand/native mappings and the existing visitor; no new public API/function/dependency.
+- Tests first for native/mixed/inverted/nullable/boxed/current captures, both null settings, global
+  defaults and native int/string readers. Preserve client projection and inherited custom identities.
+- Full baseline Debug/Release, isolated14 and same-package both-mode/patch/content/graph/hash checks,
+  independent review, docs and local commit. Parsing/TryParse/Convert overloads remain local audit work;
+  no native DB/test application, EF8/9, push or publication in this batch.
+
 ## Execution record
 
+- Batch3z final:16 added unit/16 intercepted cases; full Debug/Release/isolated14 each
+  2396=1638+756+2 pass without failures/skips. Same boolean-order-text-20261111 nupkg passes both
+  modes/patches/content/package-only graphs and DLL identity; prior package rejects ToString predicate.
+  Baseline assets remain10.0.0. Independent fix review approves; native execution and broader inventory
+  remain open. User reports Consumer crash popups from old-package negative probes: catch managed
+  failures at Main, stderr+exit1, preserve success0. Explicit old-package exit1/no-unhandled assertion
+  and both-patch/both-mode positive reruns pass without rebuilding/changing the provider package.
+  Document manual PackageConsumer versus CI archive checks and ordinary ConsumerTests; CI is unchanged.
+- Batch3z fix round1 ruling: independent review finds canonical unsigned0/1 subtraction can underflow
+  in MySQL and boxed nullable object-null must compare below a Boolean. Six RED regressions reproduce
+  unsafe subtraction SQL and NULL instead of1 for a null capture. Use signed CASE constants with
+  leading typed null guards, then normalized equality/order. A NULL receiver or typed.Value argument
+  propagates NULL; object-overload NULL argument returns1. Later EF equality compensation may still
+  appear, but preceding null branches determine the result; assert their order instead of banning
+  compensation text. No connector/server defect asserted without native execution.
 - Batch3y final:18 added unit/16 intercepted cases; full Debug/Release/isolated EF10.0.14 each
  2364=1622+740+2 pass with no failures/skips. Same baseline-built boolean-method-20261111 nupkg passes
  both modes/patches/content/package-only graphs and DLL identity; baseline assets remain10.0.0.
