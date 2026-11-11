@@ -7,6 +7,42 @@ execution, transactions, complete scalar mappings and package validation remain 
 [feature checklist](efcore-10-feature-checklist.md). SQL-generation tests and intercepted commands do not prove
 that a server accepts the SQL, generates identity values or commits and rolls back correctly.
 
+## Contextual numeric collection projection contract (Batch3ac, QRY-03/11, MAP-06/07)
+
+Support direct collection-element projection in SelectMany, scalar FirstOrDefault and Join after a
+numeric property comparison supplies a converter or explicit store mapping. Include captured/inline,
+nullable, originally empty and composed subquery shapes in both modes. Retain the property's exact
+mapping/converter for parameters, literals and projected readers; native collection defaults still work.
+This supersedes Batch3ab's documented contextual projection exclusion for the cases covered here.
+
+EF10 applies a default mapping to a projected untyped VALUES column before its final inference scanner.
+The comparison can independently infer a different property mapping. Remap only that premature
+default projection when an originally untyped numeric root has a contextual mapping; do not erase
+typed inline values, explicit casts, property columns or genuine predicate requirements. Follow direct
+column projections through subqueries. Scalar-subquery result mapping must follow its element mapping.
+Do not catch or suppress EF's inference errors. Different store types or different converters required
+for the same SQL root remain an explicit conflicting-mapping error, including same-store converters.
+Separate roots over one capture may have different mappings and must retain independent conversions.
+
+Collect actual operator/predicate requirements before rewriting: sharing one ColumnExpression object
+between projection and predicate cannot weaken the predicate. Scalar-result consumers are requirements
+too. A converted FirstOrDefault compared against an incompatible native property, converter or literal
+rejects rather than comparing encoded provider values with unconverted model values. Arbitrary result
+operator/converter composition remains unsupported. For direct nonnullable FirstOrDefault projections,
+both COALESCE's fallback literal and result mapping follow the element mapping, so an offset converter
+encodes the CLR default correctly. NULL tests impose no numeric carrier when null conversion is disabled.
+
+Distinct needs an element KeyComparer before EF's final mapping pass. Normalize its eligible projected
+columns early using contextual ownership, or the native default when no context exists. Final mapping
+inference and all genuine-conflict checks still run. Exact contracts are the published EF10.0.0
+RelationalTypeMappingPostprocessor, SelectExpression and ColumnExpression APIs; no private reflection.
+
+Verify real EF translation trees, exact sync/async bind/read converters, order/duplicates/nulls/empty
+transitions, carrier casts, clone ownership and native defaults. Include genuine multi-context conflicts,
+explicit conversions and nonnumeric/null-converting boundaries. No native result/coercion claim follows
+from intercepted commands. Computed converter arithmetic and other collection carriers keep separate
+contracts; do not advertise arbitrary converter equivalence.
+
 ## Decimal and floating collection-root contract (Batch3ab, QRY-03/11, MAP-06/07)
 
 Extend the existing integer VALUES pipeline to decimal, Single and Double, nullable forms and

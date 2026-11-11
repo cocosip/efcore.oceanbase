@@ -4,8 +4,10 @@ using System.Linq;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Query;
+using Microsoft.EntityFrameworkCore.Query.SqlExpressions;
 using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
+using OceanBase.EntityFrameworkCore.Query;
 using Xunit;
 
 namespace OceanBase.EntityFrameworkCore.UnitTests
@@ -50,6 +52,10 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
                     }
                     Assert.Equal(input, values);
                 }
+                values = [minimum, minimum, maximum, null];
+                var distinct = context.Rows.SelectMany(row => values.Where(value => row.Id > 0).Distinct().Take(2)).ToQueryString();
+                Assert.Contains("DISTINCT", distinct);
+                Assert.Contains(" AS " + (mode == OceanBaseCompatibilityMode.MySql ? mysql : oracle) + ")", distinct);
             }
         }
 
@@ -129,19 +135,93 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
         }
 
         [Theory]
-        [InlineData(OceanBaseCompatibilityMode.MySql)]
-        [InlineData(OceanBaseCompatibilityMode.Oracle)]
-        public void Contextually_converted_element_projections_keep_EF_mapping_conflicts_explicit(OceanBaseCompatibilityMode mode)
+        [MemberData(nameof(Modes))]
+        public void Contextually_converted_element_projections_use_the_property_carrier(
+            OceanBaseCompatibilityMode mode, bool relationalNulls, ParameterTranslationMode? translation)
         {
-            using var context = Create<decimal>(mode, false, null);
+            using var context = Create<decimal>(mode, relationalNulls, translation);
             decimal?[] values = [null, 17.25m];
-            foreach (var query in new IQueryable[]
-            {
+            IQueryable[] Queries() =>
+            [
                 context.Set<ConvertedRow>().SelectMany(row => values.Where(value => value > row.Value)),
                 context.Set<ConvertedRow>().Select(row => values.Where(value => value > row.Value).FirstOrDefault()),
-                context.Set<ConvertedRow>().Join(values, row => row.Value, value => value, (row, value) => value)
+                context.Set<ConvertedRow>().Join(values, row => row.Value, value => value, (row, value) => value),
+                context.Set<ConvertedRow>().Join(new decimal?[] { 17.25m, null, 17.25m }, row => row.Value, value => value, (row, value) => value),
+                context.Set<ConvertedRow>().Join(new decimal?[] { }, row => row.Value, value => value, (row, value) => value),
+                context.Set<ConvertedRow>().SelectMany(row => values.Where(value => value > row.Value).Distinct().Take(2)),
+                context.Set<ConvertedRow>().SelectMany(row => values.Where(value => value > row.Value).Take(2).Where(value => value != null)),
+                context.Set<ConvertedRow>().Where(row => values.Where(value => value > row.Value).FirstOrDefault() == null),
+                context.Set<ConvertedRow>().Where(row => values.Where(value => value > row.Value).FirstOrDefault() != null)
+            ];
+            foreach (var input in new decimal?[][] { values, [], [null, null], [17.25m], [] })
+            {
+                values = input;
+                foreach (var query in Queries())
+                {
+                    string sql;
+                    try { sql = query.ToQueryString(); }
+                    catch (InvalidOperationException error) { throw new InvalidOperationException(query.Expression.ToString(), error); }
+                    Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? " AS DOUBLE)" : " AS BINARY_DOUBLE)", sql);
+                }
+            }
+
+            foreach (var query in new IQueryable[]
+            {
+                context.Set<SameStoreRow>().SelectMany(row => values.Where(value => value > row.Value)),
+                context.Set<SameStoreRow>().Select(row => values.Where(value => value > row.Value).FirstOrDefault()),
+                context.Set<SameStoreRow>().Join(new decimal?[] { }, row => row.Value, value => value, (row, value) => value),
+                context.Set<NarrowRow>().SelectMany(row => values.Where(value => value > row.Value))
+            })
+                Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? " AS DECIMAL(65,30))" : " AS NUMBER)", query.ToQueryString());
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle)]
+        public void One_root_cannot_apply_different_same_store_converters_or_property_mappings(OceanBaseCompatibilityMode mode)
+        {
+            using var context = Create<decimal>(mode, false, null);
+            decimal?[] values = [17.25m, null];
+            decimal[] nonnullable = [17m, 18m];
+            foreach (var query in new IQueryable[]
+            {
+                context.Set<ConvertedRow>().SelectMany(row => values.Where(value => value > row.Value && value < row.Other)),
+                context.Set<ConvertedRow>().Select(row => values.Where(value => value > row.Value && value < row.Other).FirstOrDefault()),
+                context.Set<ConvertedRow>().SelectMany(row => values.Where(value => value > row.Value && value < row.Native)),
+                context.Set<ConvertedRow>().Where(row => values.Where(value => value > row.Other).FirstOrDefault() < row.Native),
+                context.Set<ConvertedRow>().Select(row => values.Where(value => value > row.Other).FirstOrDefault() < row.Native),
+                context.Set<ConvertedRow>().Select(row => values.Where(value => value > row.Other).FirstOrDefault() < 20m),
+                context.Set<ConvertedRow>().Where(row => values.Where(value => value > row.Other).FirstOrDefault() < row.Value),
+                context.Set<SameStoreRow>().Select(row => values.Where(value => value > row.Value).FirstOrDefault() < 20m),
+                context.Set<ConvertedRow>().Select(row => nonnullable.Where(value => value > row.Other).FirstOrDefault() < 20m),
+                context.Set<ConvertedRow>().Where(row => nonnullable.Where(value => value > row.Other).FirstOrDefault() < row.Native)
             })
                 Assert.Contains("Conflicting type mappings", Assert.Throws<InvalidOperationException>(() => query.ToQueryString()).Message);
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true)]
+        public void Projected_column_object_sharing_cannot_erase_a_native_predicate_requirement(OceanBaseCompatibilityMode mode, bool shared)
+        {
+            using var context = Create<decimal>(mode, false, null);
+            var source = context.GetService<IRelationalTypeMappingSource>();
+            var factory = context.GetService<ISqlExpressionFactory>();
+            var native = source.FindMapping(typeof(decimal))!;
+            var converted = (RelationalTypeMapping)context.Model.FindEntityType(typeof(ConvertedRow))!
+                .FindProperty(nameof(ConvertedRow.Other))!.GetTypeMapping();
+            var root = new ValuesExpression("v", new SqlParameterExpression("values", typeof(decimal?[]), null), ["Value"]);
+            var projected = new ColumnExpression("Value", "v", typeof(decimal), native, true);
+            var predicateColumn = shared ? projected : new ColumnExpression("Value", "v", typeof(decimal), native, true);
+            var contextual = new ColumnExpression("Value", "v", typeof(decimal), converted, true);
+            var predicate = factory.AndAlso(factory.GreaterThan(predicateColumn, factory.Constant(0m, native)),
+                factory.LessThan(contextual, factory.Constant(100m, converted)));
+            var select = new SelectExpression(null, [root], predicate, [], null, [new ProjectionExpression(projected, "Value")],
+                false, [], null, null, new SqlAliasManager());
+            Assert.Contains("Conflicting type mappings", Assert.Throws<InvalidOperationException>(() =>
+                new OceanBaseCollectionProjectionTypeMappingNormalizer(source, context.Model).Normalize(select)).Message);
         }
 
         private static TestContext<T> Create<T>(OceanBaseCompatibilityMode mode, bool relationalNulls,
@@ -164,6 +244,11 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
                 builder.Entity<ConvertedRow>().Property(row => row.Value).HasConversion(
                     new ValueConverter<decimal?, double?>(value => value.HasValue ? (double?)value.Value : null,
                         value => value.HasValue ? (decimal?)value.Value : null));
+                builder.Entity<ConvertedRow>().Property(row => row.Other).HasConversion(
+                    new ValueConverter<decimal?, double?>(value => value.HasValue ? (double?)value.Value + 100d : null,
+                        value => value.HasValue ? (decimal?)(value.Value - 100d) : null));
+                builder.Entity<SameStoreRow>().Property(row => row.Value).HasConversion(
+                    new ValueConverter<decimal?, decimal?>(value => value + 100m, value => value - 100m));
                 builder.Entity<NarrowRow>().Property(row => row.Value).HasColumnType(
                     mode == OceanBaseCompatibilityMode.MySql ? "DECIMAL(5,2)" : "NUMBER(5,2)");
             }
@@ -180,9 +265,17 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
         {
             public int Id { get; set; }
             public decimal? Value { get; set; }
+            public decimal? Other { get; set; }
+            public decimal? Native { get; set; }
         }
 
         private sealed class NarrowRow
+        {
+            public int Id { get; set; }
+            public decimal? Value { get; set; }
+        }
+
+        private sealed class SameStoreRow
         {
             public int Id { get; set; }
             public decimal? Value { get; set; }

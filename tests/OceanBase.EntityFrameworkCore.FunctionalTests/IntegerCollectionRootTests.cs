@@ -168,6 +168,63 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
             }
         }
 
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true)]
+        public async Task Projected_integer_root_retains_unsigned_offset_binding_and_inverse_reader(OceanBaseCompatibilityMode mode, bool async)
+        {
+            using var table = new DataTable();
+            table.Columns.Add("Value", typeof(object));
+            table.Rows.Add(new OceanBaseDecimal(9223372036854775825m));
+            var capture = new Capture(table);
+            await using var context = Create<int>(mode, capture);
+            int[] values = [0, 17, int.MaxValue, 17];
+            foreach (var query in new[]
+            {
+                context.Set<ConvertedRow>().SelectMany(row => values.Where(value => value > row.Value)),
+                context.Set<ConvertedRow>().Join(values, row => row.Value, value => value, (row, value) => value),
+                context.Set<ConvertedRow>().Select(row => values.Where(value => value > row.Value).FirstOrDefault()),
+                context.Set<ConvertedRow>().SelectMany(row => values.Where(value => value > row.Value).Distinct().Take(2))
+            })
+            {
+                capture.Inputs.Clear();
+                capture.Sql.Clear();
+                int[] results;
+                try { results = (async ? await query.ToListAsync() : query.ToList()).ToArray(); }
+                catch (Exception error) { throw new InvalidOperationException(query.Expression.ToString() + "\n" + string.Join("\n", capture.Sql), error); }
+                Assert.Equal(17, Assert.Single(results));
+                Assert.Equal(new ulong[] { 9223372036854775808, 9223372036854775825, 9223372039002259455, 9223372036854775825 },
+                    capture.Inputs.Select(parameter => Assert.IsType<ulong>(parameter.Value)));
+                Assert.All(capture.Inputs, parameter => Assert.Equal(DbType.UInt64, parameter.DbType));
+                Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? " AS UNSIGNED)" : " AS NUMBER)", Assert.Single(capture.Sql));
+            }
+
+            values = [];
+            table.Rows.Clear();
+            table.Rows.Add(new OceanBaseDecimal(9223372036854775808m));
+            capture.Sql.Clear();
+            capture.Inputs.Clear();
+            var emptyScalar = context.Set<ConvertedRow>().Select(row => values.Where(value => value > row.Value).FirstOrDefault());
+            Assert.Equal(0, Assert.Single(async ? await emptyScalar.ToListAsync() : emptyScalar.ToList()));
+            Assert.Contains("9223372036854775808", Assert.Single(capture.Sql));
+            Assert.Contains("WHERE 1 = 0", capture.Sql[0]);
+            Assert.Empty(capture.Inputs);
+
+            int?[] nullable = [17, null, 17];
+            table.Rows.Clear();
+            table.Rows.Add(new OceanBaseDecimal(9223372036854775825m));
+            table.Rows.Add(DBNull.Value);
+            table.Rows.Add(new OceanBaseDecimal(9223372036854775825m));
+            capture.Sql.Clear();
+            capture.Inputs.Clear();
+            var nullableQuery = context.Set<NullableConvertedRow>().SelectMany(row => nullable.Where(value => value > row.Value));
+            Assert.Equal(new int?[] { 17, null, 17 }, async ? await nullableQuery.ToListAsync() : nullableQuery.ToList());
+            Assert.Equal(new ulong[] { 9223372036854775825, 9223372036854775825 }, capture.Inputs
+                .Where(parameter => parameter.Value is not DBNull).Select(parameter => Assert.IsType<ulong>(parameter.Value)));
+        }
+
         private enum UnsignedState : ulong { Zero = 0, Maximum = ulong.MaxValue }
 
         private static TestContext<T> Create<T>(OceanBaseCompatibilityMode mode, Capture capture,

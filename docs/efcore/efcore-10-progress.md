@@ -12,6 +12,45 @@ each small group. Real database integration/tests and EF8/EF9 adaptation are exp
 [local development plan](efcore-10-local-development-plan.md) tracks the full remaining inventory, including
 an audit of locally feasible deferred families. Finishing one batch does not finish the overall goal.
 
+### Contextual numeric element-projection checkpoint (2026-11-11)
+
+Batch3ac follows f93bc48. Direct numeric collection elements now retain contextual mappings in
+SelectMany, FirstOrDefault and Join, including captured/inline/empty/nullable roots, forwarding through
+subqueries and Distinct/Take. A focused normalizer runs before EF's authoritative inference scanner;
+only premature default projections and carrier-neutral NULL tests adopt the owning mapping. Early
+Distinct supplies its KeyComparer. Nonnullable FirstOrDefault's COALESCE fallback and result mapping
+retain offset converters, including the encoded CLR default. No connector or mapping-reader changes.
+
+Two independent review findings were reproduced and fixed. Original operator/predicate requirements
+are collected before rewriting, so sharing a column object with a projection cannot erase a genuine
+conflict. Scalar-result consumers also retain their requirements: incompatible property, converter or
+literal comparisons reject instead of mixing encoded values with native values. Same-store different
+converters reject; separate roots over one capture retain independent conversions. NULL comparisons
+on forwarded columns and nullable scalar results remain supported. Arbitrary converter/operator
+equivalence remains separate work; explicit casts and genuinely typed inline values are preserved.
+Final source re-review reran the original reproductions and the null/operator boundaries with no
+remaining actionable finding.
+
+Final EF10.0.0 Debug/Release and a fresh isolated EF10.0.14 Release each pass **3764** tests:
+1764 unit +1130 intercepted functional +868 model specification +two project-consumer cases,
+zero failures/skips. This adds16 unit and20 functional cases; focused collection suites pass151/80.
+Coverage includes unsigned integer offsets, nullable and cross-numeric readers, same-store converters,
+narrow physical facets, exact rebinding, duplicate/NULL/empty sequences and conflicting result consumers.
+Supplied rows establish reader shaping and command bindings, not native query results. Evidence:
+`artifacts/converted-roots-{red,scalar-null-red,unit,functional,debug,release,patch,patch-restore}.log`.
+The fresh patch snapshot contains all final source/tests; baseline assets still resolve EF10.0.0.
+
+The same baseline-built `10.0.0-converted-roots-20261111` nupkg passes both modes on EF10.0.0/10.0.14,
+contextual projection/Distinct/empty/rebinding smoke, archive contents/dependency ranges, package-only
+graphs and baseline/archive/consumer DLL identity. Provider DLL SHA-256:
+`486DB7613C480B05B346E6A5AFE398E9E7290060F894D52B948D5E25D44B1B66`.
+Nupkg SHA-256: `D3FB04729DFCA81880690BE94140DBFF157F221EB500A2F3F59727DD54FEBC24`.
+The preceding numeric-roots-r1 package fails the new smoke with a caught conflicting-mapping error/exit1.
+Evidence: `artifacts/converted-roots-package.log`, `artifacts/verify-converted-roots-package.ps1` and
+`artifacts/converted-roots-previous-package{,-restore}.log`. No dependency changes; the existing manual
+consumer audit policy is unchanged. No live database, EF8/EF9, push, publication or branch synchronization.
+General text/other roots, wider result compositions and the remaining EF10 inventory stay open.
+
 ### Decimal and floating collection-root checkpoint (2026-11-11)
 
 Batch3ab follows 677b7ef. General VALUES roots now accept decimal, Single and Double, nullable forms
@@ -190,13 +229,14 @@ logs and `artifacts/verify-management-profile-package.ps1`. Baseline assets rema
 
 ### Resume here: remaining EF10 local inventory
 
-1. Recheck branch/worktree and saved commit before editing. Batch3ab decimal/floating collection carriers,
+1. Recheck branch/worktree and saved commit before editing. Batch3ac contextual numeric element projections,
+   Batch3ab decimal/floating collection carriers,
    Batch3aa integer collection carriers,
    Batch7f Oracle user lifecycle, Batch7e management factories and bulk-update rewrites are implemented;
    do not repeat them. Current evidence is above;
    older sections below are historical checkpoints, not a new implementation backlog.
-2. Continue QRY-03/04/06/07/11 and MAP-06/07: remaining text/other collection carriers and converter
-   projections, nonnumeric extrema, function/aggregate overloads and unsupported boundaries. Reuse
+2. Continue QRY-03/04/06/07/11 and MAP-06/07: remaining text/other collection carriers, broader
+   converter/operator compositions, nonnumeric extrema, function/aggregate overloads and unsupported boundaries. Reuse
    exact EF10 contracts; negative tests must not be mistaken for implementation of a feature family.
 3. Widen model/filter/materialization/graph-write contracts and official query/write/runtime specification
    fixtures, then audit the full deferred inventory for locally feasible work. The pinned Oracle docs

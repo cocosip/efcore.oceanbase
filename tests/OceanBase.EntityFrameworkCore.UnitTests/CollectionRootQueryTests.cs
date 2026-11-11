@@ -140,8 +140,7 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             using var parameterContext = CreateContext(mode, collectionMode: ParameterTranslationMode.Parameter);
             Assert.Throws<InvalidOperationException>(() => parameterContext.Rows.Where(row => values
                 .Where(value => value > row.Id).Contains(row.Id)).ToQueryString());
-            Assert.Contains("Conflicting type mappings", Assert.Throws<InvalidOperationException>(() => context.Rows
-                .Join(values, row => row.Converted, value => value, (row, value) => value).ToQueryString()).Message);
+            Assert.Contains("JOIN", context.Rows.Join(values, row => row.Converted, value => value, (row, value) => value).ToQueryString());
             values = null!;
             // A null source evaluated by ordinary LINQ fails before it can become a translated parameter root.
             var error = Assert.Throws<InvalidOperationException>(() => context.Rows.Where(row => values.AsQueryable()
@@ -176,7 +175,9 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
                     Second = new int?[] { }.Any(value => value > row.Optional) })
             })
             {
-                var sql = query.ToQueryString();
+                string sql;
+                try { sql = query.ToQueryString(); }
+                catch (Exception error) { throw new InvalidOperationException(query.Expression.ToString(), error); }
                 Assert.True(sql.Contains("WHERE 1 = 0", StringComparison.Ordinal), query.Expression + "\n" + sql);
                 Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? "CAST(NULL AS SIGNED)" : "CAST(NULL AS NUMBER)", sql);
                 Assert.DoesNotContain("UNION ALL VALUES", sql);
@@ -197,8 +198,8 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
                 context.Rows.Select(row => new DateTime[] { }.Count(value => row.Id > 0))
             })
                 Assert.Contains("numeric", Assert.Throws<NotSupportedException>(() => query.ToQueryString()).Message);
-            Assert.Contains("Conflicting type mappings", Assert.Throws<InvalidOperationException>(() => context.Rows
-                .Join(new int[] { }, row => row.Converted, value => value, (row, value) => value).ToQueryString()).Message);
+            Assert.Contains("WHERE 1 = 0", context.Rows.Join(new int[] { }, row => row.Converted,
+                value => value, (row, value) => value).ToQueryString());
         }
 
         [Theory]

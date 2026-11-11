@@ -42,6 +42,38 @@ Do not mark the goal complete while any locally developable item below remains u
 | 9. Deferred inventory audit | DEF-01..10 | Revisit every documented deferred family after Required local implementation stabilizes. Implement locally feasible families under explicit per-mode contracts and tests; record precise architectural/connector/server blockers for any unimplementable family. Do not treat a Deferred label alone as evidence it cannot be developed. |
 | 10. Completion audit | All IDs | Compare docs/public API/source/tests/package evidence. Every locally feasible feature is implemented/reviewed/committed; only specifically evidenced database or external blockers may remain. |
 
+## Batch3ac brief: contextual numeric collection projections
+
+**IDs:** QRY-03/11, MAP-06/07. **Spec:** contextual numeric projection contract in
+efcore-10-query-update-design.md. Continue from f93bc48; no live execution or EF8/9.
+
+- [x] Replace the numeric projection exclusion characterization with positive captured/inline/empty
+  SelectMany/FirstOrDefault/Join tests. Add integer-offset, cross-numeric nullable and same-store
+  converters, subquery forwarding, native defaults and genuine incompatible-context tests. Observe RED.
+- [x] Add a focused normalization pass before EF's type-mapping scanner in the existing query
+  postprocessor. Track originally untyped numeric VALUES and direct column forwarding; remove only
+  premature default projection mappings, preserve contextual mapping identity and reject genuine conflicts.
+  Remap to the owner rather than leave untyped projected columns; early Distinct supplies its comparer.
+- [x] Add intercepted sync/async projected collection reader/bind tests and package consumer smoke.
+  Cover duplicates/NULL/empty/rebinding and distinct converters over the same capture. Retain explicit
+  casts, default mapping and unsupported carrier boundaries; do not alter driver/read mappings.
+- [x] Full Debug/Release, isolated EF10.0.14, one baseline package at both patches/modes and content/
+  graph/hash checks. Independent review, repair findings with regressions, update evidence and commit.
+
+Review found two reproduced defects: shared column objects could erase real predicate mappings, and
+scalar-result comparisons could mix converted provider values with native literals/properties. Preserve
+original occurrence requirements before remapping and reject incompatible scalar consumers. Dedicated
+shared/distinct-object and nullable/nonnullable scalar regressions cover both modes. Direct integer
+FirstOrDefault also maps its COALESCE default literal/result; nullable forwarding NULL tests are carrier
+agnostic. Intercepted decimal tests retain GetDecimal; OceanBaseDecimal normalization belongs to the
+existing integer/floating reader paths. Scalar NULL comparisons have separate RED evidence and preserve
+inner operator requirements. Final source re-review reproduces all repaired cases with no open findings.
+Full Debug/Release and fresh isolated14 each pass3764=1764+1130+868+2, zero failures/skips. The same
+converted-roots package passes both modes/patches/content/graphs/baseline DLL identity; preceding numeric
+package fails the new smoke with caught exit1. Evidence/hashes are recorded in the progress handoff.
+Final evidence re-review confirms counts, hashes, package graphs and corrected current handoff wording.
+The local module is ready for commit; the overall EF10 goal stays active.
+
 ## Batch3ab brief: decimal and floating collection roots
 
 **IDs:** QRY-03/11, MAP-06/07. **Spec:** numeric collection-root contract in

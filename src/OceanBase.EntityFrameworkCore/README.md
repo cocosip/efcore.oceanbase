@@ -26,9 +26,11 @@ their parameter/read hooks. Typing casts follow the provider carrier independent
 MySQL SIGNED/UNSIGNED, DECIMAL(65,30), FLOAT or DOUBLE; Oracle NUMBER, BINARY_FLOAT or BINARY_DOUBLE.
 Non-finite floating inputs reject before execution. Single-parameter JSON-style roots, nonnumeric
 carriers and null-converting converters are not supported by this path.
-Contextually converted element projections (including SelectMany, FirstOrDefault and Join) can still
-fail EF's mapping-inference check. Native UNION typing,
-results and query costs remain unverified.
+Direct contextually converted element projections support SelectMany, FirstOrDefault and Join,
+including nullable/empty roots and Distinct/Take composition. The owning numeric mapping controls
+bindings, projected readers and the CLR default fallback. Incompatible requirements for one root or
+its scalar-result consumers reject, including different converters with the same store type. Arbitrary
+converter/operator composition remains unsupported. Native UNION typing, results and costs are unverified.
 
 Integer `&`, `|`, `^`, `~`, `<<` and `>>` have per-mode SQL translations, including nullable values and
 C# small-integer promotions. Bitwise enum storage must be numeric. Shift counts use C# width masking,

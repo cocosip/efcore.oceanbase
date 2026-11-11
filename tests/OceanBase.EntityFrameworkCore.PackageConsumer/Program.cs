@@ -449,7 +449,26 @@ namespace PackageConsumer
                     if (!convertedSql.Contains(mode == OceanBaseCompatibilityMode.MySql ? " AS UNSIGNED)" : " AS NUMBER)", StringComparison.Ordinal)
                         || convertedSql.Contains("WHERE 1 = 0", StringComparison.Ordinal) != (input.Length == 0))
                         throw new Exception("Packed nullable integer converter lost its unsigned carrier or current root values.");
+                    foreach (var projected in new IQueryable[]
+                    {
+                        context.Set<Row>().SelectMany(row => nullableConvertedValues.Where(value => value > row.NullableInteger)),
+                        context.Set<Row>().Select(row => nullableConvertedValues.Where(value => value > row.NullableInteger).FirstOrDefault()),
+                        context.Set<Row>().Join(nullableConvertedValues, row => row.NullableInteger, value => value, (row, value) => value),
+                        context.Set<Row>().SelectMany(row => nullableConvertedValues.Where(value => value > row.NullableInteger).Distinct().Take(2))
+                    })
+                    {
+                        var projectedSql = projected.ToQueryString();
+                        if (!projectedSql.Contains(mode == OceanBaseCompatibilityMode.MySql ? " AS UNSIGNED)" : " AS NUMBER)", StringComparison.Ordinal)
+                            || projectedSql.Contains("WHERE 1 = 0", StringComparison.Ordinal) != (input.Length == 0)
+                            || projectedSql.Split("UNION ALL SELECT", StringSplitOptions.None).Length - 1 != Math.Max(0, input.Length - 1))
+                            throw new Exception("Packed converted element projection lost its mapping, current values or row count.");
+                    }
                 }
+                var projectedEmpty = context.Set<Row>().Join(new int?[] { }, row => row.NullableInteger, value => value,
+                    (row, value) => value).ToQueryString();
+                if (!projectedEmpty.Contains("WHERE 1 = 0", StringComparison.Ordinal)
+                    || !projectedEmpty.Contains(mode == OceanBaseCompatibilityMode.MySql ? "CAST(NULL AS UNSIGNED)" : "CAST(NULL AS NUMBER)", StringComparison.Ordinal))
+                    throw new Exception("Packed converted empty-inline Join lost its mapping or zero rows.");
                 var nullableEmpty = context.Set<Row>().Select(row => new int?[] { }
                     .Count(value => value > row.NullableInteger)).ToQueryString();
                 if (!nullableEmpty.Contains(mode == OceanBaseCompatibilityMode.MySql ? "CAST(NULL AS UNSIGNED)" : "CAST(NULL AS NUMBER)", StringComparison.Ordinal))

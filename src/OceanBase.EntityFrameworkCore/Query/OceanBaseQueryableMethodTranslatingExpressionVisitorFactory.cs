@@ -25,6 +25,12 @@ namespace OceanBase.EntityFrameworkCore.Query
 
             protected override QueryableMethodTranslatingExpressionVisitor CreateSubqueryVisitor() => new Visitor(this);
 
+            protected override ShapedQueryExpression TranslateDistinct(ShapedQueryExpression source)
+                // EF10 needs the element mapping's KeyComparer before its final type-mapping pass.
+                => base.TranslateDistinct((ShapedQueryExpression)new OceanBaseCollectionProjectionTypeMappingNormalizer(
+                    RelationalDependencies.TypeMappingSource, RelationalDependencies.Model)
+                    .Normalize(source, applyProjectionMappings: true));
+
             protected override bool IsValidSelectExpressionForExecuteUpdate(SelectExpression select, TableExpressionBase targetTable,
                 [NotNullWhen(true)] out TableExpression? tableExpression)
             {

@@ -24,6 +24,8 @@ namespace OceanBase.EntityFrameworkCore.Query
 
             protected override Expression ProcessTypeMappings(Expression expression)
             {
+                expression = new OceanBaseCollectionProjectionTypeMappingNormalizer(RelationalDependencies.TypeMappingSource,
+                    RelationalQueryCompilationContext.Model).Normalize(expression);
                 var mapped = new NumericCollectionTypeMappingPostprocessor(Dependencies, RelationalDependencies,
                     RelationalQueryCompilationContext).Process(expression);
                 var metadata = new MetadataVisitor();
