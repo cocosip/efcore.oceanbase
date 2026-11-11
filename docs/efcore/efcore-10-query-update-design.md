@@ -659,6 +659,20 @@ rows, output parameters and readers establish provider behavior only; they do no
 classification, actual network cancellation, matched-row behavior, rollback or transaction attachment.
 Wider generation/readback shapes, unsupported graphs, transaction and diagnostic/logging gates remain open.
 
+### Command execution boundary local contract
+
+Batch5b's CommandExecutionBoundaryTests uses the real EF query pipeline with network-suppressing connection
+and command interceptors. Both modes and sync/async verify that `Database.SetCommandTimeout(17)` reaches the
+created `DbCommand`; an in-flight `OperationCanceledException` remains the same instance rather than becoming
+a `DbUpdateException` or generic wrapper; and async command interception receives the caller's cancellation
+token. A failed query is followed by a successful intercepted query in both sync and async paths, proving the
+EF-visible connection state remains closed and the command pipeline can be retried between operations.
+
+These are local EF/ADO.NET boundary checks. The connection-opening interceptor suppresses the physical open and
+the command interceptors do not execute a connector wire operation, so these tests do not prove physical close/
+reuse, server timeout enforcement, network cancellation, connector resource cleanup, transaction
+rollback or live connection behavior. Those gates remain under CON-05/TXN and the live matrix.
+
 Both provider-created and caller-owned connections are checked for compatibility-mode conflicts. A closed connection
 without `ExpectedMode` receives the configured provider mode before opening. An already-open connection must agree
 with that mode. MySQL requires `UseAffectedRows=false`: EF concurrency checks count matched rows, including a match

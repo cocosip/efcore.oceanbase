@@ -102,6 +102,17 @@ behavior RED before implementation; run full Debug/Release/isolated14 and indepe
 repeat both-mode/patch consumers if production changes. Wider generation/readback, unsupported graph shapes,
 transaction and live gates remain separate required inventory.
 
+## Batch5b brief: command timeout and in-flight cancellation boundaries
+
+CON-05: characterize EF command execution with a real provider query and deterministic command interceptors.
+For both compatibility modes and sync/async paths, `Database.SetCommandTimeout` must reach the created
+`DbCommand`, an in-flight `OperationCanceledException` must retain its identity/token, async interception must
+receive the `ToListAsync` token, and a failed query must leave the EF-visible connection state closed while the
+command pipeline can be retried in sync/async paths. The test fixture suppresses network access and supplies rows only on the retry; it does not establish connector
+wire cancellation, server timeout enforcement, or transaction/resource behavior on a live server. Fix only a
+reproduced provider defect, then run full Debug/Release/isolated14, independent review, update evidence and
+commit. DIA logging/redaction and transaction gates remain separate slices.
+
 ## Batch 1 brief
 
 **Files:** OptionsTests.cs; SqlGenerationHelperTests.cs; ConsumerTests/ProviderConfigurationTests.cs;
@@ -547,6 +558,14 @@ explicit supported duplication contract, not inference from Scale's ambiguous ze
    update remaining boundaries, then commit. No database, EF8/EF9 or publication work.
 
 ## Execution record
+
+- Batch5b: CommandExecutionBoundaryTests adds eight both-mode timeout/cancellation/retry cases. `SetCommandTimeout(17)`
+  reaches the intercepted command; sync/async in-flight cancellation preserves the original exception and token,
+  async receives the caller token, and a failed query can execute again with the EF-visible connection state closed
+  between calls. Focused Release passes8/8; no production change. Final Debug/Release/isolated14 each pass
+  1994=1474+518+2, zero failures/skips. Independent review found and closed sync-retry coverage and physical
+  lifecycle overclaiming; evidence now stays at EF-visible/interceptor boundaries. No package rebuild was needed.
+  Connector wire cancellation, server timeout enforcement, transactions and logging remain open.
 
 - Batch5a after6714626: graph dependency ordering/key propagation/reverse deletes, composite NULL/non-NULL
   original tokens and current NULL writes, zero-row conflict entries, synthetic connector and in-flight

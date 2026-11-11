@@ -55,6 +55,21 @@ artifacts/connection-lifecycle-*-final.log; isolated artifacts/connection-lifecy
 artifacts/connection-lifecycle-package/. No database connection, hosted CI, publication or EF8/EF9 work.
 The full local EF10 inventory, transactions and live lifecycle gates remain open.
 
+### Command timeout and cancellation checkpoint (2026-11-11)
+
+Batch5b adds eight CommandExecutionBoundaryTests cases across MySQL/Oracle and sync/async. The real EF query
+pipeline reaches intercepted DbCommands with the configured timeout, preserves an in-flight cancellation
+exception/token, forwards the async caller token and permits a failed query to be retried with the EF-visible
+connection state closed between operations. Network opening is suppressed and rows are synthetic; no physical
+connector close/reuse, wire or server claim.
+
+Focused Release passes8/8 with no production change. Final Debug/Release/isolated14 each pass1994
+(1474 unit, 518 functional, two consumers), zero failures/skips. No package rebuild was needed because
+production binaries are unchanged. Independent review found two P2 evidence/coverage issues: sync retry
+coverage was added, and claims were narrowed from physical lifecycle to EF-visible state/command replay.
+CON-05 remains partial for live timeout/cancellation and resource behavior; DIA logging and transactions remain
+separate. EF8/EF9 and real database work stay postponed.
+
 ### Model, graph materialization and filters checkpoint (2026-11-11)
 
 Batch4a/4b/4c adds 58 inherited-provider characterization cases in ModelMaterializationTests.
