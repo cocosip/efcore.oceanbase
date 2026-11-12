@@ -88,17 +88,39 @@ namespace OceanBase.EntityFrameworkCore.Query
             return membership.Update((SqlExpression)Visit(membership.Item), scalars);
         }
 
-        internal static bool IsSupportedNumeric(RelationalTypeMapping mapping)
+        internal static bool IsSupportedInteger(RelationalTypeMapping mapping)
             => mapping.Converter?.ConvertsNulls != true
-                && Type.GetTypeCode(Nullable.GetUnderlyingType(mapping.ClrType) ?? mapping.ClrType) is (TypeCode.SByte or TypeCode.Byte or TypeCode.Int16
-                    or TypeCode.UInt16 or TypeCode.Int32 or TypeCode.UInt32 or TypeCode.Int64 or TypeCode.UInt64
-                    or TypeCode.Decimal or TypeCode.Single or TypeCode.Double)
-                && mapping is OceanBaseIntegerTypeMapping<sbyte> or OceanBaseIntegerTypeMapping<byte>
+                && IsIntegerType(mapping.Converter?.ModelClrType ?? mapping.ClrType)
+                && IsIntegerType(mapping.Converter?.ProviderClrType ?? mapping.ClrType)
+                && (mapping is OceanBaseIntegerTypeMapping<sbyte> or OceanBaseIntegerTypeMapping<byte>
                     or OceanBaseIntegerTypeMapping<short> or OceanBaseIntegerTypeMapping<ushort>
                     or OceanBaseIntegerTypeMapping<int> or OceanBaseIntegerTypeMapping<uint>
-                    or OceanBaseIntegerTypeMapping<long> or OceanBaseIntegerTypeMapping<ulong>
-                    or OceanBaseDecimalTypeMapping or OceanBaseFloatingPointTypeMapping<float>
-                    or OceanBaseFloatingPointTypeMapping<double>;
+                    or OceanBaseIntegerTypeMapping<long> or OceanBaseIntegerTypeMapping<ulong>);
+
+        internal static bool IsSupportedNumeric(RelationalTypeMapping mapping)
+            => IsSupportedInteger(mapping)
+                || mapping.Converter?.ConvertsNulls != true
+                && IsNumericType(mapping.Converter?.ModelClrType ?? mapping.ClrType)
+                && IsNumericType(mapping.Converter?.ProviderClrType ?? mapping.ClrType)
+                && (mapping is OceanBaseDecimalTypeMapping or OceanBaseFloatingPointTypeMapping<float>
+                    or OceanBaseFloatingPointTypeMapping<double>);
+
+        private static bool IsIntegerType(Type type)
+        {
+            type = Nullable.GetUnderlyingType(type) ?? type;
+            if (type.IsEnum) type = Enum.GetUnderlyingType(type);
+            return Type.GetTypeCode(type) is TypeCode.SByte or TypeCode.Byte or TypeCode.Int16
+                or TypeCode.UInt16 or TypeCode.Int32 or TypeCode.UInt32 or TypeCode.Int64 or TypeCode.UInt64;
+        }
+
+        private static bool IsNumericType(Type type)
+        {
+            type = Nullable.GetUnderlyingType(type) ?? type;
+            if (type.IsEnum) type = Enum.GetUnderlyingType(type);
+            return Type.GetTypeCode(type) is TypeCode.SByte or TypeCode.Byte or TypeCode.Int16
+                or TypeCode.UInt16 or TypeCode.UInt32 or TypeCode.Int32 or TypeCode.Int64 or TypeCode.UInt64
+                or TypeCode.Decimal or TypeCode.Single or TypeCode.Double;
+        }
 
         internal static bool IsSupportedText(RelationalTypeMapping mapping)
             => mapping.Converter?.ConvertsNulls != true

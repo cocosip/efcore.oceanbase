@@ -24,8 +24,10 @@ forms and integer-backed enums through scalar parameters or constants and SELECT
 roots retain their original element type and produce zero-row SQL. Numeric-to-numeric converters keep
 their parameter/read hooks. Typing casts follow the provider carrier independently of column facets:
 MySQL SIGNED/UNSIGNED, DECIMAL(65,30), FLOAT or DOUBLE; Oracle NUMBER, BINARY_FLOAT or BINARY_DOUBLE.
-Non-finite floating inputs reject before execution. Single-parameter JSON-style roots, nonnumeric
-carriers and null-converting converters are not supported by this path.
+Non-finite floating inputs reject before execution. Explicit `EF.Parameter` roots are supported for
+integer carriers when the context explicitly selects `Constant` or `MultipleParameters`; the provider
+expands them into scalar parameters rather than sending a JSON array. Other single-parameter roots,
+nonnumeric carriers and null-converting converters are not supported by this path.
 Direct contextually converted element projections support SelectMany, FirstOrDefault and Join,
 including nullable/empty roots and Distinct/Take composition. The owning numeric mapping controls
 bindings, projected readers and the CLR default fallback. Incompatible requirements for one root or
@@ -35,7 +37,7 @@ converter/operator composition remains unsupported. Native UNION typing, results
 Text collection roots support captured arrays/lists and empty inline arrays when the provider-owned mapping
 uses a string carrier and does not convert nulls. Model-to-string converters retain parameter and reader
 hooks; MySQL empty roots use `CAST(NULL AS CHAR)` and Oracle uses the declared text type. Null-converting,
-binary/other carriers and explicit `EF.Parameter(collection)` roots remain unsupported. Oracle empty-string
+binary/other carriers and non-integer explicit `EF.Parameter(collection)` roots remain unsupported. Oracle empty-string
 normalization occurs after raw collection expansion. Native text collation, LOB behavior and UNION results
 remain unverified.
 

@@ -127,11 +127,85 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
                 values = input;
                 var sql = query.ToQueryString();
                 Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? " AS UNSIGNED)" : " AS NUMBER)", sql);
-                Assert.Equal(input.Length == 0, sql.Contains("WHERE 1 = 0", StringComparison.Ordinal));
+                Assert.Equal(input.Length == 0, sql.Contains("WHERE 1 = 0", StringComparison.Ordinal)
+                    || sql.Contains("WHERE 0", StringComparison.Ordinal));
             }
             var empty = context.Set<NullableConvertedRow>()
                 .Select(row => new int?[] { }.Count(value => value > row.Value)).ToQueryString();
             Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? "CAST(NULL AS UNSIGNED)" : "CAST(NULL AS NUMBER)", empty);
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false, ParameterTranslationMode.Constant)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true, ParameterTranslationMode.Constant)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false, ParameterTranslationMode.MultipleParameters)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true, ParameterTranslationMode.MultipleParameters)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false, ParameterTranslationMode.Constant)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true, ParameterTranslationMode.Constant)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false, ParameterTranslationMode.MultipleParameters)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true, ParameterTranslationMode.MultipleParameters)]
+        public void Explicit_parameter_integer_roots_rebind_current_values_and_empty_metadata(
+            OceanBaseCompatibilityMode mode, bool relationalNulls, ParameterTranslationMode translation)
+        {
+            using var context = Create<int>(mode, relationalNulls, translation);
+            int[] values = [int.MinValue, 17, int.MaxValue, 17];
+            var query = context.Rows.Where(row => EF.Parameter(values).Contains(row.Id));
+
+            foreach (var input in new[] { values, new[] { 17 }, Array.Empty<int>() })
+            {
+                values = input;
+                var sql = query.ToQueryString();
+                if (input.Length > 1) Assert.Contains(" IN (", sql);
+                if (input.Length == 1) Assert.Contains(" = ", sql);
+                Assert.Equal(input.Length == 0, sql.Contains("WHERE 1 = 0", StringComparison.Ordinal)
+                    || sql.Contains("WHERE 0", StringComparison.Ordinal));
+                Assert.DoesNotContain("UNION ALL VALUES", sql);
+            }
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true)]
+        public void Explicit_parameter_nullable_integer_roots_preserve_null_and_empty_boundaries(
+            OceanBaseCompatibilityMode mode, bool relationalNulls)
+        {
+            using var context = Create<int>(mode, relationalNulls, ParameterTranslationMode.MultipleParameters);
+            int?[] values = [null, 17, null, 17];
+            var query = context.Rows.Where(row => EF.Parameter(values).Contains(row.Optional));
+
+            foreach (var input in new int?[][] { values, [null], [] })
+            {
+                values = input;
+                var sql = query.ToQueryString();
+                if (input.Length > 1) Assert.Contains(" IN (", sql);
+                if (input.Length == 1)
+                    Assert.Equal(!relationalNulls, sql.Contains(" IS NULL", StringComparison.Ordinal));
+                Assert.Equal(input.Length == 0, sql.Contains("WHERE 1 = 0", StringComparison.Ordinal)
+                    || sql.Contains("WHERE 0", StringComparison.Ordinal));
+            }
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle)]
+        public void Explicit_parameter_integer_lists_translate_and_rebind(
+            OceanBaseCompatibilityMode mode)
+        {
+            using var context = Create<int>(mode, false, ParameterTranslationMode.MultipleParameters);
+            List<int> values = [1, 2, 1];
+            var query = context.Rows.Where(row => EF.Parameter(values).Contains(row.Id));
+
+            foreach (var input in new[] { new List<int> { 1, 2, 1 }, new List<int> { 17 }, new List<int>() })
+            {
+                values = input;
+                var sql = query.ToQueryString();
+                if (input.Count > 1) Assert.Contains(" IN (", sql);
+                if (input.Count == 1) Assert.Contains(" = ", sql);
+                Assert.Equal(input.Count == 0, sql.Contains("WHERE 1 = 0", StringComparison.Ordinal)
+                    || sql.Contains("WHERE 0", StringComparison.Ordinal));
+            }
         }
 
         [Theory]

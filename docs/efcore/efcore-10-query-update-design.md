@@ -245,6 +245,21 @@ cardinality or UNION coercion. Native execution, text/other carriers and wider c
 remain separate work. The source contracts are the published EF10.0.0 VALUES/collection pipeline
 already inspected for Batch3j/3k; selected EF10.0.14 and package consumers must cover this extension.
 
+## Explicit integer parameter-root contract (Batch3at, QRY-03/11, MAP-06/07)
+
+Support `EF.Parameter(int[])`, nullable integer arrays and `List<int>` when the context explicitly
+configures `Constant` or `MultipleParameters` collection translation. The provider turns the EF10
+single-parameter root into its existing typed VALUES expansion, then binds each scalar element; it does
+not send a JSON-style array parameter. Rebinding, empty roots, duplicates, order, NULL cells, MySQL/
+Oracle SQL and sync/async readers are covered. The default unconfigured context and an explicit
+`Parameter` collection mode remain unsupported and use EF's standard translation failure. Other element
+families remain on their existing explicit-parameter boundaries.
+
+The explicit-mode marker is retained through OceanBase options clones so the provider can distinguish
+an unconfigured default from an explicitly selected `MultipleParameters` mode, whose enum value is also
+EF10's default value. Unsupported mapping/converter cases reject before command execution. Local SQL,
+binding and package-consumer evidence does not establish native OceanBase UNION/coercion or live results.
+
 ## EF Core 10 contracts
 
 The implementation was checked against the EF Core Relational 10.0.0 assembly and these upstream sources:

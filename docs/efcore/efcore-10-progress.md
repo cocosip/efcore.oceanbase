@@ -33,6 +33,24 @@ Next execution order is: finish the next bounded QRY/MAP carrier or operator; wi
 transaction/specification fixtures; resolve the live transport gate; then produce REL-01/02 evidence and run
 the final package matrix. EF8/EF9 adaptation, push and publication stay outside this sequence.
 
+### Explicit integer parameter-root checkpoint (Batch3at, 2026-11-13)
+
+`EF.Parameter(int[])`, nullable integer arrays and `List<int>` now use the provider's typed VALUES expansion
+when the context explicitly selects `Constant` or `MultipleParameters`. The provider binds each scalar value,
+preserves duplicates/order/current captures, supports empty roots and NULL cells, and covers MySQL/Oracle plus
+sync/async intercepted readers. An unconfigured context or an explicit EF `Parameter` collection mode remains
+an ordinary translation boundary; text, Boolean, temporal, binary and Guid explicit parameter roots remain
+outside this slice. The options clone retains whether collection mode was explicitly configured because EF's
+default enum value is also `MultipleParameters`.
+
+Focused coverage is recorded in `IntegerCollectionRootQueryTests` and `IntegerCollectionRootTests`, including
+both collection policies, both modes, both relational-null settings and package-consumer smoke. Debug, Release
+and isolated EF10.0.14 Release each pass 4173 tests (2021 unit, 1282 functional, 868 specification and 2
+consumer tests). Package `10.0.0-integer-parameter-r2-20261113` passes content verification and the standalone
+consumer on EF10.0.0/10.0.14 in both modes. Local SQL, binding, reader and package evidence does not close
+native OceanBase UNION/coercion or live result gates; the User Secrets probes still close during pre-auth
+handshake at `172.16.2.45:2881` before SQL.
+
 ### Runtime Round checkpoint (Batch3as, 2026-11-13)
 
 Captured scalar `digits` and `MidpointRounding` arguments for the existing decimal and binary `Round`

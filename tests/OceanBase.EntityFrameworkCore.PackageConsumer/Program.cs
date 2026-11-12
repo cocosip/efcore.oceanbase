@@ -393,6 +393,18 @@ namespace PackageConsumer
                     if (hasParameters != (collectionMode != ParameterTranslationMode.Constant))
                         throw new Exception("Compiled membership query reused another context's collection mode.");
                 }
+                using (var explicitParameterContext = CreateMembershipContext(mode, ParameterTranslationMode.MultipleParameters))
+                {
+                    int[] explicitValues = [41, 42];
+                    var explicitQuery = explicitParameterContext.Set<Row>()
+                        .Where(row => EF.Parameter(explicitValues).Contains(row.Id));
+                    var explicitSql = explicitQuery.ToQueryString();
+                    if (!explicitSql.Contains(" IN (", StringComparison.Ordinal))
+                        throw new Exception("Packed provider did not expand an explicitly parameterized integer root.");
+                    explicitValues = [];
+                    if (!explicitQuery.ToQueryString().Contains("WHERE 0", StringComparison.Ordinal))
+                        throw new Exception("Packed provider reused a nonempty explicit integer parameter root.");
+                }
 
                 string?[] textMembershipValues = ["one", "two"];
                 var textMembershipQuery = context.Set<Row>()
