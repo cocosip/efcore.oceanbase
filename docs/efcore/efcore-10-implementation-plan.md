@@ -20,11 +20,11 @@ checklist rows, implementation, tests and package impact are updated together.
 Development resumed on 2026-11-11 at the user's request on efcore/10.0. The
 [progress handoff](efcore-10-progress.md) records the current checkpoint, verification and next work.
 
-Latest local slice Batch3af (`e89908e`) extends the shared collection-root pipeline to captured and inline
-Boolean roots, nullable values and non-null-converting Boolean-to-integer/decimal converters. Full
-Debug/Release and isolated EF10.0.14 each pass3960 (1888 unit, 1202 intercepted functional, 868
-specification and 2 consumer tests), with zero failures/skips. The baseline-built boolean-roots package
-passes the recorded both-mode EF10.0.0/10.0.14 consumer and package checks. Other collection carriers,
+Latest local slice Batch3ag (`fecaa95`) extends the shared collection-root pipeline to captured and inline
+DateTime roots and adds the EF10 JSON reader/writer metadata required by primitive collection mapping. Full
+Debug/Release each pass 3962 tests (1890 unit, 1202 intercepted functional, 868 specification and 2 consumer
+tests), with zero failures/skips. The preceding Boolean-roots package remains the latest recorded package
+gate; other collection carriers,
 broader converter/operator compositions, wider query/model/write families, native execution and release
 gates remain incomplete.
 

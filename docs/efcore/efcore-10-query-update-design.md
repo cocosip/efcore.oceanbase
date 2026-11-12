@@ -62,7 +62,7 @@ Use the same mapping for collection parameters, predicates and projected readers
 model-to-string converters. MySQL synthetic typing uses `CAST(... AS CHAR)`; Oracle uses the mapping's
 declared text type (for example `NVARCHAR2(...)`) so empty roots retain typed NULL metadata and
 `WHERE 1 = 0`. Oracle's later string normalizer handles empty-string-as-NULL after raw model values
-have been expanded. Null-converting converters, binary/temporal/other carriers and unknown column
+have been expanded. Null-converting converters, binary/interval/other carriers and unknown column
 layouts reject before command execution.
 
 Cover SelectMany, joins/ordinal or other direct-root compositions as they are added, current values,
@@ -80,9 +80,19 @@ integer/decimal converters. `EF.Parameter(collection)` remains outside this tran
 MySQL synthetic collection typing uses `CAST(... AS SIGNED)` or the carrier's unsigned/decimal target; Oracle
 uses `CAST(... AS NUMBER)` and emits `FROM DUAL` for every SELECT arm. Oracle's decimal Boolean carrier and
 reader continue to decode `OceanBaseDecimal` values to `bool?`. Unknown layouts, null-converting converters,
-non-Boolean model carriers and binary/temporal/other mappings fail before command execution. Intercepted
+non-Boolean model carriers and binary/interval/other mappings fail before command execution. Intercepted
 bindings and SQL prove local translation, mapping and shaping only; native Boolean UNION coercion, Boolean
 result semantics and live OceanBase execution remain open.
+
+## Temporal collection-root contract (Batch3ag, QRY-03/11, MAP-06/07)
+
+Support captured `DateTime`/`DateTime?` arrays and originally empty inline roots through the existing VALUES
+expansion in both modes. The temporal mapping supplies EF10 JSON reader/writer metadata so EF can construct the
+primitive collection mapping; the provider retains the model/provider converter and reader hooks. MySQL uses
+`DATETIME` casts and Oracle uses `TIMESTAMP` casts. NULL cells, current captures and typed zero-row metadata are
+covered locally. DateTimeOffset, DateOnly, TimeOnly and TimeSpan require their own carrier tests; Oracle interval
+transport currently lacks collection metadata and remains an explicit unsupported boundary. Native precision,
+timezone, coercion and result semantics remain live acceptance gates.
 
 ## Contextual numeric collection projection contract (Batch3ac, QRY-03/11, MAP-06/07)
 

@@ -3,7 +3,7 @@
 ## Active checkpoint: 2026-11-12
 
 Development resumed on 2026-11-11 on efcore/10.0 at the user's request, following the paused Batch7e checkpoint.
-The latest committed checkpoint is Batch3af (`e89908e`) on 2026-11-12.
+The latest committed checkpoint is Batch3ag (`fecaa95`) on 2026-11-12.
 Test each module and review completed major modules before committing. EF8/EF9 remain postponed.
 The provider is not release-ready. The [feature checklist](efcore-10-feature-checklist.md) remains the
 acceptance authority; this document records the handoff rather than defining a different completion target.
@@ -34,6 +34,17 @@ EF10.0.14. Package `10.0.0-boolean-roots-20261112` passes Verify-Package.ps1; pr
 These are local SQL-shape, binding, reader and package-consumer results; native Boolean UNION coercion,
 Boolean result semantics, live OceanBase execution, EF8/EF9 adaptation and release acceptance remain open.
 
+### Temporal collection-root checkpoint (2026-11-12)
+
+Batch3ag follows Batch3af. Captured `DateTime`/`DateTime?` arrays and empty inline roots now use the shared
+VALUES expansion in both compatibility modes. Temporal mappings expose EF10 JSON reader/writer metadata
+required for primitive collection mapping; MySQL emits `DATETIME` casts and Oracle emits `TIMESTAMP` casts.
+NULL cells, typed zero-row metadata and current captured values are covered by two focused unit cases and the
+existing collection-root suite. The source Debug/Release gates each pass **3962** tests: 1890 unit, 1202
+intercepted functional, 868 specification and 2 consumer tests, with zero failures or skips. This closes only
+the locally supported DateTime collection family; Oracle interval transport without a JSON reader/writer remains
+an explicit boundary. Native temporal coercion, precision/timezone semantics and live execution remain open.
+
 ### Live connectivity fixture checkpoint (2026-11-12)
 
 The opt-in project `tests/OceanBase.EntityFrameworkCore.LiveTests` now loads
@@ -41,12 +52,13 @@ The opt-in project `tests/OceanBase.EntityFrameworkCore.LiveTests` now loads
 `OceanBase.EntityFrameworkCore.LiveTests`. It is intentionally outside the default solution run and requires
 `OCEANBASE_RUN_LIVE_TESTS=1`. The project builds in Release with zero warnings/errors.
 
-The first non-destructive probes used the supplied host `172.16.2.45` and SQL port `2881` for both modes,
-with TLS explicitly disabled because Connector 0.2.0 defaults to VerifyFull. TCP connection succeeded, but
-both mode handshakes failed before authentication or SQL with `Connection closed while reading the packet`.
-No database/schema mutation occurred and no username, password or full connection string was recorded. This
-is an environment/transport blocker to classify; it is not yet evidence of an EF provider defect. TST-02
-remains In progress until both tenants complete the core live matrix.
+The first non-destructive probes used the supplied host `172.16.2.45`, SQL port `2881`, supplied credentials,
+and TLS explicitly disabled because Connector 0.2.0 defaults to VerifyFull. The TCP port was reachable, but
+the MySQL handshake ended with `Connection closed while reading the packet` and the Oracle handshake timed out
+before authentication or SQL. No database/schema mutation occurred; credentials were loaded from a temporary
+outside-repository User Secrets file and no username, password or full connection string was recorded. This
+is an environment/transport blocker to classify, not evidence of an EF provider defect. TST-02 remains In progress
+until the endpoint/transport issue is classified and both tenants complete the core live matrix.
 
 ### General text collection-root checkpoint (2026-11-11)
 
@@ -321,7 +333,7 @@ logs and `artifacts/verify-management-profile-package.ps1`. Baseline assets rema
    Batch7f Oracle user lifecycle, Batch7e management factories and bulk-update rewrites are implemented;
    do not repeat them. Current evidence is above;
    older sections below are historical checkpoints, not a new implementation backlog.
-2. Continue QRY-03/04/06/07/11 and MAP-06/07: remaining binary/temporal/other collection carriers,
+2. Continue QRY-03/04/06/07/11 and MAP-06/07: remaining binary/interval/other collection carriers,
    broader converter/operator compositions, function/aggregate overloads and unsupported boundaries. Reuse
    exact EF10 contracts; negative tests must not be mistaken for implementation of a feature family.
 3. Widen model/filter/materialization/graph-write contracts and official query/write/runtime specification
