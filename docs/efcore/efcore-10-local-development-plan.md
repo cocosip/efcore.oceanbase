@@ -9,7 +9,7 @@ public APIs and per-mode mappings/SQL. Separate local implementation evidence fr
 **Spec:** efcore-10-feature-checklist.md, efcore-10-technical-baseline.md, efcore-10-query-update-design.md.
 **Tech Stack:** C#, .NET 10, EF Core/Relational [10.0.0,11.0.0), xUnit, OceanBaseConnector 0.2.0.
 
-**Updated:** 2026-11-12 after Batch3aj. Continue EF10 in this checkout, test each module and
+**Updated:** 2026-11-12 after Batch3al. Continue EF10 in this checkout, test each module and
 review each completed major module before committing. EF8/EF9 remains postponed; live execution is opt-in and
 currently blocked before authentication by the supplied endpoint/transport behavior.
 The full goal remains incomplete.
