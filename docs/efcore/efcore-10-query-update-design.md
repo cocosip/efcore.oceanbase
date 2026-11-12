@@ -94,6 +94,31 @@ covered locally. DateTimeOffset, DateOnly, TimeOnly and TimeSpan require their o
 transport currently lacks collection metadata and remains an explicit unsupported boundary. Native precision,
 timezone, coercion and result semantics remain live acceptance gates.
 
+## Binary collection-root contract (Batch3ai, QRY-03/11, MAP-06/07)
+
+Support captured `byte[][]`/`byte[]?[]` arrays and originally empty inline roots through the existing VALUES
+expansion when the element mapping is the provider-owned binary mapping and its converter does not convert
+nulls. Preserve one raw byte array per row, NULL cells, current captures and typed zero-row metadata in both
+modes. MySQL synthetic typing uses `CAST(NULL AS BINARY)`; Oracle uses the mapped `RAW(n)` or `BLOB` store
+declaration. Binary parameters and projected readers retain the existing byte-array mapping and validation.
+`EF.Parameter(collection)`, scalar `byte[]` roots, null-converting converters and unknown layouts remain outside
+this translator boundary. Oracle non-null empty binary inputs remain the existing unsupported transport case.
+Interception proves local binding, reader shaping and SQL typing only; binary equality, LOB coercion and native
+UNION behavior remain live acceptance gates.
+
+### Batch3ai validation checkpoint
+
+The focused binary suite passes 6 unit and 4 intercepted functional cases. The source Debug and Release
+suites each pass 3994 tests (1902 unit, 1222 intercepted functional, 868 specification and 2 consumer tests),
+with zero failures or skips. Release package `10.0.0-binary-roots-final-20261112` passes `Verify-Package.ps1`
+and the standalone package consumer in both modes on EF10.0.0 and EF10.0.14. The provider assembly SHA-256 is
+`886DA1ADAEC3EF9966AB6F5541C30A6BB107DDD81977C5AC39A706FEC20C5947`; the nupkg SHA-256 is
+`167BD30CE4CCCBC3C2238F55E9A7107BA0E6F91CA2B2BF804DC1EDB0A04A76BA`.
+
+These checks establish local translation, parameter binding, reader conversion and package consumption only.
+They do not establish native binary equality, BLOB/RAW coercion, UNION behavior, Oracle empty-BLOB transport,
+live server execution or release acceptance.
+
 ## Contextual numeric collection projection contract (Batch3ac, QRY-03/11, MAP-06/07)
 
 Support direct collection-element projection in SelectMany, scalar FirstOrDefault and Join after a

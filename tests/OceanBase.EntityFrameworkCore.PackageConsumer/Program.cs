@@ -442,6 +442,7 @@ namespace PackageConsumer
                 VerifyNonnumericExtrema(context, mode);
                 VerifyTextRoots(context, mode);
                 VerifyBooleanRoots(context, mode);
+                VerifyBinaryRoots(context, mode);
                 int?[] nullableConvertedValues = [null, 17, 17];
                 var nullableConverted = context.Set<Row>().Where(row => nullableConvertedValues
                     .Where(value => value > row.NullableInteger).Contains(row.NullableInteger)).Select(row => row.NullableInteger);
@@ -906,6 +907,34 @@ namespace PackageConsumer
                 || !empty.Contains(mode == OceanBaseCompatibilityMode.MySql ? "CAST(NULL AS SIGNED)" : "CAST(NULL AS NUMBER)",
                     StringComparison.Ordinal))
                 throw new Exception("Packed Boolean collection root lost its typed empty relation: " + empty);
+        }
+
+        private static void VerifyBinaryRoots(ConsumerContext context, OceanBaseCompatibilityMode mode)
+        {
+            byte[][] values = [];
+            var query = context.Set<Row>().SelectMany(row => values.Where(value => row.Id > 0));
+            var target = mode == OceanBaseCompatibilityMode.MySql ? "BINARY" : "BLOB";
+            foreach (var input in new[]
+            {
+                Array.Empty<byte[]>(),
+                new[] { new byte[] { 1, 2 } },
+                Array.Empty<byte[]>(),
+                new[] { new byte[] { 3 } },
+                Array.Empty<byte[]>()
+            })
+            {
+                values = input;
+                var sql = query.ToQueryString();
+                if (!sql.Contains(" AS " + target + ")", StringComparison.Ordinal))
+                    throw new Exception("Packed binary collection root lost its provider carrier: " + sql);
+                if (sql.Split("UNION ALL SELECT", StringSplitOptions.None).Length - 1 != Math.Max(0, input.Length - 1)
+                    || sql.Contains("WHERE 1 = 0", StringComparison.Ordinal) != (input.Length == 0))
+                    throw new Exception("Packed binary collection root lost its current values or row shape.");
+            }
+            var empty = context.Set<Row>().Select(row => new byte[][] { }.Count(value => row.Id > 0)).ToQueryString();
+            if (!empty.Contains("CAST(NULL AS " + target + ")", StringComparison.Ordinal)
+                || !empty.Contains("WHERE 1 = 0", StringComparison.Ordinal))
+                throw new Exception("Packed binary collection root lost its typed empty relation: " + empty);
         }
 
         private static void VerifyNumericRoots<T>(ConsumerContext context, OceanBaseCompatibilityMode mode,

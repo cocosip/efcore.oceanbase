@@ -3,16 +3,40 @@
 **Goal:** Implement every locally developable EF10 feature, in reviewed/tested commits, while postponing real
 database integration and EF8/EF9 adaptation as explicitly requested on 2026-11-10.
 
-**Architecture:** Continue on efcore/10.0 at the current Batch3ah checkpoint `5c42125`. Reuse the existing EF relational services, connector 0.2.0
+**Architecture:** Continue on efcore/10.0 at the current Batch3ai checkpoint. Reuse the existing EF relational services, connector 0.2.0
 public APIs and per-mode mappings/SQL. Separate local implementation evidence from server acceptance.
 
 **Spec:** efcore-10-feature-checklist.md, efcore-10-technical-baseline.md, efcore-10-query-update-design.md.
 **Tech Stack:** C#, .NET 10, EF Core/Relational [10.0.0,11.0.0), xUnit, OceanBaseConnector 0.2.0.
 
-**Updated:** 2026-11-12 after Batch3ah. Continue EF10 in this checkout, test each module and
+**Updated:** 2026-11-12 after Batch3ai. Continue EF10 in this checkout, test each module and
 review each completed major module before committing. EF8/EF9 remains postponed; live execution is opt-in and
 currently blocked before authentication by the supplied endpoint/transport behavior.
 The full goal remains incomplete.
+
+## Execution order and release gates
+
+Use this section to choose the next task; the feature checklist remains the detailed acceptance authority.
+
+1. **Finish local QRY/MAP slices.** Implement the next bounded interval or other collection carrier and
+   the remaining function/aggregate or converter/operator overloads. Each slice needs a RED test, a
+   provider contract, both-mode sync/async evidence, negative boundaries and independent review.
+2. **Finish local model/write/runtime slices.** Expand MOD/QRY materialization and filter shapes, then
+   UPD/TXN/CON/DIA graph, concurrency, cancellation and diagnostics boundaries. Keep intercepted evidence
+   separate from native result or transaction claims.
+3. **Finish schema and specification coverage.** Complete the remaining SCH ownership/DDL/error paths and
+   add the next TST-01 relational fixture families with explicit exclusions mapped to checklist IDs.
+4. **Resolve the live gate.** Classify the supplied endpoint's pre-auth packet closure, then run the
+   non-destructive scalar/query/write/transaction/schema matrix in both modes. Do not run DDL until the
+   test-owned cleanup scope is recorded.
+5. **Prepare release evidence.** Record REL-01 environment/support details without credentials, rerun the
+   full Debug/Release suites, package content gate and package consumer at EF10.0.0/10.0.14, review the
+   release revision, and only then consider a release branch/tag. EF8/EF9, push and publication remain out
+   of the current development sequence.
+
+Current binary collection-root evidence is the Batch3ai working slice: 3994 source tests, the
+`10.0.0-binary-roots-final-20261112` package, package consumers on EF10.0.0/10.0.14, and local review.
+It does not close native binary, live, specification, or other required release gates.
 
 ## Global constraints
 
@@ -110,6 +134,27 @@ efcore-10-query-update-design.md. Continue from `776a9a6`; no live database or E
 Final evidence is the 3960-test source gate (1888 unit, 1202 intercepted functional, 868 specification and
 2 consumer tests), the Boolean focused 26/12 tests, and package consumers on EF10.0.0/10.0.14. Native
 Boolean UNION/result semantics and live OceanBase execution remain open.
+
+## Batch3ai brief: binary collection roots
+
+**IDs:** QRY-03/11, MAP-06/07. **Spec:** binary collection-root contract in
+efcore-10-query-update-design.md. Continue from the Batch3ah temporal-root checkpoint; no live database or
+EF8/EF9 work.
+
+- [x] Add RED/GREEN unit coverage for captured and inline `byte[][]`/`byte[]?[]` roots, originally empty
+  roots, provider binary mappings, non-null-converting converters and both compatibility modes.
+- [x] Reuse the general VALUES expansion and retain binary parameters/readers. Generate MySQL `BINARY` and
+  Oracle mapped `RAW(n)`/`BLOB` empty-root casts; preserve NULL cells and typed zero-row metadata.
+  Keep scalar `byte[]`, `EF.Parameter(collection)`, null-converting converters, unknown layouts and
+  Oracle non-null empty binary transport as explicit boundaries.
+- [x] Add sync/async intercepted bindings/readers and both-mode package-consumer binary smoke. Run full
+  Debug/Release, package contents and EF10.0.0/10.0.14 consumers, then review the module and update the
+  checklist/progress before committing.
+
+Final evidence is the 3994-test source gate (1902 unit, 1222 intercepted functional, 868 specification and
+2 consumer tests), focused binary 6/4 cases, package
+`10.0.0-binary-roots-final-20261112`, and both patch consumers. Native binary equality, LOB coercion,
+UNION behavior, Oracle empty-BLOB transport and live OceanBase execution remain open.
 
 ## Batch3ac brief: contextual numeric collection projections
 

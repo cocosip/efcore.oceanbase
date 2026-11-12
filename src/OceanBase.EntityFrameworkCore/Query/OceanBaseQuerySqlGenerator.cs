@@ -55,7 +55,7 @@ namespace OceanBase.EntityFrameworkCore.Query
         {
             if (expression.TypeMapping is not { } mapping
                 || !OceanBaseCollectionParameterExpandingVisitor.IsSupportedCollectionElement(mapping))
-                throw new NotSupportedException("Collection typing casts require supported numeric, Boolean or text elements with non-null-converting storage carriers.");
+                throw new NotSupportedException("Collection typing casts require supported numeric, Boolean, text, binary or temporal elements with non-null-converting storage carriers.");
             Sql.Append("CAST(");
             Visit(expression);
             if (OceanBaseCollectionParameterExpandingVisitor.IsSupportedBoolean(mapping))
@@ -71,6 +71,11 @@ namespace OceanBase.EntityFrameworkCore.Query
             if (OceanBaseCollectionParameterExpandingVisitor.IsSupportedText(mapping))
             {
                 Sql.Append(" AS ").Append(_mode == OceanBaseCompatibilityMode.Oracle ? mapping.StoreType : "CHAR").Append(")");
+                return;
+            }
+            if (OceanBaseCollectionParameterExpandingVisitor.IsSupportedBinary(mapping))
+            {
+                Sql.Append(" AS ").Append(_mode == OceanBaseCompatibilityMode.Oracle ? mapping.StoreType : "BINARY").Append(")");
                 return;
             }
             if (OceanBaseCollectionParameterExpandingVisitor.IsSupportedTemporal(mapping))

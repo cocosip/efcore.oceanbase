@@ -30,7 +30,7 @@ namespace OceanBase.EntityFrameworkCore.Query
             {
                 if (root.TypeMapping?.ElementTypeMapping is not RelationalTypeMapping elementMapping
                     || !IsSupportedCollectionElement(elementMapping))
-                    throw new NotSupportedException("General collection roots require supported numeric, Boolean, text or temporal elements with non-null-converting storage carriers.");
+                    throw new NotSupportedException("General collection roots require supported numeric, Boolean, text, binary or temporal elements with non-null-converting storage carriers.");
                 if (!(valuesExpression.ColumnNames.SequenceEqual(new[] { "Value" })
                     || valuesExpression.ColumnNames.SequenceEqual(new[] { "_ord", "Value" })))
                     throw new NotSupportedException("Unsupported general collection column layout.");
@@ -105,6 +105,11 @@ namespace OceanBase.EntityFrameworkCore.Query
                 && mapping is OceanBaseStringTypeMapping
                 && OceanBaseOracleStringVisitor.IsProviderString(mapping);
 
+        internal static bool IsSupportedBinary(RelationalTypeMapping mapping)
+            => mapping.Converter?.ConvertsNulls != true
+                && mapping is OceanBaseByteArrayTypeMapping
+                && mapping.JsonValueReaderWriter is not null;
+
         internal static bool IsSupportedBoolean(RelationalTypeMapping mapping)
         {
             var modelType = mapping.Converter?.ModelClrType ?? mapping.ClrType;
@@ -138,7 +143,7 @@ namespace OceanBase.EntityFrameworkCore.Query
 
         internal static bool IsSupportedCollectionElement(RelationalTypeMapping mapping)
             => IsSupportedNumeric(mapping) || IsSupportedBoolean(mapping) || IsSupportedText(mapping)
-                || IsSupportedTemporal(mapping);
+                || IsSupportedBinary(mapping) || IsSupportedTemporal(mapping);
 
         private List<object?> Snapshot(SqlParameterExpression source)
         {

@@ -405,7 +405,7 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             var binaryMapping = source.FindMapping(typeof(byte[]))!;
             var binary = new SqlParameterExpression("binary", typeof(byte[]),
                 source.FindMapping(typeof(byte[]), context.Model, binaryMapping));
-            Assert.Contains("numeric, Boolean, text or temporal", Assert.Throws<NotSupportedException>(() => visitor.Visit(
+            Assert.Contains("numeric, Boolean, text, binary or temporal", Assert.Throws<NotSupportedException>(() => visitor.Visit(
                 new ValuesExpression("v", binary, new[] { "Value" }))).Message);
             var membership = factory.In(new ColumnExpression("Text", "r", typeof(string), textMapping, true), texts);
             if (mode == OceanBaseCompatibilityMode.MySql) Assert.Same(membership, visitor.Visit(membership));

@@ -3,7 +3,7 @@
 ## Active checkpoint: 2026-11-12
 
 Development resumed on 2026-11-11 on efcore/10.0 at the user's request, following the paused Batch7e checkpoint.
-The latest committed checkpoint is Batch3ag (`fecaa95`) on 2026-11-12.
+The latest committed checkpoint is Batch3ai on 2026-11-12.
 Test each module and review completed major modules before committing. EF8/EF9 remain postponed.
 The provider is not release-ready. The [feature checklist](efcore-10-feature-checklist.md) remains the
 acceptance authority; this document records the handoff rather than defining a different completion target.
@@ -12,6 +12,42 @@ The current user goal is to finish all locally developable EF10 functionality, w
 each small group. Live database validation is now being wired for the supplied tenants; EF8/EF9 adaptation remains postponed. The
 [local development plan](efcore-10-local-development-plan.md) tracks the full remaining inventory, including
 an audit of locally feasible deferred families. Finishing one batch does not finish the overall goal.
+
+### EF10 release-readiness dashboard (2026-11-12)
+
+This is the short execution view; the feature checklist remains the acceptance authority.
+
+| Work class | Still required | Current evidence / next action |
+| --- | --- | --- |
+| Local query and mapping implementation | Remaining interval/other collection carriers, wider converter/operator compositions, and uncovered function/aggregate overloads under QRY-01/03/04/06/07/11 and MAP-01/02/04/06/07. | Integer, numeric, contextual numeric, Boolean, text, temporal and binary collection-root slices are implemented locally. Continue with the next bounded carrier or operator only after a RED test and contract review. |
+| Local model and runtime implementation | Wider MOD-01/02/03, QRY-02/05/08/09, UPD-01..05, TXN-01..03, CON-02..05 and DIA-01/02 coverage. | Existing doubles and intercepted pipelines cover selected shapes; complete required rows still need implementation or broader boundary tests. |
+| Schema and specification implementation | Remaining SCH-01..03 behavior and additional TST-01 relational specification families. | MySQL/Oracle ownership profiles and six inherited model families have local evidence; native DDL/privilege behavior and other specification families remain open. |
+| Native OceanBase validation | TST-02 scalar, query, write, transaction and schema matrix in both modes. | The supplied endpoint reaches TCP but closes during both mode handshakes before authentication. Classify transport/endpoint behavior, then run only the authorized non-destructive matrix before any DDL. |
+| Release evidence | REL-01 support record and REL-02 reviewed release revision. | Current package gates pass for the binary-roots revision; every later provider change requires fresh Debug/Release, package-content, package-consumer and review evidence. |
+| Explicitly deferred inventory | DEF-01/02/04/05/06/07/08/10 remain deferred; DEF-03 and DEF-09 remain partial. | Run the documented feasibility audit after required local work stabilizes. A deferred label is not a release pass. |
+
+Next execution order is: finish the next bounded QRY/MAP carrier or operator; widen required model/write/
+transaction/specification fixtures; resolve the live transport gate; then produce REL-01/02 evidence and run
+the final package matrix. EF8/EF9 adaptation, push and publication stay outside this sequence.
+
+### Binary collection-root checkpoint (Batch3ai, 2026-11-12)
+
+Batch3ai follows Batch3ah (`f92e2f6`). Captured `byte[][]`/`byte[]?[]` roots and originally empty inline
+roots now use the general VALUES expansion in both compatibility modes when the provider-owned binary mapping
+and a non-null-converting converter are present. Current captures, duplicate/order preservation, NULL cells,
+typed zero-row metadata, binary parameters and projected readers are covered. MySQL empty roots use `BINARY`;
+Oracle uses the mapped `RAW(n)` or `BLOB` declaration. Scalar `byte[]` roots, `EF.Parameter(collection)`,
+null-converting converters, unknown layouts and Oracle non-null empty binary transport remain explicit boundaries.
+
+Focused binary coverage passes **6** unit and **4** intercepted functional cases. The source Debug/Release
+gates each pass **3994** tests: 1902 unit, 1222 intercepted functional, 868 specification and 2 consumer tests,
+with zero failures or skips. Package `10.0.0-binary-roots-final-20261112` passes `Verify-Package.ps1` and
+the standalone package consumer in both modes on EF10.0.0 and EF10.0.14. Provider DLL SHA-256 is
+`886DA1ADAEC3EF9966AB6F5541C30A6BB107DDD81977C5AC39A706FEC20C5947`; nupkg SHA-256 is
+`167BD30CE4CCCBC3C2238F55E9A7107BA0E6F91CA2B2BF804DC1EDB0A04A76BA`.
+
+These are local SQL-shape, binding, reader and package-consumer results. Native binary equality, LOB coercion,
+UNION behavior, Oracle empty-BLOB transport, live execution and release acceptance remain open.
 
 ### Boolean collection-root checkpoint (2026-11-12)
 
@@ -333,13 +369,14 @@ logs and `artifacts/verify-management-profile-package.ps1`. Baseline assets rema
 
 ### Resume here: remaining EF10 local inventory
 
-1. Recheck branch/worktree and saved commit before editing. Batch3af Boolean collection roots,
-   Batch3ae text collection roots, Batch3ad text/temporal extrema, Batch3ac contextual numeric element
-   projections, Batch3ab decimal/floating collection carriers, Batch3aa integer collection carriers,
+1. Recheck branch/worktree and saved commit before editing. Batch3ai binary collection roots, Batch3ah
+   temporal collection roots, Batch3af Boolean collection roots, Batch3ae text collection roots,
+   Batch3ad text/temporal extrema, Batch3ac contextual numeric element projections, Batch3ab
+   decimal/floating collection carriers, Batch3aa integer collection carriers,
    Batch7f Oracle user lifecycle, Batch7e management factories and bulk-update rewrites are implemented;
    do not repeat them. Current evidence is above;
    older sections below are historical checkpoints, not a new implementation backlog.
-2. Continue QRY-03/04/06/07/11 and MAP-06/07: remaining binary/interval/other collection carriers,
+2. Continue QRY-03/04/06/07/11 and MAP-06/07: remaining interval/other collection carriers,
    broader converter/operator compositions, function/aggregate overloads and unsupported boundaries. Reuse
    exact EF10 contracts; negative tests must not be mistaken for implementation of a feature family.
 3. Widen model/filter/materialization/graph-write contracts and official query/write/runtime specification
