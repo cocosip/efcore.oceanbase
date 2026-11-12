@@ -47,8 +47,9 @@ efcore-10-query-update-design.md. Continue from Batch3aj; no live database or EF
   asserting the default MySQL text and Oracle RAW carriers and typed zero-row metadata.
 - [x] Add sync/async intercepted functional coverage for Guid parameter binding and reader conversion in both
   modes, including NULL cells and the empty transition.
-- [ ] Run the full Debug/Release, package and consumer gates after the documentation-only contract slice;
-  native Guid equality, byte order, CHAR/RAW coercion and live execution remain separate gates.
+- [x] Run the full Debug/Release, package and consumer gates after the documentation-only contract slice;
+  4007 tests pass in each configuration, package content passes, and EF10.0.0/10.0.14 consumers pass.
+  Native Guid equality, byte order, CHAR/RAW coercion and live execution remain separate gates.
 
 ## Global constraints
 

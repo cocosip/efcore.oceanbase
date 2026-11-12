@@ -3,7 +3,7 @@
 ## Active checkpoint: 2026-11-12
 
 Development resumed on 2026-11-11 on efcore/10.0 at the user's request, following the paused Batch7e checkpoint.
-The latest committed checkpoint is Batch3aj on 2026-11-12; the next local slice is Batch3ak (Guid collection roots).
+The latest committed checkpoint is Batch3ak (`60ba0df`) on 2026-11-12.
 Test each module and review completed major modules before committing. EF8/EF9 remain postponed.
 The provider is not release-ready. The [feature checklist](efcore-10-feature-checklist.md) remains the
 acceptance authority; this document records the handoff rather than defining a different completion target.
@@ -39,8 +39,14 @@ mapping. Captured and originally empty `Guid?` roots preserve NULL cells and typ
 intercepted functional cases cover both modes and sync/async reader conversion, including parameter carrier
 inspection; two unit cases cover SQL shape and empty transitions.
 
-Focused tests pass **2** unit and **4** intercepted functional cases. This is characterization evidence for
-the existing mapping path; native Guid equality, byte order, CHAR/RAW coercion and live execution remain open.
+Focused tests pass **2** unit and **4** intercepted functional cases. Debug and Release source suites each
+pass **4007** tests: 1907 unit, 1230 intercepted functional, 868 specification and 2 consumer tests, with
+zero failures or skips. Package `10.0.0-guid-roots-20261112` passes `Verify-Package.ps1` and the standalone
+consumer on EF10.0.0 and EF10.0.14; its nupkg SHA-256 is
+`A3BFD2CFFA69CED6CDF33DE126AB366358F1A97969C00D4C6BAE3B11BCED0664` and the Release provider assembly
+SHA-256 is `000496B2783B5F6FDFCE992374D508DD8665E922C3711CE3F3F0C3413E5F0507`. This is characterization
+evidence for the existing mapping path; native Guid equality, byte order, CHAR/RAW coercion and live
+execution remain open.
 
 ### Binary collection-root checkpoint (Batch3ai, 2026-11-12)
 

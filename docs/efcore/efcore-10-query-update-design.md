@@ -143,6 +143,14 @@ converters and unknown collection layouts remain outside this translator boundar
 The local contract is limited to translation, parameter binding, reader conversion and empty-root metadata.
 Native Guid equality, byte order, text collation, RAW/CHAR coercion and live execution remain acceptance gates.
 
+### Batch3ak validation checkpoint
+
+The focused Guid suite passes 2 unit and 4 intercepted functional cases. Debug and Release each pass 4007
+tests (1907 unit, 1230 intercepted functional, 868 specification and 2 consumer tests), with zero failures
+or skips. Package `10.0.0-guid-roots-20261112` passes `Verify-Package.ps1` and both-mode consumers on
+EF10.0.0/10.0.14. These checks establish the existing Guid mapping path locally; native equality, byte order,
+RAW/CHAR coercion and live execution remain open.
+
 ## Contextual numeric collection projection contract (Batch3ac, QRY-03/11, MAP-06/07)
 
 Support direct collection-element projection in SelectMany, scalar FirstOrDefault and Join after a
