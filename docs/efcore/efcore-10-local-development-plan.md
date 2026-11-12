@@ -3,7 +3,7 @@
 **Goal:** Implement every locally developable EF10 feature, in reviewed/tested commits, while postponing real
 database integration and EF8/EF9 adaptation as explicitly requested on 2026-11-10.
 
-**Architecture:** Continue on efcore/10.0 at the current Batch3am DateTime.Date slice. Reuse the existing EF relational services, connector 0.2.0
+**Architecture:** Continue on efcore/10.0 at the current Batch3an Log2 slice. Reuse the existing EF relational services, connector 0.2.0
 public APIs and per-mode mappings/SQL. Separate local implementation evidence from server acceptance.
 
 **Spec:** efcore-10-feature-checklist.md, efcore-10-technical-baseline.md, efcore-10-query-update-design.md.
@@ -132,6 +132,24 @@ efcore-10-query-update-design.md. Continue from Batch3al; no live database or EF
 - [x] Run full Debug/Release (4029 each), package content and both-mode EF10.0.0/EF10.0.14 consumers. The
   isolated EF10.0.14 source-suite rerun is blocked by NuGet repository-signature TLS restore failure; native date
   semantics and live execution remain separate gates.
+
+## Batch3an brief: Log2 translation
+
+**IDs:** QRY-07/11, MAP-02/07. **Spec:** Transcendental numeric local contract in
+efcore-10-query-update-design.md. Continue from Batch3am; no live database or EF8/EF9 work.
+
+- [x] Extend the existing Math/MathF transcendental contract with `Log2` unit coverage for both modes,
+  numeric carriers, converters, nullable shaping and unsupported boundaries.
+- [x] Translate MySQL `LOG2(input)` and Oracle `LOG(2, input)` through the existing provider-carrier and
+  Single-normalization path; do not add a new service or dependency.
+- [x] Add intercepted sync/async predicate coverage and packed-consumer dialect smoke, then run the full
+  Debug/Release, package and selected EF10 patch gates. Native logarithm domain/results remain open.
+
+Batch3an evidence: focused transcendental coverage passes 73 unit and 8 intercepted functional cases. Full
+Debug/Release each pass 4037 tests (1925 unit, 1242 functional, 868 specification and 2 consumers), with zero
+failures/skips. Package `10.0.0-log2-20261112` passes the content gate and standalone consumers in both modes on
+EF10.0.0/10.0.14. These are local translation, binding, shaping and package-consumption checks; native Log2
+domain/results and live execution remain open.
 
 Batch3ad evidence: the new nonnumeric aggregate unit suite passes 94 cases (373 with the existing numeric
 aggregate focus) and the dedicated intercepted functional suite passes 52. EF10.0.0 Debug/Release and isolated EF10.0.14 Release

@@ -3,7 +3,7 @@
 ## Active checkpoint: 2026-11-12
 
 Development resumed on 2026-11-11 on efcore/10.0 at the user's request, following the paused Batch7e checkpoint.
-The latest committed checkpoint is Batch3am on 2026-11-12.
+The latest committed checkpoint is Batch3an on 2026-11-12.
 Test each module and review completed major modules before committing. EF8/EF9 remain postponed.
 The provider is not release-ready. The [feature checklist](efcore-10-feature-checklist.md) remains the
 acceptance authority; this document records the handoff rather than defining a different completion target.
@@ -26,7 +26,7 @@ This is the short execution view; the feature checklist remains the acceptance a
 | Local model and runtime implementation | Wider MOD-01/02/03, QRY-02/05/08/09, UPD-01..05, TXN-01..03, CON-02..05 and DIA-01/02 coverage. | Existing doubles and intercepted pipelines cover selected shapes; complete required rows still need implementation or broader boundary tests. |
 | Schema and specification implementation | Remaining SCH-01..03 behavior and additional TST-01 relational specification families. | MySQL/Oracle ownership profiles and six inherited model families have local evidence; native DDL/privilege behavior and other specification families remain open. |
 | Native OceanBase validation | TST-02 scalar, query, write, transaction and schema matrix in both modes. | The supplied endpoint reaches TCP but closes during both mode handshakes before authentication. Classify transport/endpoint behavior, then run only the authorized non-destructive matrix before any DDL. |
-| Release evidence | REL-01 support record and REL-02 reviewed release revision. | Current package gates pass for the binary-roots revision; every later provider change requires fresh Debug/Release, package-content, package-consumer and review evidence. |
+| Release evidence | REL-01 support record and REL-02 reviewed release revision. | The current Log2 package passes content and both-patch package-consumer checks; every later provider change still requires fresh Debug/Release, package-content, package-consumer and review evidence. |
 | Explicitly deferred inventory | DEF-01/02/04/05/06/07/08/10 remain deferred; DEF-03 and DEF-09 remain partial. | Run the documented feasibility audit after required local work stabilizes. A deferred label is not a release pass. |
 
 Next execution order is: finish the next bounded QRY/MAP carrier or operator; widen required model/write/
@@ -62,6 +62,20 @@ specification and 2 consumer), with zero failures or skips. Package `10.0.0-date
 content gate; the packed consumer passes both modes on EF10.0.0 and EF10.0.14. The isolated EF10.0.14 source-suite
 rerun was blocked during NuGet restore by the environment's repository-signature TLS failure and is not counted as
 passed. Native date truncation, timezone/precision behavior and live execution remain open.
+
+### Log2 checkpoint (Batch3an, 2026-11-12)
+
+`Math.Log2` and `MathF.Log2` now use the existing transcendental translator in both modes. MySQL emits
+`LOG2(input)`; Oracle emits `LOG(2, input)`. The existing numeric carrier validation, Single normalization,
+decimal result reader and converter/null boundaries are shared with the other transcendental functions. Unit
+coverage now exercises fourteen exact transcendental identities, while intercepted sync/async functional
+coverage adds both Log2 methods to predicates and verifies the native dialect shape. This establishes local
+translation, binding, shaping and reader behavior only; logarithm domain/results and live execution remain open.
+Debug and Release source suites each pass **4037** tests (1925 unit, 1242 intercepted functional, 868
+specification and 2 consumer), with zero failures or skips. Package `10.0.0-log2-20261112` passes
+`Verify-Package.ps1` and the standalone consumer on both modes with EF10.0.0 and EF10.0.14. The nupkg
+SHA-256 is `855D143D08D40FA14353A25945B12430D7053E85C0D6BC7852E51FA43FCB124C`; the Release provider
+SHA-256 is `3603610EE82D44DAC118B1B964D1CCFDE25DD73B5937181D86E1BC0A00E0F1AF`.
 
 ### Guid collection-root checkpoint (Batch3ak, 2026-11-12)
 

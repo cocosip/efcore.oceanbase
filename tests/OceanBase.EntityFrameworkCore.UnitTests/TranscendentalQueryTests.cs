@@ -21,7 +21,7 @@ namespace OceanBase.EntityFrameworkCore.UnitTests;
 
 public sealed class TranscendentalQueryTests
 {
-    private static readonly string[] Names = ["Sqrt", "Exp", "Log", "LogBase", "Log10", "Pow"];
+    private static readonly string[] Names = ["Sqrt", "Exp", "Log", "LogBase", "Log2", "Log10", "Pow"];
 
     public static IEnumerable<object[]> ExactMethods()
     {
@@ -38,7 +38,7 @@ public sealed class TranscendentalQueryTests
 
     [Theory]
     [MemberData(nameof(ExactMethods))]
-    public void All_twelve_identities_require_server_predicate_order_and_projection(
+    public void All_fourteen_identities_require_server_predicate_order_and_projection(
         OceanBaseCompatibilityMode mode, bool nulls, bool single, string name)
     {
         using var context = Context(mode, nulls);
@@ -55,7 +55,11 @@ public sealed class TranscendentalQueryTests
         var projected = Expression.Call(typeof(Queryable), "Select", [typeof(Row), type], ordered,
             Expression.Quote(Expression.Lambda(call, row)));
         var sql = filtered.Provider.CreateQuery(projected).ToQueryString();
-        var native = name switch { "Sqrt" => "SQRT(", "Exp" => "EXP(", "Pow" => "POWER(",
+        var native = name switch
+        {
+            "Sqrt" => "SQRT(", "Exp" => "EXP(",
+            "Log2" => mode == OceanBaseCompatibilityMode.MySql ? "LOG2(" : "LOG(",
+            "Pow" => "POWER(",
             "Log10" => mode == OceanBaseCompatibilityMode.MySql ? "LOG10(" : "LOG(",
             "LogBase" => mode == OceanBaseCompatibilityMode.Oracle ? "LOG(" : "LN(", _ => "LN(" };
         Assert.Contains(native, sql);
@@ -130,6 +134,12 @@ public sealed class TranscendentalQueryTests
             {
                 var log = Assert.Single(functions, f => f.Name == "LOG");
                 Assert.Same(b, log.Arguments![0]); Assert.Same(x, log.Arguments[1]);
+            }
+            if (name == "Log2" && mode == OceanBaseCompatibilityMode.Oracle)
+            {
+                var log = Assert.Single(functions, f => f.Name == "LOG");
+                Assert.Equal(2, Assert.IsType<SqlConstantExpression>(log.Arguments![0]).Value);
+                Assert.Same(x, log.Arguments[1]);
             }
             if (name == "Log10" && mode == OceanBaseCompatibilityMode.Oracle)
             {
@@ -302,8 +312,8 @@ public sealed class TranscendentalQueryTests
         Assert.Null(translator.Translate(null, Method("Pow", typeof(double)), [valid], logger));
         Assert.Null(translator.Translate(null, Method("Log", typeof(double)), [valid, valid], logger));
         Assert.Null(translator.Translate(valid, Method("Sqrt", typeof(double)), [valid], logger));
-        foreach (var method in new[] { typeof(Math).GetMethod("Log2", [typeof(double)])!,
-            typeof(double).GetMethod("Sqrt", [typeof(double)])!, typeof(TranscendentalQueryTests).GetMethod(nameof(Sqrt))! })
+        foreach (var method in new[] { typeof(double).GetMethod("Sqrt", [typeof(double)])!,
+            typeof(TranscendentalQueryTests).GetMethod(nameof(Sqrt))! })
             Assert.Null(translator.Translate(null, method, [valid], logger));
     }
 

@@ -1250,9 +1250,11 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
             var query = context.Set<TranscendentalRow>()
                 .Where(r => Math.Sqrt(r.Double + wide) > wide && Math.Exp(r.Double) > wide
                     && Math.Log(r.Double) > wide && Math.Log(r.Double, exponent) > wide
+                    && Math.Log2(r.Double) > wide
                     && Math.Log10(r.Double) > wide && Math.Pow(r.Double, -2d) > wide
                     && MathF.Sqrt(r.Single + single) > single && MathF.Exp(r.Single) > single
                     && MathF.Log(r.Single) > single && MathF.Log(r.Single, .5f) > single
+                    && MathF.Log2(r.Single) > single
                     && MathF.Log10(r.Single) > single && MathF.Pow(r.Single, -2f) > single
                     && Math.Pow(r.Decimal, r.Secondary) > comparison)
                 .OrderBy(r => Math.Log(r.Single, .5f))
@@ -1287,6 +1289,7 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
                 { Assert.Equal((byte)0, p.Precision); Assert.Null(p.DecimalScale); });
                 var sql = commands.Sql[^1];
                 foreach (var function in new[] { "SQRT(", "EXP(", "LN(", "POWER(" }) Assert.Contains(function, sql);
+                Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? "LOG2(" : "LOG(", sql);
                 Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? "LOG10(" : "LOG(", sql);
                 Assert.Contains("WHERE", sql); Assert.Contains("ORDER BY", sql);
                 Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? " AS FLOAT)" : " AS BINARY_FLOAT)", sql);

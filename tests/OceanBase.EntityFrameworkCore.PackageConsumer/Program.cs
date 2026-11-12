@@ -545,6 +545,8 @@ namespace PackageConsumer
                     (context.Set<Row>().Where(row => MathF.Log(row.SingleValue) > 0f), "LN", true),
                     (context.Set<Row>().Where(row => Math.Log(row.DoubleValue, logarithmBase) > 0d), "LOG_BASE", false),
                     (context.Set<Row>().Where(row => MathF.Log(row.SingleValue, singleLogarithmBase) > 0f), "LOG_BASE", true),
+                    (context.Set<Row>().Where(row => Math.Log2(row.DoubleValue) > 0d), "LOG2", false),
+                    (context.Set<Row>().Where(row => MathF.Log2(row.SingleValue) > 0f), "LOG2", true),
                     (context.Set<Row>().Where(row => Math.Log10(row.DoubleValue) > 0d), "LOG10", false),
                     (context.Set<Row>().Where(row => MathF.Log10(row.SingleValue) > 0f), "LOG10", true),
                     (context.Set<Row>().Where(row => Math.Pow(row.DoubleValue, 2d) > 0d), "POWER", false),
@@ -555,6 +557,7 @@ namespace PackageConsumer
                     var function = operation switch
                     {
                         "LOG_BASE" => mode == OceanBaseCompatibilityMode.MySql ? "LN(" : "LOG(",
+                        "LOG2" => mode == OceanBaseCompatibilityMode.MySql ? "LOG2(" : "LOG(2",
                         "LOG10" => mode == OceanBaseCompatibilityMode.MySql ? "LOG10(" : "LOG(",
                         _ => operation + "("
                     };

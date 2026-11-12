@@ -66,6 +66,7 @@ namespace OceanBase.EntityFrameworkCore.Query
                 Add(owner, "Exp", type, type, "EXP");
                 Add(owner, "Log", type, type, "LN");
                 Add(owner, "Log", type, type, "LOG", arity: 2);
+                Add(owner, "Log2", type, type, "LOG2");
                 Add(owner, "Log10", type, type, "LOG10");
                 Add(owner, "Pow", type, type, "POWER", arity: 2);
             }
@@ -104,7 +105,7 @@ namespace OceanBase.EntityFrameworkCore.Query
             var intMapping = mappingSource.FindMapping(typeof(int))!;
             if (function != "SIGN" && mapping.ClrType != method.ReturnType)
                 return null;
-            if (function is "SQRT" or "EXP" or "LN" or "LOG" or "LOG10" or "POWER")
+            if (function is "SQRT" or "EXP" or "LN" or "LOG" or "LOG2" or "LOG10" or "POWER")
                 return TranslateTranscendental(function, method.ReturnType, inputs, mapping);
             var resultMapping = function == "SIGN" ? intMapping : mapping;
             if (mode == OceanBaseCompatibilityMode.MySql && function is "FLOOR" or "CEIL")
@@ -180,9 +181,11 @@ namespace OceanBase.EntityFrameworkCore.Query
             else
             {
                 var operands = function == "LOG" ? new[] { inputs[1], inputs[0] }
+                    : function == "LOG2" && mode == OceanBaseCompatibilityMode.Oracle
+                        ? new[] { sqlExpressionFactory.Constant(2, mappingSource.FindMapping(typeof(int))), inputs[0] }
                     : function == "LOG10" && mode == OceanBaseCompatibilityMode.Oracle
                         ? [sqlExpressionFactory.Constant(10, mappingSource.FindMapping(typeof(int))), inputs[0]] : inputs;
-                body = Native(function == "LOG10" && mode == OceanBaseCompatibilityMode.Oracle ? "LOG" : function,
+                body = Native((function is "LOG2" or "LOG10") && mode == OceanBaseCompatibilityMode.Oracle ? "LOG" : function,
                     operands, nativeType, nativeMapping);
             }
             // Uniform normalization also covers Oracle SQRT on physically wider Single declarations.

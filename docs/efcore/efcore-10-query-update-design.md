@@ -583,6 +583,11 @@ logarithm quotient, preserving native inner precision. Fixed targets avoid copyi
 or unsigned declarations into CAST. Model type and physical storage width do not replace provider-carrier
 selection. Double-provider results retain native precision; global CAST and user functions are unchanged.
 
+`Math.Log2` and `MathF.Log2` are included in this same contract. MySQL uses its native `LOG2(input)` function;
+Oracle uses `LOG(2, input)` with a converter-free integer base literal. The result and Single normalization
+follow the existing primary operand mapping. This is local SQL/binding/reader evidence; domain behavior and
+native result precision still require live validation.
+
 Connector0.2.0 GetDecimal cannot decode boxed native Single/Double results. Transcendental decimal-provider
 results therefore use an immutable opt-in decimal mapping clone with GetValue and checked numeric
 conversion, retaining converter/facets/parameter behavior through clones. Ordinary decimal properties keep
