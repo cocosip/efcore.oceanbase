@@ -131,6 +131,18 @@ These checks establish local translation, parameter binding, reader conversion a
 They do not establish native binary equality, BLOB/RAW coercion, UNION behavior, Oracle empty-BLOB transport,
 live server execution or release acceptance.
 
+## Guid collection-root contract (Batch3ak, QRY-03/11, MAP-04/07)
+
+Support captured `Guid`/`Guid?` arrays and originally empty inline roots through the same VALUES expansion used
+by the provider-owned Guid mapping. MySQL's default Guid mapping uses the 36-character text carrier and
+Oracle's default mapping uses `RAW(16)` with the existing Guid-to-bytes converter. Preserve current captures,
+NULL cells, duplicates and typed zero-row metadata; projected readers must continue to decode the declared
+carrier back to `Guid?` in both sync and async commands. `EF.Parameter(collection)`, null-converting custom
+converters and unknown collection layouts remain outside this translator boundary.
+
+The local contract is limited to translation, parameter binding, reader conversion and empty-root metadata.
+Native Guid equality, byte order, text collation, RAW/CHAR coercion and live execution remain acceptance gates.
+
 ## Contextual numeric collection projection contract (Batch3ac, QRY-03/11, MAP-06/07)
 
 Support direct collection-element projection in SelectMany, scalar FirstOrDefault and Join after a

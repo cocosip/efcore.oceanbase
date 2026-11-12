@@ -3,7 +3,7 @@
 ## Active checkpoint: 2026-11-12
 
 Development resumed on 2026-11-11 on efcore/10.0 at the user's request, following the paused Batch7e checkpoint.
-The latest committed checkpoint is Batch3aj on 2026-11-12.
+The latest committed checkpoint is Batch3aj on 2026-11-12; the next local slice is Batch3ak (Guid collection roots).
 Test each module and review completed major modules before committing. EF8/EF9 remain postponed.
 The provider is not release-ready. The [feature checklist](efcore-10-feature-checklist.md) remains the
 acceptance authority; this document records the handoff rather than defining a different completion target.
@@ -19,7 +19,7 @@ This is the short execution view; the feature checklist remains the acceptance a
 
 | Work class | Still required | Current evidence / next action |
 | --- | --- | --- |
-| Local query and mapping implementation | Remaining other collection carriers, wider converter/operator compositions, and uncovered function/aggregate overloads under QRY-01/03/04/06/07/11 and MAP-01/02/04/06/07. | Integer, numeric, contextual numeric, Boolean, text, temporal, Oracle interval and binary collection-root slices are implemented locally. Continue with the next bounded carrier or operator only after a RED test and contract review. |
+| Local query and mapping implementation | Remaining uncharacterized carriers, wider converter/operator compositions, and uncovered function/aggregate overloads under QRY-01/03/04/06/07/11 and MAP-01/02/04/06/07. | Integer, numeric, contextual numeric, Boolean, text, temporal, Oracle interval, binary and Guid collection-root slices are covered locally. Continue with the next bounded carrier or operator only after a RED test and contract review. |
 | Local model and runtime implementation | Wider MOD-01/02/03, QRY-02/05/08/09, UPD-01..05, TXN-01..03, CON-02..05 and DIA-01/02 coverage. | Existing doubles and intercepted pipelines cover selected shapes; complete required rows still need implementation or broader boundary tests. |
 | Schema and specification implementation | Remaining SCH-01..03 behavior and additional TST-01 relational specification families. | MySQL/Oracle ownership profiles and six inherited model families have local evidence; native DDL/privilege behavior and other specification families remain open. |
 | Native OceanBase validation | TST-02 scalar, query, write, transaction and schema matrix in both modes. | The supplied endpoint reaches TCP but closes during both mode handshakes before authentication. Classify transport/endpoint behavior, then run only the authorized non-destructive matrix before any DDL. |
@@ -29,6 +29,18 @@ This is the short execution view; the feature checklist remains the acceptance a
 Next execution order is: finish the next bounded QRY/MAP carrier or operator; widen required model/write/
 transaction/specification fixtures; resolve the live transport gate; then produce REL-01/02 evidence and run
 the final package matrix. EF8/EF9 adaptation, push and publication stay outside this sequence.
+
+### Guid collection-root checkpoint (Batch3ak, 2026-11-12)
+
+The existing general VALUES expansion already carries provider-owned Guid mappings, so this slice adds the
+missing explicit contract and regression coverage rather than changing production translation code. MySQL
+roots use the default 36-character text carrier; Oracle roots use the existing `RAW(16)` Guid-to-bytes
+mapping. Captured and originally empty `Guid?` roots preserve NULL cells and typed zero-row SQL. Four
+intercepted functional cases cover both modes and sync/async reader conversion, including parameter carrier
+inspection; two unit cases cover SQL shape and empty transitions.
+
+Focused tests pass **2** unit and **4** intercepted functional cases. This is characterization evidence for
+the existing mapping path; native Guid equality, byte order, CHAR/RAW coercion and live execution remain open.
 
 ### Binary collection-root checkpoint (Batch3ai, 2026-11-12)
 

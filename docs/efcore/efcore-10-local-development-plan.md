@@ -3,7 +3,7 @@
 **Goal:** Implement every locally developable EF10 feature, in reviewed/tested commits, while postponing real
 database integration and EF8/EF9 adaptation as explicitly requested on 2026-11-10.
 
-**Architecture:** Continue on efcore/10.0 at the current Batch3aj checkpoint. Reuse the existing EF relational services, connector 0.2.0
+**Architecture:** Continue on efcore/10.0 at the current Batch3aj checkpoint and Batch3ak Guid characterization slice. Reuse the existing EF relational services, connector 0.2.0
 public APIs and per-mode mappings/SQL. Separate local implementation evidence from server acceptance.
 
 **Spec:** efcore-10-feature-checklist.md, efcore-10-technical-baseline.md, efcore-10-query-update-design.md.
@@ -37,6 +37,18 @@ Use this section to choose the next task; the feature checklist remains the deta
 Current binary collection-root evidence is the Batch3ai committed slice: 3994 source tests, the
 `10.0.0-binary-roots-final-20261112` package, package consumers on EF10.0.0/10.0.14, and local review.
 It does not close native binary, live, specification, or other required release gates.
+
+## Batch3ak brief: Guid collection roots
+
+**IDs:** QRY-03/11, MAP-04/07. **Spec:** Guid collection-root contract in
+efcore-10-query-update-design.md. Continue from Batch3aj; no live database or EF8/EF9 work.
+
+- [x] Add RED/characterization unit coverage for captured and originally empty `Guid?` roots in both modes,
+  asserting the default MySQL text and Oracle RAW carriers and typed zero-row metadata.
+- [x] Add sync/async intercepted functional coverage for Guid parameter binding and reader conversion in both
+  modes, including NULL cells and the empty transition.
+- [ ] Run the full Debug/Release, package and consumer gates after the documentation-only contract slice;
+  native Guid equality, byte order, CHAR/RAW coercion and live execution remain separate gates.
 
 ## Global constraints
 
