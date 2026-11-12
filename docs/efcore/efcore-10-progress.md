@@ -3,7 +3,7 @@
 ## Active checkpoint: 2026-11-12
 
 Development resumed on 2026-11-11 on efcore/10.0 at the user's request, following the paused Batch7e checkpoint.
-The latest committed checkpoint is Batch3an on 2026-11-12.
+The latest committed checkpoint is Batch3ao on 2026-11-12.
 Test each module and review completed major modules before committing. EF8/EF9 remain postponed.
 The provider is not release-ready. The [feature checklist](efcore-10-feature-checklist.md) remains the
 acceptance authority; this document records the handoff rather than defining a different completion target.
@@ -26,7 +26,7 @@ This is the short execution view; the feature checklist remains the acceptance a
 | Local model and runtime implementation | Wider MOD-01/02/03, QRY-02/05/08/09, UPD-01..05, TXN-01..03, CON-02..05 and DIA-01/02 coverage. | Existing doubles and intercepted pipelines cover selected shapes; complete required rows still need implementation or broader boundary tests. |
 | Schema and specification implementation | Remaining SCH-01..03 behavior and additional TST-01 relational specification families. | MySQL/Oracle ownership profiles and six inherited model families have local evidence; native DDL/privilege behavior and other specification families remain open. |
 | Native OceanBase validation | TST-02 scalar, query, write, transaction and schema matrix in both modes. | The supplied endpoint reaches TCP but closes during both mode handshakes before authentication. Classify transport/endpoint behavior, then run only the authorized non-destructive matrix before any DDL. |
-| Release evidence | REL-01 support record and REL-02 reviewed release revision. | The current Log2 package passes content and both-patch package-consumer checks; every later provider change still requires fresh Debug/Release, package-content, package-consumer and review evidence. |
+| Release evidence | REL-01 support record and REL-02 reviewed release revision. | The current Sin/Cos/Tan package passes content and both-patch package-consumer checks; every later provider change still requires fresh Debug/Release, package-content, package-consumer and review evidence. |
 | Explicitly deferred inventory | DEF-01/02/04/05/06/07/08/10 remain deferred; DEF-03 and DEF-09 remain partial. | Run the documented feasibility audit after required local work stabilizes. A deferred label is not a release pass. |
 
 Next execution order is: finish the next bounded QRY/MAP carrier or operator; widen required model/write/
@@ -62,6 +62,16 @@ specification and 2 consumer), with zero failures or skips. Package `10.0.0-date
 content gate; the packed consumer passes both modes on EF10.0.0 and EF10.0.14. The isolated EF10.0.14 source-suite
 rerun was blocked during NuGet restore by the environment's repository-signature TLS failure and is not counted as
 passed. Native date truncation, timezone/precision behavior and live execution remain open.
+
+### Trigonometric checkpoint (Batch3ao, 2026-11-12)
+
+`Math/MathF.Sin`, `Cos` and `Tan` now use the existing transcendental translator in both modes and emit the
+matching `SIN`, `COS` or `TAN` function. Numeric carrier validation, converter handling, Single normalization,
+decimal result readers and null boundaries are shared with the earlier transcendental methods. The focused
+transcendental suite passes 97 cases; the full Debug/Release source suites each pass 4061 tests (1949 unit,
+1242 intercepted functional, 868 specification and 2 consumers), with zero failures or skips. Package
+`10.0.0-trig-20261112` passes content verification and both-mode consumers on EF10.0.0/10.0.14. This is local
+translation, binding, shaping and package evidence only; trigonometric native results and live execution remain open.
 
 ### Log2 checkpoint (Batch3an, 2026-11-12)
 

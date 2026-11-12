@@ -566,8 +566,9 @@ Round remains a separate contract; the following section defines the transcenden
 
 ## Transcendental numeric local contract
 
-All twelve exact Math/MathF Sqrt, Exp, Log (one/two arguments), Log10 and Pow identities translate through
-the existing math service. Both modes use SQRT/EXP/LN/POWER. MySQL Log(x,base) uses LN(x)/LN(base), retaining
+All twenty exact Math/MathF Sqrt, Exp, Log (one/two arguments), Log2, Log10, Pow, Sin, Cos and Tan identities
+translate through the existing math service. Both modes use SQRT/EXP/LN/LOG2/LOG10/POWER/SIN/COS/TAN.
+MySQL Log(x,base) uses LN(x)/LN(base), retaining
 valid bases in (0,1); Oracle uses LOG(base,x). Oracle Log10 uses a fresh converter-free integer ten, avoiding
 accidental binary promotion of NUMBER operands. Every input retains its independently validated numeric
 mapping/converter. Primary x owns the result convention, including mixed-carrier two-argument functions.
@@ -587,6 +588,11 @@ selection. Double-provider results retain native precision; global CAST and user
 Oracle uses `LOG(2, input)` with a converter-free integer base literal. The result and Single normalization
 follow the existing primary operand mapping. This is local SQL/binding/reader evidence; domain behavior and
 native result precision still require live validation.
+
+`Math.Sin`, `MathF.Sin`, `Math.Cos`, `MathF.Cos`, `Math.Tan` and `MathF.Tan` use the same contract in both
+modes and emit the matching native `SIN`, `COS` or `TAN` function. They retain the existing numeric carrier,
+converter, Single normalization and decimal result-reader boundaries. Trigonometric domain and native result
+precision remain live validation items.
 
 Connector0.2.0 GetDecimal cannot decode boxed native Single/Double results. Transcendental decimal-provider
 results therefore use an immutable opt-in decimal mapping clone with GetValue and checked numeric

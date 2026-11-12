@@ -550,7 +550,13 @@ namespace PackageConsumer
                     (context.Set<Row>().Where(row => Math.Log10(row.DoubleValue) > 0d), "LOG10", false),
                     (context.Set<Row>().Where(row => MathF.Log10(row.SingleValue) > 0f), "LOG10", true),
                     (context.Set<Row>().Where(row => Math.Pow(row.DoubleValue, 2d) > 0d), "POWER", false),
-                    (context.Set<Row>().Where(row => MathF.Pow(row.SingleValue, 2f) > 0f), "POWER", true)
+                    (context.Set<Row>().Where(row => MathF.Pow(row.SingleValue, 2f) > 0f), "POWER", true),
+                    (context.Set<Row>().Where(row => Math.Sin(row.DoubleValue) > 0d), "SIN", false),
+                    (context.Set<Row>().Where(row => MathF.Sin(row.SingleValue) > 0f), "SIN", true),
+                    (context.Set<Row>().Where(row => Math.Cos(row.DoubleValue) > 0d), "COS", false),
+                    (context.Set<Row>().Where(row => MathF.Cos(row.SingleValue) > 0f), "COS", true),
+                    (context.Set<Row>().Where(row => Math.Tan(row.DoubleValue) > 0d), "TAN", false),
+                    (context.Set<Row>().Where(row => MathF.Tan(row.SingleValue) > 0f), "TAN", true)
                 })
                 {
                     var numericSql = numericQuery.ToQueryString();
