@@ -3,7 +3,7 @@
 **Goal:** Implement every locally developable EF10 feature, in reviewed/tested commits, while postponing real
 database integration and EF8/EF9 adaptation as explicitly requested on 2026-11-10.
 
-**Architecture:** Continue on efcore/10.0 at the current Batch3av inverse-hyperbolic slice. Reuse the existing EF relational services, connector 0.2.0
+**Architecture:** Continue on efcore/10.0 at the current Batch3aw explicit numeric parameter-root slice. Reuse the existing EF relational services, connector 0.2.0
 public APIs and per-mode mappings/SQL. Separate local implementation evidence from server acceptance.
 
 **Spec:** efcore-10-feature-checklist.md, efcore-10-technical-baseline.md, efcore-10-query-update-design.md.
@@ -12,7 +12,7 @@ public APIs and per-mode mappings/SQL. Separate local implementation evidence fr
 The compact execution board is [efcore-10-roadmap.md](efcore-10-roadmap.md); this file remains the detailed
 batch ledger and acceptance notes.
 
-**Updated:** 2026-11-13 after Batch3av. Continue EF10 in this checkout, test each module and
+**Updated:** 2026-11-13 after Batch3aw. Continue EF10 in this checkout, test each module and
 review each completed major module before committing. EF8/EF9 remains postponed; live execution is opt-in and
 currently blocked before authentication by the supplied endpoint/transport behavior.
 The full goal remains incomplete.
@@ -36,6 +36,26 @@ Use this section to choose the next task; the feature checklist remains the deta
    full Debug/Release suites, package content gate and package consumer at EF10.0.0/10.0.14, review the
    release revision, and only then consider a release branch/tag. EF8/EF9, push and publication remain out
    of the current development sequence.
+
+### Batch3aw brief: explicit numeric parameter roots
+
+**IDs:** QRY-03/11, MAP-02/06/07. **Spec:** Explicit numeric parameter-root contract in
+efcore-10-query-update-design.md. Continue from Batch3av; no live database or EF8/EF9 work.
+
+- [x] Add RED/GREEN unit coverage for explicit decimal, Single and Double arrays/lists, nullable roots,
+  rebinding, duplicate values, NULL cells, empty roots and the unsupported single-parameter mode.
+- [x] Extend the existing parameter-root mapping gate from integer to numeric carriers with no new translator,
+  dependency or mapping abstraction.
+- [x] Add intercepted sync/async coverage for both MySQL/Oracle modes, both relational-null settings and both
+  configured collection policies; verify current DbTypes, reader materialization and empty predicates.
+- [x] Run full Debug/Release, isolated EF10.0.14 Release, package content and both EF10 patch consumers;
+  native numeric `IN` results and live OceanBase execution remain separate gates.
+
+Batch3aw evidence: focused coverage passes 64 unit and 84 intercepted functional cases. Debug, Release and
+isolated EF10.0.14 Release each pass 4241 source tests (2053 unit, 1318 functional, 868 specification and
+2 consumer tests). Package `10.0.0-numeric-parameter-20261113` passes Verify-Package.ps1 and standalone
+consumers on EF10.0.0/10.0.14 in both modes. The explicit EF `Parameter` collection mode and non-finite
+floating values remain explicit rejection boundaries; native and live results remain open.
 
 ### Batch3av brief: inverse-hyperbolic translations
 

@@ -3,7 +3,7 @@
 ## Active checkpoint: 2026-11-13
 
 Development resumed on 2026-11-11 on efcore/10.0 at the user's request, following the paused Batch7e checkpoint.
-The latest checkpoint is Batch3av on 2026-11-13.
+The latest checkpoint is Batch3aw on 2026-11-13.
 Test each module and review completed major modules before committing. EF8/EF9 remain postponed.
 The provider is not release-ready. The [feature checklist](efcore-10-feature-checklist.md) remains the
 acceptance authority; this document records the handoff rather than defining a different completion target.
@@ -47,6 +47,22 @@ The full Debug and Release source suites, plus the isolated EF10.0.14 Release su
 `10.0.0-copy-sign-20261113` passes `Verify-Package.ps1` and the standalone consumer on EF10.0.0 and
 EF10.0.14 in both modes. This is local translation, binding, reader and package evidence only; signed-zero
 bit patterns, non-finite behavior, native CASE coercion and live OceanBase CopySign results remain open.
+
+### Explicit numeric parameter-root checkpoint (Batch3aw, 2026-11-13)
+
+`EF.Parameter(decimal[])`, `EF.Parameter(float[])` and `EF.Parameter(double[])`, including nullable numeric
+arrays and numeric lists, now use the existing scalar `IN` parameter expansion when the context explicitly selects
+`Constant` or `MultipleParameters`. The provider accepts the numeric mapping carriers already used by captured
+roots, rebinds changed arrays/lists, preserves current values and duplicates, binds Decimal/Single/Double DbTypes,
+and keeps NULL and empty-root boundaries explicit. The explicit EF `Parameter` collection mode remains rejected
+with a clear unsupported boundary; non-finite floating values remain rejected before command execution.
+
+Focused coverage passes **64** unit and **84** intercepted sync/async functional cases across both modes, null
+settings and collection policies. Debug, Release and isolated EF10.0.14 Release each pass **4241** source tests
+(2053 unit, 1318 functional, 868 specification and 2 consumer tests), with zero failures/skips. Package
+`10.0.0-numeric-parameter-20261113` passes `Verify-Package.ps1` and the standalone consumer on EF10.0.0/10.0.14
+in both modes. This is local translation, parameter binding, reader and package evidence; native numeric
+`IN` results and live OceanBase execution remain open.
 
 ### Inverse-hyperbolic checkpoint (Batch3av, 2026-11-13)
 

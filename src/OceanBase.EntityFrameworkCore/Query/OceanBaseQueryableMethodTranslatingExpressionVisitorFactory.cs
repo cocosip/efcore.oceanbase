@@ -93,7 +93,7 @@ namespace OceanBase.EntityFrameworkCore.Query
                 var elementMapping = parameter.TypeMapping?.ElementTypeMapping as RelationalTypeMapping
                     ?? RelationalDependencies.TypeMappingSource.FindMapping(
                         Nullable.GetUnderlyingType(elementType) ?? elementType, RelationalDependencies.Model, null);
-                if (elementMapping is null || !OceanBaseCollectionParameterExpandingVisitor.IsSupportedInteger(elementMapping))
+                if (elementMapping is null || !OceanBaseCollectionParameterExpandingVisitor.IsSupportedNumeric(elementMapping))
                 {
                     return null;
                 }

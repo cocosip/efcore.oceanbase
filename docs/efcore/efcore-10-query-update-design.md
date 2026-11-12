@@ -187,6 +187,20 @@ explicit conversions and nonnumeric/null-converting boundaries. No native result
 from intercepted commands. Computed converter arithmetic and other collection carriers keep separate
 contracts; do not advertise arbitrary converter equivalence.
 
+## Explicit numeric parameter-root contract (Batch3aw, QRY-03/11, MAP-02/06/07)
+
+Support explicitly configured `EF.Parameter` roots for decimal, Single and Double arrays/lists, including nullable
+forms, when the context selects `Constant` or `MultipleParameters` collection translation. Reuse EF10's scalar
+`IN` expansion and the existing provider numeric mappings; do not send a JSON-style array parameter. Rebinding a
+captured array/list must rebuild the current scalar parameters and empty roots must reduce to the provider's typed
+false predicate. Decimal, Single and Double DbTypes, duplicates, NULL cells and both MySQL/Oracle modes are covered
+by unit and intercepted sync/async tests.
+
+The explicit EF `Parameter` collection mode remains unsupported and fails before command execution. Non-finite
+Single/Double values remain rejected by the existing mapping validation. This slice establishes local translation,
+binding and reader behavior only; native `IN` results, server coercion and live OceanBase execution remain separate
+acceptance gates.
+
 ## Decimal and floating collection-root contract (Batch3ab, QRY-03/11, MAP-06/07)
 
 Extend the existing integer VALUES pipeline to decimal, Single and Double, nullable forms and
@@ -788,7 +802,8 @@ Test the same expression in default/Constant/default and Constant/default/Consta
 string normalization must exclude collection envelopes, especially null collections; EF owns their expansion.
 
 EF.Constant/context Constant use mapping-owned literals. Context Parameter mode can use an inherited Contains
-fallback to scalar IN; explicit EF.Parameter(collection) remains unsupported without a primitive-collection
+fallback to scalar IN. Explicit integer and numeric roots use the bounded Batch3at/Batch3aw contracts; text,
+Boolean, temporal, binary and Guid explicit roots remain unsupported without their own primitive-collection
 translator. Test both boundaries. Text lists need provider-converted Oracle empty/NULL normalization before
 membership compensation; general VALUES roots need their own integer-ordinal and dialect rendering fixes.
 Those and APPLY/collection projections remain separate locally feasible work. Numeric aggregate promotion/
@@ -826,7 +841,8 @@ compensation, NOT/CASE/Boolean projections and relational-null differences after
 Characterize empty/null/all-null/duplicate/converted-empty collections, changed captures, bucket boundaries,
 name collisions, hostile literal data, fixed/national/LOB bindings and both modes/null settings. Native
 collation/padding/LOB equality/charset/server limits remain live gates. General VALUES roots and explicit
-EF.Parameter(collection) remain separate locally feasible work, with clear unsupported-shape tests.
+integer/numeric `EF.Parameter(collection)` roots have separate bounded contracts; other explicit carrier
+families remain locally feasible follow-up work with clear unsupported-shape tests.
 
 The independently reviewed slice passes 25 focused unit and 20 intercepted cases. Full Debug/Release and isolated
 EF10.0.14 Release pass 1200 tests. Real EF array/list queries cover both modes/null settings and changed
@@ -861,8 +877,9 @@ lossless targets: MySQL SIGNED for the selected signed carriers and Oracle unqua
 column write precision out of query typing; retain original element mappings/converters/checked readers.
 Do not broaden unrelated explicit CAST behavior or replace the provider's checked int mapping with EF's class.
 
-Default/MultipleParameters and Constant retain their parameter/literal policies; composed Parameter roots
-and explicit EF.Parameter remain unsupported without a separate translator. Originally empty inline roots
+Default/MultipleParameters and Constant retain their parameter/literal policies; explicit integer and numeric
+parameter roots use their bounded contracts, while composed roots and other explicit carrier families remain
+unsupported without a separate translator. Originally empty inline roots
 use compile-time metadata beyond this runtime slice; see the implemented
 [inline-empty integral contract](#originally-empty-inline-integral-roots-local-contract).
 General text/other carrier roots still need their own typing contracts and remain local follow-up work.

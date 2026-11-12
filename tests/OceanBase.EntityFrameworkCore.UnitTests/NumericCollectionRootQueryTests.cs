@@ -130,8 +130,75 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
                 Assert.Throws<ArgumentOutOfRangeException>(() => query.ToQueryString());
             }
             values = [double.Epsilon, double.MaxValue];
-            Assert.Throws<InvalidOperationException>(() => context.Rows.Where(row => EF.Parameter(values)
+            Assert.Throws<NotSupportedException>(() => context.Rows.Where(row => EF.Parameter(values)
                 .Where(value => value > row.Value).Contains(row.Value)).ToQueryString());
+            values = [double.NaN];
+            Assert.Throws<ArgumentOutOfRangeException>(() => context.Rows
+                .Where(row => EF.Parameter(values).Contains(row.Value)).ToQueryString());
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql, ParameterTranslationMode.Constant)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, ParameterTranslationMode.MultipleParameters)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, ParameterTranslationMode.Constant)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, ParameterTranslationMode.MultipleParameters)]
+        public void Explicit_parameter_numeric_roots_rebind_current_values_and_empty_metadata(
+            OceanBaseCompatibilityMode mode, ParameterTranslationMode translation)
+        {
+            Check<decimal>(decimal.MinValue, decimal.MaxValue, 1.25m);
+            Check<float>(-123.5f, 456.75f, 1.25f);
+            Check<double>(-123.5d, 456.75d, 1.25d);
+
+            void Check<T>(T minimum, T maximum, T middle) where T : struct
+            {
+                using var context = Create<T>(mode, false, translation);
+                T[] values = [minimum, middle, maximum, middle];
+                var query = context.Rows.Where(row => EF.Parameter(values).Contains(row.Value));
+                foreach (var input in new[] { values, new[] { middle }, Array.Empty<T>() })
+                {
+                    values = input;
+                    var sql = query.ToQueryString();
+                    Assert.DoesNotContain("JSON", sql);
+                    if (input.Length > 1) Assert.Contains(" IN ", sql);
+                    if (input.Length == 1) Assert.Contains(" = ", sql);
+                    Assert.Equal(input.Length == 0, sql.Contains("WHERE 1 = 0", StringComparison.Ordinal)
+                        || sql.Contains("WHERE 0", StringComparison.Ordinal));
+                }
+
+                List<T> list = [minimum, middle, maximum];
+                var listQuery = context.Rows.Where(row => EF.Parameter(list).Contains(row.Value));
+                list = [];
+                var listSql = listQuery.ToQueryString();
+                Assert.True(listSql.Contains("WHERE 1 = 0", StringComparison.Ordinal)
+                    || listSql.Contains("WHERE 0", StringComparison.Ordinal), listSql);
+            }
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql, ParameterTranslationMode.Constant)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, ParameterTranslationMode.MultipleParameters)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, ParameterTranslationMode.Constant)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, ParameterTranslationMode.MultipleParameters)]
+        public void Explicit_parameter_nullable_numeric_roots_preserve_null_and_empty_boundaries(
+            OceanBaseCompatibilityMode mode, ParameterTranslationMode translation)
+        {
+            Check<decimal>([null, 1.25m, null]);
+            Check<float>([null, 1.25f, null]);
+            Check<double>([null, 1.25d, null]);
+
+            void Check<T>(T?[] values) where T : struct
+            {
+                using var context = Create<T>(mode, false, translation);
+                var query = context.Rows.Where(row => EF.Parameter(values).Contains(row.Optional));
+                foreach (var input in new[] { values, new T?[] { null }, Array.Empty<T?>() })
+                {
+                    values = input;
+                    var sql = query.ToQueryString();
+                    Assert.DoesNotContain("JSON", sql);
+                    Assert.Equal(input.Length == 0, sql.Contains("WHERE 1 = 0", StringComparison.Ordinal)
+                        || sql.Contains("WHERE 0", StringComparison.Ordinal));
+                }
+            }
         }
 
         [Theory]

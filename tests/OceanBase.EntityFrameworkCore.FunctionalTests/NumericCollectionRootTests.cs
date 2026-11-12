@@ -86,6 +86,86 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
 
         [Theory]
         [MemberData(nameof(Modes))]
+        public async Task Explicit_parameter_numeric_roots_rebind_and_bind_current_values(
+            OceanBaseCompatibilityMode mode, bool async, bool relationalNulls, ParameterTranslationMode translation)
+        {
+            await Check(decimal.MinValue, decimal.MaxValue, 1.25m, DbType.Decimal);
+            await Check(-123.5f, 456.75f, 1.25f, DbType.Single);
+            await Check(-123.5d, 456.75d, 1.25d, DbType.Double);
+
+            async Task Check<T>(T minimum, T maximum, T middle, DbType dbType)
+                where T : struct
+            {
+                using var table = new DataTable();
+                table.Columns.Add("Value", typeof(T) == typeof(decimal) ? typeof(decimal) : typeof(object));
+                table.Rows.Add(minimum);
+                table.Rows.Add(middle);
+                table.Rows.Add(maximum);
+                var capture = new Capture(table);
+                await using var context = Create<T>(mode, capture, relationalNulls, translation);
+                T[] values = [minimum, middle, maximum, middle];
+                var query = context.Rows.Where(row => EF.Parameter(values).Contains(row.Value)).Select(row => row.Value);
+
+                foreach (var input in new[] { values, new[] { middle }, Array.Empty<T>() })
+                {
+                    values = input;
+                    capture.Inputs.Clear();
+                    capture.Sql.Clear();
+                    var result = async ? await query.ToListAsync() : query.ToList();
+                    Assert.Equal(new[] { minimum, middle, maximum }, result);
+                    var sql = Assert.Single(capture.Sql);
+                    if (input.Length > 1) Assert.Contains(" IN ", sql);
+                    if (input.Length == 1) Assert.Contains(" = ", sql);
+                    Assert.Equal(input.Length == 0, sql.Contains("WHERE 1 = 0", StringComparison.Ordinal)
+                        || sql.Contains("WHERE 0", StringComparison.Ordinal));
+                    Assert.All(capture.Inputs, parameter => Assert.Equal(dbType, parameter.DbType));
+                    Assert.Equal(input, capture.Inputs.Select(parameter => Assert.IsType<T>(parameter.Value)));
+                }
+            }
+        }
+
+        [Theory]
+        [MemberData(nameof(Modes))]
+        public async Task Explicit_parameter_nullable_numeric_roots_bind_null_cells(
+            OceanBaseCompatibilityMode mode, bool async, bool relationalNulls, ParameterTranslationMode translation)
+        {
+            await Check<decimal>(17.25m, DbType.Decimal);
+            await Check<float>(17.25f, DbType.Single);
+            await Check<double>(17.25d, DbType.Double);
+
+            async Task Check<T>(T middle, DbType dbType) where T : struct
+            {
+                using var table = new DataTable();
+                table.Columns.Add("Value", typeof(object));
+                table.Rows.Add(middle);
+                table.Rows.Add(DBNull.Value);
+                var capture = new Capture(table);
+                await using var context = Create<T>(mode, capture, relationalNulls, translation);
+                T?[] values = [middle, null, middle];
+                var query = context.Rows.Where(row => EF.Parameter(values).Contains(row.Optional))
+                    .Select(row => row.Optional);
+
+                foreach (var input in new T?[][] { values, [null], [] })
+                {
+                    values = input;
+                    capture.Inputs.Clear();
+                    capture.Sql.Clear();
+                    var result = async ? await query.ToListAsync() : query.ToList();
+                    Assert.Equal(new T?[] { middle, null }, result);
+                    var sql = Assert.Single(capture.Sql);
+                    Assert.Equal(input.Length == 0,
+                        sql.Contains("WHERE 1 = 0", StringComparison.Ordinal)
+                            || sql.Contains("WHERE 0", StringComparison.Ordinal));
+                    Assert.True(capture.Inputs.Count <= input.Length);
+                    Assert.All(capture.Inputs, parameter => Assert.Equal(dbType, parameter.DbType));
+                    Assert.All(capture.Inputs, parameter =>
+                        Assert.True(parameter.Value is DBNull || input.Contains(Assert.IsType<T>(parameter.Value))));
+                }
+            }
+        }
+
+        [Theory]
+        [MemberData(nameof(Modes))]
         public async Task Contextual_numeric_converters_keep_provider_bindings_readers_and_empty_bodies(
             OceanBaseCompatibilityMode mode, bool async, bool relationalNulls, ParameterTranslationMode translation)
         {
@@ -291,6 +371,7 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
         {
             public int Id { get; set; }
             public T Value { get; set; }
+            public T? Optional { get; set; }
         }
 
         private sealed class ConvertedRow

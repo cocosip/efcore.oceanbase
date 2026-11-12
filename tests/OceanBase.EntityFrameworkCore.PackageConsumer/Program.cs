@@ -467,6 +467,15 @@ namespace PackageConsumer
                 VerifyNumericRoots(context, mode, decimal.MinValue, decimal.MaxValue, 0.0000000000000000000000000001m, "DECIMAL(65,30)", "NUMBER");
                 VerifyNumericRoots(context, mode, float.MinValue, float.MaxValue, float.Epsilon, "FLOAT", "BINARY_FLOAT");
                 VerifyNumericRoots(context, mode, double.MinValue, double.MaxValue, double.Epsilon, "DOUBLE", "BINARY_DOUBLE");
+                using var explicitNumericContext = CreateMembershipContext(mode, ParameterTranslationMode.MultipleParameters);
+                decimal[] explicitNumericValues = [1.25m, 2.5m];
+                var explicitNumericQuery = explicitNumericContext.Set<Row>()
+                    .Where(row => EF.Parameter(explicitNumericValues).Contains(row.Amount));
+                if (!explicitNumericQuery.ToQueryString().Contains(" IN (", StringComparison.Ordinal))
+                    throw new Exception("Packed provider did not expand an explicitly parameterized numeric root.");
+                explicitNumericValues = [];
+                if (!explicitNumericQuery.ToQueryString().Contains("WHERE 0", StringComparison.Ordinal))
+                    throw new Exception("Packed provider reused a nonempty explicit numeric parameter root.");
                 VerifyNonnumericExtrema(context, mode);
                 VerifyTextRoots(context, mode);
                 VerifyBooleanRoots(context, mode);
