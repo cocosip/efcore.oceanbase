@@ -3,7 +3,7 @@
 ## Active checkpoint: 2026-11-13
 
 Development resumed on 2026-11-11 on efcore/10.0 at the user's request, following the paused Batch7e checkpoint.
-The latest checkpoint is Batch3as on 2026-11-13.
+The latest checkpoint is Batch3av on 2026-11-13.
 Test each module and review completed major modules before committing. EF8/EF9 remain postponed.
 The provider is not release-ready. The [feature checklist](efcore-10-feature-checklist.md) remains the
 acceptance authority; this document records the handoff rather than defining a different completion target.
@@ -47,6 +47,16 @@ The full Debug and Release source suites, plus the isolated EF10.0.14 Release su
 `10.0.0-copy-sign-20261113` passes `Verify-Package.ps1` and the standalone consumer on EF10.0.0 and
 EF10.0.14 in both modes. This is local translation, binding, reader and package evidence only; signed-zero
 bit patterns, non-finite behavior, native CASE coercion and live OceanBase CopySign results remain open.
+
+### Inverse-hyperbolic checkpoint (Batch3av, 2026-11-13)
+
+Math/MathF.Asinh and Atanh now use the existing transcendental translator in both modes and emit the
+matching native ASINH and ATANH functions. Numeric carrier validation, converter handling, Single
+normalization, decimal result readers and NULL boundaries are shared with the preceding transcendental methods.
+Focused coverage passes 169 unit cases and eight intercepted sync/async functional cases across both modes.
+
+This is local translation, binding, shaping and package-consumer scope only; inverse-hyperbolic domain behavior,
+native result precision and live OceanBase execution remain open.
 
 ### Explicit integer parameter-root checkpoint (Batch3at, 2026-11-13)
 

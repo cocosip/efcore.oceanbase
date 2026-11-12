@@ -3,7 +3,7 @@
 **Goal:** Implement every locally developable EF10 feature, in reviewed/tested commits, while postponing real
 database integration and EF8/EF9 adaptation as explicitly requested on 2026-11-10.
 
-**Architecture:** Continue on efcore/10.0 at the current Batch3as runtime-Round slice. Reuse the existing EF relational services, connector 0.2.0
+**Architecture:** Continue on efcore/10.0 at the current Batch3av inverse-hyperbolic slice. Reuse the existing EF relational services, connector 0.2.0
 public APIs and per-mode mappings/SQL. Separate local implementation evidence from server acceptance.
 
 **Spec:** efcore-10-feature-checklist.md, efcore-10-technical-baseline.md, efcore-10-query-update-design.md.
@@ -12,7 +12,7 @@ public APIs and per-mode mappings/SQL. Separate local implementation evidence fr
 The compact execution board is [efcore-10-roadmap.md](efcore-10-roadmap.md); this file remains the detailed
 batch ledger and acceptance notes.
 
-**Updated:** 2026-11-13 after Batch3as. Continue EF10 in this checkout, test each module and
+**Updated:** 2026-11-13 after Batch3av. Continue EF10 in this checkout, test each module and
 review each completed major module before committing. EF8/EF9 remains postponed; live execution is opt-in and
 currently blocked before authentication by the supplied endpoint/transport behavior.
 The full goal remains incomplete.
@@ -36,6 +36,22 @@ Use this section to choose the next task; the feature checklist remains the deta
    full Debug/Release suites, package content gate and package consumer at EF10.0.0/10.0.14, review the
    release revision, and only then consider a release branch/tag. EF8/EF9, push and publication remain out
    of the current development sequence.
+
+### Batch3av brief: inverse-hyperbolic translations
+
+**IDs:** QRY-07/11, MAP-02/07. **Spec:** Transcendental numeric local contract in
+efcore-10-query-update-design.md. Continue from Batch3au; no live database or EF8/EF9 work.
+
+- [x] Add RED/GREEN coverage for Math/MathF Asinh and Atanh across both modes, numeric carriers, converters,
+  nullable shaping, Single normalization, decimal readers and unsupported mappings.
+- [x] Reuse the existing transcendental translator to emit ASINH and ATANH without a new service or dependency.
+- [x] Add intercepted sync/async and packed-consumer dialect smoke, then run full Debug/Release, isolated
+  EF10.0.14, package content and both EF10 patch consumers. Native domain/results remain separate gates.
+
+Batch3av evidence: focused coverage passes 169 unit and eight intercepted functional cases. Debug/Release and
+isolated EF10.0.14 Release each pass 4201 source tests (2045 unit, 1286 functional, 868 specification and
+2 consumer tests). Package 10.0.0-asinh-atanh-20261113 passes Verify-Package.ps1 and standalone consumers
+on EF10.0.0/10.0.14 in both modes. Native inverse-hyperbolic results and live execution remain open.
 
 ## Batch3as brief: scalar runtime Round parameters
 

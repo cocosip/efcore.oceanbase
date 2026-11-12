@@ -607,9 +607,9 @@ Round remains a separate contract; the following section defines the transcenden
 
 ## Transcendental numeric local contract
 
-All twenty-eight exact Math/MathF Sqrt, Exp, Log (one/two arguments), Log2, Log10, Pow, Sin, Cos, Tan,
-Asin, Acos, Atan and Atan2 identities translate through the existing math service. Both modes use
-SQRT/EXP/LN/LOG2/LOG10/POWER/SIN/COS/TAN/ASIN/ACOS/ATAN/ATAN2.
+All thirty-eight exact Math/MathF Sqrt, Exp, Log (one/two arguments), Log2, Log10, Pow, Sin, Cos, Tan,
+Asin, Acos, Atan, Atan2, Asinh and Atanh identities translate through the existing math service. Both modes use
+SQRT/EXP/LN/LOG2/LOG10/POWER/SIN/COS/TAN/ASIN/ACOS/ATAN/ATAN2/ASINH/ATANH.
 MySQL Log(x,base) uses LN(x)/LN(base), retaining
 valid bases in (0,1); Oracle uses LOG(base,x). Oracle Log10 uses a fresh converter-free integer ten, avoiding
 accidental binary promotion of NUMBER operands. Every input retains its independently validated numeric
@@ -640,6 +640,10 @@ precision remain live validation items.
 emit `ASIN`, `ACOS` or `ATAN`. `Math.Atan2` and `MathF.Atan2` preserve the CLR `(y, x)` argument order and
 emit `ATAN2(y, x)` in both modes. Inverse-trigonometric domain behavior, native result precision and live
 execution remain validation items.
+
+Math.Asinh, MathF.Asinh, Math.Atanh and MathF.Atanh use the same numeric carrier, converter, NULL,
+decimal-reader and Single-normalization contract and emit ASINH or ATANH in both modes. The local slice
+does not claim native domain/error or floating-point parity; those remain live validation items.
 
 ### Hyperbolic numeric local contract
 
