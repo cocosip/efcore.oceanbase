@@ -8,6 +8,9 @@ Test each module and review completed major modules before committing. EF8/EF9 r
 The provider is not release-ready. The [feature checklist](efcore-10-feature-checklist.md) remains the
 acceptance authority; this document records the handoff rather than defining a different completion target.
 
+The consolidated development/release board is [efcore-10-roadmap.md](efcore-10-roadmap.md). Use it to separate
+remaining provider work, local evidence, native OceanBase validation and release gates.
+
 The current user goal is to finish all locally developable EF10 functionality, with tested/reviewed commits after
 each small group. Live database validation is now being wired for the supplied tenants; EF8/EF9 adaptation remains postponed. The
 [local development plan](efcore-10-local-development-plan.md) tracks the full remaining inventory, including
