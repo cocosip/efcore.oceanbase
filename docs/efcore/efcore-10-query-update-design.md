@@ -86,13 +86,25 @@ result semantics and live OceanBase execution remain open.
 
 ## Temporal collection-root contract (Batch3ag, QRY-03/11, MAP-06/07)
 
-Support captured `DateTime`/`DateTime?` arrays and originally empty inline roots through the existing VALUES
-expansion in both modes. The temporal mapping supplies EF10 JSON reader/writer metadata so EF can construct the
-primitive collection mapping; the provider retains the model/provider converter and reader hooks. MySQL uses
-`DATETIME` casts and Oracle uses `TIMESTAMP` casts. NULL cells, current captures and typed zero-row metadata are
-covered locally. DateTimeOffset, DateOnly, TimeOnly and TimeSpan require their own carrier tests; Oracle interval
-transport currently lacks collection metadata and remains an explicit unsupported boundary. Native precision,
-timezone, coercion and result semantics remain live acceptance gates.
+Support captured `DateTime`, `DateTimeOffset`, `DateOnly`, `TimeOnly` and `TimeSpan` arrays and originally empty
+inline roots through the existing VALUES expansion in both modes. The temporal mapping supplies EF10 JSON
+reader/writer metadata so EF can construct the primitive collection mapping; Oracle interval mappings use a
+provider-wrapper JSON reader/writer and retain their model/provider converter and reader hooks. MySQL uses
+`DATETIME`/`TIME` casts and Oracle uses `TIMESTAMP`/`DATE`/mapped `INTERVAL DAY ... TO SECOND` casts. NULL
+cells, current captures and typed zero-row metadata are covered locally. Native precision, timezone, interval
+coercion and result semantics remain live acceptance gates.
+
+### Batch3aj validation checkpoint
+
+Oracle `TimeOnly` and `TimeSpan` roots add 3 unit and 4 intercepted functional cases. Debug and Release each
+pass 4001 tests (1905 unit, 1226 intercepted functional, 868 specification and 2 consumer tests), with zero
+failures or skips. Package `10.0.0-oracle-interval-roots-final-20261112` passes `Verify-Package.ps1` and both-mode
+consumers on EF10.0.0/10.0.14. Provider SHA-256 is
+`BB78E5E62504BC22B5675467A6EB6AD83BB39E2B544387D66498B4591202DCD7`; nupkg SHA-256 is
+`9222928D0AA3E34F59A791B662F9FD83B9C19BFA0BB435836194F89F9B5032BB`.
+
+The evidence is local SQL shape, interval parameter metadata, converter/readers and package consumption.
+Native Oracle interval coercion, range/precision behavior and live execution remain open.
 
 ## Binary collection-root contract (Batch3ai, QRY-03/11, MAP-06/07)
 

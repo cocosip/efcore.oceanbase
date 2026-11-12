@@ -3,13 +3,13 @@
 **Goal:** Implement every locally developable EF10 feature, in reviewed/tested commits, while postponing real
 database integration and EF8/EF9 adaptation as explicitly requested on 2026-11-10.
 
-**Architecture:** Continue on efcore/10.0 at the current Batch3ai checkpoint. Reuse the existing EF relational services, connector 0.2.0
+**Architecture:** Continue on efcore/10.0 at the current Batch3aj checkpoint. Reuse the existing EF relational services, connector 0.2.0
 public APIs and per-mode mappings/SQL. Separate local implementation evidence from server acceptance.
 
 **Spec:** efcore-10-feature-checklist.md, efcore-10-technical-baseline.md, efcore-10-query-update-design.md.
 **Tech Stack:** C#, .NET 10, EF Core/Relational [10.0.0,11.0.0), xUnit, OceanBaseConnector 0.2.0.
 
-**Updated:** 2026-11-12 after Batch3ai. Continue EF10 in this checkout, test each module and
+**Updated:** 2026-11-12 after Batch3aj. Continue EF10 in this checkout, test each module and
 review each completed major module before committing. EF8/EF9 remains postponed; live execution is opt-in and
 currently blocked before authentication by the supplied endpoint/transport behavior.
 The full goal remains incomplete.
@@ -34,7 +34,7 @@ Use this section to choose the next task; the feature checklist remains the deta
    release revision, and only then consider a release branch/tag. EF8/EF9, push and publication remain out
    of the current development sequence.
 
-Current binary collection-root evidence is the Batch3ai working slice: 3994 source tests, the
+Current binary collection-root evidence is the Batch3ai committed slice: 3994 source tests, the
 `10.0.0-binary-roots-final-20261112` package, package consumers on EF10.0.0/10.0.14, and local review.
 It does not close native binary, live, specification, or other required release gates.
 
@@ -58,7 +58,7 @@ Do not mark the goal complete while any locally developable item below remains u
 | --- | --- | --- |
 | 1. Configuration and SQL boundaries | CFG-01/02/03, SQL-01/02; OptionsTests, ConsumerTests, SqlGenerationHelperTests | Both modes/overloads; null/invalid options; deferred connection configuration; real cache separation/reuse and design-time keys; identifier escaping/schema and both StringBuilder paths. |
 | 2. Remaining scalar contracts | MAP-01..07; Storage mappings and focused unit/pipeline tests | Oracle decimal aliases; remaining explicit numeric forms; complete converter/null/clone/input/output boundaries and documented unsupported combinations. Environment-dependent ranges/byte capacity remain separate. |
-| 3. Query translator services | QRY-01/03/04/06/07/11; Query translators and SQL generator | Supported string/date/numeric overload tables, concat/arithmetic/null semantics, negative translation tests, collection membership (numeric/Boolean/text/DateTime), correlated subqueries and aggregates. Binary/interval collection carriers and wider converter/operator compositions remain open. |
+| 3. Query translator services | QRY-01/03/04/06/07/11; Query translators and SQL generator | Supported string/date/numeric overload tables, concat/arithmetic/null semantics, negative translation tests, collection membership (numeric/Boolean/text/temporal/binary/Oracle interval), correlated subqueries and aggregates. Other collection carriers and wider converter/operator compositions remain open. |
 | 4. Model and materialization | MOD-01/02/03, QRY-02/05/08/09; conventions, validator, model/query tests | Composite/alternate keys, relationships/owned/shadow, cardinality, tracking/identity resolution, Include, filters and generation validation through real EF pipelines. |
 | 5. Tracked writes and diagnostics | UPD-01..05, DIA-01/02, CON-05; Update batch, command tests | Composite/nullable concurrency, graphs, generated/default/computed output shapes, failures/entries/inner errors, cancellation/timeout and protected parameter logging. |
 | 6. Transactions and lifecycle | TXN-01..03, CON-02..05; relational connection/transaction services | Local API/service wiring and deterministic command/transaction doubles for ownership, enlistment, atomic failure behavior and savepoints; server semantics explicitly pending. |
@@ -155,6 +155,22 @@ Final evidence is the 3994-test source gate (1902 unit, 1222 intercepted functio
 2 consumer tests), focused binary 6/4 cases, package
 `10.0.0-binary-roots-final-20261112`, and both patch consumers. Native binary equality, LOB coercion,
 UNION behavior, Oracle empty-BLOB transport and live OceanBase execution remain open.
+
+## Batch3aj brief: Oracle interval collection roots
+
+**IDs:** QRY-03/11, MAP-05/06/07. **Spec:** temporal collection-root contract in
+efcore-10-query-update-design.md. Continue from Batch3ai; no live database or EF8/EF9 work.
+
+- [x] Add RED/GREEN SQL-shape tests for Oracle `TimeOnly` and `TimeSpan` captured/NULL roots and an
+  interval mapping JSON round-trip. Keep MySQL temporal roots as controls.
+- [x] Add EF10 JSON metadata for `OceanBaseIntervalDayToSecond`, letting the existing model-to-interval
+  converters compose without changing parameter or reader conversion code.
+- [x] Add sync/async intercepted Oracle reader/bind coverage, including `DbType.Object` and
+  `OceanBaseDbType.IntervalDayToSecond`. Native interval coercion and live results remain separate gates.
+
+Focused evidence adds 3 unit and 4 functional cases. Debug/Release each pass 4001 source tests; package
+`10.0.0-oracle-interval-roots-final-20261112` passes the content gate and both-mode consumers on EF10.0.0/10.0.14.
+Independent review is complete; native interval coercion and live results remain open.
 
 ## Batch3ac brief: contextual numeric collection projections
 

@@ -443,6 +443,7 @@ namespace PackageConsumer
                 VerifyTextRoots(context, mode);
                 VerifyBooleanRoots(context, mode);
                 VerifyBinaryRoots(context, mode);
+                VerifyTemporalRoots(context, mode);
                 int?[] nullableConvertedValues = [null, 17, 17];
                 var nullableConverted = context.Set<Row>().Where(row => nullableConvertedValues
                     .Where(value => value > row.NullableInteger).Contains(row.NullableInteger)).Select(row => row.NullableInteger);
@@ -935,6 +936,25 @@ namespace PackageConsumer
             if (!empty.Contains("CAST(NULL AS " + target + ")", StringComparison.Ordinal)
                 || !empty.Contains("WHERE 1 = 0", StringComparison.Ordinal))
                 throw new Exception("Packed binary collection root lost its typed empty relation: " + empty);
+        }
+
+        private static void VerifyTemporalRoots(ConsumerContext context, OceanBaseCompatibilityMode mode)
+        {
+            TimeSpan?[] durations = [new TimeSpan(1, 2, 3), null];
+            var durationQuery = context.Set<Row>().SelectMany(row => durations.Where(value => value != row.Duration));
+            TimeOnly?[] clocks = [new TimeOnly(1, 2, 3), null];
+            var clockQuery = context.Set<Row>().SelectMany(row => clocks.Where(value => value != row.Clock));
+            var target = mode == OceanBaseCompatibilityMode.MySql ? "TIME" : "INTERVAL DAY";
+            foreach (var sql in new[] { durationQuery.ToQueryString(), clockQuery.ToQueryString() })
+            {
+                if (!sql.Contains(target, StringComparison.OrdinalIgnoreCase))
+                    throw new Exception("Packed temporal collection root lost its carrier: " + sql);
+            }
+
+            var empty = context.Set<Row>().Select(row => new TimeSpan[] { }.Count(value => row.Id > 0)).ToQueryString();
+            if (!empty.Contains("WHERE 1 = 0", StringComparison.Ordinal)
+                || !empty.Contains("CAST(NULL AS " + target, StringComparison.OrdinalIgnoreCase))
+                throw new Exception("Packed temporal collection root lost its typed empty relation: " + empty);
         }
 
         private static void VerifyNumericRoots<T>(ConsumerContext context, OceanBaseCompatibilityMode mode,

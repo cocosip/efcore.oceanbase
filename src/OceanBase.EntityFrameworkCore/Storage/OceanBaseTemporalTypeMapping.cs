@@ -37,6 +37,7 @@ namespace OceanBase.EntityFrameworkCore.Storage
             => typeof(T) == typeof(DateTime) ? JsonDateTimeReaderWriter.Instance
                 : typeof(T) == typeof(DateTimeOffset) ? JsonDateTimeOffsetReaderWriter.Instance
                 : typeof(T) == typeof(TimeSpan) ? JsonTimeSpanReaderWriter.Instance
+                : typeof(T) == typeof(OceanBaseIntervalDayToSecond) ? OceanBaseIntervalJsonReaderWriter.Instance
                 : null;
 
         private OceanBaseTemporalTypeMapping(RelationalTypeMappingParameters parameters,

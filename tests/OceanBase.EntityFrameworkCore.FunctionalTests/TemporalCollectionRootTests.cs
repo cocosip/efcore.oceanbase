@@ -8,6 +8,7 @@ using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using OceanBaseConnector;
 using Xunit;
 
 namespace OceanBase.EntityFrameworkCore.FunctionalTests;
@@ -68,10 +69,32 @@ public sealed class TemporalCollectionRootTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
+    public Task Oracle_TimeOnly_roots_bind_and_decode(bool async)
+    {
+        TimeOnly?[] values = [new TimeOnly(1, 2, 3), null];
+        return Run(OceanBaseCompatibilityMode.Oracle, async, "INTERVAL DAY", typeof(OceanBaseIntervalDayToSecond),
+            context => context.Rows.SelectMany(row => values.Where(value => value != row.OccurredTime)),
+            () => values = [], new TimeOnly(4, 5, 6));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
     public Task MySql_TimeSpan_roots_bind_and_decode(bool async)
     {
         TimeSpan?[] values = [new TimeSpan(1, 2, 3), null];
         return Run(OceanBaseCompatibilityMode.MySql, async, "TIME", typeof(TimeSpan),
+            context => context.Rows.SelectMany(row => values.Where(value => value != row.Duration)),
+            () => values = [], new TimeSpan(4, 5, 6));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public Task Oracle_TimeSpan_roots_bind_and_decode(bool async)
+    {
+        TimeSpan?[] values = [new TimeSpan(1, 2, 3), null];
+        return Run(OceanBaseCompatibilityMode.Oracle, async, "INTERVAL DAY", typeof(OceanBaseIntervalDayToSecond),
             context => context.Rows.SelectMany(row => values.Where(value => value != row.Duration)),
             () => values = [], new TimeSpan(4, 5, 6));
     }
@@ -82,7 +105,9 @@ public sealed class TemporalCollectionRootTests
     {
         using var table = new DataTable();
         table.Columns.Add("Value", typeof(object));
-        table.Rows.Add(providerValueType == typeof(TimeOnly) || providerValueType == typeof(TimeSpan)
+        table.Rows.Add(providerValueType == typeof(OceanBaseIntervalDayToSecond)
+            ? new OceanBaseIntervalDayToSecond(false, 0, 4, 5, 6, 0, 9, 6)
+        : providerValueType == typeof(TimeOnly) || providerValueType == typeof(TimeSpan)
             ? new TimeSpan(4, 5, 6)
             : providerValueType == typeof(DateOnly)
                 ? new DateTime(2026, 11, 13)
@@ -101,6 +126,15 @@ public sealed class TemporalCollectionRootTests
         Assert.Null(result[1]);
         Assert.Contains(castType, Assert.Single(capture.Sql), StringComparison.OrdinalIgnoreCase);
         Assert.NotEmpty(capture.Inputs);
+        if (mode == OceanBaseCompatibilityMode.Oracle && providerValueType == typeof(OceanBaseIntervalDayToSecond))
+        {
+            Assert.All(capture.Inputs, parameter =>
+            {
+                Assert.Equal(DbType.Object, parameter.DbType);
+                Assert.Equal(OceanBaseDbType.IntervalDayToSecond,
+                    ((OceanBaseParameter)parameter).OceanBaseDbType);
+            });
+        }
         empty();
         capture.Sql.Clear();
         capture.Inputs.Clear();

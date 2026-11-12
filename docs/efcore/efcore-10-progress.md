@@ -3,7 +3,7 @@
 ## Active checkpoint: 2026-11-12
 
 Development resumed on 2026-11-11 on efcore/10.0 at the user's request, following the paused Batch7e checkpoint.
-The latest committed checkpoint is Batch3ai on 2026-11-12.
+The latest committed checkpoint is Batch3aj on 2026-11-12.
 Test each module and review completed major modules before committing. EF8/EF9 remain postponed.
 The provider is not release-ready. The [feature checklist](efcore-10-feature-checklist.md) remains the
 acceptance authority; this document records the handoff rather than defining a different completion target.
@@ -19,7 +19,7 @@ This is the short execution view; the feature checklist remains the acceptance a
 
 | Work class | Still required | Current evidence / next action |
 | --- | --- | --- |
-| Local query and mapping implementation | Remaining interval/other collection carriers, wider converter/operator compositions, and uncovered function/aggregate overloads under QRY-01/03/04/06/07/11 and MAP-01/02/04/06/07. | Integer, numeric, contextual numeric, Boolean, text, temporal and binary collection-root slices are implemented locally. Continue with the next bounded carrier or operator only after a RED test and contract review. |
+| Local query and mapping implementation | Remaining other collection carriers, wider converter/operator compositions, and uncovered function/aggregate overloads under QRY-01/03/04/06/07/11 and MAP-01/02/04/06/07. | Integer, numeric, contextual numeric, Boolean, text, temporal, Oracle interval and binary collection-root slices are implemented locally. Continue with the next bounded carrier or operator only after a RED test and contract review. |
 | Local model and runtime implementation | Wider MOD-01/02/03, QRY-02/05/08/09, UPD-01..05, TXN-01..03, CON-02..05 and DIA-01/02 coverage. | Existing doubles and intercepted pipelines cover selected shapes; complete required rows still need implementation or broader boundary tests. |
 | Schema and specification implementation | Remaining SCH-01..03 behavior and additional TST-01 relational specification families. | MySQL/Oracle ownership profiles and six inherited model families have local evidence; native DDL/privilege behavior and other specification families remain open. |
 | Native OceanBase validation | TST-02 scalar, query, write, transaction and schema matrix in both modes. | The supplied endpoint reaches TCP but closes during both mode handshakes before authentication. Classify transport/endpoint behavior, then run only the authorized non-destructive matrix before any DDL. |
@@ -48,6 +48,22 @@ the standalone package consumer in both modes on EF10.0.0 and EF10.0.14. Provide
 
 These are local SQL-shape, binding, reader and package-consumer results. Native binary equality, LOB coercion,
 UNION behavior, Oracle empty-BLOB transport, live execution and release acceptance remain open.
+
+### Oracle interval collection-root checkpoint (Batch3aj, 2026-11-12)
+
+Oracle `TimeOnly` and `TimeSpan` collection roots now use the existing `INTERVAL DAY(...) TO SECOND(...)`
+mapping in the shared VALUES expansion. The provider interval wrapper has EF10 JSON reader/writer metadata,
+so converter-composed model mappings retain interval parameters, reader conversion and typed empty-root SQL.
+The metadata reader/writer round-trips duration values; sync/async intercepted tests assert `DbType.Object`
+and `OceanBaseDbType.IntervalDayToSecond` for Oracle inputs. MySQL temporal roots remain unchanged.
+
+The new focused coverage adds **3** unit and **4** intercepted functional cases. Native Oracle interval
+coercion, range/precision behavior, server results and live execution remain open. The source Debug/Release
+gates each pass **4001** tests: 1905 unit, 1226 intercepted functional, 868 specification and 2 consumer tests,
+with zero failures or skips. Package `10.0.0-oracle-interval-roots-final-20261112` passes `Verify-Package.ps1` and
+the standalone package consumer in both modes on EF10.0.0 and EF10.0.14. Provider DLL SHA-256 is
+`BB78E5E62504BC22B5675467A6EB6AD83BB39E2B544387D66498B4591202DCD7`; nupkg SHA-256 is
+`9222928D0AA3E34F59A791B662F9FD83B9C19BFA0BB435836194F89F9B5032BB`.
 
 ### Boolean collection-root checkpoint (2026-11-12)
 
@@ -376,7 +392,7 @@ logs and `artifacts/verify-management-profile-package.ps1`. Baseline assets rema
    Batch7f Oracle user lifecycle, Batch7e management factories and bulk-update rewrites are implemented;
    do not repeat them. Current evidence is above;
    older sections below are historical checkpoints, not a new implementation backlog.
-2. Continue QRY-03/04/06/07/11 and MAP-06/07: remaining interval/other collection carriers,
+2. Continue QRY-03/04/06/07/11 and MAP-06/07: remaining other collection carriers,
    broader converter/operator compositions, function/aggregate overloads and unsupported boundaries. Reuse
    exact EF10 contracts; negative tests must not be mistaken for implementation of a feature family.
 3. Widen model/filter/materialization/graph-write contracts and official query/write/runtime specification

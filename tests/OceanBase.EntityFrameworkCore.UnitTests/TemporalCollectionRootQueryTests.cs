@@ -1,6 +1,8 @@
 using System;
 using System.Linq;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Storage;
 using Xunit;
 
 namespace OceanBase.EntityFrameworkCore.UnitTests;
@@ -73,6 +75,19 @@ public sealed class TemporalCollectionRootQueryTests
     }
 
     [Fact]
+    public void Oracle_TimeOnly_collection_roots_use_the_interval_mapping()
+    {
+        using var context = CreateContext(OceanBaseCompatibilityMode.Oracle);
+        TimeOnly?[] values = [new TimeOnly(1, 2, 3), null];
+        var query = context.Rows.SelectMany(row => values.Where(value => value != row.OccurredTime));
+
+        var sql = query.ToQueryString();
+
+        Assert.Contains("CAST(", sql, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("INTERVAL DAY", sql, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void MySql_TimeSpan_collection_roots_use_the_temporal_mapping()
     {
         using var context = CreateContext(OceanBaseCompatibilityMode.MySql);
@@ -83,6 +98,33 @@ public sealed class TemporalCollectionRootQueryTests
 
         Assert.Contains("CAST(", sql, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("TIME", sql, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Oracle_TimeSpan_collection_roots_use_the_interval_mapping()
+    {
+        using var context = CreateContext(OceanBaseCompatibilityMode.Oracle);
+        TimeSpan?[] values = [new TimeSpan(1, 2, 3), null];
+        var query = context.Rows.SelectMany(row => values.Where(value => value != row.Duration));
+
+        var sql = query.ToQueryString();
+
+        Assert.Contains("CAST(", sql, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("INTERVAL DAY", sql, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Oracle_interval_json_mapping_preserves_duration()
+    {
+        using var context = CreateContext(OceanBaseCompatibilityMode.Oracle);
+        var mapping = context.GetService<IRelationalTypeMappingSource>()
+            .FindMapping(typeof(TimeSpan), "INTERVAL DAY(9) TO SECOND(6)")!;
+        foreach (var value in new[] { new TimeSpan(1, 2, 3, 4, 500), -new TimeSpan(1, 2, 3, 4, 500) })
+        {
+            var json = mapping.JsonValueReaderWriter!.ToJsonString(value);
+
+            Assert.Equal(value, mapping.JsonValueReaderWriter.FromJsonString(json));
+        }
     }
 
     private static TestContext CreateContext(OceanBaseCompatibilityMode mode)
