@@ -76,6 +76,9 @@ namespace OceanBase.EntityFrameworkCore.Query
                 Add(owner, "Acos", type, type, "ACOS");
                 Add(owner, "Atan", type, type, "ATAN");
                 Add(owner, "Atan2", type, type, "ATAN2", arity: 2);
+                Add(owner, "Sinh", type, type, "SINH");
+                Add(owner, "Cosh", type, type, "COSH");
+                Add(owner, "Tanh", type, type, "TANH");
             }
             return functions;
 
@@ -113,7 +116,8 @@ namespace OceanBase.EntityFrameworkCore.Query
             if (function != "SIGN" && mapping.ClrType != method.ReturnType)
                 return null;
             if (function is "SQRT" or "EXP" or "LN" or "LOG" or "LOG2" or "LOG10" or "POWER"
-                or "SIN" or "COS" or "TAN" or "ASIN" or "ACOS" or "ATAN" or "ATAN2")
+                or "SIN" or "COS" or "TAN" or "ASIN" or "ACOS" or "ATAN" or "ATAN2"
+                or "SINH" or "COSH" or "TANH")
                 return TranslateTranscendental(function, method.ReturnType, inputs, mapping);
             var resultMapping = function == "SIGN" ? intMapping : mapping;
             if (mode == OceanBaseCompatibilityMode.MySql && function is "FLOOR" or "CEIL")

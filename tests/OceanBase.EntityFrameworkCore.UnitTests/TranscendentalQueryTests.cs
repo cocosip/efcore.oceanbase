@@ -21,7 +21,7 @@ namespace OceanBase.EntityFrameworkCore.UnitTests;
 
 public sealed class TranscendentalQueryTests
 {
-    private static readonly string[] Names = ["Sqrt", "Exp", "Log", "LogBase", "Log2", "Log10", "Pow", "Sin", "Cos", "Tan", "Asin", "Acos", "Atan", "Atan2"];
+    private static readonly string[] Names = ["Sqrt", "Exp", "Log", "LogBase", "Log2", "Log10", "Pow", "Sin", "Cos", "Tan", "Asin", "Acos", "Atan", "Atan2", "Sinh", "Cosh", "Tanh"];
 
     public static IEnumerable<object[]> ExactMethods()
     {
@@ -38,7 +38,7 @@ public sealed class TranscendentalQueryTests
 
     [Theory]
     [MemberData(nameof(ExactMethods))]
-    public void All_twenty_eight_identities_require_server_predicate_order_and_projection(
+    public void All_thirty_four_identities_require_server_predicate_order_and_projection(
         OceanBaseCompatibilityMode mode, bool nulls, bool single, string name)
     {
         using var context = Context(mode, nulls);
@@ -61,6 +61,7 @@ public sealed class TranscendentalQueryTests
             "Log2" => mode == OceanBaseCompatibilityMode.MySql ? "LOG2(" : "LOG(",
             "Sin" => "SIN(", "Cos" => "COS(", "Tan" => "TAN(",
             "Asin" => "ASIN(", "Acos" => "ACOS(", "Atan" => "ATAN(", "Atan2" => "ATAN2(",
+            "Sinh" => "SINH(", "Cosh" => "COSH(", "Tanh" => "TANH(",
             "Pow" => "POWER(",
             "Log10" => mode == OceanBaseCompatibilityMode.MySql ? "LOG10(" : "LOG(",
             "LogBase" => mode == OceanBaseCompatibilityMode.Oracle ? "LOG(" : "LN(", _ => "LN(" };
@@ -179,7 +180,8 @@ public sealed class TranscendentalQueryTests
             context.Rows.Select(r => (double?)Math.Log(r.Double, .5)), context.Rows.Select(r => (double?)Math.Log10(r.Double)),
             context.Rows.Select(r => (double?)Math.Pow(r.Double, -2)), context.Rows.Select(r => (double?)Math.Asin(r.Double)),
             context.Rows.Select(r => (double?)Math.Acos(r.Double)), context.Rows.Select(r => (double?)Math.Atan(r.Double)),
-            context.Rows.Select(r => (double?)Math.Atan2(r.Double, .5))];
+            context.Rows.Select(r => (double?)Math.Atan2(r.Double, .5)), context.Rows.Select(r => (double?)Math.Sinh(r.Double)),
+            context.Rows.Select(r => (double?)Math.Cosh(r.Double)), context.Rows.Select(r => (double?)Math.Tanh(r.Double))];
         foreach (var query in results)
         {
             Assert.Contains(" IS NULL", query.Where(v => v == null).ToQueryString());
@@ -191,7 +193,8 @@ public sealed class TranscendentalQueryTests
             context.Rows.Select(r => (float?)MathF.Log(r.Single, .5f)), context.Rows.Select(r => (float?)MathF.Log10(r.Single)),
             context.Rows.Select(r => (float?)MathF.Pow(r.Single, -2)), context.Rows.Select(r => (float?)MathF.Asin(r.Single)),
             context.Rows.Select(r => (float?)MathF.Acos(r.Single)), context.Rows.Select(r => (float?)MathF.Atan(r.Single)),
-            context.Rows.Select(r => (float?)MathF.Atan2(r.Single, .5f))];
+            context.Rows.Select(r => (float?)MathF.Atan2(r.Single, .5f)), context.Rows.Select(r => (float?)MathF.Sinh(r.Single)),
+            context.Rows.Select(r => (float?)MathF.Cosh(r.Single)), context.Rows.Select(r => (float?)MathF.Tanh(r.Single))];
         foreach (var query in singles)
         {
             Assert.Contains(" IS NULL", query.Where(v => v == null).ToQueryString());
@@ -300,7 +303,7 @@ public sealed class TranscendentalQueryTests
         foreach (var mapping in invalid)
         {
             var operand = factory.Constant(2d, mapping);
-            foreach (var function in new[] { "Pow", "Sin", "Cos", "Tan", "Asin", "Acos", "Atan" })
+            foreach (var function in new[] { "Pow", "Sin", "Cos", "Tan", "Asin", "Acos", "Atan", "Sinh", "Cosh", "Tanh" })
                 Assert.Null(translator.Translate(null, Method(function, typeof(double)), function == "Pow" ? [operand, valid] : [operand], logger));
             Assert.Null(translator.Translate(null, Method("Atan2", typeof(double)), [operand, valid], logger));
             if (mapping is not DecimalTypeMapping)

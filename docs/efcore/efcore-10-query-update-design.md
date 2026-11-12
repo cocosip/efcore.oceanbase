@@ -600,6 +600,16 @@ emit `ASIN`, `ACOS` or `ATAN`. `Math.Atan2` and `MathF.Atan2` preserve the CLR `
 emit `ATAN2(y, x)` in both modes. Inverse-trigonometric domain behavior, native result precision and live
 execution remain validation items.
 
+### Hyperbolic numeric local contract
+
+The next bounded transcendental slice covers the six exact one-argument identities `Math`/`MathF.Sinh`,
+`Cosh` and `Tanh`. Both compatibility modes emit the matching native `SINH`, `COSH` or `TANH` function.
+The operand must retain an owned numeric carrier and a converter that does not convert NULL; the result keeps
+the operand's mapping/converter, uses the existing decimal result-reader clone and applies the existing Single
+normalization after the native function. No inverse-hyperbolic, runtime-argument, domain-error or CLR floating
+point parity claim is added by this slice. Native function availability, overflow/result precision and live
+execution remain separate acceptance gates.
+
 Connector0.2.0 GetDecimal cannot decode boxed native Single/Double results. Transcendental decimal-provider
 results therefore use an immutable opt-in decimal mapping clone with GetValue and checked numeric
 conversion, retaining converter/facets/parameter behavior through clones. Ordinary decimal properties keep

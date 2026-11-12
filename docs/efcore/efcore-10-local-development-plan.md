@@ -169,6 +169,25 @@ failures/skips. Package `10.0.0-trig-20261112` passes content and both-mode EF10
 checks establish local translation, binding, shaping and package consumption only; native results and live
 execution remain open.
 
+## Batch3aq brief: hyperbolic translations
+
+**IDs:** QRY-07/11, MAP-02/07. **Spec:** Hyperbolic numeric local contract in
+efcore-10-query-update-design.md. Continue from Batch3ap; no EF8/EF9 work.
+
+- [x] Add RED/GREEN coverage for `Math`/`MathF` Sinh, Cosh and Tanh across both modes, numeric carriers,
+  converters, nullable shaping and unsupported boundaries through the existing transcendental suite.
+- [x] Translate the six exact overloads through the existing native-function and Single-normalization path;
+  preserve the existing decimal reader and do not add a new service or dependency.
+- [x] Add intercepted sync/async predicate coverage and packed-consumer dialect smoke, then run full
+  Debug/Release, isolated EF10.0.14, package content and both EF10 patch consumers. Native results,
+  overflow/precision behavior and live execution remain open.
+
+Batch3aq evidence: focused transcendental coverage passes 153 unit and 8 intercepted functional cases.
+Debug, Release and isolated EF10.0.14 Release each pass 4117 tests (2005 unit, 1242 functional, 868
+specification and 2 consumers), zero failures/skips. Package `10.0.0-hyperbolic-20261113` passes content
+verification and both-mode consumers on EF10.0.0/10.0.14. The provider remains unverified against native
+OceanBase because both live probes close during pre-auth handshake.
+
 ## Batch3ap brief: inverse-trigonometric translations
 
 **IDs:** QRY-07/11, MAP-02/07. **Spec:** Transcendental numeric local contract in

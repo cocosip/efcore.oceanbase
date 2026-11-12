@@ -52,7 +52,14 @@ so that an undocumented feature is not accidentally advertised.
 
 ## Current evidence and blockers
 
-Latest implementation: Batch3ap on 2026-11-13. `Math/MathF.Asin`, `Acos`, `Atan` and `Atan2` now use the
+Latest implementation: Batch3aq on 2026-11-13. `Math/MathF.Sinh`, `Cosh` and `Tanh` now use the existing
+transcendental translator in both modes. MySQL and Oracle emit matching native `SINH`, `COSH` and `TANH`
+functions. Focused coverage passes 153 unit and 8 intercepted functional cases; the Debug/Release and
+isolated EF10.0.14 Release source suites each pass 4117 tests with zero failures/skips. Package
+`10.0.0-hyperbolic-20261113` passes content verification and its standalone consumer on EF10.0.0/10.0.14
+in both modes. Native hyperbolic results, overflow/precision behavior and live execution remain open.
+
+Preceding checkpoint: Batch3ap on 2026-11-13. `Math/MathF.Asin`, `Acos`, `Atan` and `Atan2` now use the
 existing transcendental translator in both modes. MySQL and Oracle emit matching native `ASIN`, `ACOS`,
 `ATAN` and `ATAN2` functions, with `Atan2` retaining `(y, x)` order. Focused coverage passes 129 unit and
 8 intercepted functional cases; the Debug/Release and isolated EF10.0.14 Release source suites each pass

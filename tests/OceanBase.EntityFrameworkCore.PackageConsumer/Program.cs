@@ -564,7 +564,13 @@ namespace PackageConsumer
                     (context.Set<Row>().Where(row => Math.Atan(row.DoubleValue) > 0d), "ATAN", false),
                     (context.Set<Row>().Where(row => MathF.Atan(row.SingleValue) > 0f), "ATAN", true),
                     (context.Set<Row>().Where(row => Math.Atan2(row.DoubleValue, 2d) > 0d), "ATAN2", false),
-                    (context.Set<Row>().Where(row => MathF.Atan2(row.SingleValue, 2f) > 0f), "ATAN2", true)
+                    (context.Set<Row>().Where(row => MathF.Atan2(row.SingleValue, 2f) > 0f), "ATAN2", true),
+                    (context.Set<Row>().Where(row => Math.Sinh(row.DoubleValue) > 0d), "SINH", false),
+                    (context.Set<Row>().Where(row => MathF.Sinh(row.SingleValue) > 0f), "SINH", true),
+                    (context.Set<Row>().Where(row => Math.Cosh(row.DoubleValue) > 0d), "COSH", false),
+                    (context.Set<Row>().Where(row => MathF.Cosh(row.SingleValue) > 0f), "COSH", true),
+                    (context.Set<Row>().Where(row => Math.Tanh(row.DoubleValue) > 0d), "TANH", false),
+                    (context.Set<Row>().Where(row => MathF.Tanh(row.SingleValue) > 0f), "TANH", true)
                 })
                 {
                     var numericSql = numericQuery.ToQueryString();

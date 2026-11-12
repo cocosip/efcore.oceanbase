@@ -1236,11 +1236,11 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
             OceanBaseCompatibilityMode mode, bool async, bool relationalNulls)
         {
             using var table = new DataTable();
-            foreach (var name in new[] { "Single", "Double", "Decimal", "Optional", "Nested", "Integral", "NullableCarrier" })
+            foreach (var name in new[] { "Single", "Double", "Decimal", "Optional", "Nested", "Integral", "NullableCarrier", "Sinh", "Cosh", "Tanh" })
                 table.Columns.Add(name, typeof(object));
             // Supplied rows exercise the real EF shaping pipeline; they do not calculate SQL functions.
-            table.Rows.Add(2d, 1E100d, 14d, DBNull.Value, 18f, 12d, new OceanBaseDecimal(14m));
-            table.Rows.Add(3f, new OceanBaseDecimal(BigInteger.One, -100), new OceanBaseDecimal(18m), 4f, 14d, new OceanBaseDecimal(14m), 18f);
+            table.Rows.Add(2d, 1E100d, 14d, DBNull.Value, 18f, 12d, new OceanBaseDecimal(14m), 3d, 4d, 5d);
+            table.Rows.Add(3f, new OceanBaseDecimal(BigInteger.One, -100), new OceanBaseDecimal(18m), 4f, 14d, new OceanBaseDecimal(14m), 18f, 6d, 7d, 8d);
             var commands = new CommandCapture { Results = table };
             await using var context = CreateContext(mode, commands, relationalNulls);
             var single = float.Epsilon;
@@ -1254,14 +1254,16 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
                     && Math.Log10(r.Double) > wide && Math.Pow(r.Double, -2d) > wide
                     && Math.Sin(r.Double) > wide && Math.Cos(r.Double) > wide && Math.Tan(r.Double) > wide
                     && Math.Asin(r.Double) > wide && Math.Acos(r.Double) > wide && Math.Atan(r.Double) > wide
-                    && Math.Atan2(r.Double, exponent) > wide
+                    && Math.Atan2(r.Double, exponent) > wide && Math.Sinh(r.Double) > wide
+                    && Math.Cosh(r.Double) > wide && Math.Tanh(r.Double) > wide
                     && MathF.Sqrt(r.Single + single) > single && MathF.Exp(r.Single) > single
                     && MathF.Log(r.Single) > single && MathF.Log(r.Single, .5f) > single
                     && MathF.Log2(r.Single) > single
                     && MathF.Log10(r.Single) > single && MathF.Pow(r.Single, -2f) > single
                     && MathF.Sin(r.Single) > single && MathF.Cos(r.Single) > single && MathF.Tan(r.Single) > single
                     && MathF.Asin(r.Single) > single && MathF.Acos(r.Single) > single && MathF.Atan(r.Single) > single
-                    && MathF.Atan2(r.Single, .5f) > single
+                    && MathF.Atan2(r.Single, .5f) > single && MathF.Sinh(r.Single) > single
+                    && MathF.Cosh(r.Single) > single && MathF.Tanh(r.Single) > single
                     && Math.Pow(r.Decimal, r.Secondary) > comparison)
                 .OrderBy(r => Math.Log(r.Single, .5f))
                 .Select(r => new
@@ -1269,7 +1271,8 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
                     Single = MathF.Exp(r.Single), Double = Math.Exp(r.Double), Decimal = Math.Pow(r.Decimal, r.Secondary),
                     Optional = (double?)Math.Log(r.Optional!.Value),
                     Nested = Math.Pow(r.Decimal, Math.Pow(r.Integral, r.Double)),
-                    Integral = Math.Sqrt(r.Integral), NullableCarrier = Math.Log10(r.NullableCarrier)
+                    Integral = Math.Sqrt(r.Integral), NullableCarrier = Math.Log10(r.NullableCarrier),
+                    Sinh = Math.Sinh(r.Double), Cosh = Math.Cosh(r.Double), Tanh = Math.Tanh(r.Double)
                 });
             for (var index = 0; index < 3; index++)
             {
@@ -1284,9 +1287,11 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
                 Assert.Equal(2d, rows[0].Decimal); Assert.Null(rows[0].Optional);
                 Assert.Equal(4d, rows[0].Nested); Assert.Equal(2d, rows[0].Integral);
                 Assert.Equal(2d, rows[0].NullableCarrier);
+                Assert.Equal(3d, rows[0].Sinh); Assert.Equal(4d, rows[0].Cosh); Assert.Equal(5d, rows[0].Tanh);
                 Assert.Equal(4d, rows[1].Decimal); Assert.Equal(4d, rows[1].Optional);
                 Assert.Equal(2d, rows[1].Nested); Assert.Equal(4d, rows[1].Integral);
                 Assert.Equal(4d, rows[1].NullableCarrier);
+                Assert.Equal(6d, rows[1].Sinh); Assert.Equal(7d, rows[1].Cosh); Assert.Equal(8d, rows[1].Tanh);
                 Assert.Contains(commands.Inputs, p => Equals(p.Value, single) && p.DbType == DbType.Single);
                 Assert.Contains(commands.Inputs, p => Equals(p.Value, wide) && p.DbType == DbType.Double);
                 Assert.Contains(commands.Inputs, p => Equals(p.Value, exponent) && p.DbType == DbType.Double);
@@ -1294,7 +1299,7 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
                 Assert.All(commands.Inputs.Where(p => p.DbType == DbType.Decimal), p =>
                 { Assert.Equal((byte)0, p.Precision); Assert.Null(p.DecimalScale); });
                 var sql = commands.Sql[^1];
-                foreach (var function in new[] { "SQRT(", "EXP(", "LN(", "POWER(", "SIN(", "COS(", "TAN(", "ASIN(", "ACOS(", "ATAN(" }) Assert.Contains(function, sql);
+                foreach (var function in new[] { "SQRT(", "EXP(", "LN(", "POWER(", "SIN(", "COS(", "TAN(", "ASIN(", "ACOS(", "ATAN(", "SINH(", "COSH(", "TANH(" }) Assert.Contains(function, sql);
                 Assert.Contains("ATAN2(", sql);
                 Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? "LOG2(" : "LOG(", sql);
                 Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? "LOG10(" : "LOG(", sql);

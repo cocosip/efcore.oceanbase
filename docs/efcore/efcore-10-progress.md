@@ -3,7 +3,7 @@
 ## Active checkpoint: 2026-11-13
 
 Development resumed on 2026-11-11 on efcore/10.0 at the user's request, following the paused Batch7e checkpoint.
-The latest checkpoint is Batch3ap on 2026-11-13.
+The latest checkpoint is Batch3aq on 2026-11-13.
 Test each module and review completed major modules before committing. EF8/EF9 remain postponed.
 The provider is not release-ready. The [feature checklist](efcore-10-feature-checklist.md) remains the
 acceptance authority; this document records the handoff rather than defining a different completion target.
@@ -32,6 +32,21 @@ This is the short execution view; the feature checklist remains the acceptance a
 Next execution order is: finish the next bounded QRY/MAP carrier or operator; widen required model/write/
 transaction/specification fixtures; resolve the live transport gate; then produce REL-01/02 evidence and run
 the final package matrix. EF8/EF9 adaptation, push and publication stay outside this sequence.
+
+### Hyperbolic checkpoint (Batch3aq, 2026-11-13)
+
+`Math`/`MathF.Sinh`, `Cosh` and `Tanh` now use the existing transcendental translator in both modes.
+MySQL and Oracle emit the matching `SINH`, `COSH` and `TANH` functions. The existing numeric carrier
+validation, converter handling, Single normalization, decimal result reader and NULL boundaries are shared
+with the preceding transcendental methods. Focused coverage now includes 153 unit cases and eight intercepted
+sync/async functional cases. Debug and Release source suites each pass **4117** tests (2005 unit, 1242
+functional, 868 specification and 2 consumer tests); the isolated EF10.0.14 Release suite also passes 4117.
+Package `10.0.0-hyperbolic-20261113` passes `Verify-Package.ps1` and the standalone consumer on EF10.0.0/
+10.0.14 in both modes. Provider SHA-256 is
+`91D3662C48D00EE4859C8C7C7A1A7498CD48EE49B934D32635E616A53355A9A3`; nupkg SHA-256 is
+`8B6841D5E8AE71DDFD8E888C34BFCB62863FB4D12233DCA771E7042B40FDBF38`.
+These are local translation, binding, shaping and package-consumption checks; native hyperbolic results,
+overflow/precision behavior and live execution remain open.
 
 ### Inverse-trigonometric checkpoint (Batch3ap, 2026-11-13)
 
