@@ -17,6 +17,41 @@ namespace OceanBase.EntityFrameworkCore.Storage
                 return zoned.ToDateTimeOffset();
             }
 
+            if (targetType == typeof(DateTimeOffset) && value is DateTime dateTime)
+            {
+                return ReadUtcDateTime(dateTime);
+            }
+
+            if (targetType == typeof(DateTime) && value is DateTimeOffset zonedDateTime)
+            {
+                return DateTime.SpecifyKind(zonedDateTime.DateTime, DateTimeKind.Unspecified);
+            }
+
+            if (targetType == typeof(DateOnly) && value is DateTime date)
+            {
+                return ReadDateOnly(date);
+            }
+
+            if (targetType == typeof(DateOnly) && value is DateTimeOffset zonedDate)
+            {
+                return ReadDateOnly(zonedDate.DateTime);
+            }
+
+            if (targetType == typeof(TimeOnly) && value is TimeSpan time)
+            {
+                return TimeOnly.FromTimeSpan(time);
+            }
+
+            if (targetType == typeof(TimeOnly) && value is OceanBaseIntervalDayToSecond intervalForClock)
+            {
+                return TimeOnly.FromTimeSpan(intervalForClock.ToTimeSpan());
+            }
+
+            if (targetType == typeof(TimeSpan) && value is OceanBaseIntervalDayToSecond interval)
+            {
+                return interval.ToTimeSpan();
+            }
+
             return OceanBaseNumericConversion.ConvertValue(value, targetType);
         }
 
