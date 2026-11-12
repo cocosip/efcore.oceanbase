@@ -8,6 +8,7 @@ using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Query;
 using Microsoft.EntityFrameworkCore.Query.SqlExpressions;
 using Microsoft.EntityFrameworkCore.Storage;
+using OceanBaseConnector;
 using OceanBase.EntityFrameworkCore.Storage;
 
 namespace OceanBase.EntityFrameworkCore.Query
@@ -29,7 +30,7 @@ namespace OceanBase.EntityFrameworkCore.Query
             {
                 if (root.TypeMapping?.ElementTypeMapping is not RelationalTypeMapping elementMapping
                     || !IsSupportedCollectionElement(elementMapping))
-                    throw new NotSupportedException("General collection roots require supported numeric, Boolean or text elements with non-null-converting storage carriers.");
+                    throw new NotSupportedException("General collection roots require supported numeric, Boolean, text or temporal elements with non-null-converting storage carriers.");
                 if (!(valuesExpression.ColumnNames.SequenceEqual(new[] { "Value" })
                     || valuesExpression.ColumnNames.SequenceEqual(new[] { "_ord", "Value" })))
                     throw new NotSupportedException("Unsupported general collection column layout.");
@@ -121,8 +122,23 @@ namespace OceanBase.EntityFrameworkCore.Query
                     or TypeCode.Decimal);
         }
 
+        internal static bool IsSupportedTemporal(RelationalTypeMapping mapping)
+        {
+            var modelType = Nullable.GetUnderlyingType(mapping.Converter?.ModelClrType ?? mapping.ClrType)
+                ?? mapping.Converter?.ModelClrType ?? mapping.ClrType;
+            var temporalModel = modelType == typeof(DateTime) || modelType == typeof(DateTimeOffset)
+                || modelType == typeof(DateOnly) || modelType == typeof(TimeOnly) || modelType == typeof(TimeSpan);
+            var temporalMapping = mapping is OceanBaseTemporalTypeMapping<DateTime>
+                or OceanBaseTemporalTypeMapping<DateTimeOffset>
+                or OceanBaseTemporalTypeMapping<TimeSpan>
+                or OceanBaseTemporalTypeMapping<OceanBaseIntervalDayToSecond>;
+            return mapping.Converter?.ConvertsNulls != true && temporalModel && temporalMapping
+                && mapping.JsonValueReaderWriter is not null;
+        }
+
         internal static bool IsSupportedCollectionElement(RelationalTypeMapping mapping)
-            => IsSupportedNumeric(mapping) || IsSupportedBoolean(mapping) || IsSupportedText(mapping);
+            => IsSupportedNumeric(mapping) || IsSupportedBoolean(mapping) || IsSupportedText(mapping)
+                || IsSupportedTemporal(mapping);
 
         private List<object?> Snapshot(SqlParameterExpression source)
         {

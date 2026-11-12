@@ -52,7 +52,7 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
                 new ParametersCacheDecorator(dictionary), source, mode);
             var error = Assert.Throws<NotSupportedException>(() => visitor.Visit(
                 new ValuesExpression("v", parameter, new[] { "Value" })));
-            Assert.Contains("numeric, Boolean or text", error.Message);
+            Assert.Contains("numeric, Boolean, text or temporal", error.Message);
         }
 
         [Theory]

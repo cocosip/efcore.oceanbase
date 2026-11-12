@@ -39,7 +39,7 @@ namespace OceanBase.EntityFrameworkCore.Query
                     if (mapping is null || (Nullable.GetUnderlyingType(mapping.ClrType) ?? mapping.ClrType)
                             != (Nullable.GetUnderlyingType(elementType) ?? elementType)
                         || !OceanBaseCollectionParameterExpandingVisitor.IsSupportedCollectionElement(mapping))
-                        throw new NotSupportedException("Empty inline collection roots require supported numeric, Boolean or text elements with non-null-converting storage carriers.");
+                        throw new NotSupportedException("Empty inline collection roots require supported numeric, Boolean, text or temporal elements with non-null-converting storage carriers.");
                     var ordinal = RelationalDependencies.TypeMappingSource.FindMapping(typeof(int))!;
                     _emptyColumns.Add(values.Alias, (elementType, new Dictionary<string, SqlExpression>
                     {

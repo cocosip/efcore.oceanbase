@@ -194,11 +194,9 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             var text = context.Rows.Select(row => new string[] { }.Count(value => row.Id > 0)).ToQueryString();
             Assert.Contains("WHERE 1 = 0", text);
             Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? "CAST(NULL AS CHAR)" : "CAST(NULL AS NVARCHAR2", text);
-            foreach (var query in new IQueryable[]
-            {
-                context.Rows.Select(row => new DateTime[] { }.Count(value => row.Id > 0))
-            })
-                Assert.Contains("numeric", Assert.Throws<NotSupportedException>(() => query.ToQueryString()).Message);
+            var temporal = context.Rows.Select(row => new DateTime[] { }.Count(value => row.Id > 0)).ToQueryString();
+            Assert.Contains("WHERE 1 = 0", temporal);
+            Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? "CAST(NULL AS DATETIME" : "CAST(NULL AS TIMESTAMP", temporal);
             Assert.Contains("WHERE 1 = 0", context.Rows.Join(new int[] { }, row => row.Converted,
                 value => value, (row, value) => value).ToQueryString());
         }
@@ -407,7 +405,7 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             var binaryMapping = source.FindMapping(typeof(byte[]))!;
             var binary = new SqlParameterExpression("binary", typeof(byte[]),
                 source.FindMapping(typeof(byte[]), context.Model, binaryMapping));
-            Assert.Contains("numeric, Boolean or text", Assert.Throws<NotSupportedException>(() => visitor.Visit(
+            Assert.Contains("numeric, Boolean, text or temporal", Assert.Throws<NotSupportedException>(() => visitor.Visit(
                 new ValuesExpression("v", binary, new[] { "Value" }))).Message);
             var membership = factory.In(new ColumnExpression("Text", "r", typeof(string), textMapping, true), texts);
             if (mode == OceanBaseCompatibilityMode.MySql) Assert.Same(membership, visitor.Visit(membership));

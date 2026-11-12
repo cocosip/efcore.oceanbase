@@ -73,6 +73,11 @@ namespace OceanBase.EntityFrameworkCore.Query
                 Sql.Append(" AS ").Append(_mode == OceanBaseCompatibilityMode.Oracle ? mapping.StoreType : "CHAR").Append(")");
                 return;
             }
+            if (OceanBaseCollectionParameterExpandingVisitor.IsSupportedTemporal(mapping))
+            {
+                Sql.Append(" AS ").Append(mapping.StoreType).Append(")");
+                return;
+            }
 
             // Use the lossless query carrier, not a property's narrower physical write declaration.
             var oracle = _mode == OceanBaseCompatibilityMode.Oracle;

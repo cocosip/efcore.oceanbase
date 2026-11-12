@@ -6,6 +6,7 @@ using System.Linq.Expressions;
 using System.Reflection;
 using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore.Storage;
+using Microsoft.EntityFrameworkCore.Storage.Json;
 using OceanBaseConnector;
 
 namespace OceanBase.EntityFrameworkCore.Storage
@@ -24,12 +25,19 @@ namespace OceanBase.EntityFrameworkCore.Storage
 
         public OceanBaseTemporalTypeMapping(string storeType, DbType dbType, int precision,
             OceanBaseCompatibilityMode mode, byte leadingPrecision = 0)
-            : base(new RelationalTypeMappingParameters(new CoreTypeMappingParameters(typeof(T)), storeType,
+            : base(new RelationalTypeMappingParameters(new CoreTypeMappingParameters(typeof(T),
+                jsonValueReaderWriter: JsonReaderWriter), storeType,
                 StoreTypePostfix.None, dbType, precision: precision))
         {
             _mode = mode;
             _leadingPrecision = leadingPrecision;
         }
+
+        private static JsonValueReaderWriter? JsonReaderWriter
+            => typeof(T) == typeof(DateTime) ? JsonDateTimeReaderWriter.Instance
+                : typeof(T) == typeof(DateTimeOffset) ? JsonDateTimeOffsetReaderWriter.Instance
+                : typeof(T) == typeof(TimeSpan) ? JsonTimeSpanReaderWriter.Instance
+                : null;
 
         private OceanBaseTemporalTypeMapping(RelationalTypeMappingParameters parameters,
             OceanBaseCompatibilityMode mode, byte leadingPrecision) : base(parameters)
