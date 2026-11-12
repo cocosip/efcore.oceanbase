@@ -56,6 +56,75 @@ public sealed class TextCollectionRootTests
     }
 
     [Theory]
+    [InlineData(OceanBaseCompatibilityMode.MySql, false, ParameterTranslationMode.Constant)]
+    [InlineData(OceanBaseCompatibilityMode.MySql, true, ParameterTranslationMode.Constant)]
+    [InlineData(OceanBaseCompatibilityMode.MySql, false, ParameterTranslationMode.MultipleParameters)]
+    [InlineData(OceanBaseCompatibilityMode.MySql, true, ParameterTranslationMode.MultipleParameters)]
+    [InlineData(OceanBaseCompatibilityMode.Oracle, false, ParameterTranslationMode.Constant)]
+    [InlineData(OceanBaseCompatibilityMode.Oracle, true, ParameterTranslationMode.Constant)]
+    [InlineData(OceanBaseCompatibilityMode.Oracle, false, ParameterTranslationMode.MultipleParameters)]
+    [InlineData(OceanBaseCompatibilityMode.Oracle, true, ParameterTranslationMode.MultipleParameters)]
+    public async Task Explicit_parameter_text_roots_bind_current_values_and_read_nullable_rows(
+        OceanBaseCompatibilityMode mode, bool async, ParameterTranslationMode translation)
+    {
+        using var table = new DataTable();
+        table.Columns.Add("Text", typeof(object));
+        var capture = new Capture(table);
+        await using var context = CreateExplicit(mode, capture, translation);
+        string?[] values = ["one", null, "two"];
+        var query = context.Rows.Where(row => EF.Parameter(values).Contains(row.Text)).Select(row => row.Text);
+
+        foreach (var input in new string?[][] { values, ["one"], ["", null], [] })
+        {
+            values = input;
+            capture.Sql.Clear();
+            capture.Inputs.Clear();
+            table.Rows.Clear();
+            if (input.Length != 0)
+            {
+                table.Rows.Add("reader");
+                table.Rows.Add(DBNull.Value);
+            }
+
+            var result = async ? await query.ToListAsync() : query.ToList();
+            Assert.Equal(input.Length == 0 ? [] : new string?[] { "reader", null }, result);
+            var sql = Assert.Single(capture.Sql);
+            Assert.DoesNotContain("IN ()", sql);
+            Assert.Equal(input.Length == 0, sql.Contains("WHERE 1 = 0", StringComparison.Ordinal)
+                || sql.Contains("WHERE 0", StringComparison.Ordinal));
+            Assert.All(capture.Inputs, parameter => Assert.Equal(DbType.String, parameter.DbType));
+        }
+    }
+
+    [Theory]
+    [InlineData(OceanBaseCompatibilityMode.MySql, false, ParameterTranslationMode.Constant)]
+    [InlineData(OceanBaseCompatibilityMode.MySql, true, ParameterTranslationMode.Constant)]
+    [InlineData(OceanBaseCompatibilityMode.MySql, false, ParameterTranslationMode.MultipleParameters)]
+    [InlineData(OceanBaseCompatibilityMode.MySql, true, ParameterTranslationMode.MultipleParameters)]
+    [InlineData(OceanBaseCompatibilityMode.Oracle, false, ParameterTranslationMode.Constant)]
+    [InlineData(OceanBaseCompatibilityMode.Oracle, true, ParameterTranslationMode.Constant)]
+    [InlineData(OceanBaseCompatibilityMode.Oracle, false, ParameterTranslationMode.MultipleParameters)]
+    [InlineData(OceanBaseCompatibilityMode.Oracle, true, ParameterTranslationMode.MultipleParameters)]
+    public async Task Explicit_parameter_converted_text_roots_bind_provider_values(
+        OceanBaseCompatibilityMode mode, bool async, ParameterTranslationMode translation)
+    {
+        using var table = new DataTable();
+        table.Columns.Add("Text", typeof(object));
+        table.Rows.Add("reader!");
+        var capture = new Capture(table);
+        await using var context = CreateExplicit(mode, capture, translation);
+        List<string?> values = ["one", "two"];
+        var query = context.ConvertedRows
+            .Where(row => EF.Parameter(values).Contains(row.Text)).Select(row => row.Text);
+
+        var result = async ? await query.ToListAsync() : query.ToList();
+        Assert.Equal(new[] { "reader" }, result);
+        Assert.Equal(new object?[] { "one!", "two!" }, capture.Inputs.Select(parameter => parameter.Value));
+        Assert.All(capture.Inputs, parameter => Assert.Equal(DbType.String, parameter.DbType));
+        Assert.DoesNotContain("IN ()", Assert.Single(capture.Sql));
+    }
+
+    [Theory]
     [InlineData(OceanBaseCompatibilityMode.MySql, false)]
     [InlineData(OceanBaseCompatibilityMode.MySql, true)]
     [InlineData(OceanBaseCompatibilityMode.Oracle, false)]
@@ -87,13 +156,26 @@ public sealed class TextCollectionRootTests
         Assert.Contains("WHERE 1 = 0", Assert.Single(capture.Sql));
     }
 
-    private static DbContextOptions<TestContext> Options(OceanBaseCompatibilityMode mode, Capture capture)
-        => new DbContextOptionsBuilder<TestContext>().UseOceanBase("Server=offline;Database=text_roots", mode)
-            .EnableServiceProviderCaching(false)
-            .AddInterceptors(new NoNetwork(), capture).Options;
-
     private static TestContext Create(OceanBaseCompatibilityMode mode, Capture capture)
         => new(Options(mode, capture));
+
+    private static TestContext CreateExplicit(OceanBaseCompatibilityMode mode, Capture capture,
+        ParameterTranslationMode translation)
+        => new(Options(mode, capture, translation));
+
+    private static DbContextOptions<TestContext> Options(OceanBaseCompatibilityMode mode, Capture capture,
+        ParameterTranslationMode? collectionMode = null)
+    {
+        var builder = new DbContextOptionsBuilder<TestContext>().UseOceanBase("Server=offline;Database=text_roots", mode)
+            .EnableServiceProviderCaching(false).AddInterceptors(new NoNetwork(), capture);
+        if (collectionMode is { } configured)
+        {
+            var extension = builder.Options.Extensions.OfType<RelationalOptionsExtension>().Single()
+                .WithUseParameterizedCollectionMode(configured);
+            ((IDbContextOptionsBuilderInfrastructure)builder).AddOrUpdateExtension(extension);
+        }
+        return builder.Options;
+    }
 
     private sealed class TestContext(DbContextOptions<TestContext> options) : DbContext(options)
     {

@@ -413,6 +413,15 @@ namespace PackageConsumer
                     explicitValues = [];
                     if (!explicitQuery.ToQueryString().Contains("WHERE 0", StringComparison.Ordinal))
                         throw new Exception("Packed provider reused a nonempty explicit integer parameter root.");
+
+                    string?[] explicitTextValues = ["one", null, "two"];
+                    var explicitTextQuery = explicitParameterContext.Set<Row>()
+                        .Where(row => EF.Parameter(explicitTextValues).Contains(row.SearchText));
+                    if (explicitTextQuery.ToQueryString().Contains("IN ()", StringComparison.Ordinal))
+                        throw new Exception("Packed provider generated an empty explicit text parameter root.");
+                    explicitTextValues = [];
+                    if (!explicitTextQuery.ToQueryString().Contains("WHERE 0", StringComparison.Ordinal))
+                        throw new Exception("Packed provider reused a nonempty explicit text parameter root.");
                 }
 
                 string?[] textMembershipValues = ["one", "two"];

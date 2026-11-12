@@ -70,6 +70,41 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
         }
 
         [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql, ParameterTranslationMode.Constant)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, ParameterTranslationMode.MultipleParameters)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, ParameterTranslationMode.Constant)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, ParameterTranslationMode.MultipleParameters)]
+        public void Explicit_parameter_text_roots_translate_and_rebind(
+            OceanBaseCompatibilityMode mode, ParameterTranslationMode translation)
+        {
+            using var context = CreateContext(mode, collectionMode: translation);
+            string?[] values = ["one", null, "two"];
+            var query = context.Rows.Where(row => EF.Parameter(values).Contains(row.Text));
+
+            foreach (var input in new string?[][] { values, ["one"], [] })
+            {
+                values = input;
+                var sql = query.ToQueryString();
+                Assert.DoesNotContain("IN ()", sql);
+                Assert.Equal(input.Length == 0, sql.Contains("WHERE 1 = 0", StringComparison.Ordinal)
+                    || sql.Contains("WHERE 0", StringComparison.Ordinal));
+            }
+
+            List<string?> list = ["one", null];
+            Assert.DoesNotContain("IN ()", context.Rows
+                .Where(row => EF.Parameter(list).Contains(row.Text)).ToQueryString());
+            string?[] converted = ["one", null];
+            Assert.DoesNotContain("IN ()", context.Rows
+                .Where(row => EF.Parameter(converted).Contains(row.Suffix)).ToQueryString());
+            using var unconfigured = CreateContext(mode);
+            Assert.Throws<InvalidOperationException>(() => unconfigured.Rows
+                .Where(row => EF.Parameter(converted).Contains(row.Text)).ToQueryString());
+            using var singleParameter = CreateContext(mode, collectionMode: ParameterTranslationMode.Parameter);
+            Assert.Throws<InvalidOperationException>(() => singleParameter.Rows
+                .Where(row => EF.Parameter(converted).Contains(row.Text)).ToQueryString());
+        }
+
+        [Theory]
         [InlineData(false)]
         [InlineData(true)]
         public void Oracle_converted_empty_collection_values_reach_EF_null_processing(bool relationalNulls)
@@ -144,7 +179,10 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             Assert.Contains("O''Reilly!", constants.Rows.Where(row => values.Contains(row.Suffix)).ToQueryString());
             using var parameters = CreateContext(mode, relationalNulls, ParameterTranslationMode.Parameter);
             Assert.Contains(" IN (", parameters.Rows.Where(row => values.Contains(row.Suffix)).ToQueryString());
-            Assert.Throws<InvalidOperationException>(() => context.Rows.Where(row => EF.Parameter(values).Contains(row.Text)).ToQueryString());
+            using var explicitContext = CreateContext(mode, relationalNulls, ParameterTranslationMode.MultipleParameters);
+            var explicitText = explicitContext.Rows.Where(row => EF.Parameter(values).Contains(row.Text)).ToQueryString();
+            Assert.DoesNotContain("IN ()", explicitText);
+            Assert.Contains("SELECT", explicitText);
             Assert.Throws<InvalidOperationException>(() => context.Rows.Where(row => values.Contains(row.Text, StringComparer.Ordinal)).ToQueryString());
             Assert.Throws<InvalidOperationException>(() => context.Rows.Where(row => EF.Parameter(values).AsQueryable()
                 .Where(value => value != null).Contains(row.Text)).ToQueryString());

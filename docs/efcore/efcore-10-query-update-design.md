@@ -55,8 +55,8 @@ Support captured arrays/lists and originally empty inline arrays whose element m
 `OceanBaseStringTypeMapping` with a string provider carrier and a converter that does not convert
 nulls. The existing VALUES expansion keeps one raw model value per row, current capture snapshots,
 duplicates/order and the optional `_ord` column. Constant and MultipleParameters policies remain
-supported; an explicit `EF.Parameter(collection)` root remains unsupported without a primitive-
-collection translator.
+supported; explicitly configured `EF.Parameter(collection)` roots use the primitive-collection translator
+described below.
 
 Use the same mapping for collection parameters, predicates and projected readers, including ordinary
 model-to-string converters. MySQL synthetic typing uses `CAST(... AS CHAR)`; Oracle uses the mapping's
@@ -69,6 +69,20 @@ Cover SelectMany, joins/ordinal or other direct-root compositions as they are ad
 empty transitions, NULL/empty text, converter-owned parameter/read values, sync/async bindings and both
 compatibility modes. Intercepted SQL and readers establish translation, mapping and shaping only;
 native text collation, LOB behavior, UNION coercion and server results remain live gates.
+
+## Explicit text parameter-root contract (Batch3ax, QRY-03/06/11, MAP-06/07)
+
+Support explicitly configured `EF.Parameter` string arrays/lists when the context selects `Constant` or
+`MultipleParameters` collection translation. Reuse the existing primitive collection `VALUES` shape and
+text mapping validation; preserve model-to-string converters, current captures, duplicates, `NULL` cells,
+empty roots and MySQL/Oracle parameter binding. Oracle's string normalizer continues to apply its
+empty-string-as-NULL rule after expansion.
+
+An unconfigured context and EF's single JSON-style `Parameter` collection mode remain unsupported. Binary,
+Boolean, temporal and Guid explicit roots keep their existing boundaries. Null-converting and non-text
+carriers reject before command execution. Unit, intercepted sync/async and packed-consumer tests establish
+local translation, provider values, readers and empty metadata only; native text collation, UNION coercion
+and live OceanBase results remain separate gates.
 
 ## Boolean collection-root contract (Batch3af, QRY-03/06/11, MAP-06/07)
 

@@ -36,10 +36,12 @@ converter/operator composition remains unsupported. Native UNION typing, results
 
 Text collection roots support captured arrays/lists and empty inline arrays when the provider-owned mapping
 uses a string carrier and does not convert nulls. Model-to-string converters retain parameter and reader
-hooks; MySQL empty roots use `CAST(NULL AS CHAR)` and Oracle uses the declared text type. Null-converting,
-binary/other carriers and non-integer explicit `EF.Parameter(collection)` roots remain unsupported. Oracle empty-string
-normalization occurs after raw collection expansion. Native text collation, LOB behavior and UNION results
-remain unverified.
+hooks; MySQL empty roots use `CAST(NULL AS CHAR)` and Oracle uses the declared text type. Explicit
+`EF.Parameter(string[])`/`List<string?>` roots are also supported when the context explicitly selects
+`Constant` or `MultipleParameters`; the provider expands scalar values rather than sending a JSON array.
+Unconfigured contexts, EF's single JSON-style collection parameter, null-converting, binary and other
+non-text carriers remain unsupported by this path. Oracle empty-string normalization occurs after raw
+collection expansion. Native text collation, LOB behavior and UNION results remain unverified.
 
 Text and temporal `Min/Max` support scalar/selector and nullable forms using native aggregates and
 the original mappings/readers. Supported temporal families are DateTime, DateTimeOffset, DateOnly,

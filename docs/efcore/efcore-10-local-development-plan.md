@@ -3,7 +3,7 @@
 **Goal:** Implement every locally developable EF10 feature, in reviewed/tested commits, while postponing real
 database integration and EF8/EF9 adaptation as explicitly requested on 2026-11-10.
 
-**Architecture:** Continue on efcore/10.0 at the current Batch3aw explicit numeric parameter-root slice. Reuse the existing EF relational services, connector 0.2.0
+**Architecture:** Continue on efcore/10.0 at the current Batch3ax explicit text parameter-root slice. Reuse the existing EF relational services, connector 0.2.0
 public APIs and per-mode mappings/SQL. Separate local implementation evidence from server acceptance.
 
 **Spec:** efcore-10-feature-checklist.md, efcore-10-technical-baseline.md, efcore-10-query-update-design.md.
@@ -12,7 +12,7 @@ public APIs and per-mode mappings/SQL. Separate local implementation evidence fr
 The compact execution board is [efcore-10-roadmap.md](efcore-10-roadmap.md); this file remains the detailed
 batch ledger and acceptance notes.
 
-**Updated:** 2026-11-13 after Batch3aw. Continue EF10 in this checkout, test each module and
+**Updated:** 2026-11-13 after Batch3ax. Continue EF10 in this checkout, test each module and
 review each completed major module before committing. EF8/EF9 remains postponed; live execution is opt-in and
 currently blocked before authentication by the supplied endpoint/transport behavior.
 The full goal remains incomplete.
@@ -36,6 +36,28 @@ Use this section to choose the next task; the feature checklist remains the deta
    full Debug/Release suites, package content gate and package consumer at EF10.0.0/10.0.14, review the
    release revision, and only then consider a release branch/tag. EF8/EF9, push and publication remain out
    of the current development sequence.
+
+### Batch3ax brief: explicit text parameter roots
+
+**IDs:** QRY-03/06/11, MAP-06/07. **Spec:** Explicit text parameter-root contract in
+`efcore-10-query-update-design.md`. Continue from Batch3aw; no live database or EF8/EF9 work.
+
+- [x] Add RED/GREEN unit coverage for explicitly configured `EF.Parameter` string arrays/lists, NULL and
+  empty roots, Oracle empty-string normalization, model-to-string converters and both compatibility modes.
+- [x] Extend the existing primitive collection visitor to accept provider-owned text mappings only when the
+  context explicitly selects `Constant` or `MultipleParameters`; keep Boolean, temporal, binary and Guid
+  explicit roots outside this slice.
+- [x] Add intercepted sync/async coverage for current parameter values, nullable readers and converted
+  provider values, then add packed-consumer smoke for both EF10 patches and both modes.
+- [x] Run full Debug/Release, isolated EF10.0.14 Release, package content and both EF10.0.0/EF10.0.14
+  consumers. Native collation, UNION coercion and live results remain separate gates.
+
+Batch3ax evidence: 33 focused text unit cases and 24 intercepted functional cases pass. Debug, Release and
+isolated EF10.0.14 Release each pass 4261 source tests (2057 unit, 1334 functional, 868 specification and
+2 consumer tests). Package `10.0.0-text-parameter-r5-20261113` passes `Verify-Package.ps1` and standalone
+consumers on EF10.0.0/10.0.14 in both modes from a clean EF10.0.0 baseline build. The live MySQL and Oracle
+probes reach TCP but close during the pre-authentication handshake, so no SQL result is claimed. No production
+dependency or public API was added.
 
 ### Batch3aw brief: explicit numeric parameter roots
 

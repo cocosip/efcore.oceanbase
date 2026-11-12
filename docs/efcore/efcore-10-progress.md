@@ -3,7 +3,7 @@
 ## Active checkpoint: 2026-11-13
 
 Development resumed on 2026-11-11 on efcore/10.0 at the user's request, following the paused Batch7e checkpoint.
-The latest checkpoint is Batch3aw on 2026-11-13.
+The latest checkpoint is Batch3ax on 2026-11-13.
 Test each module and review completed major modules before committing. EF8/EF9 remain postponed.
 The provider is not release-ready. The [feature checklist](efcore-10-feature-checklist.md) remains the
 acceptance authority; this document records the handoff rather than defining a different completion target.
@@ -32,6 +32,22 @@ This is the short execution view; the feature checklist remains the acceptance a
 Next execution order is: finish the next bounded QRY/MAP carrier or operator; widen required model/write/
 transaction/specification fixtures; resolve the live transport gate; then produce REL-01/02 evidence and run
 the final package matrix. EF8/EF9 adaptation, push and publication stay outside this sequence.
+
+### Explicit text parameter-root checkpoint (Batch3ax, 2026-11-13)
+
+Explicitly configured `EF.Parameter(string[])` and `EF.Parameter(List<string?>)` roots now reuse the
+provider's existing text VALUES expansion when the context selects `Constant` or `MultipleParameters`.
+Captured values rebind on each execution, ordinary model-to-string converters retain provider values, and
+MySQL/Oracle both preserve NULL, empty-root and Oracle empty-string normalization boundaries. Unconfigured
+contexts and EF's single JSON-style `Parameter` collection mode remain rejected; Boolean, temporal, binary
+and Guid explicit roots remain outside this slice.
+
+`TextCollectionQueryTests` passes 33 cases and `TextCollectionRootTests` passes 24 intercepted sync/async
+cases. Debug and Release each pass 4261 tests (2057 unit, 1334 functional, 868 specification and 2
+consumer tests). The isolated EF10.0.14 Release suite also passes 4261 tests. Package
+`10.0.0-text-parameter-r5-20261113` passes `Verify-Package.ps1` and the standalone consumer on EF10.0.0 and
+EF10.0.14 in both modes from a clean EF10.0.0 baseline build. Live MySQL and Oracle probes reach TCP but close
+during the pre-authentication handshake before SQL; native text collation and UNION coercion remain open.
 
 ### CopySign checkpoint (Batch3au, 2026-11-13)
 
