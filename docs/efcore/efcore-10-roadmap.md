@@ -13,6 +13,8 @@ The following required rows have complete local/package evidence for both modes:
 
 - `CFG-01..03`, `CON-01`, `SQL-02`
 - `PKG-01..04`
+- Batch3as scalar `Math.Round`/`decimal.Round` digits and midpoint parameters now refresh local SQL per
+  execution in both modes; invalid runtime and row-dependent arguments remain rejected.
 - Numeric and nonnumeric query slices, collection roots for integer/numeric/text/Boolean/temporal/binary/Guid
   carriers, and selected model/materialization, write, transaction, schema and diagnostics paths have local
   coverage, but their required rows remain open until their remaining boundaries and native evidence are closed.

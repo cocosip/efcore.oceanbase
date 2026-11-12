@@ -657,8 +657,11 @@ unsupported; the local checks cover SQL, cache keys, binding and supplied reader
 
 `Math.Round` and `decimal.Round` each have four decimal overloads. Omitted digits mean zero; an
 omitted midpoint rule means `ToEven`. Accept constant digits from 0 through 28 and all five
-`MidpointRounding` values. Dynamic arguments and invalid constants fail server translation;
-floating point overloads have a separate contract. EF's normal top-level client evaluation still applies.
+`MidpointRounding` values. Captured scalar `digits` and `MidpointRounding` arguments are resolved by the
+EF10 parameter-based SQL processor for each execution, which disables the compiled SQL shape cache before
+rebuilding the same constant translation. Invalid runtime values fail translation, while row-dependent
+arguments remain unsupported; floating point overloads follow the same runtime-parameter boundary. EF's
+normal top-level client evaluation still applies.
 
 The exact decimal SQL uses TRUNCATE in MySQL mode and TRUNC in Oracle mode. It uses an exact decimal
 quantum for the requested scale and compares twice the absolute remainder to the quantum. This avoids
@@ -676,8 +679,9 @@ precision, return metadata, NULL and numeric boundary results still need both mo
 
 `Math.Round` and `double.Round` accept constant digits 0 through 15; `MathF.Round` and
 `float.Round` accept 0 through 6. Each has four signatures, defaults to zero digits and
-`ToEven`, and accepts all five constant rules. Runtime and invalid arguments fail server
-translation. SQL operates on stored binary values; the result keeps its input's reader and
+`ToEven`, and accepts all five constant rules. Captured scalar digits and rules are resolved by the
+EF10 parameter-based SQL processor per execution; invalid runtime values fail translation and row-dependent
+arguments remain unsupported. SQL operates on stored binary values; the result keeps its input's reader and
 inverse converter. Translation requires a valid provider binary mapping with a matching carrier
 and a converter that does not convert NULL.
 

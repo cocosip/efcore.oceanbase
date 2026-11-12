@@ -15,6 +15,7 @@ internal sealed class OceanBaseRoundTranslator(
     ISqlExpressionFactory factory, IRelationalTypeMappingSource mappingSource, OceanBaseCompatibilityMode mode)
     : IMethodCallTranslator
 {
+    internal const string RuntimeMarker = "__oceanbase_internal_round_runtime";
     private static readonly Dictionary<MethodInfo, (int Digits, int Rule)> Signatures = CreateSignatures();
 
     private static Dictionary<MethodInfo, (int, int)> CreateSignatures()
@@ -41,24 +42,63 @@ internal sealed class OceanBaseRoundTranslator(
 
         var type = method.ReturnType;
         var maxDigits = type == typeof(float) ? 6 : type == typeof(double) ? 15 : 28;
+        var runtime = false;
         var digits = 0;
         if (signature.Digits >= 0)
         {
-            if (arguments[signature.Digits] is not SqlConstantExpression { Value: int count } || count < 0 || count > maxDigits)
-                return null;
-            digits = count;
+            switch (arguments[signature.Digits])
+            {
+                case SqlConstantExpression { Value: int count } when count >= 0 && count <= maxDigits:
+                    digits = count;
+                    break;
+                case SqlParameterExpression:
+                    runtime = true;
+                    break;
+                default:
+                    return null;
+            }
         }
 
         var rule = MidpointRounding.ToEven;
         if (signature.Rule >= 0)
         {
-            if (arguments[signature.Rule] is not SqlConstantExpression { Value: MidpointRounding midpoint }
-                || !Enum.IsDefined(midpoint))
-                return null;
-            rule = midpoint;
+            switch (arguments[signature.Rule])
+            {
+                case SqlConstantExpression { Value: MidpointRounding midpoint } when Enum.IsDefined(midpoint):
+                    rule = midpoint;
+                    break;
+                case SqlParameterExpression:
+                    runtime = true;
+                    break;
+                default:
+                    return null;
+            }
         }
 
         var input = factory.ApplyDefaultTypeMapping(arguments[0]);
+        if (runtime)
+            return TranslateRuntime(input, type, signature.Digits >= 0 ? arguments[signature.Digits] : factory.Constant(0),
+                signature.Rule >= 0 ? arguments[signature.Rule] : factory.Constant(MidpointRounding.ToEven));
+
+        return TranslateResolved(input, type, digits, rule);
+    }
+
+    internal SqlExpression? TranslateRuntime(SqlExpression input, Type type, SqlExpression digits, SqlExpression rule)
+    {
+        var resultMapping = ValidateInput(input, type);
+        return resultMapping is null
+            ? null
+            : factory.Function(RuntimeMarker, [input, digits, rule], nullable: true,
+                argumentsPropagateNullability: [false, false, false], type, resultMapping);
+    }
+
+    internal SqlExpression? TranslateResolved(SqlExpression input, Type type, int digits, MidpointRounding rule)
+    {
+        var maxDigits = type == typeof(float) ? 6 : type == typeof(double) ? 15 : 28;
+        if (digits < 0 || digits > maxDigits || !Enum.IsDefined(rule))
+            return null;
+
+        input = factory.ApplyDefaultTypeMapping(input);
         if (type != typeof(decimal))
             return TranslateBinary(input, type, digits, rule);
 
@@ -105,6 +145,29 @@ internal sealed class OceanBaseRoundTranslator(
             => new SqlBinaryExpression(ExpressionType.Modulo, value, divisor, typeof(decimal), syntax);
         SqlExpression Choose(SqlExpression condition, SqlExpression yes, SqlExpression no)
             => factory.Case([new CaseWhenClause(condition, yes)], no);
+    }
+
+    private RelationalTypeMapping? ValidateInput(SqlExpression input, Type type)
+    {
+        input = factory.ApplyDefaultTypeMapping(input);
+        if (type == typeof(decimal))
+        {
+            return input.TypeMapping is OceanBaseDecimalTypeMapping decimalMapping && decimalMapping.ClrType == typeof(decimal)
+                && (decimalMapping.Converter?.ProviderClrType ?? typeof(decimal)) == typeof(decimal)
+                && OceanBaseMathTranslator.IsValidNumeric(decimalMapping, mappingSource)
+                    ? decimalMapping.AsQueryResult()
+                    : null;
+        }
+
+        var single = type == typeof(float);
+        return input.TypeMapping is RelationalTypeMapping floatingMapping
+            && (single ? floatingMapping is OceanBaseFloatingPointTypeMapping<float>
+                : floatingMapping is OceanBaseFloatingPointTypeMapping<double>)
+            && floatingMapping.ClrType == type
+            && (floatingMapping.Converter?.ProviderClrType ?? type) == type
+            && OceanBaseMathTranslator.IsValidNumeric(floatingMapping, mappingSource)
+            ? floatingMapping
+            : null;
     }
 
     private SqlExpression? TranslateBinary(SqlExpression input, Type type, int digits, MidpointRounding rule)

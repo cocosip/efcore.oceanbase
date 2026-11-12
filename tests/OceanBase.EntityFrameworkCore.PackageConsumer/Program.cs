@@ -681,6 +681,19 @@ namespace PackageConsumer
                     || !roundSingle.Contains("100000000", StringComparison.Ordinal))
                     throw new Exception("Packed Single Round lost the guards or Single precision casts: " + roundSingle);
 
+                var runtimeDigits = 2;
+                var runtimeRule = MidpointRounding.AwayFromZero;
+                var runtimeRound = context.Set<Row>().Select(row =>
+                    Math.Round(row.Amount, runtimeDigits, runtimeRule)).ToQueryString();
+                runtimeDigits = 3;
+                runtimeRule = MidpointRounding.ToEven;
+                var refreshedRound = context.Set<Row>().Select(row =>
+                    Math.Round(row.Amount, runtimeDigits, runtimeRule)).ToQueryString();
+                if (!runtimeRound.Contains(truncate, StringComparison.Ordinal)
+                    || !refreshedRound.Contains(truncate, StringComparison.Ordinal)
+                    || runtimeRound == refreshedRound)
+                    throw new Exception("Packed runtime Round parameters reused stale SQL.");
+
                 var guidType = context.Model.FindEntityType(typeof(Row))!.FindProperty(nameof(Row.Token))!.GetColumnType();
                 if (guidType != (mode == OceanBaseCompatibilityMode.Oracle ? "RAW(16)" : "CHAR(36)"))
                 {

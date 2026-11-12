@@ -3,7 +3,7 @@
 ## Active checkpoint: 2026-11-13
 
 Development resumed on 2026-11-11 on efcore/10.0 at the user's request, following the paused Batch7e checkpoint.
-The latest checkpoint is Batch3ar on 2026-11-13.
+The latest checkpoint is Batch3as on 2026-11-13.
 Test each module and review completed major modules before committing. EF8/EF9 remain postponed.
 The provider is not release-ready. The [feature checklist](efcore-10-feature-checklist.md) remains the
 acceptance authority; this document records the handoff rather than defining a different completion target.
@@ -32,6 +32,22 @@ This is the short execution view; the feature checklist remains the acceptance a
 Next execution order is: finish the next bounded QRY/MAP carrier or operator; widen required model/write/
 transaction/specification fixtures; resolve the live transport gate; then produce REL-01/02 evidence and run
 the final package matrix. EF8/EF9 adaptation, push and publication stay outside this sequence.
+
+### Runtime Round checkpoint (Batch3as, 2026-11-13)
+
+Captured scalar `digits` and `MidpointRounding` arguments for the existing decimal and binary `Round`
+overloads now resolve through the EF10 parameter-based SQL processor on every execution. The processor reads
+the current values, disables the compiled SQL-shape cache and rebuilds the existing constant translation;
+invalid runtime values fail translation and row-dependent arguments remain unsupported. Defaults for omitted
+digits/rules are covered as well.
+
+Focused Round coverage passes 124 unit and 14 intercepted functional cases in both modes and sync/async.
+Debug, Release and isolated EF10.0.14 Release source suites each pass 4127 tests (2007 unit, 1250
+functional, 868 specification and 2 consumer tests), with zero failures or skips. Package
+`10.0.0-runtime-round-20261113` passes the content gate and its standalone consumer on EF10.0.0/10.0.14
+in both modes. Native rounding precision, result metadata and live execution remain open. The non-destructive
+MySQL and Oracle live probes were rerun from User Secrets and both still close the packet during the pre-auth
+handshake at `172.16.2.45:2881`, before any SQL executes.
 
 ### Paging and ordering checkpoint (Batch3ar, 2026-11-13)
 

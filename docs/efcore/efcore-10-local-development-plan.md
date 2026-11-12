@@ -3,7 +3,7 @@
 **Goal:** Implement every locally developable EF10 feature, in reviewed/tested commits, while postponing real
 database integration and EF8/EF9 adaptation as explicitly requested on 2026-11-10.
 
-**Architecture:** Continue on efcore/10.0 at the current Batch3ar paging/ordering slice. Reuse the existing EF relational services, connector 0.2.0
+**Architecture:** Continue on efcore/10.0 at the current Batch3as runtime-Round slice. Reuse the existing EF relational services, connector 0.2.0
 public APIs and per-mode mappings/SQL. Separate local implementation evidence from server acceptance.
 
 **Spec:** efcore-10-feature-checklist.md, efcore-10-technical-baseline.md, efcore-10-query-update-design.md.
@@ -12,7 +12,7 @@ public APIs and per-mode mappings/SQL. Separate local implementation evidence fr
 The compact execution board is [efcore-10-roadmap.md](efcore-10-roadmap.md); this file remains the detailed
 batch ledger and acceptance notes.
 
-**Updated:** 2026-11-13 after Batch3ar. Continue EF10 in this checkout, test each module and
+**Updated:** 2026-11-13 after Batch3as. Continue EF10 in this checkout, test each module and
 review each completed major module before committing. EF8/EF9 remains postponed; live execution is opt-in and
 currently blocked before authentication by the supplied endpoint/transport behavior.
 The full goal remains incomplete.
@@ -36,6 +36,24 @@ Use this section to choose the next task; the feature checklist remains the deta
    full Debug/Release suites, package content gate and package consumer at EF10.0.0/10.0.14, review the
    release revision, and only then consider a release branch/tag. EF8/EF9, push and publication remain out
    of the current development sequence.
+
+## Batch3as brief: scalar runtime Round parameters
+
+**IDs:** QRY-07/11, MAP-02/07. **Spec:** Exact decimal and binary Round contracts in
+`efcore-10-query-update-design.md`. Continue from Batch3ar; no EF8/EF9 work.
+
+- [x] Add RED coverage for captured `digits` and `MidpointRounding` values, omitted defaults, invalid runtime
+  values and row-dependent arguments in both compatibility modes.
+- [x] Resolve scalar parameters in the EF10 parameter-based SQL processor for each execution, disable stale
+  SQL-shape caching, and reuse the existing constant decimal/binary translation without changing native SQL
+  formulas or adding a service/dependency.
+- [x] Add sync/async intercepted coverage that executes one compiled query with changed digits/rules in both
+  modes; run the focused and full Debug gates. Native rounding and live execution remain separate gates.
+
+Batch3as evidence: 124 focused Round unit cases and 14 intercepted functional cases pass. Debug, Release and
+isolated EF10.0.14 Release each pass 4127 tests with zero failures/skips. Package
+`10.0.0-runtime-round-20261113` passes content verification and standalone consumers on EF10.0.0/10.0.14
+in both modes. The live MySQL and Oracle probes still close during the pre-auth handshake before SQL.
 
 Current binary collection-root evidence is the Batch3ai committed slice: 3994 source tests, the
 `10.0.0-binary-roots-final-20261112` package, package consumers on EF10.0.0/10.0.14, and local review.

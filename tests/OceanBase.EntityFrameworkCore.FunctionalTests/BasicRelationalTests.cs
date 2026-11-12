@@ -1410,6 +1410,37 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
         [InlineData(OceanBaseCompatibilityMode.MySql, true)]
         [InlineData(OceanBaseCompatibilityMode.Oracle, false)]
         [InlineData(OceanBaseCompatibilityMode.Oracle, true)]
+        public async Task Decimal_round_runtime_parameters_refresh_compiled_sql(
+            OceanBaseCompatibilityMode mode, bool async)
+        {
+            using var table = new DataTable();
+            table.Columns.Add("Rounded", typeof(object));
+            table.Rows.Add(new OceanBaseDecimal(2m));
+            var commands = new CommandCapture { Results = table };
+            await using var context = CreateContext(mode, commands);
+            var digits = 2;
+            var rule = MidpointRounding.AwayFromZero;
+            var query = context.Set<FloorCeilingRow>()
+                .Select(row => Math.Round(row.Decimal, digits, rule));
+
+            _ = async ? await query.ToListAsync() : query.ToList();
+            var first = commands.Sql[^1];
+            digits = 3;
+            rule = MidpointRounding.ToEven;
+            _ = async ? await query.ToListAsync() : query.ToList();
+            var second = commands.Sql[^1];
+
+            var trunc = mode == OceanBaseCompatibilityMode.MySql ? "TRUNCATE(" : "TRUNC(";
+            Assert.Contains(trunc, first);
+            Assert.Contains(trunc, second);
+            Assert.NotEqual(first, second);
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true)]
         public async Task Transcendental_result_readers_keep_checked_decimal_single_and_integral_domains(OceanBaseCompatibilityMode mode, bool async)
         {
             using var table = new DataTable();

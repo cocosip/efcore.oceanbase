@@ -221,15 +221,26 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             var rule = MidpointRounding.ToEven;
             Expression<Func<Row, bool>>[] unsupported =
             [
-                row => Math.Round(row.Double, digits) > 0d,
-                row => double.Round(row.Double, rule) > 0d,
                 row => Math.Round(row.Double, -1) > 0d,
                 row => MathF.Round(row.Single, 7) > 0f,
-                row => float.Round(row.Single, (MidpointRounding)5) > 0f
+                row => float.Round(row.Single, (MidpointRounding)5) > 0f,
+                row => Math.Round(row.Decimal, row.Id) > 0m
             ];
             foreach (var predicate in unsupported)
                 Assert.Throws<InvalidOperationException>(() => context.Rows.Where(predicate).ToQueryString());
-            Assert.DoesNotContain("TRUNC", context.Rows.Select(row => MathF.Round(row.Single, digits, rule)).ToQueryString());
+            var first = context.Rows.Select(row => MathF.Round(row.Single, digits, rule)).ToQueryString();
+            digits = 3;
+            rule = MidpointRounding.AwayFromZero;
+            var second = context.Rows.Select(row => MathF.Round(row.Single, digits, rule)).ToQueryString();
+            Assert.Contains("TRUNC", first);
+            Assert.Contains("TRUNC", second);
+            Assert.NotEqual(first, second);
+
+            digits = -1;
+            Assert.Throws<InvalidOperationException>(() => context.Rows.Select(row => MathF.Round(row.Single, digits, rule)).ToQueryString());
+            digits = 2;
+            rule = (MidpointRounding)5;
+            Assert.Throws<InvalidOperationException>(() => context.Rows.Select(row => MathF.Round(row.Single, digits, rule)).ToQueryString());
 
             var factory = context.GetService<ISqlExpressionFactory>();
             var source = context.GetService<IRelationalTypeMappingSource>();
@@ -250,6 +261,32 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             foreach (var invalidMapping in invalid)
                 Assert.Null(provider.Translate(context.Model, null, method, [factory.Constant(1d, invalidMapping)], logger));
             Assert.Null(provider.Translate(context.Model, null, method, [factory.Constant(1f)], logger));
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle)]
+        public void Round_accepts_captured_digits_and_midpoint_rule(OceanBaseCompatibilityMode mode)
+        {
+            using var context = CreateContext(mode);
+            var digits = 2;
+            var rule = MidpointRounding.AwayFromZero;
+
+            var sql = context.Rows.Select(row => Math.Round(row.Decimal, digits, rule)).ToQueryString();
+
+            var trunc = mode == OceanBaseCompatibilityMode.MySql ? "TRUNCATE(" : "TRUNC(";
+            Assert.Contains(trunc, sql);
+            Assert.Contains("0.01", sql);
+            digits = 3;
+            rule = MidpointRounding.ToEven;
+            var changed = context.Rows.Select(row => Math.Round(row.Decimal, digits, rule)).ToQueryString();
+            Assert.Contains(trunc, changed);
+            Assert.NotEqual(sql, changed);
+
+            var digitsOnly = context.Rows.Select(row => Math.Round(row.Decimal, digits)).ToQueryString();
+            var ruleOnly = context.Rows.Select(row => Math.Round(row.Decimal, rule)).ToQueryString();
+            Assert.Contains(trunc, digitsOnly);
+            Assert.Contains(trunc, ruleOnly);
         }
 
         [Theory]
@@ -311,16 +348,14 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
                 row => Math.Round(row.Decimal, -1) > 0m,
                 row => decimal.Round(row.Decimal, 29) > 0m,
                 row => Math.Round(row.Decimal, (MidpointRounding)5) > 0m,
-                row => decimal.Round(row.Decimal, digits) > 0m,
-                row => Math.Round(row.Decimal, rule) > 0m,
                 row => Math.Round(row.Double, 16) > 0d
             ];
             foreach (var predicate in unsupported)
                 Assert.Throws<InvalidOperationException>(() => context.Rows.Where(predicate).ToQueryString());
 
             var projection = context.Rows.Select(row => Math.Round(row.Decimal, digits, rule)).ToQueryString();
-            Assert.DoesNotContain("CASE", projection);
-            Assert.DoesNotContain("TRUNC", projection);
+            Assert.Contains("CASE", projection);
+            Assert.Contains("TRUNC", projection);
         }
 
         [Theory]
