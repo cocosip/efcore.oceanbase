@@ -52,14 +52,37 @@ so that an undocumented feature is not accidentally advertised.
 
 ## Current evidence and blockers
 
-Latest implementation: Batch3ac after f93bc48 on 2026-11-11. Direct contextually converted numeric
+Latest implementation: Batch3af after `776a9a6` on 2026-11-12. Captured `bool`/`bool?` arrays and lists,
+including originally empty inline roots, use the shared VALUES expansion in both modes. Provider-owned
+Boolean mappings and non-null-converting Boolean-to-integer/decimal converters retain current values,
+duplicates, order, NULL cells, typed zero-row metadata, parameters and readers. MySQL uses SIGNED or the
+carrier's unsigned/decimal target; Oracle uses NUMBER with FROM DUAL for each SELECT arm. Focused Boolean
+coverage passes 26 unit and 12 intercepted cases; the full source gate passes 3960 tests (1888 unit,
+1202 intercepted functional, 868 specification and 2 consumer), zero failures/skips. The
+`10.0.0-boolean-roots-20261112` package passes the recorded package gate and both-mode EF10.0.0/10.0.14
+consumer checks. These are local SQL-shape, binding, reader and package-consumer results; native Boolean
+UNION/result semantics, live OceanBase execution and release acceptance remain open.
+
+Preceding checkpoint: Batch3ae after `b611f0b` on 2026-11-11. Captured string arrays/lists and empty
+inline roots use the shared VALUES path with provider text mappings and non-null-converting model-to-string
+converters. MySQL uses CHAR casts and Oracle uses the declared text type; Oracle empty-string normalization
+occurs after expansion. Final Debug/Release and isolated EF10.0.14 each pass3922=1862+1190+868+2, and the
+text-roots package passes both modes/patches and package checks. Native collation, LOB behavior, UNION
+coercion and live execution remain open.
+
+Preceding checkpoint: Batch3ad after `cd8d256` on 2026-11-11. String and temporal Min/Max validation
+supports provider-owned mappings, nullable forms and non-null-converting converters while rejecting
+unsupported carriers, null-converting converters and Oracle CLOB/NCLOB extrema. Final Debug/Release and
+isolated EF10.0.14 each pass3910=1858+1182+868+2, with the nonnumeric-extrema package and consumer checks
+passing. Native ordering and live execution remain open.
+
+Preceding checkpoint: Batch3ac after f93bc48 on 2026-11-11. Direct contextually converted numeric
 element projections now cover SelectMany/FirstOrDefault/Join, empty/nullable roots, forwarded NULL
 tests and Distinct/Take. Readers, bindings and encoded CLR defaults retain their owning converters.
 Original predicate and scalar-consumer requirements preserve genuine conflicts, including same-store
-different converters and shared projection/predicate objects. Independent reproductions/re-review
-confirm both repaired defects. Final Debug/Release and isolated14 each pass3764=1764+1130+868+2;
-same converted-roots package passes both modes/patches/content/graphs/DLL identity. Native execution,
-general text/other roots, arbitrary converter/operator composition and the overall inventory remain open.
+different converters and shared projection/predicate objects. Final Debug/Release and isolated14 each
+pass3764=1764+1130+868+2; native execution, arbitrary converter/operator composition and the overall
+inventory remain open.
 
 Preceding checkpoint: Batch3ab after 677b7ef on 2026-11-11. NumericCollectionRootQueryTests and
 NumericCollectionRootTests extend general roots to decimal/Single/Double, nullable forms and numeric
@@ -110,7 +133,7 @@ An open row is not automatically waiting for a database. Track the remaining wor
 - **Other validation:** hosted Windows/Linux evidence applies only to its tested revision; package and
   EF-patch checks have their own recorded boundaries. EF8/EF9 adaptation remains postponed by user choice.
 
-Development resumed at the user's request (2026-11-10) on efcore/10.0. See the
+Development resumed at the user's request (2026-11-11) on efcore/10.0. See the
 [progress handoff](efcore-10-progress.md) for saved state, remaining work and the exact resume point.
 
 MySQL snapshot checkpoint (Batch9c aftere1ef05e): cycles/dependent joins and derived joined sources

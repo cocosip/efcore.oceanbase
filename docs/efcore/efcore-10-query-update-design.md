@@ -620,7 +620,8 @@ fallback to scalar IN; explicit EF.Parameter(collection) remains unsupported wit
 translator. Test both boundaries. Text lists need provider-converted Oracle empty/NULL normalization before
 membership compensation; general VALUES roots need their own integer-ordinal and dialect rendering fixes.
 Those and APPLY/collection projections remain separate locally feasible work. Numeric aggregate promotion/
-result normalization has the contract above; nonnumeric aggregate extrema and native execution remain open.
+result normalization has the contract above; nonnumeric aggregate extrema are implemented in Batch3ad, while
+native aggregate execution and server ordering remain open.
 The shipped EF10.0.0 package owners and source-derived gaps are audited in the local query-shapes research.
 
 The local slice passes 30 focused unit and 40 intercepted cases. Full Debug/Release and isolated EF10.0.14

@@ -1,8 +1,9 @@
 # EF Core 10 Development Progress
 
-## Active checkpoint: 2026-11-11
+## Active checkpoint: 2026-11-12
 
 Development resumed on 2026-11-11 on efcore/10.0 at the user's request, following the paused Batch7e checkpoint.
+The latest committed checkpoint is Batch3af (`e89908e`) on 2026-11-12.
 Test each module and review completed major modules before committing. EF8/EF9 remain postponed.
 The provider is not release-ready. The [feature checklist](efcore-10-feature-checklist.md) remains the
 acceptance authority; this document records the handoff rather than defining a different completion target.
@@ -300,14 +301,14 @@ logs and `artifacts/verify-management-profile-package.ps1`. Baseline assets rema
 
 ### Resume here: remaining EF10 local inventory
 
-1. Recheck branch/worktree and saved commit before editing. Batch3ac contextual numeric element projections,
-   Batch3ab decimal/floating collection carriers,
-   Batch3aa integer collection carriers,
+1. Recheck branch/worktree and saved commit before editing. Batch3af Boolean collection roots,
+   Batch3ae text collection roots, Batch3ad text/temporal extrema, Batch3ac contextual numeric element
+   projections, Batch3ab decimal/floating collection carriers, Batch3aa integer collection carriers,
    Batch7f Oracle user lifecycle, Batch7e management factories and bulk-update rewrites are implemented;
    do not repeat them. Current evidence is above;
    older sections below are historical checkpoints, not a new implementation backlog.
-2. Continue QRY-03/04/06/07/11 and MAP-06/07: remaining text/other collection carriers, broader
-   converter/operator compositions, nonnumeric extrema, function/aggregate overloads and unsupported boundaries. Reuse
+2. Continue QRY-03/04/06/07/11 and MAP-06/07: remaining binary/temporal/other collection carriers,
+   broader converter/operator compositions, function/aggregate overloads and unsupported boundaries. Reuse
    exact EF10 contracts; negative tests must not be mistaken for implementation of a feature family.
 3. Widen model/filter/materialization/graph-write contracts and official query/write/runtime specification
    fixtures, then audit the full deferred inventory for locally feasible work. The pinned Oracle docs

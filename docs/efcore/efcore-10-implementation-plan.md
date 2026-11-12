@@ -17,14 +17,16 @@ checklist rows, implementation, tests and package impact are updated together.
 
 ## Acceptance map and current state
 
-Development resumed on 2026-11-10 at the user's request on efcore/10.0. The
+Development resumed on 2026-11-11 at the user's request on efcore/10.0. The
 [progress handoff](efcore-10-progress.md) records the current checkpoint, verification and next work.
 
-Latest local slice Batch3aa extends general integer collection roots to all eight carriers, nullable forms,
-integer enums/converters and standalone projected roots. Explicit nullable converter validation was corrected
-after independent review. Full Debug/Release/isolated EF10.0.14 each pass3652; the same baseline-built
-integer-roots-r1 package passes both modes/patches/content/graphs/DLL identity. Other collection carriers,
-converter projections, broader query/model/write families and all live gates remain incomplete.
+Latest local slice Batch3af (`e89908e`) extends the shared collection-root pipeline to captured and inline
+Boolean roots, nullable values and non-null-converting Boolean-to-integer/decimal converters. Full
+Debug/Release and isolated EF10.0.14 each pass3960 (1888 unit, 1202 intercepted functional, 868
+specification and 2 consumer tests), with zero failures/skips. The baseline-built boolean-roots package
+passes the recorded both-mode EF10.0.0/10.0.14 consumer and package checks. Other collection carriers,
+broader converter/operator compositions, wider query/model/write families, native execution and release
+gates remain incomplete.
 
 The feature checklist is the release authority. Task checkboxes describe work steps, not proof that all features
 in a category are supported. Before starting a step, name its checklist IDs and required evidence; after it,
@@ -43,12 +45,11 @@ ownership and complete scalar semantics, before expanding Task 4 support claims.
 do not complete mappings.
 
 Before further production changes, use the checklist's **Before starting a feature** record to enumerate concrete
-cases for the selected IDs. The **Next mapping acceptance cases** table defines the immediate scalar work;
-its initial failing tests are the RED baseline. The resumed text slice passes 563 tests
-in Debug/Release and isolated EF10.0.14 Release (420 unit, 142 intercepted pipeline, one project consumer).
-Package evidence is recorded in the progress handoff. This is partial acceptance, not Task 3/4 completion or live evidence.
+cases for the selected IDs. The progress handoff's **Resume here** section identifies the current local work;
+the older scalar and text sections below are historical evidence. Package evidence is recorded in the progress
+handoff. This is partial acceptance, not Task 3/4 completion or live evidence.
 
-### Resumed text slice (2026-11-10)
+### Historical resumed text slice (2026-11-10)
 
 The user resumed development on efcore/10.0. The text contract in the technical baseline governs this slice.
 Work in the existing clean checkout on that branch; do not create or synchronize other branches implicitly.

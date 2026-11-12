@@ -3,13 +3,13 @@
 **Goal:** Implement every locally developable EF10 feature, in reviewed/tested commits, while postponing real
 database integration and EF8/EF9 adaptation as explicitly requested on 2026-11-10.
 
-**Architecture:** Continue on efcore/10.0 from 57fd44a. Reuse the existing EF relational services, connector 0.2.0
+**Architecture:** Continue on efcore/10.0 at the current Batch3af checkpoint `e89908e`. Reuse the existing EF relational services, connector 0.2.0
 public APIs and per-mode mappings/SQL. Separate local implementation evidence from server acceptance.
 
 **Spec:** efcore-10-feature-checklist.md, efcore-10-technical-baseline.md, efcore-10-query-update-design.md.
 **Tech Stack:** C#, .NET 10, EF Core/Relational [10.0.0,11.0.0), xUnit, OceanBaseConnector 0.2.0.
 
-**Resumed:** 2026-11-11 at the user's request. Continue EF10 in this checkout, test each module and
+**Updated:** 2026-11-12 after Batch3af. Continue EF10 in this checkout, test each module and
 review each completed major module before committing. EF8/EF9 and live execution remain postponed.
 The full goal remains incomplete.
 
