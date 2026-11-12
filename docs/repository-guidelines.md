@@ -102,6 +102,8 @@ The current local environment stores these keys plus `ConnectionStrings:OceanBas
 under User Secrets ID `OceanBase.EntityFrameworkCore.LiveTests`; the values are never repository content.
 When adding the live-test fixture, use that stable `UserSecretsId` and explicitly load User Secrets
 in test configuration; a test project does not load them automatically. The ID is public metadata, not a secret.
+The opt-in fixture lives in `tests/OceanBase.EntityFrameworkCore.LiveTests` and is intentionally excluded from
+the default solution run; set `OCEANBASE_RUN_LIVE_TESTS=1` only for an explicit live acceptance command.
 This is the agreed fixture contract; the current intercepted tests do not load secrets or connect to a server.
 
 Do not put credentials in source, tracked configuration, documentation, command output or test artifacts. Do not

@@ -16,7 +16,7 @@ The full goal remains incomplete.
 ## Global constraints
 
 - Develop and commit on efcore/10.0. Do not push, publish, tag or synchronize other branches implicitly.
-- No real database connections, live fixtures or destructive database tests in this execution phase.
+- Live tests are explicit opt-in only; keep credentials in User Secrets, run non-destructive probes first and do not perform destructive database tests until the cleanup scope is recorded.
 - EF8/EF9 work remains postponed. Local passing evidence never completes a required live gate.
 - Preserve every Required feature ID. Track local coverage separately instead of weakening acceptance criteria.
 - For each batch: specify behavior, add tests (RED for missing behavior), implement, run full tests, review,

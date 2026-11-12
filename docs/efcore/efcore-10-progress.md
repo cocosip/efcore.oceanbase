@@ -9,7 +9,7 @@ The provider is not release-ready. The [feature checklist](efcore-10-feature-che
 acceptance authority; this document records the handoff rather than defining a different completion target.
 
 The current user goal is to finish all locally developable EF10 functionality, with tested/reviewed commits after
-each small group. Real database integration/tests and EF8/EF9 adaptation are explicitly postponed. The
+each small group. Live database validation is now being wired for the supplied tenants; EF8/EF9 adaptation remains postponed. The
 [local development plan](efcore-10-local-development-plan.md) tracks the full remaining inventory, including
 an audit of locally feasible deferred families. Finishing one batch does not finish the overall goal.
 
@@ -33,6 +33,20 @@ EF10.0.14. Package `10.0.0-boolean-roots-20261112` passes Verify-Package.ps1; pr
 
 These are local SQL-shape, binding, reader and package-consumer results; native Boolean UNION coercion,
 Boolean result semantics, live OceanBase execution, EF8/EF9 adaptation and release acceptance remain open.
+
+### Live connectivity fixture checkpoint (2026-11-12)
+
+The opt-in project `tests/OceanBase.EntityFrameworkCore.LiveTests` now loads
+`ConnectionStrings:OceanBaseMySql` and `ConnectionStrings:OceanBaseOracle` from User Secrets ID
+`OceanBase.EntityFrameworkCore.LiveTests`. It is intentionally outside the default solution run and requires
+`OCEANBASE_RUN_LIVE_TESTS=1`. The project builds in Release with zero warnings/errors.
+
+The first non-destructive probes used the supplied host `172.16.2.45` and SQL port `2881` for both modes,
+with TLS explicitly disabled because Connector 0.2.0 defaults to VerifyFull. TCP connection succeeded, but
+both mode handshakes failed before authentication or SQL with `Connection closed while reading the packet`.
+No database/schema mutation occurred and no username, password or full connection string was recorded. This
+is an environment/transport blocker to classify; it is not yet evidence of an EF provider defect. TST-02
+remains In progress until both tenants complete the core live matrix.
 
 ### General text collection-root checkpoint (2026-11-11)
 
