@@ -483,6 +483,14 @@ mapping, independent of the input converter. Test leap day, year boundaries, enu
 both null semantics, and rejection of non-temporal carriers. Native computation and return types
 remain live acceptance gates.
 
+The next bounded member slice is `DateTime.Date`. Accept only DateTime model values whose provider carrier is
+DateTime and whose store family is an existing DATETIME, TIMESTAMP or DATE mapping. MySQL emits `DATE(input)`;
+Oracle emits `TRUNC(input)`. The result uses the existing date-valued DateTime mapping (`DATETIME(0)` for MySQL,
+`DATE` for Oracle), carries a value-preserving
+DateTime-to-DateTime converter when one is present, and propagates NULL from the input. DateTimeOffset, string,
+numeric and binary carriers, null-converting converters, and timezone/date-time-of-day members remain unsupported.
+This is SQL-shape and mapping evidence only until native server execution is available.
+
 DateTimeOffset, clocks/Now/UtcNow/Today, fractional parts/Ticks, Date/TimeOfDay/DayNumber, duration
 parts and Add operations need their own timezone/range/precision/calendar/wrapping contracts. This slice makes
 no server extraction, DATE cast, calendar/zero-date, interval-clock or result-metadata claim without live evidence.

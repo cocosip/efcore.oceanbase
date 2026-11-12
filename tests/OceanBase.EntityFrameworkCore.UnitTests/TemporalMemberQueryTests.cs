@@ -278,6 +278,56 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             Assert.Throws<InvalidOperationException>(() => context.Rows.Where(row => row.TextDate.DayOfYear == 60).ToQueryString());
         }
 
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle)]
+        public void DateTime_Date_uses_date_carrier_and_preserves_supported_converter(OceanBaseCompatibilityMode mode)
+        {
+            using var context = CreateContext(mode);
+            var sql = context.Rows.Select(row => new { Date = row.Stamp.Date, Optional = row.OptionalStamp!.Value.Date })
+                .Where(row => row.Date == new DateTime(2024, 2, 29)).ToQueryString();
+            Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? "DATE(`r`.`Stamp`)" : "TRUNC(\"r\".\"Stamp\")", sql);
+            Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? "DATE(`r`.`OptionalStamp`)" : "TRUNC(\"r\".\"OptionalStamp\")", sql);
+
+            var source = context.GetService<IRelationalTypeMappingSource>();
+            var factory = context.GetService<ISqlExpressionFactory>();
+            var logger = context.GetService<IDiagnosticsLogger<DbLoggerCategory.Query>>();
+            var converter = new ValueConverter<DateTime, DateTime>(value => value, value => value);
+            var mapping = (RelationalTypeMapping)source.FindMapping(typeof(DateTime),
+                mode == OceanBaseCompatibilityMode.Oracle ? "TIMESTAMP(3)" : "DATETIME(3)")!
+                .WithComposedConverter(converter);
+            var input = factory.Constant(new DateTime(2024, 2, 29, 23, 59, 59), mapping);
+            var result = Assert.IsType<SqlFunctionExpression>(context.GetService<IMemberTranslatorProvider>().Translate(
+                input, typeof(DateTime).GetProperty(nameof(DateTime.Date))!, typeof(DateTime), logger));
+            Assert.Equal(mode == OceanBaseCompatibilityMode.MySql ? "DATE" : "TRUNC", result.Name);
+            Assert.Same(mapping, Assert.Single(result.Arguments!).TypeMapping);
+            Assert.Same(converter, result.TypeMapping!.Converter);
+            Assert.Equal(mode == OceanBaseCompatibilityMode.MySql ? "DATETIME" : "DATE",
+                result.TypeMapping.StoreTypeNameBase, ignoreCase: true);
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle)]
+        public void DateTime_Date_rejects_unowned_and_null_converting_carriers(OceanBaseCompatibilityMode mode)
+        {
+            using var context = CreateContext(mode);
+            var source = context.GetService<IRelationalTypeMappingSource>();
+            var factory = context.GetService<ISqlExpressionFactory>();
+            var logger = context.GetService<IDiagnosticsLogger<DbLoggerCategory.Query>>();
+            var members = context.GetService<IMemberTranslatorProvider>();
+            var binary = (RelationalTypeMapping)source.FindMapping(typeof(byte[]))!.WithComposedConverter(
+                new ValueConverter<DateTime, byte[]>(value => BitConverter.GetBytes(value.Ticks), value => new DateTime(BitConverter.ToInt64(value))));
+            var nullConverter = (RelationalTypeMapping)source.FindMapping(typeof(DateTime))!.WithComposedConverter(
+                new ValueConverter<DateTime, DateTime>(value => value, value => value, convertsNulls: true));
+            Assert.Null(members.Translate(factory.Constant(DateTime.UtcNow, binary),
+                typeof(DateTime).GetProperty(nameof(DateTime.Date))!, typeof(DateTime), logger));
+            Assert.Null(members.Translate(factory.Constant(DateTime.UtcNow, nullConverter),
+                typeof(DateTime).GetProperty(nameof(DateTime.Date))!, typeof(DateTime), logger));
+            Assert.Null(members.Translate(factory.Constant(DateTimeOffset.UtcNow, source.FindMapping(typeof(DateTimeOffset))!),
+                typeof(DateTimeOffset).GetProperty(nameof(DateTimeOffset.Date))!, typeof(DateTime), logger));
+        }
+
         private static TestContext CreateContext(OceanBaseCompatibilityMode mode, bool relationalNulls = false)
         {
             var builder = new DbContextOptionsBuilder<TestContext>().UseOceanBase("Server=localhost;Database=test", mode);

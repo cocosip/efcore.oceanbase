@@ -3,7 +3,7 @@
 **Goal:** Implement every locally developable EF10 feature, in reviewed/tested commits, while postponing real
 database integration and EF8/EF9 adaptation as explicitly requested on 2026-11-10.
 
-**Architecture:** Continue on efcore/10.0 at the current Batch3ak checkpoint and Batch3al Clamp slice. Reuse the existing EF relational services, connector 0.2.0
+**Architecture:** Continue on efcore/10.0 at the current Batch3am DateTime.Date slice. Reuse the existing EF relational services, connector 0.2.0
 public APIs and per-mode mappings/SQL. Separate local implementation evidence from server acceptance.
 
 **Spec:** efcore-10-feature-checklist.md, efcore-10-technical-baseline.md, efcore-10-query-update-design.md.
@@ -12,7 +12,7 @@ public APIs and per-mode mappings/SQL. Separate local implementation evidence fr
 The compact execution board is [efcore-10-roadmap.md](efcore-10-roadmap.md); this file remains the detailed
 batch ledger and acceptance notes.
 
-**Updated:** 2026-11-12 after Batch3al. Continue EF10 in this checkout, test each module and
+**Updated:** 2026-11-12 after Batch3am. Continue EF10 in this checkout, test each module and
 review each completed major module before committing. EF8/EF9 remains postponed; live execution is opt-in and
 currently blocked before authentication by the supplied endpoint/transport behavior.
 The full goal remains incomplete.
@@ -119,6 +119,19 @@ efcore-10-query-update-design.md. Continue from cd8d256; no live database or EF8
 Review focus: no duplicated inherited aggregate logic, exact identities/plugin priority, provider
 ordering rather than CLR comparer claims, no Oracle LOB truncation, full temporal reader/converter
 ownership, empty/all-null cardinality and no dependency on live credentials. The full goal stays active.
+
+## Batch3am brief: DateTime.Date translation
+
+**IDs:** QRY-07/11, MAP-05/07. **Spec:** DateTime.Date contract in
+efcore-10-query-update-design.md. Continue from Batch3al; no live database or EF8/EF9 work.
+
+- [x] Add RED unit coverage for MySQL `DATE(input)` and Oracle `TRUNC(input)`, date-valued result mappings,
+  nullable composition, value-preserving DateTime converters and unsupported carriers.
+- [x] Implement the existing temporal member translator path without adding a service or dependency.
+- [x] Add four intercepted sync/async functional cases for parameter binding, SQL shape and DateTime readers.
+- [x] Run full Debug/Release (4029 each), package content and both-mode EF10.0.0/EF10.0.14 consumers. The
+  isolated EF10.0.14 source-suite rerun is blocked by NuGet repository-signature TLS restore failure; native date
+  semantics and live execution remain separate gates.
 
 Batch3ad evidence: the new nonnumeric aggregate unit suite passes 94 cases (373 with the existing numeric
 aggregate focus) and the dedicated intercepted functional suite passes 52. EF10.0.0 Debug/Release and isolated EF10.0.14 Release

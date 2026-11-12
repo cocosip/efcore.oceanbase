@@ -16,6 +16,8 @@ The following required rows have complete local/package evidence for both modes:
 - Numeric and nonnumeric query slices, collection roots for integer/numeric/text/Boolean/temporal/binary/Guid
   carriers, and selected model/materialization, write, transaction, schema and diagnostics paths have local
   coverage, but their required rows remain open until their remaining boundaries and native evidence are closed.
+- `DateTime.Date` now has both-mode SQL-shape, mapping and intercepted reader coverage; native date semantics remain
+  a live gate.
 
 The provider is still a development checkpoint. It is not a release candidate.
 

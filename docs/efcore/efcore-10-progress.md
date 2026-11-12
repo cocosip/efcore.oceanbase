@@ -3,7 +3,7 @@
 ## Active checkpoint: 2026-11-12
 
 Development resumed on 2026-11-11 on efcore/10.0 at the user's request, following the paused Batch7e checkpoint.
-The latest committed checkpoint is Batch3al (`30b9a5f`) on 2026-11-12.
+The latest committed checkpoint is Batch3am on 2026-11-12.
 Test each module and review completed major modules before committing. EF8/EF9 remain postponed.
 The provider is not release-ready. The [feature checklist](efcore-10-feature-checklist.md) remains the
 acceptance authority; this document records the handoff rather than defining a different completion target.
@@ -48,6 +48,20 @@ with zero failures or skips. The selected EF10.0.14 Release suite also passes 40
 the current nupkg SHA-256 is `FB6C0ED09D485D49800E43596BDFDEE91E83857347AA7AFFC2571601472FEC45` and the
 Release provider SHA-256 is `033090D2242AC08E6D36419FE46C9C8F0A02BC23354FDA7E101D38F553474F0F`.
 Native range/overflow, CASE result coercion and live execution remain open.
+
+### DateTime.Date checkpoint (Batch3am, 2026-11-12)
+
+`DateTime.Date` now translates through the existing temporal member service in both modes. MySQL emits
+`DATE(input)` and uses its date-valued `DATETIME(0)` result mapping; Oracle emits `TRUNC(input)` and uses the
+`DATE` result mapping. Supported DateTime-to-DateTime converters remain attached to the result, input NULLs
+propagate, and DateTimeOffset/string/numeric/binary or null-converting carriers are rejected by the provider
+translator. Four intercepted sync/async cases and the focused temporal unit suite cover SQL shape, parameter
+binding and DateTime materialization. Native date truncation, timezone/precision behavior and live execution
+remain open. Debug and Release source suites each pass 4029 tests (1917 unit, 1242 intercepted functional, 868
+specification and 2 consumer), with zero failures or skips. Package `10.0.0-datetime-date-20261112` passes the
+content gate; the packed consumer passes both modes on EF10.0.0 and EF10.0.14. The isolated EF10.0.14 source-suite
+rerun was blocked during NuGet restore by the environment's repository-signature TLS failure and is not counted as
+passed. Native date truncation, timezone/precision behavior and live execution remain open.
 
 ### Guid collection-root checkpoint (Batch3ak, 2026-11-12)
 

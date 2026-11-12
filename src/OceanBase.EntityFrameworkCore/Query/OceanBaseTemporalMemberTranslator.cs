@@ -40,10 +40,26 @@ namespace OceanBase.EntityFrameworkCore.Query
             [typeof(DateTime).GetProperty(nameof(DateTime.DayOfWeek))!] = true,
             [typeof(DateOnly).GetProperty(nameof(DateOnly.DayOfWeek))!] = true
         };
+        private static readonly MemberInfo DateTimeDate = typeof(DateTime).GetProperty(nameof(DateTime.Date))!;
 
         public SqlExpression? Translate(SqlExpression? instance, MemberInfo member, Type returnType,
             IDiagnosticsLogger<DbLoggerCategory.Query> logger)
         {
+            if (instance is not null && member == DateTimeDate && returnType == typeof(DateTime))
+            {
+                instance = factory.ApplyDefaultTypeMapping(instance);
+                var dateMapping = instance.TypeMapping;
+                if (dateMapping is null || !SupportsDate(dateMapping) || dateMapping.Converter?.ConvertsNulls == true)
+                    return null;
+
+                var resultMapping = (RelationalTypeMapping)mappingSource.FindMapping(typeof(DateTime),
+                    mode == OceanBaseCompatibilityMode.MySql ? "DATETIME(0)" : "DATE")!;
+                if (dateMapping.Converter is { } converter)
+                    resultMapping = (RelationalTypeMapping)resultMapping.WithComposedConverter(converter);
+                return factory.Function(mode == OceanBaseCompatibilityMode.MySql ? "DATE" : "TRUNC", [instance],
+                    nullable: true, argumentsPropagateNullability: [false], typeof(DateTime), resultMapping);
+            }
+
             if (instance is not null && CalendarParts.TryGetValue(member, out var weekday)
                 && returnType == (weekday ? typeof(DayOfWeek) : typeof(int)))
             {
@@ -115,6 +131,13 @@ namespace OceanBase.EntityFrameworkCore.Query
                     : mode == OceanBaseCompatibilityMode.MySql
                         ? providerType == typeof(TimeSpan) && store == "TIME"
                         : providerType == typeof(OceanBaseIntervalDayToSecond) && store.StartsWith("INTERVAL DAY", StringComparison.Ordinal);
+        }
+
+        private static bool SupportsDate(RelationalTypeMapping mapping)
+        {
+            var store = mapping.StoreTypeNameBase.Trim().ToUpperInvariant();
+            var providerType = mapping.Converter?.ProviderClrType ?? mapping.ClrType;
+            return providerType == typeof(DateTime) && store is "DATE" or "DATETIME" or "TIMESTAMP";
         }
     }
 }
