@@ -19,6 +19,24 @@ namespace OceanBase.EntityFrameworkCore.Query
     {
         internal const string SingleResultMarker = "__oceanbase_internal_single_result";
         private static readonly Dictionary<MethodInfo, string> Functions = CreateFunctions();
+        private static readonly HashSet<MethodInfo> ClampMethods = CreateClampMethods();
+
+        private static HashSet<MethodInfo> CreateClampMethods()
+        {
+            var methods = new HashSet<MethodInfo>();
+            foreach (var (owner, type) in new[]
+            {
+                (typeof(Math), typeof(sbyte)), (typeof(Math), typeof(byte)),
+                (typeof(Math), typeof(short)), (typeof(Math), typeof(ushort)),
+                (typeof(Math), typeof(int)), (typeof(Math), typeof(uint)),
+                (typeof(Math), typeof(long)), (typeof(Math), typeof(ulong)),
+                (typeof(Math), typeof(float)), (typeof(Math), typeof(double)),
+                (typeof(Math), typeof(decimal)), (typeof(decimal), typeof(decimal))
+            })
+                methods.Add(owner.GetMethod("Clamp", [type, type, type])
+                    ?? throw new InvalidOperationException($"Unexpected Clamp signature for {owner} and {type}."));
+            return methods;
+        }
 
         private static Dictionary<MethodInfo, string> CreateFunctions()
         {
@@ -66,6 +84,9 @@ namespace OceanBase.EntityFrameworkCore.Query
         public SqlExpression? Translate(SqlExpression? instance, MethodInfo method, IReadOnlyList<SqlExpression> arguments,
             IDiagnosticsLogger<DbLoggerCategory.Query> logger)
         {
+            if (instance is null && ClampMethods.Contains(method))
+                return TranslateClamp(method, arguments);
+
             if (instance is not null || !Functions.TryGetValue(method, out var function)
                 || arguments.Count != method.GetParameters().Length)
                 return null;
@@ -105,6 +126,35 @@ namespace OceanBase.EntityFrameworkCore.Query
                     nullable: true, argumentsPropagateNullability: [false, false], method.ReturnType, resultMapping)
                 : sqlExpressionFactory.Function(function, [input], nullable: true,
                     argumentsPropagateNullability: [false], method.ReturnType, resultMapping);
+        }
+
+        private SqlExpression? TranslateClamp(MethodInfo method, IReadOnlyList<SqlExpression> arguments)
+        {
+            if (arguments.Count != 3 || arguments.Any(argument => argument.Type != method.ReturnType))
+                return null;
+
+            var inputs = arguments.Select(sqlExpressionFactory.ApplyDefaultTypeMapping).ToArray();
+            if (inputs.Any(input => input is null || input.TypeMapping is not RelationalTypeMapping))
+                return null;
+            var value = inputs[0]!;
+            var mapping = (RelationalTypeMapping)value.TypeMapping!;
+            if (mapping.ClrType != method.ReturnType
+                || !inputs.All(input => IsValidNumeric((RelationalTypeMapping)input!.TypeMapping!, mappingSource)))
+                return null;
+
+            if (inputs[1] is SqlConstantExpression { Value: IComparable minimum }
+                && inputs[2] is SqlConstantExpression { Value: { } maximum }
+                && minimum.CompareTo(maximum) > 0)
+                return null;
+
+            var lower = sqlExpressionFactory.ApplyTypeMapping(inputs[1]!, mapping)!;
+            var upper = sqlExpressionFactory.ApplyTypeMapping(inputs[2]!, mapping)!;
+            var result = sqlExpressionFactory.Case(
+                [
+                    new CaseWhenClause(sqlExpressionFactory.LessThan(value, lower), lower),
+                    new CaseWhenClause(sqlExpressionFactory.GreaterThan(value, upper), upper)
+                ], value);
+            return sqlExpressionFactory.ApplyTypeMapping(result, mapping);
         }
 
         private SqlExpression? TranslateTranscendental(string function, Type returnType, SqlExpression[] inputs,

@@ -114,6 +114,13 @@ namespace PackageConsumer
                     throw new Exception("Packed provider truncated fractional division.");
                 }
 
+                var clampSql = context.Set<Row>().Where(row => Math.Clamp(row.Id, -1, 1) > 0).ToQueryString();
+                if (!clampSql.Contains("CASE", StringComparison.Ordinal)
+                    || !clampSql.Contains("WHEN", StringComparison.Ordinal))
+                {
+                    throw new Exception("Packed provider did not translate Math.Clamp.");
+                }
+
                 var bitwiseSql = context.Set<Row>().Where(row => (row.Id & -3) != 0).Select(row => new
                 {
                     Or = row.Id | -3, Xor = row.Id ^ -3, Not = ~row.Id,

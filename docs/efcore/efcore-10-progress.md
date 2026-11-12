@@ -3,7 +3,7 @@
 ## Active checkpoint: 2026-11-12
 
 Development resumed on 2026-11-11 on efcore/10.0 at the user's request, following the paused Batch7e checkpoint.
-The latest committed checkpoint is Batch3ak (`60ba0df`) on 2026-11-12.
+The latest committed checkpoint is Batch3ak (`60ba0df`) on 2026-11-12; Batch3al is the current verified slice.
 Test each module and review completed major modules before committing. EF8/EF9 remain postponed.
 The provider is not release-ready. The [feature checklist](efcore-10-feature-checklist.md) remains the
 acceptance authority; this document records the handoff rather than defining a different completion target.
@@ -29,6 +29,22 @@ This is the short execution view; the feature checklist remains the acceptance a
 Next execution order is: finish the next bounded QRY/MAP carrier or operator; widen required model/write/
 transaction/specification fixtures; resolve the live transport gate; then produce REL-01/02 evidence and run
 the final package matrix. EF8/EF9 adaptation, push and publication stay outside this sequence.
+
+### Numeric Clamp checkpoint (Batch3al, 2026-11-12)
+
+`Math.Clamp` and `decimal.Clamp` now translate all supported numeric overloads through a searched CASE
+expression in both modes. The translator keeps the input numeric mapping/converter, applies that carrier to
+the lower and upper bounds, and rejects unsupported/null-converting carriers. Statically reversed constant
+bounds remain unsupported so the CLR `ArgumentException` boundary is not silently changed. Captured bounds
+are parameterized and refresh across executions.
+
+Focused coverage passes **6** unit and **8** intercepted functional cases. Debug and Release source suites
+each pass **4021** tests: 1913 unit, 1238 intercepted functional, 868 specification and 2 consumer tests,
+with zero failures or skips. The selected EF10.0.14 Release suite also passes 4021. Package
+`10.0.0-clamp-20261112` passes `Verify-Package.ps1` and the packed consumer in both modes on EF10.0.0/10.0.14;
+the current nupkg SHA-256 is `FB6C0ED09D485D49800E43596BDFDEE91E83857347AA7AFFC2571601472FEC45` and the
+Release provider SHA-256 is `033090D2242AC08E6D36419FE46C9C8F0A02BC23354FDA7E101D38F553474F0F`.
+Native range/overflow, CASE result coercion and live execution remain open.
 
 ### Guid collection-root checkpoint (Batch3ak, 2026-11-12)
 

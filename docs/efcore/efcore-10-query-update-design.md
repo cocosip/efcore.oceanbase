@@ -513,6 +513,27 @@ removes fractions toward zero, without casting or rounding the input. Floor/Ceil
 below; Round/Random remain separate contracts. Pinned EF v10.0.0 and OceanBase documentation revision
 2a5ae3a23a51729d065cec716508eb26cb064106 are audited in the numeric-core local research artifact.
 
+## Numeric Clamp local contract (Batch3al, QRY-07/11, MAP-02/07)
+
+Translate the exact `Math.Clamp` overloads for `sbyte`, `byte`, `short`, `ushort`, `int`, `uint`, `long`,
+`ulong`, `float`, `double` and `decimal` through a provider-neutral searched CASE expression. The result
+keeps the input mapping and converter; each lower/upper bound is visited with the same numeric carrier. The
+`MathF` type has no Clamp API in the target framework, so no synthetic overload is introduced.
+
+Reject unsupported or null-converting carriers before inherited fallback. A statically reversed constant
+bound pair remains unsupported so CLR `ArgumentException` is not silently replaced with a server result;
+parameterized or column bounds retain SQL three-valued/null semantics and require native validation. This
+slice owns translation and mapping/reader behavior only; range, overflow and actual server CASE results remain
+live acceptance gates.
+
+### Batch3al validation checkpoint
+
+The focused Clamp suite passes 6 unit and 8 intercepted functional cases. Debug, Release and selected
+EF10.0.14 Release each pass 4021 tests (1913 unit, 1238 intercepted functional, 868 specification and 2
+consumer tests), with zero failures or skips. Package `10.0.0-clamp-20261112` passes content validation and
+both-mode EF10.0.0/10.0.14 consumers. These checks establish translation, parameter rebinding, mapping and
+reader behavior only; native range/overflow, CASE coercion and live execution remain open.
+
 ## Numeric Floor and Ceiling local contract
 
 The local numeric slice covers eight exact identities: Math.Floor(double/decimal), MathF.Floor(float),

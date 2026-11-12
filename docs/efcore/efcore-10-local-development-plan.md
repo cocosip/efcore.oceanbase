@@ -3,7 +3,7 @@
 **Goal:** Implement every locally developable EF10 feature, in reviewed/tested commits, while postponing real
 database integration and EF8/EF9 adaptation as explicitly requested on 2026-11-10.
 
-**Architecture:** Continue on efcore/10.0 at the current Batch3aj checkpoint and Batch3ak Guid characterization slice. Reuse the existing EF relational services, connector 0.2.0
+**Architecture:** Continue on efcore/10.0 at the current Batch3ak checkpoint and Batch3al Clamp slice. Reuse the existing EF relational services, connector 0.2.0
 public APIs and per-mode mappings/SQL. Separate local implementation evidence from server acceptance.
 
 **Spec:** efcore-10-feature-checklist.md, efcore-10-technical-baseline.md, efcore-10-query-update-design.md.
@@ -50,6 +50,19 @@ efcore-10-query-update-design.md. Continue from Batch3aj; no live database or EF
 - [x] Run the full Debug/Release, package and consumer gates after the documentation-only contract slice;
   4007 tests pass in each configuration, package content passes, and EF10.0.0/10.0.14 consumers pass.
   Native Guid equality, byte order, CHAR/RAW coercion and live execution remain separate gates.
+
+## Batch3al brief: numeric Clamp translation
+
+**IDs:** QRY-07/11, MAP-02/07. **Spec:** Numeric Clamp local contract in
+efcore-10-query-update-design.md. Continue from Batch3ak; no live database or EF8/EF9 work.
+
+- [x] Add RED coverage for all supported `Math.Clamp`/`decimal.Clamp` numeric overloads in filtering queries,
+  including both modes and statically reversed constant bounds.
+- [x] Add a provider translator that emits searched CASE expressions, retains the input mapping/converter and
+  rejects unsupported/null-converting carriers before fallback.
+- [x] Add sync/async intercepted integer and decimal tests for captured bound rebinding and result readers.
+- [x] Run the full Debug/Release and selected EF10.0.14 suites (4021 each), package content and both EF10.0.0/
+  EF10.0.14 consumers; native range/overflow and live CASE results remain separate acceptance gates.
 
 ## Global constraints
 
