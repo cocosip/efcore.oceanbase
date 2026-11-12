@@ -121,6 +121,15 @@ namespace PackageConsumer
                     throw new Exception("Packed provider did not translate Math.Clamp.");
                 }
 
+                var copySignSql = context.Set<Row>().Where(row => Math.CopySign(row.DoubleValue, row.Amplitude) < 0d
+                    && MathF.CopySign(row.SingleValue, row.SingleValue) < 0f).ToQueryString();
+                if (!copySignSql.Contains("ABS(", StringComparison.Ordinal)
+                    || !copySignSql.Contains("CASE", StringComparison.Ordinal)
+                    || !copySignSql.Contains("<", StringComparison.Ordinal))
+                {
+                    throw new Exception("Packed provider did not translate Math.CopySign/MathF.CopySign.");
+                }
+
                 var bitwiseSql = context.Set<Row>().Where(row => (row.Id & -3) != 0).Select(row => new
                 {
                     Or = row.Id | -3, Xor = row.Id ^ -3, Not = ~row.Id,

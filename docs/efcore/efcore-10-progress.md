@@ -33,6 +33,21 @@ Next execution order is: finish the next bounded QRY/MAP carrier or operator; wi
 transaction/specification fixtures; resolve the live transport gate; then produce REL-01/02 evidence and run
 the final package matrix. EF8/EF9 adaptation, push and publication stay outside this sequence.
 
+### CopySign checkpoint (Batch3au, 2026-11-13)
+
+`Math.CopySign(double, double)` and `MathF.CopySign(float, float)` now translate in both modes through
+`ABS(value) * CASE WHEN sign IS NULL THEN NULL WHEN sign < 0 THEN -1 ELSE 1 END`. The exact overloads
+preserve the first operand's mapping/converter/result carrier, require both operands to have compatible
+numeric provider carriers, and reject null-converting or unsupported mappings before command execution.
+Focused coverage passes 8 unit and 4 intercepted sync/async functional cases in both modes, including
+nested calls, nullable operands, reader NULLs and a same-carrier converter.
+
+The full Debug and Release source suites, plus the isolated EF10.0.14 Release suite, pass 4185 tests
+(2029 unit, 1286 functional, 868 specification and 2 consumer) with zero failures/skips. Package
+`10.0.0-copy-sign-20261113` passes `Verify-Package.ps1` and the standalone consumer on EF10.0.0 and
+EF10.0.14 in both modes. This is local translation, binding, reader and package evidence only; signed-zero
+bit patterns, non-finite behavior, native CASE coercion and live OceanBase CopySign results remain open.
+
 ### Explicit integer parameter-root checkpoint (Batch3at, 2026-11-13)
 
 `EF.Parameter(int[])`, nullable integer arrays and `List<int>` now use the provider's typed VALUES expansion

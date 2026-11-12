@@ -20,6 +20,16 @@ namespace OceanBase.EntityFrameworkCore.Query
         internal const string SingleResultMarker = "__oceanbase_internal_single_result";
         private static readonly Dictionary<MethodInfo, string> Functions = CreateFunctions();
         private static readonly HashSet<MethodInfo> ClampMethods = CreateClampMethods();
+        private static readonly HashSet<MethodInfo> CopySignMethods = CreateCopySignMethods();
+
+        private static HashSet<MethodInfo> CreateCopySignMethods()
+            =>
+            [
+                typeof(Math).GetMethod(nameof(Math.CopySign), [typeof(double), typeof(double)])
+                    ?? throw new InvalidOperationException("Unexpected Math.CopySign signature."),
+                typeof(MathF).GetMethod(nameof(MathF.CopySign), [typeof(float), typeof(float)])
+                    ?? throw new InvalidOperationException("Unexpected MathF.CopySign signature.")
+            ];
 
         private static HashSet<MethodInfo> CreateClampMethods()
         {
@@ -95,6 +105,9 @@ namespace OceanBase.EntityFrameworkCore.Query
         public SqlExpression? Translate(SqlExpression? instance, MethodInfo method, IReadOnlyList<SqlExpression> arguments,
             IDiagnosticsLogger<DbLoggerCategory.Query> logger)
         {
+            if (instance is null && CopySignMethods.Contains(method))
+                return TranslateCopySign(method, arguments);
+
             if (instance is null && ClampMethods.Contains(method))
                 return TranslateClamp(method, arguments);
 
@@ -139,6 +152,49 @@ namespace OceanBase.EntityFrameworkCore.Query
                     nullable: true, argumentsPropagateNullability: [false, false], method.ReturnType, resultMapping)
                 : sqlExpressionFactory.Function(function, [input], nullable: true,
                     argumentsPropagateNullability: [false], method.ReturnType, resultMapping);
+        }
+
+        private SqlExpression? TranslateCopySign(MethodInfo method, IReadOnlyList<SqlExpression> arguments)
+        {
+            if (arguments.Count != 2 || method.ReturnType != method.GetParameters()[0].ParameterType
+                || method.ReturnType != method.GetParameters()[1].ParameterType)
+                return null;
+
+            var inputs = arguments.Select(sqlExpressionFactory.ApplyDefaultTypeMapping).ToArray();
+            if (inputs[0] is not { TypeMapping: RelationalTypeMapping valueMapping }
+                || inputs[1] is not { TypeMapping: RelationalTypeMapping signMapping })
+                return null;
+
+            var value = inputs[0]!;
+            var sign = inputs[1]!;
+            if (!IsValidNumeric(valueMapping, mappingSource) || !IsValidNumeric(signMapping, mappingSource)
+                || value.Type != method.ReturnType || sign.Type != method.GetParameters()[1].ParameterType)
+                return null;
+
+            var valueCarrier = Carrier(valueMapping);
+            if (valueCarrier != Carrier(signMapping) || !CanRepresentNegativeOne(valueCarrier))
+                return null;
+
+            var absolute = sqlExpressionFactory.Function("ABS", [value], nullable: true,
+                argumentsPropagateNullability: [false], method.ReturnType, valueMapping);
+            var signZero = sqlExpressionFactory.Constant(Convert.ChangeType(0, sign.Type), signMapping);
+            var signIsNull = sqlExpressionFactory.Equal(sign, sqlExpressionFactory.Constant(null, sign.Type, signMapping));
+            var negative = sqlExpressionFactory.Constant(Convert.ChangeType(-1, method.ReturnType), valueMapping);
+            var positive = sqlExpressionFactory.Constant(Convert.ChangeType(1, method.ReturnType), valueMapping);
+            var multiplier = sqlExpressionFactory.Case(
+                [
+                    new CaseWhenClause(signIsNull, sqlExpressionFactory.Constant(null, method.ReturnType, valueMapping)),
+                    new CaseWhenClause(sqlExpressionFactory.LessThan(sign, signZero), negative)
+                ], positive);
+            return sqlExpressionFactory.Multiply(absolute, multiplier, valueMapping);
+
+            static Type Carrier(RelationalTypeMapping mapping)
+                => Nullable.GetUnderlyingType(mapping.Converter?.ProviderClrType ?? mapping.ClrType)
+                    ?? mapping.Converter?.ProviderClrType ?? mapping.ClrType;
+
+            static bool CanRepresentNegativeOne(Type carrier)
+                => carrier != typeof(byte) && carrier != typeof(ushort)
+                    && carrier != typeof(uint) && carrier != typeof(ulong);
         }
 
         private SqlExpression? TranslateClamp(MethodInfo method, IReadOnlyList<SqlExpression> arguments)

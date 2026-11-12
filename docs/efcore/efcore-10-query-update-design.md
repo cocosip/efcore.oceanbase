@@ -545,6 +545,23 @@ removes fractions toward zero, without casting or rounding the input. Floor/Ceil
 below; Round/Random remain separate contracts. Pinned EF v10.0.0 and OceanBase documentation revision
 2a5ae3a23a51729d065cec716508eb26cb064106 are audited in the numeric-core local research artifact.
 
+## Numeric CopySign local contract (QRY-07/11, MAP-02/07)
+
+The provider translates only the exact `Math.CopySign(double, double)` and
+`MathF.CopySign(float, float)` overloads in both compatibility modes. The SQL shape is
+`ABS(value) * CASE WHEN sign IS NULL THEN NULL WHEN sign < 0 THEN -1 ELSE 1 END`; the first
+operand owns the result mapping, converter and query precision, while the sign operand retains its
+own mapping for comparison and binding. Both operands must be valid numeric mappings with the same
+provider carrier that can represent the typed `-1` branch, and null-converting, text, binary, temporal,
+unsigned and mismatched-carrier combinations are rejected before command execution. Signed-zero bit patterns,
+non-finite values, native result coercion and server execution remain outside this local contract.
+
+Focused unit and intercepted sync/async functional tests cover both modes, exact overload identity,
+mapping ownership, nullable operands, reader NULLs and unsupported carriers. The packed consumer
+also checks the `ABS`/`CASE` shape on EF 10.0.0 and selected EF 10.0.14. These checks establish
+translation, binding, reader and package compatibility only; native CopySign results remain part of
+TST-02.
+
 ## Numeric Clamp local contract (Batch3al, QRY-07/11, MAP-02/07)
 
 Translate the exact `Math.Clamp` overloads for `sbyte`, `byte`, `short`, `ushort`, `int`, `uint`, `long`,
