@@ -3,7 +3,7 @@
 ## Active checkpoint: 2026-11-13
 
 Development resumed on 2026-11-11 on efcore/10.0 at the user's request, following the paused Batch7e checkpoint.
-The latest checkpoint is Batch3aq on 2026-11-13.
+The latest checkpoint is Batch3ar on 2026-11-13.
 Test each module and review completed major modules before committing. EF8/EF9 remain postponed.
 The provider is not release-ready. The [feature checklist](efcore-10-feature-checklist.md) remains the
 acceptance authority; this document records the handoff rather than defining a different completion target.
@@ -32,6 +32,16 @@ This is the short execution view; the feature checklist remains the acceptance a
 Next execution order is: finish the next bounded QRY/MAP carrier or operator; widen required model/write/
 transaction/specification fixtures; resolve the live transport gate; then produce REL-01/02 evidence and run
 the final package matrix. EF8/EF9 adaptation, push and publication stay outside this sequence.
+
+### Paging and ordering checkpoint (Batch3ar, 2026-11-13)
+
+`Distinct`, `OrderBy`, `Skip`/`Take`, empty pages and offset-only queries now have real EF sync/async
+intercepted coverage in both modes. MySQL asserts positional `LIMIT`/`OFFSET`; Oracle asserts the
+`OFFSET`/`FETCH` shape without depending on EF patch-specific parameter suffixes. The focused matrix passes
+4 cases. Debug and Release source suites and the isolated EF10.0.14 Release suite each pass **4117** tests
+(2005 unit, 1246 functional, 868 specification and 2 consumer tests). Package
+`10.0.0-paging-20261113` passes content verification and the standalone consumer on EF10.0.0/10.0.14 in both
+modes. Native ordering, collation, paging and server results remain open.
 
 ### Hyperbolic checkpoint (Batch3aq, 2026-11-13)
 

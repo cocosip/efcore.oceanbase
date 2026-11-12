@@ -291,6 +291,15 @@ in the [technical baseline](efcore-10-technical-baseline.md). Larger Oracle stri
 generating an order or group operation over LOB storage does not establish valid execution. Live mapping and query
 evidence remains required before advertising support.
 
+### Paging and ordering local contract
+
+`QRY-02` retains EF10's ordering, `Distinct`, `Skip` and `Take` composition and verifies the supplied reader
+results through the real EF sync and async pipelines in both modes. MySQL emits `LIMIT <count> OFFSET <offset>`;
+offset-only queries use `LIMIT 18446744073709551615 OFFSET <offset>`. Oracle emits `OFFSET <offset> ROWS`
+with `FETCH NEXT <count> ROWS ONLY`, and never uses table alias `AS`. Empty pages must materialize as an empty
+sequence while preserving the same SQL shape. Intercepted readers prove local shaping and binding only; native
+ordering, collation, paging and server results remain live acceptance gates.
+
 ## Model and materialization local contract
 
 Batch4a/4b/4c uses the existing EF10 relational conventions, initialized model and query materializers.

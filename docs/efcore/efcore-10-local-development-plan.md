@@ -3,7 +3,7 @@
 **Goal:** Implement every locally developable EF10 feature, in reviewed/tested commits, while postponing real
 database integration and EF8/EF9 adaptation as explicitly requested on 2026-11-10.
 
-**Architecture:** Continue on efcore/10.0 at the current Batch3ap inverse-trigonometric slice. Reuse the existing EF relational services, connector 0.2.0
+**Architecture:** Continue on efcore/10.0 at the current Batch3ar paging/ordering slice. Reuse the existing EF relational services, connector 0.2.0
 public APIs and per-mode mappings/SQL. Separate local implementation evidence from server acceptance.
 
 **Spec:** efcore-10-feature-checklist.md, efcore-10-technical-baseline.md, efcore-10-query-update-design.md.
@@ -12,7 +12,7 @@ public APIs and per-mode mappings/SQL. Separate local implementation evidence fr
 The compact execution board is [efcore-10-roadmap.md](efcore-10-roadmap.md); this file remains the detailed
 batch ledger and acceptance notes.
 
-**Updated:** 2026-11-13 after Batch3ap. Continue EF10 in this checkout, test each module and
+**Updated:** 2026-11-13 after Batch3ar. Continue EF10 in this checkout, test each module and
 review each completed major module before committing. EF8/EF9 remains postponed; live execution is opt-in and
 currently blocked before authentication by the supplied endpoint/transport behavior.
 The full goal remains incomplete.
@@ -40,6 +40,24 @@ Use this section to choose the next task; the feature checklist remains the deta
 Current binary collection-root evidence is the Batch3ai committed slice: 3994 source tests, the
 `10.0.0-binary-roots-final-20261112` package, package consumers on EF10.0.0/10.0.14, and local review.
 It does not close native binary, live, specification, or other required release gates.
+
+## Batch3ar brief: paging and ordering pipeline evidence
+
+**IDs:** QRY-02. **Spec:** Paging and ordering local contract in efcore-10-query-update-design.md. Continue
+from Batch3aq; no EF8/EF9 work.
+
+- [x] Add real EF sync/async intercepted coverage for ordered `Distinct` plus `Skip`/`Take`, empty pages and
+  offset-only queries in MySQL and Oracle.
+- [x] Assert materialized reader rows, execution count and mode-specific `LIMIT`/`OFFSET`/`FETCH` SQL while
+  retaining the existing SQL generator and no new service or dependency.
+- [x] Run focused/full Debug/Release, isolated EF10.0.14, package content and both EF10 patch consumers;
+  native ordering, collation, paging and server results remain separate gates.
+
+Batch3ar evidence: the focused four-case matrix, full Debug/Release suites and isolated EF10.0.14 Release each
+pass 4117 tests (2005 unit, 1246 functional, 868 specification and 2 consumer tests). Package
+`10.0.0-paging-20261113` passes content verification and the standalone consumer on EF10.0.0/10.0.14 in both
+modes. Oracle parameter suffixes are intentionally matched by shape because EF10.0.14 renames the second
+generated parameter; native ordering, collation, paging and server results remain open.
 
 ## Batch3ak brief: Guid collection roots
 

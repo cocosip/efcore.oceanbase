@@ -273,6 +273,55 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
         [InlineData(OceanBaseCompatibilityMode.MySql, true)]
         [InlineData(OceanBaseCompatibilityMode.Oracle, false)]
         [InlineData(OceanBaseCompatibilityMode.Oracle, true)]
+        public async Task Ordered_distinct_paging_materializes_results_and_empty_pages(
+            OceanBaseCompatibilityMode mode, bool async)
+        {
+            foreach (var (rows, expected) in new[]
+            {
+                (new object?[][] { ["beta"], ["gamma"] }, new[] { "beta", "gamma" }),
+                (Array.Empty<object?[]>(), Array.Empty<string>())
+            })
+            {
+                var capture = new ReaderCapture { Results = Table([typeof(string)], rows) };
+                await using var context = CreateContext(mode, capture);
+                var query = context.Set<Parent>().Select(parent => parent.Name).Distinct()
+                    .OrderBy(name => name).Skip(1).Take(2);
+                var result = async ? await query.ToListAsync() : query.ToList();
+
+                Assert.Equal(expected, result);
+                Assert.Contains("DISTINCT", capture.Sql!, StringComparison.OrdinalIgnoreCase);
+                Assert.Contains("ORDER BY", capture.Sql!, StringComparison.OrdinalIgnoreCase);
+                if (mode == OceanBaseCompatibilityMode.MySql)
+                {
+                    Assert.Contains("LIMIT ? OFFSET ?", capture.Sql!, StringComparison.OrdinalIgnoreCase);
+                    Assert.Equal(new object?[] { 2, 1 }, capture.Values);
+                }
+                else
+                {
+                    Assert.Matches(new Regex(@"OFFSET :p ROWS FETCH NEXT :p\d+ ROWS ONLY", RegexOptions.IgnoreCase), capture.Sql!);
+                    Assert.Equal(new object?[] { 1, 2 }, capture.Values);
+                    Assert.DoesNotContain(" AS ", capture.Sql!, StringComparison.Ordinal);
+                }
+                Assert.Equal(1, capture.Executions);
+            }
+
+            var offsetCapture = new ReaderCapture { Results = Table([typeof(string)], [new object?[] { "delta" }]) };
+            await using var offsetContext = CreateContext(mode, offsetCapture);
+            var offsetQuery = offsetContext.Set<Parent>().Select(parent => parent.Name).OrderBy(name => name).Skip(3);
+            var offsetResult = async ? await offsetQuery.ToListAsync() : offsetQuery.ToList();
+            Assert.Equal(new[] { "delta" }, offsetResult);
+            if (mode == OceanBaseCompatibilityMode.MySql)
+                Assert.Contains("LIMIT 18446744073709551615 OFFSET ?", offsetCapture.Sql!, StringComparison.OrdinalIgnoreCase);
+            else
+                Assert.Contains("OFFSET :p ROWS", offsetCapture.Sql!, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal(3, Convert.ToInt32(offsetCapture.Values[^1]));
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true)]
         public async Task Named_filters_compose_disable_selectively_and_refresh_context_parameters(OceanBaseCompatibilityMode mode, bool async)
         {
             var capture = new ReaderCapture { Results = Table([typeof(int)], [7]) };
