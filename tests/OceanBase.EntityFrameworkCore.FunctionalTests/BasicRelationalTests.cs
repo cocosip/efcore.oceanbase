@@ -1253,11 +1253,15 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
                     && Math.Log2(r.Double) > wide
                     && Math.Log10(r.Double) > wide && Math.Pow(r.Double, -2d) > wide
                     && Math.Sin(r.Double) > wide && Math.Cos(r.Double) > wide && Math.Tan(r.Double) > wide
+                    && Math.Asin(r.Double) > wide && Math.Acos(r.Double) > wide && Math.Atan(r.Double) > wide
+                    && Math.Atan2(r.Double, exponent) > wide
                     && MathF.Sqrt(r.Single + single) > single && MathF.Exp(r.Single) > single
                     && MathF.Log(r.Single) > single && MathF.Log(r.Single, .5f) > single
                     && MathF.Log2(r.Single) > single
                     && MathF.Log10(r.Single) > single && MathF.Pow(r.Single, -2f) > single
                     && MathF.Sin(r.Single) > single && MathF.Cos(r.Single) > single && MathF.Tan(r.Single) > single
+                    && MathF.Asin(r.Single) > single && MathF.Acos(r.Single) > single && MathF.Atan(r.Single) > single
+                    && MathF.Atan2(r.Single, .5f) > single
                     && Math.Pow(r.Decimal, r.Secondary) > comparison)
                 .OrderBy(r => Math.Log(r.Single, .5f))
                 .Select(r => new
@@ -1290,7 +1294,8 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
                 Assert.All(commands.Inputs.Where(p => p.DbType == DbType.Decimal), p =>
                 { Assert.Equal((byte)0, p.Precision); Assert.Null(p.DecimalScale); });
                 var sql = commands.Sql[^1];
-                foreach (var function in new[] { "SQRT(", "EXP(", "LN(", "POWER(", "SIN(", "COS(", "TAN(" }) Assert.Contains(function, sql);
+                foreach (var function in new[] { "SQRT(", "EXP(", "LN(", "POWER(", "SIN(", "COS(", "TAN(", "ASIN(", "ACOS(", "ATAN(" }) Assert.Contains(function, sql);
+                Assert.Contains("ATAN2(", sql);
                 Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? "LOG2(" : "LOG(", sql);
                 Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? "LOG10(" : "LOG(", sql);
                 Assert.Contains("WHERE", sql); Assert.Contains("ORDER BY", sql);

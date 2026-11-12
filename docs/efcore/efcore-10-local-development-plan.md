@@ -3,7 +3,7 @@
 **Goal:** Implement every locally developable EF10 feature, in reviewed/tested commits, while postponing real
 database integration and EF8/EF9 adaptation as explicitly requested on 2026-11-10.
 
-**Architecture:** Continue on efcore/10.0 at the current Batch3ao trigonometric slice. Reuse the existing EF relational services, connector 0.2.0
+**Architecture:** Continue on efcore/10.0 at the current Batch3ap inverse-trigonometric slice. Reuse the existing EF relational services, connector 0.2.0
 public APIs and per-mode mappings/SQL. Separate local implementation evidence from server acceptance.
 
 **Spec:** efcore-10-feature-checklist.md, efcore-10-technical-baseline.md, efcore-10-query-update-design.md.
@@ -12,7 +12,7 @@ public APIs and per-mode mappings/SQL. Separate local implementation evidence fr
 The compact execution board is [efcore-10-roadmap.md](efcore-10-roadmap.md); this file remains the detailed
 batch ledger and acceptance notes.
 
-**Updated:** 2026-11-12 after Batch3am. Continue EF10 in this checkout, test each module and
+**Updated:** 2026-11-13 after Batch3ap. Continue EF10 in this checkout, test each module and
 review each completed major module before committing. EF8/EF9 remains postponed; live execution is opt-in and
 currently blocked before authentication by the supplied endpoint/transport behavior.
 The full goal remains incomplete.
@@ -168,6 +168,25 @@ Debug/Release each pass 4061 tests (1949 unit, 1242 functional, 868 specificatio
 failures/skips. Package `10.0.0-trig-20261112` passes content and both-mode EF10.0.0/10.0.14 consumers. These
 checks establish local translation, binding, shaping and package consumption only; native results and live
 execution remain open.
+
+## Batch3ap brief: inverse-trigonometric translations
+
+**IDs:** QRY-07/11, MAP-02/07. **Spec:** Transcendental numeric local contract in
+efcore-10-query-update-design.md. Continue from Batch3ao; no EF8/EF9 work.
+
+- [x] Add RED/GREEN coverage for `Math`/`MathF` Asin, Acos, Atan and Atan2 across both modes, numeric
+  carriers, converters, nullable shaping and unsupported boundaries through the existing transcendental suite.
+- [x] Translate the eight exact overloads through the existing native-function and Single-normalization path;
+  preserve `Atan2(y, x)` argument order and do not add a new service or dependency.
+- [x] Add intercepted predicate coverage, null/composition coverage and packed-consumer dialect smoke, then
+  run full Debug/Release, isolated EF10.0.14, package content and both EF10 patch consumers. Native inverse-
+  trigonometric results remain open.
+
+Batch3ap evidence: focused transcendental coverage passes 129 unit and 8 intercepted functional cases. Debug,
+Release and isolated EF10.0.14 Release each pass 4093 tests (1981 unit, 1242 functional, 868 specification and
+2 consumers), zero failures/skips. Package `10.0.0-inverse-trig-final-20261112` passes content verification
+and both-mode consumers on EF10.0.0/10.0.14; provider and package hashes are recorded in the progress handoff.
+The provider remains unverified against native OceanBase because both live probes close during pre-auth handshake.
 
 Batch3ad evidence: the new nonnumeric aggregate unit suite passes 94 cases (373 with the existing numeric
 aggregate focus) and the dedicated intercepted functional suite passes 52. EF10.0.0 Debug/Release and isolated EF10.0.14 Release

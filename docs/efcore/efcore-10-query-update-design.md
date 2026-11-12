@@ -566,8 +566,9 @@ Round remains a separate contract; the following section defines the transcenden
 
 ## Transcendental numeric local contract
 
-All twenty exact Math/MathF Sqrt, Exp, Log (one/two arguments), Log2, Log10, Pow, Sin, Cos and Tan identities
-translate through the existing math service. Both modes use SQRT/EXP/LN/LOG2/LOG10/POWER/SIN/COS/TAN.
+All twenty-eight exact Math/MathF Sqrt, Exp, Log (one/two arguments), Log2, Log10, Pow, Sin, Cos, Tan,
+Asin, Acos, Atan and Atan2 identities translate through the existing math service. Both modes use
+SQRT/EXP/LN/LOG2/LOG10/POWER/SIN/COS/TAN/ASIN/ACOS/ATAN/ATAN2.
 MySQL Log(x,base) uses LN(x)/LN(base), retaining
 valid bases in (0,1); Oracle uses LOG(base,x). Oracle Log10 uses a fresh converter-free integer ten, avoiding
 accidental binary promotion of NUMBER operands. Every input retains its independently validated numeric
@@ -593,6 +594,11 @@ native result precision still require live validation.
 modes and emit the matching native `SIN`, `COS` or `TAN` function. They retain the existing numeric carrier,
 converter, Single normalization and decimal result-reader boundaries. Trigonometric domain and native result
 precision remain live validation items.
+
+`Math.Asin`, `MathF.Asin`, `Math.Acos`, `MathF.Acos`, `Math.Atan` and `MathF.Atan` use the same contract and
+emit `ASIN`, `ACOS` or `ATAN`. `Math.Atan2` and `MathF.Atan2` preserve the CLR `(y, x)` argument order and
+emit `ATAN2(y, x)` in both modes. Inverse-trigonometric domain behavior, native result precision and live
+execution remain validation items.
 
 Connector0.2.0 GetDecimal cannot decode boxed native Single/Double results. Transcendental decimal-provider
 results therefore use an immutable opt-in decimal mapping clone with GetValue and checked numeric

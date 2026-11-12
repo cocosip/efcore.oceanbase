@@ -1,9 +1,9 @@
 # EF Core 10 Development Progress
 
-## Active checkpoint: 2026-11-12
+## Active checkpoint: 2026-11-13
 
 Development resumed on 2026-11-11 on efcore/10.0 at the user's request, following the paused Batch7e checkpoint.
-The latest committed checkpoint is Batch3ao on 2026-11-12.
+The latest checkpoint is Batch3ap on 2026-11-13.
 Test each module and review completed major modules before committing. EF8/EF9 remain postponed.
 The provider is not release-ready. The [feature checklist](efcore-10-feature-checklist.md) remains the
 acceptance authority; this document records the handoff rather than defining a different completion target.
@@ -26,12 +26,26 @@ This is the short execution view; the feature checklist remains the acceptance a
 | Local model and runtime implementation | Wider MOD-01/02/03, QRY-02/05/08/09, UPD-01..05, TXN-01..03, CON-02..05 and DIA-01/02 coverage. | Existing doubles and intercepted pipelines cover selected shapes; complete required rows still need implementation or broader boundary tests. |
 | Schema and specification implementation | Remaining SCH-01..03 behavior and additional TST-01 relational specification families. | MySQL/Oracle ownership profiles and six inherited model families have local evidence; native DDL/privilege behavior and other specification families remain open. |
 | Native OceanBase validation | TST-02 scalar, query, write, transaction and schema matrix in both modes. | The supplied endpoint reaches TCP but closes during both mode handshakes before authentication. Classify transport/endpoint behavior, then run only the authorized non-destructive matrix before any DDL. |
-| Release evidence | REL-01 support record and REL-02 reviewed release revision. | The current Sin/Cos/Tan package passes content and both-patch package-consumer checks; every later provider change still requires fresh Debug/Release, package-content, package-consumer and review evidence. |
+| Release evidence | REL-01 support record and REL-02 reviewed release revision. | The current inverse-trigonometric package passes content and both-patch package-consumer checks; every later provider change still requires fresh Debug/Release, package-content, package-consumer and review evidence. |
 | Explicitly deferred inventory | DEF-01/02/04/05/06/07/08/10 remain deferred; DEF-03 and DEF-09 remain partial. | Run the documented feasibility audit after required local work stabilizes. A deferred label is not a release pass. |
 
 Next execution order is: finish the next bounded QRY/MAP carrier or operator; widen required model/write/
 transaction/specification fixtures; resolve the live transport gate; then produce REL-01/02 evidence and run
 the final package matrix. EF8/EF9 adaptation, push and publication stay outside this sequence.
+
+### Inverse-trigonometric checkpoint (Batch3ap, 2026-11-13)
+
+`Math/MathF.Asin`, `Acos`, `Atan` and `Atan2` now use the existing transcendental translator in both modes.
+MySQL and Oracle emit `ASIN`, `ACOS`, `ATAN` and `ATAN2`; `Atan2` preserves the CLR `(y, x)` argument order.
+The focused transcendental suite passes 129 unit cases and the intercepted functional method covers 8
+sync/async, two-mode cases. Debug and Release source suites each pass 4093 tests (1981 unit, 1242 intercepted
+functional, 868 specification and 2 consumer tests); the isolated EF10.0.14 Release suite also passes 4093.
+Package `10.0.0-inverse-trig-final-20261112` passes `Verify-Package.ps1` and the standalone package consumer
+on EF10.0.0/10.0.14 in both modes. Provider SHA-256 is
+`69D66E96D12596D04E78A69F1A63A1311196CB2DFBE15C5898DF9488E4F5F2D8`; nupkg SHA-256 is
+`3BEB684C1C475592EFDEAC0AB20C654422F8FBA57E9133DC9EFA4106924796B7`. These are local translation,
+binding, shaping and package-consumption checks; inverse-trigonometric native results and live execution
+remain open. The live MySQL and Oracle probes still close during the pre-auth handshake before SQL.
 
 ### Numeric Clamp checkpoint (Batch3al, 2026-11-12)
 

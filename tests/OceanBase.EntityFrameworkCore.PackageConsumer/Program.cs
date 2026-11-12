@@ -556,7 +556,15 @@ namespace PackageConsumer
                     (context.Set<Row>().Where(row => Math.Cos(row.DoubleValue) > 0d), "COS", false),
                     (context.Set<Row>().Where(row => MathF.Cos(row.SingleValue) > 0f), "COS", true),
                     (context.Set<Row>().Where(row => Math.Tan(row.DoubleValue) > 0d), "TAN", false),
-                    (context.Set<Row>().Where(row => MathF.Tan(row.SingleValue) > 0f), "TAN", true)
+                    (context.Set<Row>().Where(row => MathF.Tan(row.SingleValue) > 0f), "TAN", true),
+                    (context.Set<Row>().Where(row => Math.Asin(row.DoubleValue) > 0d), "ASIN", false),
+                    (context.Set<Row>().Where(row => MathF.Asin(row.SingleValue) > 0f), "ASIN", true),
+                    (context.Set<Row>().Where(row => Math.Acos(row.DoubleValue) > 0d), "ACOS", false),
+                    (context.Set<Row>().Where(row => MathF.Acos(row.SingleValue) > 0f), "ACOS", true),
+                    (context.Set<Row>().Where(row => Math.Atan(row.DoubleValue) > 0d), "ATAN", false),
+                    (context.Set<Row>().Where(row => MathF.Atan(row.SingleValue) > 0f), "ATAN", true),
+                    (context.Set<Row>().Where(row => Math.Atan2(row.DoubleValue, 2d) > 0d), "ATAN2", false),
+                    (context.Set<Row>().Where(row => MathF.Atan2(row.SingleValue, 2f) > 0f), "ATAN2", true)
                 })
                 {
                     var numericSql = numericQuery.ToQueryString();

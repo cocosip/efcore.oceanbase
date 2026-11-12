@@ -21,7 +21,7 @@ namespace OceanBase.EntityFrameworkCore.UnitTests;
 
 public sealed class TranscendentalQueryTests
 {
-    private static readonly string[] Names = ["Sqrt", "Exp", "Log", "LogBase", "Log2", "Log10", "Pow", "Sin", "Cos", "Tan"];
+    private static readonly string[] Names = ["Sqrt", "Exp", "Log", "LogBase", "Log2", "Log10", "Pow", "Sin", "Cos", "Tan", "Asin", "Acos", "Atan", "Atan2"];
 
     public static IEnumerable<object[]> ExactMethods()
     {
@@ -34,18 +34,18 @@ public sealed class TranscendentalQueryTests
 
     private static MethodInfo Method(string name, Type type)
         => (type == typeof(float) ? typeof(MathF) : typeof(Math)).GetMethod(name == "LogBase" ? "Log" : name,
-            name is "LogBase" or "Pow" ? [type, type] : [type])!;
+            name is "LogBase" or "Pow" or "Atan2" ? [type, type] : [type])!;
 
     [Theory]
     [MemberData(nameof(ExactMethods))]
-    public void All_twenty_identities_require_server_predicate_order_and_projection(
+    public void All_twenty_eight_identities_require_server_predicate_order_and_projection(
         OceanBaseCompatibilityMode mode, bool nulls, bool single, string name)
     {
         using var context = Context(mode, nulls);
         var type = single ? typeof(float) : typeof(double);
         var row = Expression.Parameter(typeof(Row), "r");
         var x = Expression.Property(row, single ? "Single" : "Double");
-        var args = name is "LogBase" or "Pow" ? new Expression[] { x, Expression.Constant(Convert.ChangeType(.5, type)) } : [x];
+        var args = name is "LogBase" or "Pow" or "Atan2" ? new Expression[] { x, Expression.Constant(Convert.ChangeType(.5, type)) } : [x];
         var method = Method(name, type);
         Assert.Equal(type, method.ReturnType);
         var call = Expression.Call(method, args);
@@ -60,6 +60,7 @@ public sealed class TranscendentalQueryTests
             "Sqrt" => "SQRT(", "Exp" => "EXP(",
             "Log2" => mode == OceanBaseCompatibilityMode.MySql ? "LOG2(" : "LOG(",
             "Sin" => "SIN(", "Cos" => "COS(", "Tan" => "TAN(",
+            "Asin" => "ASIN(", "Acos" => "ACOS(", "Atan" => "ATAN(", "Atan2" => "ATAN2(",
             "Pow" => "POWER(",
             "Log10" => mode == OceanBaseCompatibilityMode.MySql ? "LOG10(" : "LOG(",
             "LogBase" => mode == OceanBaseCompatibilityMode.Oracle ? "LOG(" : "LN(", _ => "LN(" };
@@ -114,7 +115,7 @@ public sealed class TranscendentalQueryTests
                 converter.ModelClrType == typeof(float)
                     ? new ValueConverter<float, double>(v => v * 3d - 4, v => (float)((v + 4) / 3)) : secondaryConverter);
             var b = factory.Constant(Convert.ChangeType(.5, converter.ModelClrType), secondaryMapping);
-            var result = translator.Translate(null, Method(name, converter.ModelClrType), name is "LogBase" or "Pow" ? [x, b] : [x], logger)!;
+            var result = translator.Translate(null, Method(name, converter.ModelClrType), name is "LogBase" or "Pow" or "Atan2" ? [x, b] : [x], logger)!;
             Assert.NotNull(result);
             Assert.Equal(converter.ModelClrType, result.Type);
             Assert.Same(converter, result.TypeMapping!.Converter);
@@ -130,7 +131,7 @@ public sealed class TranscendentalQueryTests
             var functions = Functions(result).ToArray();
             Assert.All(functions, f => { Assert.True(f.IsNullable); Assert.All(f.ArgumentsPropagateNullability!, Assert.False); });
             Assert.Contains(functions.SelectMany(f => f.Arguments!), a => ReferenceEquals(a, x));
-            if (name is "LogBase" or "Pow") Assert.Contains(functions.SelectMany(f => f.Arguments!), a => ReferenceEquals(a, b));
+            if (name is "LogBase" or "Pow" or "Atan2") Assert.Contains(functions.SelectMany(f => f.Arguments!), a => ReferenceEquals(a, b));
             if (name == "LogBase" && mode == OceanBaseCompatibilityMode.Oracle)
             {
                 var log = Assert.Single(functions, f => f.Name == "LOG");
@@ -176,7 +177,9 @@ public sealed class TranscendentalQueryTests
         IQueryable<double?>[] results = [context.Rows.Select(r => (double?)Math.Sqrt(r.Double)),
             context.Rows.Select(r => (double?)Math.Exp(r.Optional!.Value)), context.Rows.Select(r => (double?)Math.Log(r.Double)),
             context.Rows.Select(r => (double?)Math.Log(r.Double, .5)), context.Rows.Select(r => (double?)Math.Log10(r.Double)),
-            context.Rows.Select(r => (double?)Math.Pow(r.Double, -2))];
+            context.Rows.Select(r => (double?)Math.Pow(r.Double, -2)), context.Rows.Select(r => (double?)Math.Asin(r.Double)),
+            context.Rows.Select(r => (double?)Math.Acos(r.Double)), context.Rows.Select(r => (double?)Math.Atan(r.Double)),
+            context.Rows.Select(r => (double?)Math.Atan2(r.Double, .5))];
         foreach (var query in results)
         {
             Assert.Contains(" IS NULL", query.Where(v => v == null).ToQueryString());
@@ -186,7 +189,9 @@ public sealed class TranscendentalQueryTests
         IQueryable<float?>[] singles = [context.Rows.Select(r => (float?)MathF.Sqrt(r.Single)),
             context.Rows.Select(r => (float?)MathF.Exp(r.Single)), context.Rows.Select(r => (float?)MathF.Log(r.Single)),
             context.Rows.Select(r => (float?)MathF.Log(r.Single, .5f)), context.Rows.Select(r => (float?)MathF.Log10(r.Single)),
-            context.Rows.Select(r => (float?)MathF.Pow(r.Single, -2))];
+            context.Rows.Select(r => (float?)MathF.Pow(r.Single, -2)), context.Rows.Select(r => (float?)MathF.Asin(r.Single)),
+            context.Rows.Select(r => (float?)MathF.Acos(r.Single)), context.Rows.Select(r => (float?)MathF.Atan(r.Single)),
+            context.Rows.Select(r => (float?)MathF.Atan2(r.Single, .5f))];
         foreach (var query in singles)
         {
             Assert.Contains(" IS NULL", query.Where(v => v == null).ToQueryString());
@@ -225,7 +230,7 @@ public sealed class TranscendentalQueryTests
             var mapping = source.FindMapping(type, storeTypeName: declaration)!;
             var x = factory.Constant(Convert.ChangeType(2, type), mapping);
             var b = factory.Constant(Convert.ChangeType(.5, type), source.FindMapping(type));
-            var result = translator.Translate(null, Method(name, type), name is "LogBase" or "Pow" ? [x, b] : [x], logger)!;
+            var result = translator.Translate(null, Method(name, type), name is "LogBase" or "Pow" or "Atan2" ? [x, b] : [x], logger)!;
             Assert.Same(mapping, result.TypeMapping);
             Assert.Same(mapping, x.TypeMapping);
             var sql = Render(context, mode, result);
@@ -262,10 +267,10 @@ public sealed class TranscendentalQueryTests
             foreach (var baseValue in new[] { -.5, 0, .5, 1, type == typeof(float) ? MathF.BitIncrement(1f) : Math.BitIncrement(1d), 2 })
             {
                 var b = factory.Constant(Convert.ChangeType(baseValue, type), source.FindMapping(type));
-                var result = translator.Translate(null, Method(name, type), name is "LogBase" or "Pow" ? [x, b] : [x], logger)!;
+                var result = translator.Translate(null, Method(name, type), name is "LogBase" or "Pow" or "Atan2" ? [x, b] : [x], logger)!;
                 Assert.NotNull(result);
                 Assert.Contains(Functions(result).SelectMany(f => f.Arguments!), a => ReferenceEquals(a, x));
-                if (name is "LogBase" or "Pow")
+                if (name is "LogBase" or "Pow" or "Atan2")
                     Assert.Contains(Functions(result).SelectMany(f => f.Arguments!), a => ReferenceEquals(a, b));
                 if (name == "Pow") Assert.DoesNotContain(Functions(result), f => f.Name == "LN");
                 Assert.DoesNotContain("CASE", Render(context, mode, result));
@@ -295,8 +300,11 @@ public sealed class TranscendentalQueryTests
         foreach (var mapping in invalid)
         {
             var operand = factory.Constant(2d, mapping);
-            foreach (var function in new[] { "Pow", "Sin", "Cos", "Tan" })
+            foreach (var function in new[] { "Pow", "Sin", "Cos", "Tan", "Asin", "Acos", "Atan" })
                 Assert.Null(translator.Translate(null, Method(function, typeof(double)), function == "Pow" ? [operand, valid] : [operand], logger));
+            Assert.Null(translator.Translate(null, Method("Atan2", typeof(double)), [operand, valid], logger));
+            if (mapping is not DecimalTypeMapping)
+                Assert.Null(translator.Translate(null, Method("Atan2", typeof(double)), [valid, operand], logger));
             // A valid physical decimal secondary mapping is allowed; its reader is not used for result decoding.
             if (mapping is not DecimalTypeMapping)
                 Assert.Null(translator.Translate(null, Method("LogBase", typeof(double)), [valid, operand], logger));
@@ -313,6 +321,7 @@ public sealed class TranscendentalQueryTests
         }
         Assert.Null(translator.Translate(null, Method("Pow", typeof(double)), [valid], logger));
         Assert.Null(translator.Translate(null, Method("Log", typeof(double)), [valid, valid], logger));
+        Assert.Null(translator.Translate(null, Method("Atan2", typeof(double)), [valid], logger));
         Assert.Null(translator.Translate(valid, Method("Sqrt", typeof(double)), [valid], logger));
         foreach (var method in new[] { typeof(double).GetMethod("Sqrt", [typeof(double)])!,
             typeof(TranscendentalQueryTests).GetMethod(nameof(Sqrt))! })
