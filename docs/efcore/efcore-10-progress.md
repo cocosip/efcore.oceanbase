@@ -36,14 +36,20 @@ Boolean result semantics, live OceanBase execution, EF8/EF9 adaptation and relea
 
 ### Temporal collection-root checkpoint (2026-11-12)
 
-Batch3ag follows Batch3af. Captured `DateTime`/`DateTime?` arrays and empty inline roots now use the shared
-VALUES expansion in both compatibility modes. Temporal mappings expose EF10 JSON reader/writer metadata
-required for primitive collection mapping; MySQL emits `DATETIME` casts and Oracle emits `TIMESTAMP` casts.
-NULL cells, typed zero-row metadata and current captured values are covered by two focused unit cases and the
-existing collection-root suite. The source Debug/Release gates each pass **3962** tests: 1890 unit, 1202
-intercepted functional, 868 specification and 2 consumer tests, with zero failures or skips. This closes only
-the locally supported DateTime collection family; Oracle interval transport without a JSON reader/writer remains
-an explicit boundary. Native temporal coercion, precision/timezone semantics and live execution remain open.
+Batch3ah follows Batch3ag (`5c42125`). Captured `DateTime`, `DateTimeOffset`, `DateOnly`, `TimeOnly` and
+`TimeSpan` arrays, nullable cells and empty roots use the shared VALUES expansion in both compatibility modes
+where the existing mapping exposes EF10 collection metadata. MySQL emits `DATETIME`/`TIME`/`DATE` casts and
+Oracle emits `TIMESTAMP`/`DATE` casts; Oracle interval transport remains an explicit boundary. The shared
+temporal reader now accepts the connector and CLR carrier shapes produced by collection projections while
+preserving DateOnly midnight and DateTimeOffset UTC semantics. Six focused SQL-shape unit cases and sixteen
+intercepted sync/async functional cases assert parameters, decoded values, NULL rows and zero-row SQL.
+
+The source Debug/Release gates each pass **3984** tests: 1896 unit, 1218 intercepted functional, 868
+specification and 2 consumer tests, with zero failures or skips. Release packaging and `Verify-Package.ps1`
+pass for `10.0.0`; provider DLL SHA-256 is `FF9C42ED909E19959249925BBEEC4AF69D5740EC769E6C9216905F25AC24356D`
+and the nupkg SHA-256 is `E67F9B23902290C5C9A2739C56A83432AC45BDF1B184406A239215056B6656DC`. These are local
+SQL-shape, binding, reader and package results; native temporal coercion, precision/timezone semantics and
+live execution remain open.
 
 ### Live connectivity fixture checkpoint (2026-11-12)
 
@@ -54,11 +60,11 @@ The opt-in project `tests/OceanBase.EntityFrameworkCore.LiveTests` now loads
 
 The first non-destructive probes used the supplied host `172.16.2.45`, SQL port `2881`, supplied credentials,
 and TLS explicitly disabled because Connector 0.2.0 defaults to VerifyFull. The TCP port was reachable, but
-the MySQL handshake ended with `Connection closed while reading the packet` and the Oracle handshake timed out
-before authentication or SQL. No database/schema mutation occurred; credentials were loaded from a temporary
-outside-repository User Secrets file and no username, password or full connection string was recorded. This
-is an environment/transport blocker to classify, not evidence of an EF provider defect. TST-02 remains In progress
-until the endpoint/transport issue is classified and both tenants complete the core live matrix.
+both MySQL and Oracle handshakes ended with `Connection closed while reading the packet`, before authentication
+or SQL. No database/schema mutation occurred; credentials remain in the external User Secrets file and are not
+recorded here. This is an environment/transport blocker to classify, not evidence of an EF provider defect.
+TST-02 remains In progress until the endpoint/transport issue is classified and both tenants complete the core
+live matrix.
 
 ### General text collection-root checkpoint (2026-11-11)
 

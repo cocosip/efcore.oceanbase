@@ -31,7 +31,7 @@
 
 ## Current Baseline
 
-The feature implementation baseline is fecaa95 (Batch3ag, temporal DateTime collection roots). Documentation is synchronized by the follow-up documentation commit. Debug and Release source suites each pass 3962 tests: 1890 unit, 1202 intercepted functional, 868 specification and 2 project consumers, with zero failures or skips. This is local evidence only; the provider is not release-ready.
+The feature implementation baseline is 5c42125 (Batch3ah, temporal collection-root reader alignment). Debug and Release source suites each pass 3984 tests: 1896 unit, 1218 intercepted functional, 868 specification and 2 project consumers, with zero failures or skips. Release packaging and Verify-Package.ps1 pass for 10.0.0. This is local evidence only; the provider is not release-ready.
 
 The checklist currently has 9 Done rows, 44 In progress rows, 2 Planned rows and 8 Deferred rows. The status split below is the working boundary for automatic progression.
 
