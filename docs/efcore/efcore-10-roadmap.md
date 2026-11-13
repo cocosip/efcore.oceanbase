@@ -18,7 +18,11 @@ The following required rows have complete local/package evidence for both modes:
 - Migrations tooling supplies public assembly/history options and discoverable design services. Package-only
   CLI migrations/snapshots/model checks/scripts/list/removal and four Windows bundle build/help checks pass
   both modes on EF10.0.0/10.0.14 using dotnet-ef 10.0.15; see the [tooling plan](efcore-10-migrations-tooling-plan.md).
-  DEF-01/02 stay In progress pending native acceptance and reverse engineering.
+  DEF-01/02 stay In progress pending native acceptance.
+- Reverse engineering now consumes public Connector 0.3.0 GetSchema metadata, warning on unknown behavior.
+  Real generated contexts compile and produce query SQL in both modes for complete and documented-driver
+  profiles. Full source suites each pass 4562; packed runtime/CLI/bundle consumers pass on both EF patches.
+  See the [scaffolding plan](efcore-10-scaffolding-plan.md); native catalogs and lossless DDL are not claimed.
 - TPT inheritance now has physical-table-aware generation plus local schema/migration/query/write and packed
   CLI evidence. Debug/Release/selected-patch suites each pass 4441; see the [TPT plan](efcore-10-tpt-plan.md).
   DEF-07 is partial; native TPT acceptance and TPC remain open. Entity/table splitting now also has local
@@ -43,7 +47,7 @@ The provider is still a development checkpoint. It is not a release candidate.
 | Tracked writes and transactions | `UPD-01..05`, `TXN-01..03` | Finish generated/default/computed readback, composite and nullable concurrency, graph save ordering, atomic failure/cancellation recovery, enlistment and savepoint boundaries. | Deterministic command/transaction tests in both modes plus native readback/rollback evidence. |
 | Schema and database lifecycle | `SCH-01..03` | Finish existence/error classification, owned namespace boundaries, table/database/user creation and deletion behavior, privilege checks, and cleanup rules. | Offline SQL/double tests plus controlled live DDL/privilege/deletion matrix with an isolated owned target. |
 | EF relational specification coverage | `TST-01` | Add the next required relational model/query/write/runtime families and map each exclusion to a checklist ID. | Selected specification classes pass for both modes with zero unexplained skips. |
-| Migrations and reverse engineering | `DEF-01/02` | Core runtime/scripts and the package-only migration-tooling workflow pass locally. Implement reverse engineering separately; close native migration/script/bundle/concurrency acceptance. | Live schema fixtures and an authorized isolated upgrade/revert/lock/script matrix; retain packed tooling matrix. |
+| Migrations and reverse engineering | `DEF-01/02` | Core runtime/scripts, package-only migration tooling and Connector 0.3.0 metadata-to-compiled-context workflow pass locally. Close native catalog/migration/script/bundle/concurrency acceptance; review unknown generated configuration before writes or DDL. | Live schema fixtures and an authorized isolated upgrade/revert/lock/script matrix; retain packed tooling matrix. |
 
 ## Work that is implemented locally but still needs native validation
 
@@ -74,15 +78,16 @@ the exact release revision has not been reviewed. EF8/EF9 adaptation is outside 
 
 `DEF-04/05/06/08/10` remain deferred. `DEF-01/02/03/07/09` are partial: migrations core/tooling and local TPT,
 ordinary bulk operations, EnsureCreated/Migrate callbacks and runtime migration locking have local evidence.
-Native migrations/locks/bundle application, reverse engineering, wider JSON/converter/model variants, execution-strategy retries
+Native migrations/locks/bundle application and reverse-engineering catalogs, wider JSON/converter/model variants, execution-strategy retries
 and ambient/distributed transactions remain outside the accepted support claim. Deferred
 features stay visible and must not be advertised as supported.
 
 ## Execution order from this checkpoint
 
-1. **Completed locally:** migrations core, tooling, TPT inheritance and entity/table splitting are reviewed/tested
-   as complete modules. Splitting source suites each pass 4504; the same package passes both-mode runtime/CLI
-   consumers on EF10.0.0/10.0.14 and all four Windows bundle build/help checks.
+1. **Completed locally:** migrations core, tooling, TPT inheritance, entity/table splitting and Connector 0.3.0
+   reverse engineering are reviewed/tested as complete modules. Current source suites each pass 4562; the same
+   scaffolding package passes both-mode generated-context/runtime/CLI consumers on EF10.0.0/10.0.14 and all
+   four Windows bundle build/help checks. Unknown metadata remains visible through warnings.
 2. Build the next complete relational query/write specification fixture module (`TST-01`), then close the
    exposed graph materialization, tracked graph writes and transaction/connection recovery gaps together.
    Record positive/null/empty/failure boundaries by feature ID; avoid a new sequence of one-overload commits.

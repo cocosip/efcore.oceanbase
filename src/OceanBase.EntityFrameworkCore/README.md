@@ -1,7 +1,7 @@
 # OceanBase.EntityFrameworkCore
 
 Entity Framework Core 10 provider for OceanBase MySQL and Oracle compatibility modes, using the public
-OceanBaseConnector API. The package targets .NET 10 and accepts EF Core 10 patch versions in `[10.0.0,11.0.0)`.
+OceanBaseConnector 0.3.0 API. The package targets .NET 10 and accepts EF Core 10 patch versions in `[10.0.0,11.0.0)`.
 Select the tenant's compatibility mode explicitly when configuring a context:
 
 ```csharp
@@ -18,6 +18,16 @@ tenant. Driver protocol, authentication, connection pooling and transport settin
 This is a development provider. Local tests cover model/type mappings, SQL generation, intercepted query/write
 pipelines and package consumption. Real OceanBase query, write, transaction and schema acceptance is still open
 for both modes. Passing local tests does not establish server compatibility or release readiness.
+
+Database reverse engineering uses the driver's public `GetSchema` collections, including its typed column
+declarations and tri-state generation/default/update metadata. Scaffolding connections must specify
+`ExpectedMode=MySql` or `ExpectedMode=Oracle`; generated `UseOceanBase` code selects that mode explicitly.
+Supported scalar columns, keys, ordinary indexes, relationships and keyless views use EF's model/C# generation.
+Unavailable behavior metadata produces design-time warnings requiring configuration review before writes or
+schema recreation. Known defaults with unavailable SQL use EF's `HasDefaultValue()` marker; unknown identity
+is not guessed from a key or sequence-looking default. This is a usable model scaffold, not a lossless DDL
+backup. Unsupported types, expression/prefix indexes and known `ON UPDATE` behavior reject explicitly.
+Oracle identity mode/options and native catalog/generated-context execution remain unverified.
 
 General query collection roots support all eight CLR integer types, decimal, Single, Double, nullable
 forms and integer-backed enums through scalar parameters or constants and SELECT/UNION ALL. Empty

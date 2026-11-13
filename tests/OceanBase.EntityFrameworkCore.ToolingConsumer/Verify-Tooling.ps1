@@ -12,6 +12,8 @@ $toolingRoot = (Resolve-Path (Join-Path $PSScriptRoot '../..')).Path
 $toolingWorkspace = Join-Path $toolingRoot "artifacts/tooling-$EfCoreVersion-$([Guid]::NewGuid().ToString('N'))"
 New-Item -ItemType Directory -Path $toolingWorkspace | Out-Null
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'Program.cs') -Destination $toolingWorkspace
+Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'ReverseEngineeringSmoke.cs') -Destination $toolingWorkspace
+Copy-Item -LiteralPath (Join-Path $PSScriptRoot '../TestUtilities/ScaffoldingCatalogConnection.cs') -Destination $toolingWorkspace
 $toolingProject = Join-Path $toolingWorkspace 'ToolingConsumer.csproj'
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'OceanBase.EntityFrameworkCore.ToolingConsumer.csproj') -Destination $toolingProject
 [xml]$toolingProjectXml = Get-Content $toolingProject -Raw
@@ -76,6 +78,10 @@ $toolingConsumerDll = Join-Path $toolingWorkspace 'bin/Debug/net10.0/OceanBase.E
 if ((Get-FileHash $toolingCachedDll).Hash -ne (Get-FileHash $toolingConsumerDll).Hash) {
     throw 'Tooling output does not contain the selected packaged provider assembly.'
 }
+
+$null = Invoke-ToolingDotNet 'generate-catalog' @('run', '--project', $toolingProject, '--no-build', '--', '--generate-catalog', (Join-Path $toolingWorkspace 'Scaffolded'))
+Build-ToolingProject
+$null = Invoke-ToolingDotNet 'verify-catalog' @('run', '--project', $toolingProject, '--no-build', '--', '--verify-catalog')
 
 foreach ($toolingMode in @('MySql', 'Oracle')) {
     $toolingContext = "${toolingMode}Context"

@@ -10,7 +10,7 @@
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Relational.Specification.Tests" Version="[10.0.0,11.0.0)" />
     <PackageVersion Include="Microsoft.Extensions.Configuration.UserSecrets" Version="[10.0.0,11.0.0)" />
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.11.0" />
-    <PackageVersion Include="OceanBaseConnector" Version="0.2.0" />
+    <PackageVersion Include="OceanBaseConnector" Version="0.3.0" />
     <PackageVersion Include="System.Security.Cryptography.Xml" Version="9.0.23" />
     <PackageVersion Include="xunit" Version="2.9.3" />
     <PackageVersion Include="xunit.runner.visualstudio" Version="3.1.5" />

@@ -52,7 +52,22 @@ so that an undocumented feature is not accidentally advertised.
 
 ## Current evidence and blockers
 
-Latest implementation: TPT inheritance on 2026-11-13. Both-mode creation and model-difference migrations now
+Latest implementation: Connector 0.3.0 reverse engineering on 2026-11-13. Public GetSchema metadata now flows
+through the real EF model/C# generators to compiled DbContexts in both modes. Unknown generation/default/update
+facts warn and permit useful scaffolding; no provider column-directory SQL or guessed default SQL remains.
+The driver meets the agreed profile; its server/Java metadata limits are not additional driver defects.
+Fifty-eight focused cases pass, including ownership, named connections, warning reporting and the reviewed
+Oracle TIMESTAMP/CHAR mapping fix. Debug/Release at EF10.0.0 and isolated EF10.0.14 Release each pass 4562 tests,
+zero failures/skips. Package `10.0.0-scaffolding-ob030-r2-20261113` passes content, both-mode runtime and compiled
+generated-context consumers, full migration CLI and four bundle build/help checks on both patches. See the
+[scaffolding design](efcore-10-scaffolding-design.md) and [execution record](efcore-10-scaffolding-plan.md).
+Native catalogs and unknown generated write/DDL configuration still need acceptance/review; DEF-02 stays In progress.
+
+Preceding implementation: entity/table splitting on 2026-11-13 adds required entity fragments and shared-row
+schema/query/tracked CRUD workflows; see the [splitting plan](efcore-10-splitting-plan.md). Its 4504-test
+checkpoint and package matrix remain historical evidence; TPC stays rejected.
+
+Preceding implementation: TPT inheritance on 2026-11-13. Both-mode creation and model-difference migrations now
 distinguish physical root identity generation from inherited PK/FK propagation; TPC and entity splitting remain
 rejected. Hierarchy query/materialization/Include/filter and tracked multi-table CRUD/transaction-control
 fixtures pass locally. Final Debug/Release and isolated EF10.0.14 each pass 4441 tests; package
@@ -67,7 +82,7 @@ and provider ownership state; provider design services reuse EF generators witho
 See [tooling design](efcore-10-migrations-tooling-design.md) and its execution plan. Debug/Release and isolated
 EF10.0.14 Release each pass 4388 tests; `10.0.0-tooling-r2-20261113` passes content/runtime/tooling consumers in
 both modes on both patches with installed dotnet-ef 10.0.15. DEF-02 is now partially promoted to In progress;
-reverse engineering remains unimplemented. Native application/locking/script execution remain open.
+reverse engineering was unimplemented at that checkpoint. Native application/locking/script execution remain open.
 
 Preceding implementation: migrations core on 2026-11-13. DEF-01 is partially promoted: both-mode operation SQL,
 real model differences, history/owner-row locking, guarded Migrate/MigrateAsync and forward/reverse/idempotent
@@ -546,7 +561,7 @@ specification families and the remaining checklist criteria stay open; no Requir
 | CFG-02 | Database.IsOceanBase() and invariant identify this provider through EF's real service graph. | Required | Done | Done | CP UseOceanBase_registers_the_provider passes both modes in Debug/Release; UO confirms invariant and null facade guard. |
 | CFG-03 | Model/service-provider and compiled-query caches separate compatibility/translation modes and design-time/runtime models; compatible options reuse services. | Required | Done | Done | UO/URS model/service/key/mode/design/runtime and same-expression default/Constant order regressions pass in Debug/Release and isolated EF10.0.14; same-package PC passes both patches. Full relational base key retained. Positive model retention uses a test-owned cache; explicit eviction preserves keys/services and rebuilds equivalent models. |
 | CFG-04 | Required relational services resolve with EF10 lifetimes; normal DatabaseFacade APIs have no missing services. | Required | In progress | In progress | Scoped creator, migration/history services and discoverable design services resolve; real scaffolder tests and package-only CLI workflows pass. Wider service/schema/native lifecycle acceptance remains open. |
-| CON-01 | Create OceanBaseConnection through public OceanBaseConnector 0.2.0 APIs and supply ExpectedMode. | Required | Done | Done | UO Relational_connection_uses_connector_and_mode. |
+| CON-01 | Create OceanBaseConnection through public OceanBaseConnector 0.3.0 APIs and supply ExpectedMode. | Required | Done | Done | UO Relational_connection_uses_connector_and_mode; current full source and package matrices use 0.3.0. |
 | CON-02 | Reject configured/detected mode conflicts before execution for supplied/created connections; cleanup remains safe after rejection. | Required | In progress | In progress | UO mutation/replacement/cleanup regressions pass; opened/detected-mode execution missing. |
 | CON-03 | Caller-owned connections survive context disposal; provider-owned connections close/dispose in sync/async success/error paths. | Required | In progress | In progress | UO closed disposal and ConnectionLifecycleTests failed-open count/ownership/captured-native cleanup pass. Caller-opened/outer leases, cancellation and retry use deterministic physical doubles; native close failure requires best-effort/direct cleanup. Actual opened ownership/disposal and live behavior remain open. |
 | CON-04 | Sync/async open, execute, read, close and connection reuse honor mode and connector settings. | Required | In progress | In progress | FP commands plus registered-provider failed-open accounting and physical-state/retry doubles pass; no live lifecycle execution. EF10 private snapshot contracts require patch review. |
@@ -651,10 +666,10 @@ Creating an Oracle tenant is never inferred.
 
 | ID | Requirement and acceptance criteria | Priority | MySQL | Oracle | Existing evidence / gap |
 | --- | --- | --- | --- | --- | --- |
-| PKG-01 | Build net10.0 assets against published OceanBaseConnector 0.2.0 with warnings as errors. | Required | Done | Done | Current solution test command builds assets; not a package-content assertion. |
-| PKG-02 | Packed nuspec uses OceanBase.EntityFrameworkCore and EF ranges [10.0.0,11.0.0). | Required | Done | Done | Verify-Package.ps1 passes `10.0.0-tpt-r2-20261113` identity/net10.0/README/ranges and unchanged three runtime dependencies; Design remains a private consumer/test dependency. Prior negative probes remain historical evidence. Rerun on every release pack; runtime/live gates are separate. |
-| PKG-03 | Isolated packed consumer restores/executes provider API without project/local connector references. | Required | Done | Done | `10.0.0-tpt-r2-20261113` passes both modes on EF10.0.0/10.0.14, including TPT schema/query/CRUD runtime smoke and CLI migrations/snapshots/model changes/scripts/list/removal/bundle build/help. Package-only graphs and source/archive/consumer DLL hashes match; runtime consumer has no Design dependency. Rerun after changes. |
-| PKG-04 | Minimum EF10 and selected later available EF10 patch restore/build/test without pinning the EF patch in the provider package; EF11 cannot satisfy dependencies. | Required | Done | Done | Source Debug/Release at EF10.0.0 and isolated EF10.0.14 Release each pass 4441 tests; the same TPT nupkg passes both-patch runtime/CLI consumers and ranges remain [10.0.0,11.0.0). CLI is 10.0.15; Design/runtime use selected patches. Future patches need fresh private-contract evidence. |
+| PKG-01 | Build net10.0 assets against OceanBaseConnector 0.3.0 with warnings as errors. | Required | Done | Done | Current full source matrix builds against the supplied 0.3.0 release nupkg; provenance/hash and unavailable public NuGet TLS lookup are recorded in the scaffolding plan. No driver project reference. |
+| PKG-02 | Packed nuspec uses OceanBase.EntityFrameworkCore and EF ranges [10.0.0,11.0.0). | Required | Done | Done | Verify-Package.ps1 passes `10.0.0-scaffolding-ob030-r2-20261113` identity/net10.0/README/ranges and three runtime dependencies, now Connector 0.3.0; Design stays private to consumers/tests. Rerun on every release pack; runtime/live gates remain separate. |
+| PKG-03 | Isolated packed consumer restores/executes provider API without project/local connector references. | Required | Done | Done | The scaffolding r2 nupkg passes both modes on EF10.0.0/10.0.14: existing runtime smokes, compiled generated contexts for complete/documented-driver profiles, full migration CLI and bundle build/help. Package-only graphs and source/archive/consumer DLL hashes match; runtime consumer has no Design dependency. Rerun after changes. |
+| PKG-04 | Minimum EF10 and selected later available EF10 patch restore/build/test without pinning the EF patch in the provider package; EF11 cannot satisfy dependencies. | Required | Done | Done | Source Debug/Release at EF10.0.0 and isolated EF10.0.14 Release each pass 4562 tests; the same scaffolding r2 nupkg passes both-patch runtime/generated-context/CLI consumers and ranges stay [10.0.0,11.0.0). CLI is 10.0.15; Design/runtime use selected patches. Future patches need fresh private-contract evidence. |
 | TST-01 | Selected EF relational specification classes pass; exclusions map to checklist IDs and limitations. | Required | In progress | In progress | SpecificationTests now runs full inherited generic relational OneToMany/ManyToOne/OneToOne/ManyToMany/Inheritance/OwnedTypes families against real provider services in both modes:866 inherited+two guard cases pass at EF10.0.0/10.0.14, zero skips/exclusions. Other model families and query/write/runtime specification fixtures remain open. Selected metadata success does not establish deferred runtime features. |
 | TST-02 | Live core query/write/transaction/schema/scalar suites pass in at least one declared supported environment per mode. | Required | In progress | In progress | Opt-in `tests/OceanBase.EntityFrameworkCore.LiveTests` loads external User Secrets and builds cleanly. With the supplied credentials, TCP to `172.16.2.45:2881` was reachable; both MySQL and Oracle closed the packet during handshake before authentication or SQL. No SQL/DDL ran. Classify the endpoint/transport failure and rerun before expanding the live matrix. |
 | REL-01 | Support notes record server/connector/runtime/EF versions, tenant mode, direct/proxy endpoint, transport/options without credentials. | Required | Planned | Planned | Release evidence record missing. |
@@ -668,7 +683,7 @@ are difficult to implement. Promoting a deferred feature requires its own design
 | ID | Feature | MySQL | Oracle | Promotion criteria |
 | --- | --- | --- | --- | --- |
 | DEF-01 | Migrations/history table/scripts/idempotent scripts/bundles | In progress | In progress | Core model differences, dialect DDL/seed, history/owner-row lock, guarded sync/async execution and scripts have local evidence. CLI scaffolding/snapshot compilation, model checks, scripts/list/removal and Windows bundle build/help pass both modes/patches; see migrations/tooling designs and plans. Unknown annotations, cross-scope data/history, unsupported models and retrying strategies reject. Native DDL/locking, bundle application and external client script execution remain open. |
-| DEF-02 | Reverse engineering/provider design-time services/dotnet ef tooling | In progress | In progress | Discoverable provider design services and packed migration-tooling workflows pass both modes/patches without a new runtime dependency. See tooling design/plan. Reverse engineering and its live schema fixtures remain unimplemented; no database-model factory is registered. |
+| DEF-02 | Reverse engineering/provider design-time services/dotnet ef tooling | In progress | In progress | Scoped database-model factory consumes public Connector 0.3.0 GetSchema, provider code generation and context-free mappings resolve, and real EF generated contexts compile/query in both modes on EF10.0.0/10.0.14. Packed migration CLI/bundles still pass without a new runtime dependency. Unknown generation/default/update facts warn; review generated write/DDL configuration. See scaffolding design/plan. Native catalogs and lossless DDL are not claimed. |
 | DEF-03 | ExecuteUpdate/ExecuteDelete, including EF10 lambda/JSON variants | In progress | In progress | Ordinary bulk operations, Oracle joined/paged scalar/EXISTS rewrites and MySQL cyclic/dependent/derived-source snapshots have local coverage, including physical keys, left joins, nullable Boolean encodings, filters, paging, binding and aliases. Final full3480 pass on both selected patches. Arbitrary cross-converter expressions, wider model/JSON shapes and native optimizer/read consistency/results remain open. |
 | DEF-04 | JSON, primitive collections/arrays and complex types, including JSON-owned/complex mappings | Deferred | Deferred | Per-mode mapping/query/update design. |
 | DEF-05 | Spatial, XML, native enum types, OBJECT, LOB locators, REF CURSOR | Deferred | Deferred | Connector capability review/live mappings; ordinary enum converters belong to MAP-07. |

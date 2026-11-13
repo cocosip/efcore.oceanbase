@@ -27,7 +27,7 @@ try {
     $expectedDependencies = @{
         'Microsoft.EntityFrameworkCore' = '[10.0.0, 11.0.0)'
         'Microsoft.EntityFrameworkCore.Relational' = '[10.0.0, 11.0.0)'
-        'OceanBaseConnector' = '0.2.0'
+        'OceanBaseConnector' = '0.3.0'
     }
     $dependencies = @($groups[0].dependency)
     if ($dependencies.Count -ne $expectedDependencies.Count) { throw 'Unexpected package dependencies.' }

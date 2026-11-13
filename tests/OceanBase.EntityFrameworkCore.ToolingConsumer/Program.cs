@@ -14,7 +14,20 @@ namespace ToolingConsumer
 {
     internal static class Program
     {
-        private static void Main() => Console.WriteLine("Offline packed-provider migrations tooling fixture.");
+        private static int Main(string[] args)
+        {
+            try
+            {
+                if (args.Length > 0) ReverseEngineeringSmoke.Run(args);
+                else Console.WriteLine("Offline packed-provider migrations tooling fixture.");
+                return 0;
+            }
+            catch (Exception error)
+            {
+                Console.Error.WriteLine($"Tooling fixture failed ({error.GetType().Name}): {error.Message}");
+                return 1;
+            }
+        }
     }
 
     public abstract class ToolingContext(DbContextOptions options, bool expanded) : DbContext(options)

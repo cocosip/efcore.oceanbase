@@ -12,13 +12,35 @@ smaller than a complete EF Core feature catalog.
 - Release branch: efcore/10.0.
 - EF dependency range: Microsoft.EntityFrameworkCore and Microsoft.EntityFrameworkCore.Relational [10.0.0, 11.0.0).
 - Initial provider asset: the runtime target required by EF Core 10.
-- ADO.NET dependency: the public OceanBaseConnector package APIs.
+- ADO.NET dependency: the public OceanBaseConnector 0.3.0 package APIs.
 - Public package: OceanBase.EntityFrameworkCore 10.x.
 
 EF Core 10 requires .NET 10 to build and run. NuGet normally selects the lowest applicable version inside a bounded
 range, unless a consumer dependency requires a higher version. A range permits consumer patch upgrades; it does not
 automatically test those upgrades. The package-consumer gate must record the SDK, runtime, resolved EF Core patch,
 provider package and connector.
+
+## Reverse engineering and Connector 0.3.0 (2026-11-13)
+
+The current baseline registers a scoped IDatabaseModelFactory, singleton provider code generator and
+context-free relational design mappings. Consume public GetSchema tables/columns/keys/indexes/foreign keys;
+do not duplicate the driver's column-directory SQL or infer defaults from raw COLUMN_DEFAULT text.
+Require explicit ExpectedMode, check opened mode, preserve caller ownership and primary failures.
+
+Columns has 23 fields with nullable typed flags for identity/computed/default/update facts. Unknown flags
+produce EF design-time warnings and permit scaffolding; they do not mean false. A known default with unavailable
+SQL uses DatabaseColumn.DefaultValue = DBNull.Value (HasDefaultValue()); a known computed expression with
+unavailable SQL uses ComputedColumnSql = "" (HasComputedColumnSql()). Never fabricate default SQL. Known
+unsupported ON UPDATE, types or contradictory metadata reject. Review generated write/DDL configuration
+when facts are unknown; this is usable scaffolding, not lossless schema reconstruction.
+
+Reuse mode mappings; Oracle NUMBER(p,0) narrows to int for p<=9 and long for p<=18, otherwise decimal.
+Context-free dispatch includes plain TIMESTAMP and CHAR BYTE/CHAR semantics. Named connection generation
+retains Name= and emits the explicit provider mode. EF10's internal named resolver remains a tested patch seam.
+See the [design](efcore-10-scaffolding-design.md) and [execution record](efcore-10-scaffolding-plan.md) for
+0.3.0 package provenance, 58 focused cases, 4562 tests per full suite and packed generated-code/CLI evidence.
+No native catalog execution is claimed; actual server/Java limits do not create additional driver requirements.
+Earlier version-specific evidence below remains historical.
 
 ## Migrations core (2026-11-13)
 

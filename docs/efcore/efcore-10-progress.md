@@ -3,7 +3,7 @@
 ## Active checkpoint: 2026-11-13
 
 Development resumed on 2026-11-11 on efcore/10.0 at the user's request, following the paused Batch7e checkpoint.
-The latest checkpoint is the entity/table splitting module on 2026-11-13, following TPT and migrations core/tooling.
+The latest checkpoint is Connector 0.3.0 reverse engineering on 2026-11-13, following splitting, TPT and migrations.
 Test each module and review completed major modules before committing. EF8/EF9 remain postponed.
 The provider is not release-ready. The [feature checklist](efcore-10-feature-checklist.md) remains the
 acceptance authority; this document records the handoff rather than defining a different completion target.
@@ -16,6 +16,30 @@ each complete feature module. Two read-only live probes already load User Secret
 the wider native matrix remains open. EF8/EF9 adaptation remains postponed. The
 [local development plan](efcore-10-local-development-plan.md) tracks the full remaining inventory, including
 an audit of locally feasible deferred families. Finishing one batch does not finish the overall goal.
+
+### Connector 0.3.0 reverse-engineering checkpoint (2026-11-13)
+
+The local database-metadata-to-compiled-DbContext workflow now works in both modes using public Connector
+0.3.0 GetSchema APIs. The provider no longer duplicates column-directory queries or declaration/default
+reconstruction. The 23-field Columns contract supplies typed declarations and tri-state behavior facts;
+unknown generation/default/update facts produce visible design-time warnings and permit useful scaffolding.
+This contract meets the agreed supported profile; server/Java metadata limits are not further driver defects.
+Explicit ExpectedMode remains a provider requirement. See the [design](efcore-10-scaffolding-design.md) and
+[execution record](efcore-10-scaffolding-plan.md).
+
+Fifty-eight focused cases cover metadata assembly, selectors, ownership/failure cleanup, context-free mapping,
+warnings, named connections and actual EF C# generation. Independent review found and fixed Oracle plain
+TIMESTAMP and CHAR BYTE/CHAR mapping dispatch. Debug/Release at EF10.0.0 and isolated EF10.0.14 Release each
+pass **4562 tests** (2193 unit, 1499 functional, 868 metadata specification, two project consumers), zero
+failures/skips. Package `10.0.0-scaffolding-ob030-r2-20261113` passes content, both-mode runtime consumers,
+compiled generated contexts using complete and documented-0.3.0 metadata profiles, full migration CLI and four
+Windows bundle build/help checks on both patches. Source/archive/consumer DLL identity and package-only graphs
+are verified. Connector provenance and local artifact paths are recorded in the execution record.
+
+DEF-02 remains In progress pending native catalog acceptance. No live SQL/catalog ran for this module;
+unknown generated configuration needs review before writes/schema recreation, and lossless DDL/identity
+options are not claimed. Next work remains the relational query/write specification and graph/recovery modules;
+the overall EF10 goal and native/release gates remain open.
 
 ### Entity/table splitting checkpoint (2026-11-13)
 

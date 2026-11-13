@@ -3,16 +3,16 @@
 **Goal:** Implement every locally developable EF10 feature, in reviewed/tested commits, while postponing real
 database integration and EF8/EF9 adaptation as explicitly requested on 2026-11-10.
 
-**Architecture:** Continue on efcore/10.0 with entity/table splitting following TPT and migrations core/tooling. Reuse the existing EF relational services, connector 0.2.0
+**Architecture:** Continue on efcore/10.0 with Connector 0.3.0 reverse engineering following splitting, TPT and migrations core/tooling. Reuse the existing EF relational services, connector 0.3.0
 public APIs and per-mode mappings/SQL. Separate local implementation evidence from server acceptance.
 
 **Spec:** efcore-10-feature-checklist.md, efcore-10-technical-baseline.md, efcore-10-query-update-design.md.
-**Tech Stack:** C#, .NET 10, EF Core/Relational [10.0.0,11.0.0), xUnit, OceanBaseConnector 0.2.0.
+**Tech Stack:** C#, .NET 10, EF Core/Relational [10.0.0,11.0.0), xUnit, OceanBaseConnector 0.3.0.
 
 The compact execution board is [efcore-10-roadmap.md](efcore-10-roadmap.md); this file remains the detailed
 batch ledger and acceptance notes.
 
-**Updated:** 2026-11-13, entity/table splitting. Continue EF10 in this checkout, test each module and
+**Updated:** 2026-11-13, Connector 0.3.0 reverse engineering. Continue EF10 in this checkout, test each module and
 review each completed major module before committing. EF8/EF9 remains postponed; live execution is opt-in and
 currently blocked before authentication by the supplied endpoint/transport behavior.
 The full goal remains incomplete.
@@ -37,6 +37,16 @@ Use this section to choose the next task; the feature checklist remains the deta
    full Debug/Release suites, package content gate and package consumer at EF10.0.0/10.0.14, review the
    release revision, and only then consider a release branch/tag. EF8/EF9, push and publication remain out
    of the current development sequence.
+
+### Connector 0.3.0 reverse-engineering module (2026-11-13)
+
+**IDs:** DEF-02, CFG-04, CON-01, MAP-01..07, PKG-01..04. The [design](efcore-10-scaffolding-design.md)
+and [execution record](efcore-10-scaffolding-plan.md) cover public GetSchema metadata through compiled
+generated DbContexts, context-free mappings, warnings, ownership and package tooling in both modes.
+Fifty-eight focused cases and 4562 tests per Debug/Release/selected-patch suite pass. The same nupkg passes
+both-patch runtime, generated-context and full CLI/bundle checks. Independent review's Oracle TIMESTAMP/CHAR
+dispatch finding is fixed. Driver 0.3.0 meets the agreed profile; unknown behavior warns rather than blocking
+all scaffolding. Native catalogs, lossless DDL and the overall EF10 goal remain open.
 
 ### Entity/table splitting module (2026-11-13)
 

@@ -36,7 +36,8 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             var services = new ServiceCollection();
             ((IDesignTimeServices)Activator.CreateInstance(type)!).ConfigureDesignTimeServices(services);
             Assert.Contains(services, s => s.ServiceType == typeof(IAnnotationCodeGenerator) && s.Lifetime == ServiceLifetime.Singleton);
-            Assert.DoesNotContain(services, s => s.ServiceType == typeof(Microsoft.EntityFrameworkCore.Scaffolding.IDatabaseModelFactory));
+            Assert.Contains(services, s => s.ServiceType == typeof(Microsoft.EntityFrameworkCore.Scaffolding.IDatabaseModelFactory)
+                && s.Lifetime == ServiceLifetime.Scoped);
         }
 
         [Theory]
