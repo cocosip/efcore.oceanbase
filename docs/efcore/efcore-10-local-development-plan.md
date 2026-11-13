@@ -3,7 +3,7 @@
 **Goal:** Implement every locally developable EF10 feature, in reviewed/tested commits, while postponing real
 database integration and EF8/EF9 adaptation as explicitly requested on 2026-11-10.
 
-**Architecture:** Continue on efcore/10.0 at the current Batch3ax explicit text parameter-root slice. Reuse the existing EF relational services, connector 0.2.0
+**Architecture:** Continue on efcore/10.0 at the current Batch3ay explicit Boolean parameter-root slice. Reuse the existing EF relational services, connector 0.2.0
 public APIs and per-mode mappings/SQL. Separate local implementation evidence from server acceptance.
 
 **Spec:** efcore-10-feature-checklist.md, efcore-10-technical-baseline.md, efcore-10-query-update-design.md.
@@ -12,7 +12,7 @@ public APIs and per-mode mappings/SQL. Separate local implementation evidence fr
 The compact execution board is [efcore-10-roadmap.md](efcore-10-roadmap.md); this file remains the detailed
 batch ledger and acceptance notes.
 
-**Updated:** 2026-11-13 after Batch3ax. Continue EF10 in this checkout, test each module and
+**Updated:** 2026-11-13 after Batch3ay. Continue EF10 in this checkout, test each module and
 review each completed major module before committing. EF8/EF9 remains postponed; live execution is opt-in and
 currently blocked before authentication by the supplied endpoint/transport behavior.
 The full goal remains incomplete.
@@ -36,6 +36,28 @@ Use this section to choose the next task; the feature checklist remains the deta
    full Debug/Release suites, package content gate and package consumer at EF10.0.0/10.0.14, review the
    release revision, and only then consider a release branch/tag. EF8/EF9, push and publication remain out
    of the current development sequence.
+
+### Batch3ay brief: explicit Boolean parameter roots
+
+**IDs:** QRY-03/06/11, MAP-06/07. **Spec:** Explicit Boolean parameter-root contract in
+`efcore-10-query-update-design.md`. Continue from Batch3ax; no live database or EF8/EF9 work.
+
+- [x] Add RED/GREEN unit coverage for explicitly configured `EF.Parameter(bool[])`, nullable Boolean arrays
+  and `List<bool?>`, including rebinding, NULL/empty roots and the unconfigured/single-parameter boundaries.
+- [x] Extend the existing primitive collection visitor to accept provider-owned Boolean mappings only when the
+  context explicitly selects `Constant` or `MultipleParameters`; keep temporal, binary and Guid explicit roots
+  outside this slice.
+- [x] Add intercepted sync/async coverage for MySQL Boolean and Oracle decimal carriers, current parameter
+  values, nullable readers and a non-null-converting Boolean-to-integer converter.
+- [x] Run focused/full Debug/Release, isolated EF10.0.14 Release, package content and both EF10 patch
+  consumers. Native Boolean UNION coercion, result semantics and live execution remain separate gates.
+
+Batch3ay implementation adds one provider gate and no public API or dependency. Focused Boolean coverage passes
+30 unit cases and 28 intercepted sync/async cases. Debug, Release and isolated EF10.0.14 Release each pass
+4,281 source tests (2,061 unit, 1,350 functional, 868 specification and 2 consumer tests), with zero
+failures/skips. Package `10.0.0-boolean-parameter-r4-20261113` passes `Verify-Package.ps1` and the standalone
+consumer on EF10.0.0 and EF10.0.14 in both modes. Native Boolean UNION/result behavior and live OceanBase
+execution remain open.
 
 ### Batch3ax brief: explicit text parameter roots
 

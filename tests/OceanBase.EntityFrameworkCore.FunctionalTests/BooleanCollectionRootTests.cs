@@ -17,6 +17,15 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests;
 
 public sealed class BooleanCollectionRootTests
 {
+    public static IEnumerable<object[]> ExplicitModes()
+    {
+        foreach (var mode in new[] { OceanBaseCompatibilityMode.MySql, OceanBaseCompatibilityMode.Oracle })
+        foreach (var async in new[] { false, true })
+        foreach (var relationalNulls in new[] { false, true })
+        foreach (var translation in new[] { ParameterTranslationMode.Constant, ParameterTranslationMode.MultipleParameters })
+            yield return new object[] { mode, async, relationalNulls, translation };
+    }
+
     [Theory]
     [InlineData(OceanBaseCompatibilityMode.MySql, false, false)]
     [InlineData(OceanBaseCompatibilityMode.MySql, true, false)]
@@ -103,8 +112,58 @@ public sealed class BooleanCollectionRootTests
         Assert.Contains("WHERE 1 = 0", Assert.Single(capture.Sql));
     }
 
+    [Theory]
+    [MemberData(nameof(ExplicitModes))]
+    public async Task Explicit_parameter_boolean_roots_rebind_and_bind_current_values(
+        OceanBaseCompatibilityMode mode, bool async, bool relationalNulls, ParameterTranslationMode translation)
+    {
+        using var table = new DataTable();
+        table.Columns.Add("Value", typeof(object));
+        table.Rows.Add(true);
+        table.Rows.Add(false);
+        table.Rows.Add(DBNull.Value);
+        var capture = new Capture(table);
+        await using var context = Create<NativeRow>(mode, capture, relationalNulls, translation);
+        bool?[] values = [true, null, false, true];
+        var query = context.Rows.Where(row => EF.Parameter(values).Contains(row.Optional))
+            .Select(row => row.Optional);
+
+        foreach (var input in new bool?[][] { values, [null], [] })
+        {
+            values = input;
+            capture.Inputs.Clear();
+            capture.Sql.Clear();
+            var result = async ? await query.ToListAsync() : query.ToList();
+            Assert.Equal(new bool?[] { true, false, null }, result);
+            var sql = Assert.Single(capture.Sql);
+            Assert.DoesNotContain("JSON", sql, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal(input.Length == 0, sql.Contains("WHERE 1 = 0", StringComparison.Ordinal)
+                || sql.Contains("WHERE 0", StringComparison.Ordinal));
+            Assert.All(capture.Inputs, parameter => Assert.Equal(
+                mode == OceanBaseCompatibilityMode.MySql ? DbType.Boolean : DbType.Decimal, parameter.DbType));
+            Assert.All(capture.Inputs, parameter => Assert.True(
+                parameter.Value is DBNull || input.Contains(parameter.Value is bool value ? value : null)));
+        }
+
+        using var convertedTable = new DataTable();
+        convertedTable.Columns.Add("Value", typeof(object));
+        convertedTable.Rows.Add(new OceanBaseDecimal(1m));
+        convertedTable.Rows.Add(new OceanBaseDecimal(0m));
+        convertedTable.Rows.Add(DBNull.Value);
+        var convertedCapture = new Capture(convertedTable);
+        await using var convertedContext = Create<ConvertedRow>(mode, convertedCapture, relationalNulls, translation);
+        bool?[] convertedValues = [true, null, false];
+        var convertedQuery = convertedContext.ConvertedRows
+            .Where(row => EF.Parameter(convertedValues).Contains(row.Flag))
+            .Select(row => row.Flag);
+        var convertedResult = async ? await convertedQuery.ToListAsync() : convertedQuery.ToList();
+        Assert.Equal(new bool?[] { true, false, null }, convertedResult);
+        Assert.All(convertedCapture.Inputs, parameter => Assert.Equal(
+            mode == OceanBaseCompatibilityMode.MySql ? DbType.Boolean : DbType.Decimal, parameter.DbType));
+    }
+
     private static TestContext<T> Create<T>(OceanBaseCompatibilityMode mode, Capture capture,
-        bool relationalNulls = false) where T : class
+        bool relationalNulls = false, ParameterTranslationMode? translation = null) where T : class
     {
         var builder = new DbContextOptionsBuilder<TestContext<T>>()
             .UseOceanBase("Server=offline;Database=boolean_roots", mode)
@@ -112,6 +171,7 @@ public sealed class BooleanCollectionRootTests
             .AddInterceptors(new NoNetwork(), capture);
         var extension = builder.Options.Extensions.OfType<RelationalOptionsExtension>().Single()
             .WithUseRelationalNulls(relationalNulls);
+        if (translation.HasValue) extension = extension.WithUseParameterizedCollectionMode(translation.Value);
         ((IDbContextOptionsBuilderInfrastructure)builder).AddOrUpdateExtension(extension);
         return new TestContext<T>(builder.Options);
     }

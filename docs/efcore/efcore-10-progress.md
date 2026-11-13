@@ -3,7 +3,7 @@
 ## Active checkpoint: 2026-11-13
 
 Development resumed on 2026-11-11 on efcore/10.0 at the user's request, following the paused Batch7e checkpoint.
-The latest checkpoint is Batch3ax on 2026-11-13.
+The latest checkpoint is Batch3ay on 2026-11-13.
 Test each module and review completed major modules before committing. EF8/EF9 remain postponed.
 The provider is not release-ready. The [feature checklist](efcore-10-feature-checklist.md) remains the
 acceptance authority; this document records the handoff rather than defining a different completion target.
@@ -32,6 +32,22 @@ This is the short execution view; the feature checklist remains the acceptance a
 Next execution order is: finish the next bounded QRY/MAP carrier or operator; widen required model/write/
 transaction/specification fixtures; resolve the live transport gate; then produce REL-01/02 evidence and run
 the final package matrix. EF8/EF9 adaptation, push and publication stay outside this sequence.
+
+### Explicit Boolean parameter-root checkpoint (Batch3ay, 2026-11-13)
+
+Explicitly configured `EF.Parameter(bool[])`, nullable Boolean arrays and `List<bool?>` roots now reuse the
+provider's existing primitive collection `VALUES` path when the context selects `Constant` or
+`MultipleParameters`. Captured values rebind on each execution, NULL/empty roots retain typed metadata, and
+MySQL Boolean plus Oracle decimal carriers preserve parameter and reader conversion, including a
+non-null-converting Boolean-to-integer converter. Unconfigured contexts and EF's single JSON-style collection
+parameter remain rejected; temporal, binary and Guid explicit roots remain outside this slice.
+
+Focused coverage passes 30 unit cases and 28 intercepted sync/async cases across both modes, both relational
+null settings and both translation policies. Debug, Release and isolated EF10.0.14 Release each pass 4,281
+source tests (2,061 unit, 1,350 functional, 868 specification and 2 consumer tests), with zero failures/skips.
+Package `10.0.0-boolean-parameter-r4-20261113` passes `Verify-Package.ps1` and the standalone consumer on
+EF10.0.0 and EF10.0.14 in both modes. Native Boolean UNION coercion/result semantics and live OceanBase
+execution remain open.
 
 ### Explicit text parameter-root checkpoint (Batch3ax, 2026-11-13)
 

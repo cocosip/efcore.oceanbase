@@ -91,6 +91,54 @@ public sealed class BooleanCollectionRootQueryTests
         Assert.Contains("Boolean", message.Message, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Theory]
+    [InlineData(OceanBaseCompatibilityMode.MySql, ParameterTranslationMode.Constant)]
+    [InlineData(OceanBaseCompatibilityMode.MySql, ParameterTranslationMode.MultipleParameters)]
+    [InlineData(OceanBaseCompatibilityMode.Oracle, ParameterTranslationMode.Constant)]
+    [InlineData(OceanBaseCompatibilityMode.Oracle, ParameterTranslationMode.MultipleParameters)]
+    public void Explicit_parameter_boolean_roots_rebind_current_values_and_empty_metadata(
+        OceanBaseCompatibilityMode mode, ParameterTranslationMode translation)
+    {
+        using var context = Create(mode, false, translation);
+        bool[] values = [true, false, true];
+        var query = context.Rows.Where(row => EF.Parameter(values).Contains(row.Value));
+
+        foreach (var input in new[] { values, new[] { false }, Array.Empty<bool>() })
+        {
+            values = input;
+            var sql = query.ToQueryString();
+            Assert.DoesNotContain("JSON", sql, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal(input.Length == 0, sql.Contains("WHERE 1 = 0", StringComparison.Ordinal)
+                || sql.Contains("WHERE 0", StringComparison.Ordinal));
+        }
+
+        bool?[] nullable = [true, null, false];
+        var nullableQuery = context.Rows.Where(row => EF.Parameter(nullable).Contains(row.Optional));
+        foreach (var input in new bool?[][] { nullable, [null], [] })
+        {
+            nullable = input;
+            var sql = nullableQuery.ToQueryString();
+            Assert.DoesNotContain("JSON", sql, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal(input.Length == 0, sql.Contains("WHERE 1 = 0", StringComparison.Ordinal)
+                || sql.Contains("WHERE 0", StringComparison.Ordinal));
+        }
+
+        List<bool?> list = [true, null];
+        var listQuery = context.Rows.Where(row => EF.Parameter(list).Contains(row.Optional));
+        list = [];
+        var listSql = listQuery.ToQueryString();
+        Assert.True(listSql.Contains("WHERE 1 = 0", StringComparison.Ordinal)
+            || listSql.Contains("WHERE 0", StringComparison.Ordinal), listSql);
+
+        bool[] unsupportedValues = [true];
+        using var unconfigured = Create(mode, false, null);
+        Assert.Throws<InvalidOperationException>(() => unconfigured.Rows
+            .Where(row => EF.Parameter(unsupportedValues).Contains(row.Value)).ToQueryString());
+        using var singleParameter = Create(mode, false, ParameterTranslationMode.Parameter);
+        Assert.Throws<InvalidOperationException>(() => singleParameter.Rows
+            .Where(row => EF.Parameter(unsupportedValues).Contains(row.Value)).ToQueryString());
+    }
+
     private static TestContext Create(OceanBaseCompatibilityMode mode, bool relationalNulls,
         ParameterTranslationMode? translation)
     {

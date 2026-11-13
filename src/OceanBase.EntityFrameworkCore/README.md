@@ -24,10 +24,11 @@ forms and integer-backed enums through scalar parameters or constants and SELECT
 roots retain their original element type and produce zero-row SQL. Numeric-to-numeric converters keep
 their parameter/read hooks. Typing casts follow the provider carrier independently of column facets:
 MySQL SIGNED/UNSIGNED, DECIMAL(65,30), FLOAT or DOUBLE; Oracle NUMBER, BINARY_FLOAT or BINARY_DOUBLE.
-Non-finite floating inputs reject before execution. Explicit `EF.Parameter` roots are supported for
-integer carriers when the context explicitly selects `Constant` or `MultipleParameters`; the provider
+Non-finite floating inputs reject before execution. Explicit `EF.Parameter` roots are supported for integer
+and Boolean carriers when the context explicitly selects `Constant` or `MultipleParameters`; the provider
 expands them into scalar parameters rather than sending a JSON array. Other single-parameter roots,
-nonnumeric carriers and null-converting converters are not supported by this path.
+non-target carriers and null-converting converters are not supported by this path. Boolean roots preserve
+the provider Boolean carrier in MySQL and the decimal Boolean carrier in Oracle.
 Direct contextually converted element projections support SelectMany, FirstOrDefault and Join,
 including nullable/empty roots and Distinct/Take composition. The owning numeric mapping controls
 bindings, projected readers and the CLR default fallback. Incompatible requirements for one root or

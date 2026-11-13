@@ -95,6 +95,7 @@ namespace OceanBase.EntityFrameworkCore.Query
                         Nullable.GetUnderlyingType(elementType) ?? elementType, RelationalDependencies.Model, null);
                 if (elementMapping is null
                     || (!OceanBaseCollectionParameterExpandingVisitor.IsSupportedNumeric(elementMapping)
+                        && !OceanBaseCollectionParameterExpandingVisitor.IsSupportedBoolean(elementMapping)
                         && !OceanBaseCollectionParameterExpandingVisitor.IsSupportedText(elementMapping)))
                 {
                     return null;

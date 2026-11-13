@@ -84,6 +84,21 @@ carriers reject before command execution. Unit, intercepted sync/async and packe
 local translation, provider values, readers and empty metadata only; native text collation, UNION coercion
 and live OceanBase results remain separate gates.
 
+## Explicit Boolean parameter-root contract (Batch3ay, QRY-03/06/11, MAP-06/07)
+
+Support explicitly configured `EF.Parameter(bool[])`, nullable Boolean arrays and `List<bool?>` roots when
+the context selects `Constant` or `MultipleParameters`. Reuse the existing primitive collection `VALUES`
+shape and Boolean mapping validation; preserve current captures, duplicates, `NULL` cells, empty roots,
+MySQL/Oracle bindings and model-to-numeric-Boolean converters. MySQL uses the existing Boolean carrier and
+Oracle uses the decimal Boolean carrier with the existing reader conversion.
+
+An unconfigured context and EF's single JSON-style `Parameter` collection mode remain unsupported. Unknown
+layouts, null-converting converters and non-Boolean carriers reject before command execution. Unit and
+intercepted sync/async tests establish local translation, binding, reader shaping and typed empty metadata;
+Debug/Release and isolated EF10.0.14 each pass 4,281 source tests. Package
+`10.0.0-boolean-parameter-r4-20261113` passes content verification and both EF10.0.0/10.0.14 consumers in
+both modes. Native Boolean UNION coercion, result semantics and live OceanBase execution remain separate gates.
+
 ## Boolean collection-root contract (Batch3af, QRY-03/06/11, MAP-06/07)
 
 Support captured arrays/lists and originally empty inline `bool`/`bool?` roots in both compatibility modes by
@@ -816,9 +831,9 @@ Test the same expression in default/Constant/default and Constant/default/Consta
 string normalization must exclude collection envelopes, especially null collections; EF owns their expansion.
 
 EF.Constant/context Constant use mapping-owned literals. Context Parameter mode can use an inherited Contains
-fallback to scalar IN. Explicit integer and numeric roots use the bounded Batch3at/Batch3aw contracts; text,
-Boolean, temporal, binary and Guid explicit roots remain unsupported without their own primitive-collection
-translator. Test both boundaries. Text lists need provider-converted Oracle empty/NULL normalization before
+fallback to scalar IN. Explicit integer, numeric, text and Boolean roots use the bounded Batch3at/Batch3aw/
+Batch3ax/Batch3ay contracts; temporal, binary and Guid explicit roots remain unsupported without their own
+primitive-collection translator. Test both boundaries. Text lists need provider-converted Oracle empty/NULL normalization before
 membership compensation; general VALUES roots need their own integer-ordinal and dialect rendering fixes.
 Those and APPLY/collection projections remain separate locally feasible work. Numeric aggregate promotion/
 result normalization has the contract above; nonnumeric aggregate extrema are implemented in Batch3ad, while
@@ -855,8 +870,8 @@ compensation, NOT/CASE/Boolean projections and relational-null differences after
 Characterize empty/null/all-null/duplicate/converted-empty collections, changed captures, bucket boundaries,
 name collisions, hostile literal data, fixed/national/LOB bindings and both modes/null settings. Native
 collation/padding/LOB equality/charset/server limits remain live gates. General VALUES roots and explicit
-integer/numeric `EF.Parameter(collection)` roots have separate bounded contracts; other explicit carrier
-families remain locally feasible follow-up work with clear unsupported-shape tests.
+integer/numeric/text/Boolean `EF.Parameter(collection)` roots have separate bounded contracts; other explicit
+carrier families remain locally feasible follow-up work with clear unsupported-shape tests.
 
 The independently reviewed slice passes 25 focused unit and 20 intercepted cases. Full Debug/Release and isolated
 EF10.0.14 Release pass 1200 tests. Real EF array/list queries cover both modes/null settings and changed
@@ -891,12 +906,12 @@ lossless targets: MySQL SIGNED for the selected signed carriers and Oracle unqua
 column write precision out of query typing; retain original element mappings/converters/checked readers.
 Do not broaden unrelated explicit CAST behavior or replace the provider's checked int mapping with EF's class.
 
-Default/MultipleParameters and Constant retain their parameter/literal policies; explicit integer and numeric
-parameter roots use their bounded contracts, while composed roots and other explicit carrier families remain
-unsupported without a separate translator. Originally empty inline roots
+Default/MultipleParameters and Constant retain their parameter/literal policies; explicit integer, numeric,
+text and Boolean parameter roots use their bounded contracts, while composed roots and other explicit carrier
+families remain unsupported without a separate translator. Originally empty inline roots
 use compile-time metadata beyond this runtime slice; see the implemented
 [inline-empty integral contract](#originally-empty-inline-integral-roots-local-contract).
-General text/other carrier roots still need their own typing contracts and remain local follow-up work.
+Other carrier roots still need their own typing contracts and remain local follow-up work.
 Native UNION coercion/results/order and server limits require later database validation.
 
 The slice passes 40 unit and 16 intercepted cases; full Debug/Release and isolated EF10.0.14 Release pass

@@ -422,6 +422,19 @@ namespace PackageConsumer
                     explicitTextValues = [];
                     if (!explicitTextQuery.ToQueryString().Contains("WHERE 0", StringComparison.Ordinal))
                         throw new Exception("Packed provider reused a nonempty explicit text parameter root.");
+
+                    bool?[] explicitBooleanValues = [true, null, false];
+                    var explicitBooleanQuery = explicitParameterContext.Set<Row>()
+                        .Where(row => EF.Parameter(explicitBooleanValues).Contains(row.OptionalBoolean));
+                    var explicitBooleanSql = explicitBooleanQuery.ToQueryString();
+                    if (explicitBooleanSql.Contains("JSON", StringComparison.OrdinalIgnoreCase)
+                        || explicitBooleanSql.Contains("IN ()", StringComparison.Ordinal))
+                        throw new Exception("Packed provider did not expand an explicit Boolean parameter root.");
+                    explicitBooleanValues = [];
+                    explicitBooleanSql = explicitBooleanQuery.ToQueryString();
+                    if (!explicitBooleanSql.Contains("WHERE 0", StringComparison.Ordinal)
+                        && !explicitBooleanSql.Contains("WHERE 1 = 0", StringComparison.Ordinal))
+                        throw new Exception("Packed provider reused a nonempty explicit Boolean parameter root.");
                 }
 
                 string?[] textMembershipValues = ["one", "two"];
