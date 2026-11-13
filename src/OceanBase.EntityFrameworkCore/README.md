@@ -29,6 +29,13 @@ and Boolean carriers when the context explicitly selects `Constant` or `Multiple
 expands them into scalar parameters rather than sending a JSON array. Other single-parameter roots,
 non-target carriers and null-converting converters are not supported by this path. Boolean roots preserve
 the provider Boolean carrier in MySQL and the decimal Boolean carrier in Oracle.
+
+Explicit temporal `EF.Parameter` arrays/lists for DateTime, DateTimeOffset, DateOnly, TimeOnly and TimeSpan
+are admitted when the context explicitly selects `Constant` or `MultipleParameters`. EF10 renders these
+explicit roots as scalar `IN` parameters; captured and inline temporal roots retain the provider's typed
+`VALUES` path. Current captures rebind, nullable values use the existing temporal readers and empty captures
+produce a false predicate. Unconfigured contexts and the single JSON-style collection parameter remain outside
+this contract. Native temporal precision, timezone, interval coercion and live results remain unverified.
 Direct contextually converted element projections support SelectMany, FirstOrDefault and Join,
 including nullable/empty roots and Distinct/Take composition. The owning numeric mapping controls
 bindings, projected readers and the CLR default fallback. Incompatible requirements for one root or

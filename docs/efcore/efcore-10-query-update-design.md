@@ -99,6 +99,20 @@ Debug/Release and isolated EF10.0.14 each pass 4,281 source tests. Package
 `10.0.0-boolean-parameter-r4-20261113` passes content verification and both EF10.0.0/10.0.14 consumers in
 both modes. Native Boolean UNION coercion, result semantics and live OceanBase execution remain separate gates.
 
+## Explicit temporal parameter-root contract (Batch3az, QRY-03/11, MAP-05/06/07)
+
+Support explicitly configured `EF.Parameter` arrays/lists for DateTime, DateTimeOffset, DateOnly, TimeOnly and
+TimeSpan, including nullable elements, when the context selects `Constant` or `MultipleParameters`. The
+provider admits the existing temporal mappings through the same primitive collection gate; EF10 emits scalar
+`IN` parameters for this explicit-root form. Captured and inline roots continue to use the provider's
+`VALUES` expansion and typed empty metadata. Rebinding, NULL cells, empty captures and Oracle interval reader
+conversion are covered by the local unit/intercepted tests.
+
+Unconfigured contexts and EF's single JSON-style collection parameter remain rejected. Binary and Guid explicit
+roots are outside this slice. The focused evidence is local translation, parameter binding, reader conversion
+and empty predicates; native temporal precision, timezone, interval coercion and live OceanBase results remain
+separate gates.
+
 ## Boolean collection-root contract (Batch3af, QRY-03/06/11, MAP-06/07)
 
 Support captured arrays/lists and originally empty inline `bool`/`bool?` roots in both compatibility modes by

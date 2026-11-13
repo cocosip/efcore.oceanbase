@@ -8,6 +8,7 @@ using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Query;
 using OceanBaseConnector;
 using Xunit;
 
@@ -15,6 +16,14 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests;
 
 public sealed class TemporalCollectionRootTests
 {
+    public static IEnumerable<object[]> ExplicitModes()
+    {
+        foreach (var mode in new[] { OceanBaseCompatibilityMode.MySql, OceanBaseCompatibilityMode.Oracle })
+        foreach (var async in new[] { false, true })
+        foreach (var translation in new[] { ParameterTranslationMode.Constant, ParameterTranslationMode.MultipleParameters })
+            yield return new object[] { mode, async, translation };
+    }
+
     [Theory]
     [InlineData(OceanBaseCompatibilityMode.MySql, false)]
     [InlineData(OceanBaseCompatibilityMode.MySql, true)]
@@ -99,9 +108,33 @@ public sealed class TemporalCollectionRootTests
             () => values = [], new TimeSpan(4, 5, 6));
     }
 
+    [Theory]
+    [MemberData(nameof(ExplicitModes))]
+    public Task Explicit_DateTime_parameter_roots_rebind_and_decode(
+        OceanBaseCompatibilityMode mode, bool async, ParameterTranslationMode translation)
+    {
+        DateTime?[] values = [new DateTime(2026, 11, 12, 1, 2, 3), null];
+        return Run(mode, async, mode == OceanBaseCompatibilityMode.Oracle ? "TIMESTAMP" : "DATETIME", typeof(DateTime),
+            context => context.Rows.Where(row => EF.Parameter(values).Contains(row.OccurredAt))
+                .Select(row => row.OccurredAt), () => values = [], new DateTime(2026, 11, 13, 4, 5, 6), translation, false);
+    }
+
+    [Theory]
+    [MemberData(nameof(ExplicitModes))]
+    public Task Explicit_TimeSpan_parameter_roots_rebind_and_decode(
+        OceanBaseCompatibilityMode mode, bool async, ParameterTranslationMode translation)
+    {
+        TimeSpan?[] values = [new TimeSpan(1, 2, 3), null];
+        return Run(mode, async, mode == OceanBaseCompatibilityMode.Oracle ? "INTERVAL DAY" : "TIME",
+            mode == OceanBaseCompatibilityMode.Oracle ? typeof(OceanBaseIntervalDayToSecond) : typeof(TimeSpan),
+            context => context.Rows.Where(row => EF.Parameter(values).Contains(row.Duration))
+                .Select(row => row.Duration), () => values = [], new TimeSpan(4, 5, 6), translation, false);
+    }
+
     private static async Task Run<T>(
         OceanBaseCompatibilityMode mode, bool async, string castType, Type providerValueType,
-        Func<TestContext, IQueryable<T>> queryFactory, Action empty, object expected)
+        Func<TestContext, IQueryable<T>> queryFactory, Action empty, object expected,
+        ParameterTranslationMode? translation = null, bool requireCast = true)
     {
         using var table = new DataTable();
         table.Columns.Add("Value", typeof(object));
@@ -116,7 +149,7 @@ public sealed class TemporalCollectionRootTests
                 : new DateTime(2026, 11, 13, 4, 5, 6));
         table.Rows.Add(DBNull.Value);
         var capture = new Capture(table);
-        await using var context = Create(mode, capture);
+        await using var context = Create(mode, capture, translation);
         var query = queryFactory(context);
 
         var result = async ? await query.ToListAsync() : query.ToList();
@@ -124,7 +157,8 @@ public sealed class TemporalCollectionRootTests
         Assert.Equal(2, result.Count);
         Assert.Equal(expected, result[0]);
         Assert.Null(result[1]);
-        Assert.Contains(castType, Assert.Single(capture.Sql), StringComparison.OrdinalIgnoreCase);
+        if (requireCast)
+            Assert.Contains(castType, Assert.Single(capture.Sql), StringComparison.OrdinalIgnoreCase);
         Assert.NotEmpty(capture.Inputs);
         if (mode == OceanBaseCompatibilityMode.Oracle && providerValueType == typeof(OceanBaseIntervalDayToSecond))
         {
@@ -142,14 +176,26 @@ public sealed class TemporalCollectionRootTests
         result = async ? await query.ToListAsync() : query.ToList();
         Assert.Empty(result);
         Assert.Empty(capture.Inputs);
-        Assert.Contains("WHERE 1 = 0", Assert.Single(capture.Sql));
+        var emptySql = Assert.Single(capture.Sql);
+        Assert.True(emptySql.Contains("WHERE 1 = 0", StringComparison.Ordinal)
+            || emptySql.Contains("WHERE 0", StringComparison.Ordinal));
     }
 
-    private static TestContext Create(OceanBaseCompatibilityMode mode, Capture capture)
-        => new(new DbContextOptionsBuilder<TestContext>()
+    private static TestContext Create(OceanBaseCompatibilityMode mode, Capture capture,
+        ParameterTranslationMode? translation = null)
+    {
+        var builder = new DbContextOptionsBuilder<TestContext>()
             .UseOceanBase("Server=offline;Database=temporal_roots", mode)
             .EnableServiceProviderCaching(false)
-            .AddInterceptors(new NoNetwork(), capture).Options);
+            .AddInterceptors(new NoNetwork(), capture);
+        if (translation.HasValue)
+        {
+            var extension = builder.Options.Extensions.OfType<RelationalOptionsExtension>().Single()
+                .WithUseParameterizedCollectionMode(translation.Value);
+            ((IDbContextOptionsBuilderInfrastructure)builder).AddOrUpdateExtension(extension);
+        }
+        return new TestContext(builder.Options);
+    }
 
     private sealed class TestContext(DbContextOptions<TestContext> options) : DbContext(options)
     {

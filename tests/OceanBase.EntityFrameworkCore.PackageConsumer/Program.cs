@@ -435,6 +435,22 @@ namespace PackageConsumer
                     if (!explicitBooleanSql.Contains("WHERE 0", StringComparison.Ordinal)
                         && !explicitBooleanSql.Contains("WHERE 1 = 0", StringComparison.Ordinal))
                         throw new Exception("Packed provider reused a nonempty explicit Boolean parameter root.");
+
+                    DateTime?[] explicitTemporalValues = [new DateTime(2026, 11, 12, 1, 2, 3), null];
+                    var explicitTemporalQuery = explicitParameterContext.Set<Row>()
+                        .Where(row => EF.Parameter(explicitTemporalValues).Contains(row.LegacyStamp));
+                    var explicitTemporalSql = explicitTemporalQuery.ToQueryString();
+                    if (explicitTemporalSql.Contains("JSON", StringComparison.OrdinalIgnoreCase)
+                        || !explicitTemporalSql.Contains("WHERE", StringComparison.OrdinalIgnoreCase)
+                        || (!explicitTemporalSql.Contains(" IN (", StringComparison.Ordinal)
+                            && !explicitTemporalSql.Contains(" = ", StringComparison.Ordinal)
+                            && !explicitTemporalSql.Contains(" IS NULL", StringComparison.Ordinal)))
+                        throw new Exception("Packed provider did not expand an explicit temporal parameter root.");
+                    explicitTemporalValues = [];
+                    explicitTemporalSql = explicitTemporalQuery.ToQueryString();
+                    if (!explicitTemporalSql.Contains("WHERE 0", StringComparison.Ordinal)
+                        && !explicitTemporalSql.Contains("WHERE 1 = 0", StringComparison.Ordinal))
+                        throw new Exception("Packed provider reused a nonempty explicit temporal parameter root.");
                 }
 
                 string?[] textMembershipValues = ["one", "two"];

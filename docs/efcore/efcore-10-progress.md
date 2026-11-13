@@ -3,7 +3,7 @@
 ## Active checkpoint: 2026-11-13
 
 Development resumed on 2026-11-11 on efcore/10.0 at the user's request, following the paused Batch7e checkpoint.
-The latest checkpoint is Batch3ay on 2026-11-13.
+The latest checkpoint is Batch3az on 2026-11-13.
 Test each module and review completed major modules before committing. EF8/EF9 remain postponed.
 The provider is not release-ready. The [feature checklist](efcore-10-feature-checklist.md) remains the
 acceptance authority; this document records the handoff rather than defining a different completion target.
@@ -32,6 +32,20 @@ This is the short execution view; the feature checklist remains the acceptance a
 Next execution order is: finish the next bounded QRY/MAP carrier or operator; widen required model/write/
 transaction/specification fixtures; resolve the live transport gate; then produce REL-01/02 evidence and run
 the final package matrix. EF8/EF9 adaptation, push and publication stay outside this sequence.
+
+### Explicit temporal parameter-root checkpoint (Batch3az, 2026-11-13)
+
+Explicitly configured `EF.Parameter` roots for `DateTime`, `DateTimeOffset`, `DateOnly`, `TimeOnly` and
+`TimeSpan`, including nullable arrays/lists, now pass the existing temporal admission gate when the context
+selects `Constant` or `MultipleParameters`. EF10 emits its scalar `IN` parameter form for these explicit roots;
+captured and inline roots continue to use the provider's `VALUES`/typed-empty path. Current captures rebind,
+NULL cells materialize through the existing temporal readers, and empty captures produce `WHERE 0`/`WHERE 1 = 0`.
+Unconfigured contexts and EF's single JSON-style `Parameter` mode remain rejected. Native temporal precision,
+timezone, interval coercion and server results remain open.
+
+Focused coverage passes 15 unit cases and 36 intercepted sync/async cases across both modes and both explicit
+translation policies. Full Debug/Release, isolated EF10.0.14, package and consumer evidence is still pending
+for this batch.
 
 ### Explicit Boolean parameter-root checkpoint (Batch3ay, 2026-11-13)
 
