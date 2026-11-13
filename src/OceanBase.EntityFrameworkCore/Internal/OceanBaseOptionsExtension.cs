@@ -157,8 +157,11 @@ namespace OceanBase.EntityFrameworkCore.Internal
                 .TryAdd<IMigrationsSqlGenerator, OceanBaseMigrationsSqlGenerator>()
                 .TryAdd<IHistoryRepository, OceanBaseHistoryRepository>()
                 .TryAdd<IMigrator, OceanBaseMigrator>()
-                .TryAdd<IModelRuntimeInitializer, RelationalModelRuntimeInitializer>()
-                .TryAdd<IModelCustomizer, RelationalModelCustomizer>()
+                .TryAdd<IModelRuntimeInitializer>(s => new OceanBaseModelRuntimeInitializer(
+                    s.GetRequiredService<ModelRuntimeInitializerDependencies>(),
+                    s.GetRequiredService<RelationalModelRuntimeInitializerDependencies>(), CompatibilityMode))
+                .TryAdd<IModelCustomizer>(s => new OceanBaseModelCustomizer(
+                    s.GetRequiredService<ModelCustomizerDependencies>(), CompatibilityMode))
                 .TryAdd<IModelValidator, RelationalModelValidator>()
                 .TryAdd<ICompiledQueryCacheKeyGenerator, OceanBaseCompiledQueryCacheKeyGenerator>()
                 .TryAdd<IQueryCompilationContextFactory, OceanBaseQueryCompilationContextFactory>()

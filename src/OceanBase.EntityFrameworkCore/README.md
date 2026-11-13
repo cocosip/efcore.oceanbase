@@ -53,6 +53,20 @@ after failed graph materialization, discard or clear partially tracked entities 
 Native SQL/results, consistency and session reuse remain unverified. Lazy loading and compiled-model/tooling
 optimizations are separate capabilities.
 
+Ordinary EF compiled models support both compatibility modes, including provider scalar mappings and
+converters with or without mapping hints. Generate a model using the matching mode's design-time context:
+
+```shell
+dotnet ef dbcontext optimize --context AppDbContext --output-dir CompiledModels --namespace App.CompiledModels
+```
+
+Select the generated model with `UseModel(App.CompiledModels.AppDbContextModel.Instance)` alongside
+`UseOceanBase`. Generate and select separate models for MySQL and Oracle; an incompatible mode fails during
+model initialization. Regenerate after model/provider changes. EF's compiled-model restrictions still apply,
+including unsupported query filters. The public compiled-model mapping helpers and interval JSON reader are
+infrastructure used by generated code; they do not add a JSON property mapping profile. NativeAOT, precompiled
+queries, lazy-loading proxies and performance improvements have not been established by this workflow.
+
 Database reverse engineering uses the driver's public `GetSchema` collections, including its typed column
 declarations and tri-state generation/default/update metadata. Scaffolding connections must specify
 `ExpectedMode=MySql` or `ExpectedMode=Oracle`; generated `UseOceanBase` code selects that mode explicitly.

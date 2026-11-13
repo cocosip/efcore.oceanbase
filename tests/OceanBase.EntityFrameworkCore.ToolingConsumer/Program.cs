@@ -18,13 +18,14 @@ namespace ToolingConsumer
         {
             try
             {
-                if (args.Length > 0) ReverseEngineeringSmoke.Run(args);
+                if (args.Length > 0 && args[0] == "--verify-compiled") CompiledModelSmoke.Run();
+                else if (args.Length > 0) ReverseEngineeringSmoke.Run(args);
                 else Console.WriteLine("Offline packed-provider migrations tooling fixture.");
                 return 0;
             }
             catch (Exception error)
             {
-                Console.Error.WriteLine($"Tooling fixture failed ({error.GetType().Name}): {error.Message}");
+                Console.Error.WriteLine($"Tooling fixture failed: {error}");
                 return 1;
             }
         }

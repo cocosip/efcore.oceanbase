@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore.Design;
+using Microsoft.EntityFrameworkCore.Design.Internal;
 using Microsoft.EntityFrameworkCore.Scaffolding;
 using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.EntityFrameworkCore.Infrastructure;
@@ -24,11 +25,14 @@ namespace OceanBase.EntityFrameworkCore.Design
                 .TryAdd<IModelValidator, RelationalModelValidator>()
                 .TryAdd<IRelationalAnnotationProvider, RelationalAnnotationProvider>()
                 .TryAddCoreServices();
+#pragma warning disable EF1001 // Provider extension seam for compiled model mapping construction.
             new EntityFrameworkRelationalDesignServicesBuilder(serviceCollection)
+                .TryAdd<ICSharpRuntimeAnnotationCodeGenerator, OceanBaseRuntimeAnnotationCodeGenerator>()
                 .TryAdd<IDatabaseModelFactory, OceanBaseDatabaseModelFactory>()
                 .TryAdd<IProviderConfigurationCodeGenerator, OceanBaseProviderCodeGenerator>()
                 .TryAdd<ITypeMappingSource>(services => services.GetRequiredService<IRelationalTypeMappingSource>())
                 .TryAddCoreServices();
+#pragma warning restore EF1001
         }
     }
 }

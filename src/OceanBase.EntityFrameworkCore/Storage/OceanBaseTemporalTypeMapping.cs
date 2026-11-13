@@ -15,6 +15,7 @@ namespace OceanBase.EntityFrameworkCore.Storage
     {
         private const long MaximumMySqlTimeTicks = (838 * 3600L + 59 * 60 + 59) * TimeSpan.TicksPerSecond + 9999990;
         private readonly OceanBaseCompatibilityMode _mode;
+        public OceanBaseCompatibilityMode CompatibilityMode => _mode;
         private readonly byte _leadingPrecision;
 
         private bool DateOnlyTransport => DbType == System.Data.DbType.Date
@@ -185,6 +186,16 @@ namespace OceanBase.EntityFrameworkCore.Storage
             return precision == 0 ? string.Empty
                 : "." + Math.Abs(ticks % TimeSpan.TicksPerSecond).ToString("D7", CultureInfo.InvariantCulture)
                     .PadRight(precision, '0')[..precision];
+        }
+
+        public override Expression GenerateCodeLiteral(object value)
+        {
+            if (value is not OceanBaseIntervalDayToSecond interval) return base.GenerateCodeLiteral(value);
+            return Expression.New(typeof(OceanBaseIntervalDayToSecond).GetConstructor(
+                [typeof(bool), typeof(int), typeof(int), typeof(int), typeof(int), typeof(int), typeof(byte), typeof(byte)])!,
+                Expression.Constant(interval.IsNegative), Expression.Constant(interval.Days), Expression.Constant(interval.Hours),
+                Expression.Constant(interval.Minutes), Expression.Constant(interval.Seconds), Expression.Constant(interval.Nanosecond),
+                Expression.Constant(interval.LeadingPrecision), Expression.Constant(interval.Scale));
         }
 
         protected override string GenerateNonNullSqlLiteral(object value)

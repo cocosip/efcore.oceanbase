@@ -13,6 +13,8 @@ $toolingWorkspace = Join-Path $toolingRoot "artifacts/tooling-$EfCoreVersion-$([
 New-Item -ItemType Directory -Path $toolingWorkspace | Out-Null
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'Program.cs') -Destination $toolingWorkspace
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'ReverseEngineeringSmoke.cs') -Destination $toolingWorkspace
+Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'CompiledModelSmoke.cs') -Destination $toolingWorkspace
+Copy-Item -LiteralPath (Join-Path $PSScriptRoot '../OceanBase.EntityFrameworkCore.PackageConsumer/RecoverySmoke.cs') -Destination $toolingWorkspace
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot '../TestUtilities/ScaffoldingCatalogConnection.cs') -Destination $toolingWorkspace
 $toolingProject = Join-Path $toolingWorkspace 'ToolingConsumer.csproj'
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'OceanBase.EntityFrameworkCore.ToolingConsumer.csproj') -Destination $toolingProject
@@ -82,6 +84,13 @@ if ((Get-FileHash $toolingCachedDll).Hash -ne (Get-FileHash $toolingConsumerDll)
 $null = Invoke-ToolingDotNet 'generate-catalog' @('run', '--project', $toolingProject, '--no-build', '--', '--generate-catalog', (Join-Path $toolingWorkspace 'Scaffolded'))
 Build-ToolingProject
 $null = Invoke-ToolingDotNet 'verify-catalog' @('run', '--project', $toolingProject, '--no-build', '--', '--verify-catalog')
+
+foreach ($toolingMode in @('MySql', 'Oracle')) {
+    $null = Invoke-ToolingDotNet "$toolingMode-optimize" @('ef', 'dbcontext', 'optimize', '--project', $toolingProject,
+        '--context', "Compiled${toolingMode}Context", '--no-build', '--output-dir', "Compiled/$toolingMode", '--namespace', "ToolingConsumer.Compiled.$toolingMode")
+    Build-ToolingProject
+}
+$null = Invoke-ToolingDotNet 'verify-compiled' @('run', '--project', $toolingProject, '--no-build', '--', '--verify-compiled')
 
 foreach ($toolingMode in @('MySql', 'Oracle')) {
     $toolingContext = "${toolingMode}Context"

@@ -6,13 +6,33 @@ This document is the implementation reference for the first provider vertical sl
 contracts that must be checked against the exact EF Core 10 package before code is written. It is intentionally
 smaller than a complete EF Core feature catalog.
 
+## Ordinary compiled models (2026-11-13)
+
+Extend EF10's RelationalCSharpRuntimeAnnotationCodeGenerator.CreateDefaultTypeMapping. Emit public mapping
+construction helpers for six internal provider mapping families, returning the unconverted baseline so
+EF's existing Clone logic retains converters/comparers. Public temporal expression helpers, interval JSON
+metadata and exact interval constructor literals keep generated code independent of internal access.
+Use a fully qualified provider mode enum in generated expressions to avoid the Connector enum ambiguity.
+
+Ordinary EF10 generation emits full mappings for instance converters with mapping hints, but only composed
+converters without hints. The latter re-infers storage and can change DATE to DATETIME or Boolean integer
+to decimal. Generate(IProperty,...) explicitly emits the original provider TypeMapping for the unhinted
+instance-converter branch, reusing the same Create/Clone seam. Both branches require actual generated-code
+compilation and UseModel mapping/parameter parity tests, not just string assertions.
+
+The model customizer tags provider-created models with an integer mode annotation. The relational runtime
+initializer validates it before base initialization, including previously initialized models. Package-only
+optimize/compiled-use fixtures forbid OnModelCreating and exercise both-mode sync/async graphs and writes.
+See the [design](efcore-10-compiled-model-design.md). NativeAOT/precompiled queries and performance remain
+unverified; ordinary/named query filters retain EF's visible compiled-model restrictions.
+
 ## Split-query graph loading (2026-11-13)
 
 OceanBase supports one active native reader per connection. EF10's generic relational compilation context
 only enables buffering for retries; replace its factory with a provider context whose IsBuffering is
 base.IsBuffering OR effective QuerySplittingBehavior.SplitQuery. Evaluate the property dynamically because
 AsSplitQuery/AsSingleQuery normalization occurs after construction. Preserve CreatePrecompiled without
-claiming compiled-model/tooling support. Register the normal EF factory service; reuse graph coordinators.
+claiming NativeAOT/precompiled-query support. Register the normal EF factory service; reuse graph coordinators.
 
 Public UseQuerySplittingBehavior validates the enum and clones the relational option. Existing relational
 cache keys already distinguish query-splitting/retry behavior. SingleQuery remains the default. Test
@@ -20,7 +40,7 @@ one-active-reader enforcement separately from synthetic graph rows, and assert p
 SQL independently. Buffered command retries expose no partial rows; unknown/cancelled reads preserve the
 error, dispose results and retain caller leases. Clear/discard partially tracked entities after failure.
 See the [split-query design](efcore-10-split-query-design.md). Native isolation/session/memory behavior,
-lazy loading, compiled models and upstream runtime fixtures remain independent acceptance work.
+lazy loading, NativeAOT/precompiled optimization and upstream runtime fixtures remain acceptance work.
 
 ## Execution retries (2026-11-13)
 

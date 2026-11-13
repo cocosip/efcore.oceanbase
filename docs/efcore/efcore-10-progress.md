@@ -3,8 +3,8 @@
 ## Active checkpoint: 2026-11-13
 
 Development resumed on 2026-11-11 on efcore/10.0 at the user's request, following the paused Batch7e checkpoint.
-The latest checkpoint is buffered split-query graph loading on 2026-11-13, following opt-in execution retries,
-TPC, many-to-many and Connector 0.3.0 reverse engineering.
+The latest checkpoint is ordinary compiled-model generation and use on 2026-11-13, following buffered
+split-query graph loading, opt-in execution retries, TPC, many-to-many and Connector 0.3.0 reverse engineering.
 Test each module and review completed major modules before committing. EF8/EF9 remain postponed.
 The provider is not release-ready. The [feature checklist](efcore-10-feature-checklist.md) remains the
 acceptance authority; this document records the handoff rather than defining a different completion target.
@@ -17,6 +17,30 @@ each complete feature module. Two read-only live probes already load User Secret
 the wider native matrix remains open. EF8/EF9 adaptation remains postponed. The
 [local development plan](efcore-10-local-development-plan.md) tracks the full remaining inventory, including
 an audit of locally feasible deferred families. Finishing one batch does not finish the overall goal.
+
+### Ordinary compiled-model checkpoint (2026-11-13)
+
+Actual dbcontext optimize output now compiles and runs through UseModel in both modes. Provider runtime
+annotation generation reconstructs all six mapping families while preserving converters/comparers, store
+facets, interval sentinels and write guards. Provider-created models retain their mode and reject opposite-
+mode reuse, including already initialized models. See the [design](efcore-10-compiled-model-design.md) and
+[execution record](efcore-10-compiled-model-plan.md).
+
+Thirteen unit cases perform real generation, Roslyn compilation and UseModel parity checks. Package-only
+sync/async graph smokes prove model-building bypass, split-reader sequencing, scalar conversion/fixup,
+tracked converted writes, NULL concurrency, length validation and cleanup. Independent review reproduced
+silent physical mapping changes for instance converters without hints; the fix preserves explicit property
+mappings through EF's existing Create/Clone seam. Both hinted and unhinted paths pass.
+
+Final baseline Debug/Release and isolated EF10.0.14 Release each pass **4943 tests** (2314 unit, 1759
+functional, 868 metadata specification, two consumers), zero failures/skips. The same baseline-built
+`10.0.0-compiled-model-r2-20261113` nupkg passes content, both-mode runtime/generated-context/optimized-model/
+full migration CLI consumers on both patches, including four Windows bundle build/help checks. Source,
+archive and consumer DLL hashes and package-only dependency graphs match; details are in the execution record.
+
+NativeAOT, precompiled query optimization, lazy loading and upstream runtime specification families remain
+separate work. EF's named/ordinary query-filter restrictions remain visible generation errors. Native
+execution and performance are unverified; DEF-08, the overall EF10 goal and release acceptance stay open.
 
 ### Split-query graph loading checkpoint (2026-11-13)
 
@@ -40,9 +64,9 @@ DLL hashes and package-only graphs match; details are in the execution record. C
 module's needs without changes.
 
 Native SQL/results, physical session reuse, isolation and memory/timing remain unverified. Splitting adds
-buffering and round trips; use a unique paging order and application-selected isolation. Lazy loading,
-compiled models and upstream runtime fixtures remain independent work. DEF-08 is partial; the full EF10
-goal and release acceptance remain open.
+buffering and round trips; use a unique paging order and application-selected isolation. Ordinary compiled
+models are covered by the later checkpoint above. Lazy loading and upstream runtime fixtures remain open.
+DEF-08 is partial; the full EF10 goal and release acceptance remain open.
 
 ### Opt-in execution retries checkpoint (2026-11-13)
 

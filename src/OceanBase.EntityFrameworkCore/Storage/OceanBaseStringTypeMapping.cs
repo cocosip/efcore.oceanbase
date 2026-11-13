@@ -13,6 +13,7 @@ namespace OceanBase.EntityFrameworkCore.Storage
     internal sealed class OceanBaseStringTypeMapping : StringTypeMapping, IOceanBaseWriteValidation
     {
         private readonly OceanBaseCompatibilityMode _mode;
+        public OceanBaseCompatibilityMode CompatibilityMode => _mode;
 
         public OceanBaseStringTypeMapping(string storeType, DbType dbType, bool unicode, int? size, bool fixedLength,
             OceanBaseCompatibilityMode mode)

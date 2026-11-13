@@ -8,6 +8,8 @@
     <OceanBaseConsumerEfCoreVersion Condition="'$(OceanBaseConsumerEfCoreVersion)' == ''">10.0.0</OceanBaseConsumerEfCoreVersion>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="../OceanBase.EntityFrameworkCore.PackageConsumer/RecoverySmoke.cs" Link="RecoverySmoke.cs"
+             Condition="Exists('../OceanBase.EntityFrameworkCore.PackageConsumer/RecoverySmoke.cs')" />
     <Compile Include="../TestUtilities/ScaffoldingCatalogConnection.cs" Link="ScaffoldingCatalogConnection.cs"
              Condition="Exists('../TestUtilities/ScaffoldingCatalogConnection.cs')" />
     <PackageReference Include="OceanBase.EntityFrameworkCore" Version="$(OceanBaseProviderVersion)" />

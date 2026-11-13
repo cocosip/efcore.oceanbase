@@ -3,7 +3,7 @@
 **Goal:** Implement every locally developable EF10 feature, in reviewed/tested commits, while postponing real
 database integration and EF8/EF9 adaptation as explicitly requested on 2026-11-10.
 
-**Architecture:** Continue on efcore/10.0 with split-query graph loading following execution retries, TPC,
+**Architecture:** Continue on efcore/10.0 with ordinary compiled models following split-query loading, execution retries, TPC,
 many-to-many verification, Connector 0.3.0 reverse engineering, splitting, TPT and migrations core/tooling.
 Reuse the existing EF relational services, connector 0.3.0
 public APIs and per-mode mappings/SQL. Separate local implementation evidence from server acceptance.
@@ -14,7 +14,7 @@ public APIs and per-mode mappings/SQL. Separate local implementation evidence fr
 The compact execution board is [efcore-10-roadmap.md](efcore-10-roadmap.md); this file remains the detailed
 batch ledger and acceptance notes.
 
-**Updated:** 2026-11-13, split-query graph loading. Continue EF10 in this checkout, test each module and
+**Updated:** 2026-11-13, ordinary compiled models. Continue EF10 in this checkout, test each module and
 review each completed major module before committing. EF8/EF9 remains postponed; live execution is opt-in and
 currently blocked before authentication by the supplied endpoint/transport behavior.
 The full goal remains incomplete.
@@ -22,6 +22,8 @@ The full goal remains incomplete.
 ## Execution order and release gates
 
 Use this section to choose the next task; the feature checklist remains the detailed acceptance authority.
+Keep one feature module active at a time: finish its implementation, verification, review fixes, evidence
+and local commit before starting another. A status request does not authorize switching modules.
 
 1. **Completed locally: migrations core and tooling.** The core is committed at `a8cbccf`; the
    [tooling execution plan](efcore-10-migrations-tooling-plan.md) records the complete configuration/discovery/
@@ -40,6 +42,19 @@ Use this section to choose the next task; the feature checklist remains the deta
    release revision, and only then consider a release branch/tag. EF8/EF9, push and publication remain out
    of the current development sequence.
 
+### Ordinary compiled-model module (2026-11-13)
+
+**IDs:** DEF-08, CFG-03, MAP-01..07, PKG-02..04. The [design](efcore-10-compiled-model-design.md) and
+[execution record](efcore-10-compiled-model-plan.md) cover actual optimize/generated C#/UseModel for both
+modes, six mapping families, converter/facet/sentinel/write parity and wrong-mode rejection. Independent
+review's unhinted-converter physical mapping regression is fixed with RED/green coverage. Thirteen unit
+cases and package-only compiled graph/write smokes pass. Full Debug/Release/isolated patch suites each
+pass 4943 tests, zero failures/skips. The final r2 baseline-built nupkg passes content, both-mode runtime,
+generated-context/optimized-model/full migration CLI consumers on both patches and four bundle build/help
+checks; source/archive/consumer hashes and package graphs match. Lazy loading, NativeAOT/precompiled
+optimization, native/performance acceptance and upstream runtime fixtures remain open. Connector 0.3.0
+requires no change. This closes the ordinary compiled-model local module, not the full EF10 goal.
+
 ### Split-query graph loading module (2026-11-13)
 
 **IDs:** DEF-08, QRY-01/05/08/09, CON-04/05, CFG-02/03, PKG-03/04. The
@@ -50,7 +65,7 @@ graph cases before implementation. Independent review's SQL ordering/window/corr
 is fixed. Full Debug/Release/isolated patch suites each pass 4930 tests, zero failures/skips. One
 baseline-built nupkg passes content, both-mode runtime/generated-context/full CLI consumers on both
 patches and four bundle build/help checks, with matching graphs/DLL hashes. Native
-graph/session/isolation acceptance, lazy loading, compiled models and upstream runtime specifications stay
+graph/session/isolation acceptance, lazy loading, NativeAOT/precompiled optimization and upstream runtime specifications stay
 open; this module does not finish the full goal. Connector 0.3.0 needs no changes.
 
 ### Execution retries module (2026-11-13)

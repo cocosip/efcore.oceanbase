@@ -9,7 +9,8 @@ using OceanBaseConnector;
 
 namespace OceanBase.EntityFrameworkCore.Storage;
 
-internal sealed class OceanBaseIntervalJsonReaderWriter : JsonValueReaderWriter<OceanBaseIntervalDayToSecond>
+/// <summary>Preserves exact interval transport values in EF metadata and generated converter mappings.</summary>
+public sealed class OceanBaseIntervalJsonReaderWriter : JsonValueReaderWriter<OceanBaseIntervalDayToSecond>
 {
     private static readonly PropertyInfo InstanceProperty = typeof(OceanBaseIntervalJsonReaderWriter)
         .GetProperty(nameof(Instance))!;
@@ -17,10 +18,13 @@ internal sealed class OceanBaseIntervalJsonReaderWriter : JsonValueReaderWriter<
         @"\A(?<sign>[+-])(?<days>\d{1,9}) (?<hours>\d{2}):(?<minutes>\d{2}):(?<seconds>\d{2})(?:\.(?<fraction>\d{1,9}))?\z",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
+    /// <summary>Gets the shared reader/writer used by generated model code.</summary>
     public static OceanBaseIntervalJsonReaderWriter Instance { get; } = new();
 
+    /// <inheritdoc />
     public override Expression ConstructorExpression => Expression.Property(null, InstanceProperty);
 
+    /// <inheritdoc />
     public override OceanBaseIntervalDayToSecond FromJsonTyped(
         ref Utf8JsonReaderManager manager, object? existingObject = null)
     {
@@ -44,6 +48,7 @@ internal sealed class OceanBaseIntervalJsonReaderWriter : JsonValueReaderWriter<
             checked((byte)fraction.Length));
     }
 
+    /// <inheritdoc />
     public override void ToJsonTyped(Utf8JsonWriter writer, OceanBaseIntervalDayToSecond value)
         => writer.WriteStringValue(value.ToString());
 }

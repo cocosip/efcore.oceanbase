@@ -11,6 +11,7 @@ namespace OceanBase.EntityFrameworkCore.Storage
     internal sealed class OceanBaseByteArrayTypeMapping : ByteArrayTypeMapping, IOceanBaseWriteValidation
     {
         private readonly OceanBaseCompatibilityMode _mode;
+        public OceanBaseCompatibilityMode CompatibilityMode => _mode;
 
         public OceanBaseByteArrayTypeMapping(string storeType, int? size, OceanBaseCompatibilityMode mode, bool? fixedLength = null)
             : base(ValidateParameters(new RelationalTypeMappingParameters(

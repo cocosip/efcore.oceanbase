@@ -13,6 +13,13 @@ The following required rows have complete local/package evidence for both modes:
 
 - `CFG-01..03`, `CON-01`, `SQL-02`
 - `PKG-01..04`
+- Ordinary compiled models now support actual dbcontext optimize, generated-code compilation and UseModel
+  in both modes. Six mapping families preserve converters/facets/sentinels and write validation; mode tags
+  reject opposite-mode reuse. Independent review's unhinted-converter physical mapping regression is fixed.
+  Full source suites each pass 4943 tests. One baseline-built r2 nupkg passes content, both-mode runtime,
+  generated-context/optimized-model/full CLI consumers on both patches and four bundle build/help checks.
+  Package graphs and DLL hashes match; see the [compiled-model plan](efcore-10-compiled-model-plan.md).
+  EF filter restrictions remain; NativeAOT/precompiled optimization and native/performance evidence remain open.
 - Split queries now buffer effective SplitQuery result sets before opening another native reader, using
   EF graph coordinators with public context-wide options and per-query overrides. Seven unit and 72
   runtime cases cover tracking, nested/sibling graphs, filters/paging, empty results and retry/error
@@ -20,7 +27,7 @@ The following required rows have complete local/package evidence for both modes:
   same baseline-built nupkg passes content, both-mode runtime/generated-context/full CLI consumers on
   both patches and four bundle build/help checks, with matching graphs/DLL hashes.
   See the [split-query plan](efcore-10-split-query-plan.md). DEF-08 is partial; native behavior, lazy
-  loading, compiled models and upstream runtime specifications remain separate unfinished work.
+  loading, NativeAOT/precompiled optimization and upstream runtime specifications remain unfinished work.
 - Opt-in execution retries now use EF's operation strategy with conservative known-outcome server codes,
   confirmed owned rollback and early migration/lifecycle DDL rejection. Independent review's startup,
   buffered-reader disposal and post-write close replay gaps are fixed. Seventy-nine unit and 68 runtime
@@ -105,9 +112,9 @@ the exact release revision has not been reviewed. EF8/EF9 adaptation is outside 
 ## Explicitly deferred after the first release
 
 `DEF-04/05/06/10` remain deferred. `DEF-01/02/03/07/08/09` are partial: migrations core/tooling, local TPT/TPC,
-ordinary bulk operations, split-query graphs, EnsureCreated/Migrate callbacks, execution retries and runtime
+ordinary bulk operations, split-query graphs, ordinary compiled models, EnsureCreated/Migrate callbacks, execution retries and runtime
 migration locking have local evidence. Native migrations/locks/bundle application, reverse-engineering
-catalogs, graph/retry behavior, wider JSON/converter/model variants, lazy loading, compiled models and
+catalogs, graph/retry behavior, wider JSON/converter/model variants, lazy loading, NativeAOT/precompiled optimization and
 ambient/distributed transactions remain outside the accepted support claim. Deferred
 features stay visible and must not be advertised as supported.
 
@@ -126,3 +133,6 @@ features stay visible and must not be advertised as supported.
 
 Each completed feature module gets its own documented evidence and local commit. No push, tag or publication is implied by
 this roadmap.
+Keep only one feature module active: finish implementation, tests, review fixes, evidence and its local
+commit before starting the next. Status reports must distinguish new functionality, verified existing
+behavior and missing native acceptance.

@@ -23,6 +23,13 @@ namespace OceanBase.EntityFrameworkCore.Storage
             _compatibilityMode = compatibilityMode;
         }
 
+        // Design-time literals include provider-valued sentinels, independently of CLR property admission.
+        public override RelationalTypeMapping? FindMapping(Type type)
+            => type == typeof(OceanBaseIntervalDayToSecond) && _compatibilityMode == OceanBaseCompatibilityMode.Oracle
+                ? new OceanBaseTemporalTypeMapping<OceanBaseIntervalDayToSecond>("INTERVAL DAY(9) TO SECOND(9)",
+                    DbType.Object, 9, _compatibilityMode, 9)
+                : base.FindMapping(type);
+
         public override CoreTypeMapping? FindMapping(IProperty property)
         {
             var mapping = base.FindMapping(property);
@@ -265,10 +272,10 @@ namespace OceanBase.EntityFrameworkCore.Storage
                     precision, _compatibilityMode, dayPrecision);
                 return (RelationalTypeMapping)(clock
                     ? mapping.WithComposedConverter(new ValueConverter<TimeOnly, OceanBaseIntervalDayToSecond>(
-                        value => OceanBaseTemporalConversions.ToInterval(value.ToTimeSpan()),
+                        value => OceanBaseCompiledModelTypeMappings.ToInterval(value.ToTimeSpan()),
                         value => TimeOnly.FromTimeSpan(value.ToTimeSpan())))
                     : mapping.WithComposedConverter(new ValueConverter<TimeSpan, OceanBaseIntervalDayToSecond>(
-                        value => OceanBaseTemporalConversions.ToInterval(value), value => value.ToTimeSpan())));
+                        value => OceanBaseCompiledModelTypeMappings.ToInterval(value), value => value.ToTimeSpan())));
             }
 
             if (duration)
@@ -286,9 +293,9 @@ namespace OceanBase.EntityFrameworkCore.Storage
             var dateMapping = new OceanBaseTemporalTypeMapping<DateTime>(storeType,
                 typeName == "DATE" ? DbType.Date : DbType.DateTime2, precision, _compatibilityMode);
             return dateOnly ? (RelationalTypeMapping)dateMapping.WithComposedConverter(new ValueConverter<DateOnly, DateTime>(
-                    value => value.ToDateTime(TimeOnly.MinValue), value => OceanBaseTemporalConversions.ReadDateOnly(value)))
+                    value => value.ToDateTime(TimeOnly.MinValue), value => OceanBaseCompiledModelTypeMappings.ReadDateOnly(value)))
                 : zoned ? (RelationalTypeMapping)dateMapping.WithComposedConverter(new ValueConverter<DateTimeOffset, DateTime>(
-                    value => OceanBaseTemporalConversions.ToUtcDateTime(value), value => OceanBaseTemporalConversions.ReadUtcDateTime(value)))
+                    value => OceanBaseCompiledModelTypeMappings.ToUtcDateTime(value), value => OceanBaseCompiledModelTypeMappings.ReadUtcDateTime(value)))
                 : dateMapping;
         }
 

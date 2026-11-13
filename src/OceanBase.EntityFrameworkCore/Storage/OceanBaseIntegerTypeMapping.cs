@@ -13,6 +13,7 @@ namespace OceanBase.EntityFrameworkCore.Storage
     internal sealed class OceanBaseIntegerTypeMapping<T> : RelationalTypeMapping, IOceanBaseWriteValidation where T : struct, IConvertible
     {
         private readonly OceanBaseCompatibilityMode _mode;
+        public OceanBaseCompatibilityMode CompatibilityMode => _mode;
         private readonly decimal _minimum;
         private readonly decimal _maximum;
 

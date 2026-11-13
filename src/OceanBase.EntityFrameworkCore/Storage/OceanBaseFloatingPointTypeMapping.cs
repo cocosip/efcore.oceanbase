@@ -14,6 +14,7 @@ namespace OceanBase.EntityFrameworkCore.Storage
         where T : struct, IConvertible
     {
         private readonly OceanBaseCompatibilityMode _mode;
+        public OceanBaseCompatibilityMode CompatibilityMode => _mode;
         private readonly bool _singleStorage;
         private readonly bool _unsigned;
 

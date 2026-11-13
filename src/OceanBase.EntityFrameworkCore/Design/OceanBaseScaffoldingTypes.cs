@@ -83,6 +83,10 @@ namespace OceanBase.EntityFrameworkCore.Design
 
         protected override RelationalTypeMapping? FindMapping(in RelationalTypeMappingInfo mappingInfo)
         {
+            // EF compiled models serialize Oracle TimeOnly/TimeSpan sentinels in their provider representation.
+            if (mappingInfo.ClrType == typeof(OceanBaseIntervalDayToSecond))
+                return new OceanBaseTemporalTypeMapping<OceanBaseIntervalDayToSecond>("INTERVAL DAY(9) TO SECOND(9)",
+                    System.Data.DbType.Object, 9, OceanBaseCompatibilityMode.Oracle, 9);
             var store = mappingInfo.StoreTypeName;
             var oracle = store is not null && (Regex.IsMatch(store,
                 @"\A(?:NUMBER|NVARCHAR2|VARCHAR2|NCHAR|CLOB|NCLOB|RAW|BINARY_FLOAT|BINARY_DOUBLE|INTERVAL|TIMESTAMP)\b|\b(?:BYTE|CHAR)\s*\)\z",

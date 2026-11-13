@@ -15,6 +15,7 @@ namespace OceanBase.EntityFrameworkCore.Storage
     internal sealed class OceanBaseDecimalTypeMapping : DecimalTypeMapping, IOceanBaseWriteValidation
     {
         private readonly OceanBaseCompatibilityMode _mode;
+        public OceanBaseCompatibilityMode CompatibilityMode => _mode;
         private readonly bool _queryResult;
 
         public OceanBaseDecimalTypeMapping(string storeType, int? precision, int? scale,
