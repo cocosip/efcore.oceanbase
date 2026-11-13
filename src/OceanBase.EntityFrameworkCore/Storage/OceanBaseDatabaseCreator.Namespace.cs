@@ -16,6 +16,7 @@ namespace OceanBase.EntityFrameworkCore.Storage
 
         private OceanBaseRelationalConnection ManagementConnection(out string scope, out OceanBaseConnection target)
         {
+            ValidateNoRetries();
             var extension = options.FindExtension<Internal.OceanBaseOptionsExtension>()!;
             if (!extension.DatabaseManagementEnabled
                 || (_mode == OceanBaseCompatibilityMode.Oracle) != (extension.OracleUserPasswordFactory is not null))

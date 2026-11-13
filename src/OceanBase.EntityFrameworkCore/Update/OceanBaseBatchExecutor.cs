@@ -9,6 +9,7 @@ using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.EntityFrameworkCore.Update;
 using Microsoft.EntityFrameworkCore.Update.Internal;
+using OceanBase.EntityFrameworkCore.Storage;
 
 namespace OceanBase.EntityFrameworkCore.Update
 {
@@ -76,7 +77,7 @@ namespace OceanBase.EntityFrameworkCore.Update
                 if (beganTransaction)
                 {
                     try { transaction!.Dispose(); }
-                    catch (Exception cleanup) when (failure is not null) { failure.Data["OceanBase.BatchCleanupError"] = cleanup; }
+                    catch (Exception cleanup) when (failure is not null) { OceanBaseRetryingExecutionStrategy.PreventRetry(failure); failure.Data["OceanBase.BatchCleanupError"] = cleanup; }
                 }
                 else
                 {
@@ -96,7 +97,7 @@ namespace OceanBase.EntityFrameworkCore.Update
                     finally
                     {
                         try { if (opened) connection.Close(); }
-                        catch (Exception cleanup) when (failure is not null) { failure.Data["OceanBase.BatchCleanupError"] = cleanup; }
+                        catch (Exception cleanup) when (failure is not null) { OceanBaseRetryingExecutionStrategy.PreventRetry(failure); failure.Data["OceanBase.BatchCleanupError"] = cleanup; }
                     }
                 }
             }
@@ -165,7 +166,7 @@ namespace OceanBase.EntityFrameworkCore.Update
                 if (beganTransaction)
                 {
                     try { await transaction!.DisposeAsync().ConfigureAwait(false); }
-                    catch (Exception cleanup) when (failure is not null) { failure.Data["OceanBase.BatchCleanupError"] = cleanup; }
+                    catch (Exception cleanup) when (failure is not null) { OceanBaseRetryingExecutionStrategy.PreventRetry(failure); failure.Data["OceanBase.BatchCleanupError"] = cleanup; }
                 }
                 else
                 {
@@ -188,7 +189,7 @@ namespace OceanBase.EntityFrameworkCore.Update
                     finally
                     {
                         try { if (opened) await connection.CloseAsync().ConfigureAwait(false); }
-                        catch (Exception cleanup) when (failure is not null) { failure.Data["OceanBase.BatchCleanupError"] = cleanup; }
+                        catch (Exception cleanup) when (failure is not null) { OceanBaseRetryingExecutionStrategy.PreventRetry(failure); failure.Data["OceanBase.BatchCleanupError"] = cleanup; }
                     }
                 }
             }
@@ -197,7 +198,10 @@ namespace OceanBase.EntityFrameworkCore.Update
         private void ReportSavepointFailure(Exception cleanup, Exception? failure, bool rollback)
         {
             if (failure is not null)
+            {
+                OceanBaseRetryingExecutionStrategy.PreventRetry(failure);
                 failure.Data[rollback ? "OceanBase.SavepointRollbackError" : "OceanBase.SavepointReleaseError"] = cleanup;
+            }
             try
             {
                 if (rollback) UpdateLogger.BatchExecutorFailedToRollbackToSavepoint(CurrentContext.Context.GetType(), cleanup);

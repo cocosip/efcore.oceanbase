@@ -146,6 +146,7 @@ namespace OceanBase.EntityFrameworkCore.Storage
 
         private IReadOnlyList<string> ValidateTableCreation()
         {
+            ValidateNoRetries();
             var scope = options.FindExtension<Internal.OceanBaseOptionsExtension>()!.SchemaManagementScope;
             if (scope is null)
             {
@@ -165,6 +166,12 @@ namespace OceanBase.EntityFrameworkCore.Storage
                 throw new NotSupportedException("The model contains a table outside the declared schema management scope.");
             }
             return CreateStatements(model);
+        }
+
+        private void ValidateNoRetries()
+        {
+            if (ExecutionStrategy.Current is not null || currentContext.Context.Database.CreateExecutionStrategy().RetriesOnFailure)
+                throw new NotSupportedException("OceanBase DDL cannot run under execution-strategy retries because it commits implicitly. Inspect the schema before retrying.");
         }
 
         private IRelationalCommand ScopeProbe() => commands.Build(_mode == OceanBaseCompatibilityMode.MySql

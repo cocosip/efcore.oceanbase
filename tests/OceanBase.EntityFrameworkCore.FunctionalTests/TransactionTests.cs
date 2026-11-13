@@ -488,6 +488,35 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
             }
         }
 
+        [Theory]
+        [MemberData(nameof(Modes))]
+        public async Task Retrying_start_cannot_replay_after_native_transaction_exists(OceanBaseCompatibilityMode mode, bool async)
+        {
+            foreach (var outerLease in new[] { false, true })
+            foreach (var failDispose in new[] { false, true })
+            {
+                var failure = (OceanBaseException)Activator.CreateInstance(typeof(OceanBaseException),
+                    System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance, binder: null,
+                    args: ["Synthetic started failure.", mode == OceanBaseCompatibilityMode.MySql ? 1213 : 60, null, false, null, null], culture: null)!;
+                var cleanup = new InvalidOperationException("native cleanup failed");
+                var begin = new BeginFailure(failure, failStarting: false);
+                var started = new StartedFailure(failure, failDispose ? cleanup : null);
+                await using var context = new DbContext(new DbContextOptionsBuilder()
+                    .UseOceanBase("Server=offline;Database=app", mode, options => options.EnableRetryOnFailure(2, TimeSpan.Zero))
+                    .AddInterceptors(begin, started).Options);
+                if (outerLease) await context.Database.OpenConnectionAsync();
+                var strategy = context.Database.CreateExecutionStrategy();
+                Assert.Same(failure, async ? await Assert.ThrowsAsync<OceanBaseException>(() => strategy.ExecuteAsync(async () =>
+                    { await using var transaction = await context.Database.BeginTransactionAsync(); }))
+                    : Assert.Throws<OceanBaseException>(() => strategy.Execute(() => { using var transaction = context.Database.BeginTransaction(); })));
+                Assert.Equal(1, begin.Starts);
+                Assert.Equal(1, started.Transaction!.Disposals);
+                Assert.Null(context.Database.CurrentTransaction);
+                if (failDispose) Assert.Same(cleanup, failure.Data["OceanBase.TransactionStartCleanupError"]);
+                if (outerLease) await context.Database.CloseConnectionAsync();
+            }
+        }
+
         private sealed class StartedFailure(Exception? failure, Exception? disposeFailure) : DbTransactionInterceptor
         {
             public StartTransaction? Transaction { get; private set; }

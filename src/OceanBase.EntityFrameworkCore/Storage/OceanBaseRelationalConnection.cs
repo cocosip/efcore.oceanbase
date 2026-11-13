@@ -79,6 +79,18 @@ namespace OceanBase.EntityFrameworkCore.Storage
             }
         }
 
+        public override bool Close()
+        {
+            try { return base.Close(); }
+            catch (Exception error) { OceanBaseRetryingExecutionStrategy.PreventRetry(error); throw; }
+        }
+
+        public override async Task<bool> CloseAsync()
+        {
+            try { return await base.CloseAsync().ConfigureAwait(false); }
+            catch (Exception error) { OceanBaseRetryingExecutionStrategy.PreventRetry(error); throw; }
+        }
+
         public override IDbContextTransaction BeginTransaction(IsolationLevel isolationLevel)
         {
             ValidateConnection(DbConnection);
@@ -99,8 +111,10 @@ namespace OceanBase.EntityFrameworkCore.Storage
             }
             catch (Exception error)
             {
+                // No EF wrapper exists yet; native disposal cannot certify rollback for replay.
+                if (transaction is not null) OceanBaseRetryingExecutionStrategy.PreventRetry(error);
                 try { transaction?.Dispose(); }
-                catch (Exception cleanup) { error.Data["OceanBase.TransactionStartCleanupError"] = cleanup; }
+                catch (Exception cleanup) { OceanBaseRetryingExecutionStrategy.PreventRetry(error); error.Data["OceanBase.TransactionStartCleanupError"] = cleanup; }
                 entry.Restore(error);
                 throw;
             }
@@ -131,8 +145,9 @@ namespace OceanBase.EntityFrameworkCore.Storage
             }
             catch (Exception error)
             {
+                if (transaction is not null) OceanBaseRetryingExecutionStrategy.PreventRetry(error);
                 try { if (transaction is not null) await transaction.DisposeAsync().ConfigureAwait(false); }
-                catch (Exception cleanup) { error.Data["OceanBase.TransactionStartCleanupError"] = cleanup; }
+                catch (Exception cleanup) { OceanBaseRetryingExecutionStrategy.PreventRetry(error); error.Data["OceanBase.TransactionStartCleanupError"] = cleanup; }
                 await entry.RestoreAsync(error).ConfigureAwait(false);
                 throw;
             }

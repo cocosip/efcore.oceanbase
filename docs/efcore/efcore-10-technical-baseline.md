@@ -6,6 +6,23 @@ This document is the implementation reference for the first provider vertical sl
 contracts that must be checked against the exact EF Core 10 package before code is written. It is intentionally
 smaller than a complete EF Core feature catalog.
 
+## Execution retries (2026-11-13)
+
+EnableRetryOnFailure installs a per-context factory through RelationalOptionsExtension. Reuse EF10's retry
+budget/backoff, nested-current strategy, active-transaction checks and buffering cache-key distinction.
+Only known-outcome non-XA server failures qualify; cancellation, all commit-stage failures and failed
+resource cleanup veto replay. The shared transaction factory explicitly rolls back unfinished owned retry
+transactions before disposal, using CancellationToken.None. Default and native borrowed ownership remain.
+
+EF unwraps DbUpdateException before classification: put the cleanup veto on each inner exception too.
+A failed TransactionStarted callback with an already-created native handle vetoes replay even if native
+Dispose returns successfully. Injected retry-only reader wrapping preserves read/getter/NextResult errors
+when disposal fails, closing BufferedDataReader's try/finally exception replacement path. Close/CloseAsync
+exceptions veto replay after successful bulk DML. Commit exceptions also veto because EF combines physical
+commit and callbacks. Reject configured/current execution strategies before lifecycle/migration DDL, but
+retain offline scripts. See the [retry design](efcore-10-retries-design.md) for codes, public configuration,
+application callback/service replacement responsibilities and native acceptance boundaries.
+
 ## Version and package baseline
 
 - Development branch: efcore/10.0 (also used for packaging and release).

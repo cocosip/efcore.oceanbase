@@ -50,7 +50,7 @@ namespace OceanBase.EntityFrameworkCore.Migrations
             if (_connection.CurrentTransaction is not null || System.Transactions.Transaction.Current is not null
                 || _connection is ITransactionEnlistmentManager { EnlistedTransaction: not null })
                 throw new NotSupportedException("OceanBase migrations cannot run inside a caller, ambient or enlisted transaction.");
-            if (_executionStrategy.RetriesOnFailure)
+            if (_executionStrategy.RetriesOnFailure || ExecutionStrategy.Current is not null)
                 throw new NotSupportedException("Automatic migration retries are unsupported because OceanBase DDL commits implicitly. Inspect the applied schema before retrying.");
             var core = _contextOptions.FindExtension<CoreOptionsExtension>();
             if (async ? core?.AsyncSeeder is null && core?.Seeder is not null

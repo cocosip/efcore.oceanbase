@@ -23,6 +23,7 @@ namespace OceanBase.EntityFrameworkCore.Storage
             }
             catch (Exception cleanupError)
             {
+                OceanBaseRetryingExecutionStrategy.PreventRetry(openingError);
                 openingError.Data["OceanBase.OpenCleanupError"] = cleanupError;
             }
             finally
@@ -41,6 +42,7 @@ namespace OceanBase.EntityFrameworkCore.Storage
             }
             catch (Exception cleanupError)
             {
+                OceanBaseRetryingExecutionStrategy.PreventRetry(openingError);
                 openingError.Data["OceanBase.OpenCleanupError"] = cleanupError;
             }
             finally

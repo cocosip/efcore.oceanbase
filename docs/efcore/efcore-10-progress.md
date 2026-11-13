@@ -3,7 +3,7 @@
 ## Active checkpoint: 2026-11-13
 
 Development resumed on 2026-11-11 on efcore/10.0 at the user's request, following the paused Batch7e checkpoint.
-The latest checkpoint is TPC inheritance on 2026-11-13, following many-to-many verification and Connector 0.3.0 reverse engineering.
+The latest checkpoint is opt-in execution retries on 2026-11-13, following TPC, many-to-many and Connector 0.3.0 reverse engineering.
 Test each module and review completed major modules before committing. EF8/EF9 remain postponed.
 The provider is not release-ready. The [feature checklist](efcore-10-feature-checklist.md) remains the
 acceptance authority; this document records the handoff rather than defining a different completion target.
@@ -16,6 +16,31 @@ each complete feature module. Two read-only live probes already load User Secret
 the wider native matrix remains open. EF8/EF9 adaptation remains postponed. The
 [local development plan](efcore-10-local-development-plan.md) tracks the full remaining inventory, including
 an audit of locally feasible deferred families. Finishing one batch does not finish the overall goal.
+
+### Opt-in execution retries checkpoint (2026-11-13)
+
+EnableRetryOnFailure now selects a public EF execution strategy for known transient server failures in both
+modes. Defaults remain non-retrying. Unknown outcomes, XA, cancellation, commit-stage failures and failed
+resource cleanup never replay. Owned retry transactions explicitly confirm rollback before disposal;
+configured/current strategies reject migration and schema/namespace DDL before network/factories/seeding.
+See the [design](efcore-10-retries-design.md) and [execution record](efcore-10-retries-plan.md).
+
+Seventy-nine unit and 68 runtime cases cover mode-specific codes, option isolation, buffering/cache keys,
+nested budgets, limits/cancellation, generated graph SaveChanges, bulk DML, user transaction boundaries and
+DDL guards. Independent review found three unsafe replay paths; startup veto, buffered-reader cleanup
+protection and Close/CloseAsync veto fix each with RED/green regressions. Commit callbacks after physical
+commit also veto replay. Ordinary non-retry and borrowed transaction behavior is retained.
+
+Final EF10.0.0 Debug/Release and isolated EF10.0.14 Release each pass **4851 tests** (2294 unit,
+1687 functional, 868 upstream metadata specification, two consumers), zero failures/skips. Package
+`10.0.0-retries-20261113` passes content and both-mode runtime consumers on both patches using one
+baseline-built Provider DLL. Driver 0.3.0 already meets this module's needs; no driver changes are requested.
+The same package passes generated-context/full migration CLI checks on both patches and modes, including
+compiled snapshots/evolution/scripts/removal and four Windows bundle build/help checks; DLL hashes match.
+
+Native error-code behavior, physical rollback/commit, failover and upstream runtime fixtures remain open.
+Application delegates/callbacks must be replayable; arbitrary raw DDL and external side effects are
+application-owned. This does not complete DEF-09, the full EF10 goal or release acceptance.
 
 ### TPC inheritance checkpoint (2026-11-13)
 

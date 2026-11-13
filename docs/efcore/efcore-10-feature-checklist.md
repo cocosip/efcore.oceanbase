@@ -52,7 +52,18 @@ so that an undocumented feature is not accidentally advertised.
 
 ## Current evidence and blockers
 
-Latest implementation: TPC inheritance on 2026-11-13. Concrete-table schema/model differences and existing
+Latest implementation: opt-in execution retries on 2026-11-13. Public EnableRetryOnFailure uses EF's
+operation strategy for known transient server failures in both modes; defaults remain non-retrying.
+Owned retry transactions confirm rollback, while unknown/XA/cancelled/commit/cleanup failures veto replay.
+Configured/current strategies reject lifecycle and migration DDL before work. Independent review's startup,
+reader-cleanup and post-write close gaps have RED/green regressions; see the [retry plan](efcore-10-retries-plan.md).
+Seventy-nine unit and 68 runtime cases are added. Full EF10.0.0 Debug/Release and isolated EF10.0.14 Release
+each pass 4851 tests (2294 unit, 1687 functional, 868 metadata specifications, two consumers), zero failures/skips.
+The same baseline-built retry nupkg passes content and both-mode runtime consumers on both patches.
+Full generated-context/migration CLI consumers and four bundle build/help checks also pass for this binary.
+Native rollback/commit, error codes and failover remain open; DEF-09/TST-01/02 and release remain incomplete.
+
+Preceding implementation: TPC inheritance on 2026-11-13. Concrete-table schema/model differences and existing
 EF UNION/query/write infrastructure support assigned/composite hierarchy-wide keys and client Guid keys.
 Shared validation rejects unsafe store generation before DDL and the first tracked-write batch, including
 mixed saves. Eighteen schema and 58 runtime cases pass in both modes; independent review's computed/Never
@@ -714,7 +725,7 @@ are difficult to implement. Promoting a deferred feature requires its own design
 | DEF-06 | Stored-procedure modification mappings; provider-specific sequence/HiLo strategies | Deferred | Deferred | Parameter/result/generation contracts; reject unsupported mappings clearly. |
 | DEF-07 | TPH/TPT/TPC inheritance, table/entity splitting, many-to-many skip navigations | In progress | In progress | TPT, TPC and entity/table splitting have local schema/migration/query/write workflows. TPC supports assigned/composite/client Guid keys and rejects unsafe store generation before schema or tracked writes; 18 schema and 58 runtime cases cover the profile. Ordinary many-to-many has four schema and 62 runtime cases. See module designs/plans for package/tooling evidence. Native behavior, TPH's wider matrix, sequence allocation, wider skip-navigation variants and upstream runtime specifications remain open. |
 | DEF-08 | Split queries, lazy loading, compiled-model/tooling optimizations | Deferred | Deferred | Graph/lifetime/generated-model consumer tests. |
-| DEF-09 | EF seeding callbacks, execution-strategy retries, ambient/distributed transactions | In progress | In progress | EnsureCreated callbacks and Migrate-time callback integration/owner-row locking exist locally; opposite-only callbacks reject before work. Physical rollback/commit and native locks remain unverified. Retrying migration strategies and caller/ambient/enlisted transactions explicitly reject; no distributed-transaction guarantee. |
+| DEF-09 | EF seeding callbacks, execution-strategy retries, ambient/distributed transactions | In progress | In progress | EnsureCreated/Migrate seeding and owner-row locking exist locally. EnableRetryOnFailure adds known-outcome operation retries, confirmed owned rollback, buffering and nested budgets; unknown/XA/cancelled/commit/cleanup failures veto. Configured/current DDL strategies and transactions active before strategy execution reject. See retry plan for 79 unit/68 runtime cases. Physical outcomes/native locks/failover remain open; no distributed-transaction guarantee. |
 | DEF-10 | Provider full-text/vector/search functions, advanced batching optimizations | Deferred | Deferred | Server-version contract and independent tests/benchmarks. |
 
 Ordinary string/byte-array scalar values remain required even when advanced LOB locator APIs are deferred.

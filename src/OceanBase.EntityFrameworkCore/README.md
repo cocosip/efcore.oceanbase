@@ -19,6 +19,24 @@ This is a development provider. Local tests cover model/type mappings, SQL gener
 pipelines and package consumption. Real OceanBase query, write, transaction and schema acceptance is still open
 for both modes. Passing local tests does not establish server compatibility or release readiness.
 
+Enable EF operation retries explicitly for replayable queries and writes:
+
+```csharp
+optionsBuilder.UseOceanBase(connectionString, OceanBaseCompatibilityMode.MySql,
+    options => options.EnableRetryOnFailure());
+```
+
+Defaults are six retries with a maximum 30-second delay for known transient server errors: MySQL 1205/1213,
+Oracle 54/60/8177, or SQLSTATE 40001. The optional count/delay/additional server codes apply per context.
+Unknown execution outcomes, cancellation, XA, commit-stage errors and failed resource cleanup never replay.
+Owned retry transactions explicitly confirm rollback before disposal; uncertain outcomes require application
+reconciliation. Put user transactions inside `Database.CreateExecutionStrategy().Execute`/`ExecuteAsync`;
+transactions already active before execution reject. Retrying queries buffer results, increasing memory use.
+Delegates, callbacks and raw SQL must be replayable; keep automatic SaveChanges transactions enabled.
+DDL lifecycle operations and Migrate reject configured or active strategies because DDL commits implicitly;
+use a separate context without retries for these operations. Offline script generation remains available.
+This local retry policy does not establish native failover or rollback acceptance.
+
 Database reverse engineering uses the driver's public `GetSchema` collections, including its typed column
 declarations and tri-state generation/default/update metadata. Scaffolding connections must specify
 `ExpectedMode=MySql` or `ExpectedMode=Oracle`; generated `UseOceanBase` code selects that mode explicitly.

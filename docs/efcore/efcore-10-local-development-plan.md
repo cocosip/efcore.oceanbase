@@ -3,7 +3,7 @@
 **Goal:** Implement every locally developable EF10 feature, in reviewed/tested commits, while postponing real
 database integration and EF8/EF9 adaptation as explicitly requested on 2026-11-10.
 
-**Architecture:** Continue on efcore/10.0 with TPC inheritance following many-to-many verification, Connector 0.3.0 reverse engineering, splitting, TPT and migrations core/tooling. Reuse the existing EF relational services, connector 0.3.0
+**Architecture:** Continue on efcore/10.0 with execution retries following TPC, many-to-many verification, Connector 0.3.0 reverse engineering, splitting, TPT and migrations core/tooling. Reuse the existing EF relational services, connector 0.3.0
 public APIs and per-mode mappings/SQL. Separate local implementation evidence from server acceptance.
 
 **Spec:** efcore-10-feature-checklist.md, efcore-10-technical-baseline.md, efcore-10-query-update-design.md.
@@ -37,6 +37,18 @@ Use this section to choose the next task; the feature checklist remains the deta
    full Debug/Release suites, package content gate and package consumer at EF10.0.0/10.0.14, review the
    release revision, and only then consider a release branch/tag. EF8/EF9, push and publication remain out
    of the current development sequence.
+
+### Execution retries module (2026-11-13)
+
+**IDs:** DEF-09, CON-04/05, QRY-01/08, UPD-01..05, TXN-01..03, SCH-01/02, DEF-01, PKG-03/04.
+The [design](efcore-10-retries-design.md) and [execution record](efcore-10-retries-plan.md) add opt-in EF
+operation retries, known-outcome policy, confirmed rollback for owned transactions and early DDL rejection.
+Independent review's startup/reader/close replay gaps are fixed with RED/green regressions. Seventy-nine
+unit and 68 runtime cases cover options/classification, query buffering, save/bulk replay and error safety.
+Debug/Release/isolated patch suites each pass 4851 tests with zero failures/skips. One baseline-built nupkg
+passes content and both-mode runtime consumers on EF10.0.0/10.0.14. Connector 0.3.0 requires no change.
+Generated-context/full migration CLI and four bundle build/help checks pass for the same package too.
+Native outcomes/failover, ambient/distributed support, upstream runtime specifications and the overall goal stay open.
 
 ### TPC inheritance module (2026-11-13)
 

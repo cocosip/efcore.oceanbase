@@ -1,11 +1,14 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using OceanBase.EntityFrameworkCore.Internal;
+using OceanBase.EntityFrameworkCore.Storage;
 
 namespace OceanBase.EntityFrameworkCore.Infrastructure
 {
-    /// <summary>Configures OceanBase migrations through the UseOceanBase callback.</summary>
+    /// <summary>Configures OceanBase relational behavior through the UseOceanBase callback.</summary>
     public sealed class OceanBaseDbContextOptionsBuilder
     {
         private readonly DbContextOptionsBuilder _optionsBuilder;
@@ -13,6 +16,20 @@ namespace OceanBase.EntityFrameworkCore.Infrastructure
         internal OceanBaseDbContextOptionsBuilder(DbContextOptionsBuilder optionsBuilder) => _optionsBuilder = optionsBuilder;
 
         private OceanBaseOptionsExtension Options => _optionsBuilder.Options.FindExtension<OceanBaseOptionsExtension>()!;
+
+        /// <summary>Enables operation-level retries for confirmed transient server errors.</summary>
+        /// <remarks>Unknown outcomes, cancellation and XA never retry. Schema/migration execution rejects retries.</remarks>
+        public OceanBaseDbContextOptionsBuilder EnableRetryOnFailure(int maxRetryCount = 6,
+            TimeSpan? maxRetryDelay = null, IEnumerable<int>? additionalErrorCodes = null)
+        {
+            ArgumentOutOfRangeException.ThrowIfNegative(maxRetryCount);
+            if (maxRetryDelay < TimeSpan.Zero) throw new ArgumentOutOfRangeException(nameof(maxRetryDelay));
+            var codes = additionalErrorCodes?.ToArray();
+            if (codes?.Contains(0) == true) throw new ArgumentException("Code zero identifies client-local errors and cannot be retried.", nameof(additionalErrorCodes));
+            Update(Options.WithExecutionStrategyFactory(dependencies =>
+                new OceanBaseRetryingExecutionStrategy(dependencies, maxRetryCount, maxRetryDelay, codes)));
+            return this;
+        }
 
         /// <summary>Selects the assembly containing migrations; null restores the context assembly default.</summary>
         public OceanBaseDbContextOptionsBuilder MigrationsAssembly(string? assemblyName)

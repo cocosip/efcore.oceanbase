@@ -42,6 +42,7 @@ namespace PackageConsumer
                 VerifyFailedOpen(mode);
                 VerifyNullableConcurrency(mode);
                 TransactionSmoke.Run(mode);
+                RetrySmoke.Run(mode);
                 SchemaSmoke.Run(mode);
                 SeedingSmoke.Run(mode);
                 BulkDmlSmoke.Run(mode);

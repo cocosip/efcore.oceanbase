@@ -13,6 +13,13 @@ The following required rows have complete local/package evidence for both modes:
 
 - `CFG-01..03`, `CON-01`, `SQL-02`
 - `PKG-01..04`
+- Opt-in execution retries now use EF's operation strategy with conservative known-outcome server codes,
+  confirmed owned rollback and early migration/lifecycle DDL rejection. Independent review's startup,
+  buffered-reader disposal and post-write close replay gaps are fixed. Seventy-nine unit and 68 runtime
+  cases pass; full baseline Debug/Release/selected-patch suites each pass 4851. One baseline-built retry
+  nupkg passes content/runtime consumers on both patches/modes. See the [retry plan](efcore-10-retries-plan.md).
+  Generated-context/full CLI and four bundle build/help checks also pass for the same binary.
+  Native outcome/error-code/failover acceptance and ambient/distributed support remain open under DEF-09.
 - Migrations core now supplies both-mode model-difference/operation SQL, scoped history and owner-row locking,
   Migrate/MigrateAsync and forward/reverse/idempotent scripts; see the [core plan](efcore-10-migrations-plan.md).
 - Migrations tooling supplies public assembly/history options and discoverable design services. Package-only

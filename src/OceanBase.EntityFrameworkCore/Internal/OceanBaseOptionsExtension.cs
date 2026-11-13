@@ -11,6 +11,7 @@ using Microsoft.EntityFrameworkCore.Query;
 using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.EntityFrameworkCore.Update;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using OceanBase.EntityFrameworkCore.Metadata;
 using OceanBase.EntityFrameworkCore.Metadata.Conventions;
 using OceanBase.EntityFrameworkCore.Migrations;
@@ -147,6 +148,7 @@ namespace OceanBase.EntityFrameworkCore.Internal
 
         public override void ApplyServices(IServiceCollection services)
         {
+            services.TryAddEnumerable(ServiceDescriptor.Singleton<IInterceptor, OceanBaseRetryReaderInterceptor>());
             var builder = new EntityFrameworkRelationalServicesBuilder(services)
                 .TryAdd<LoggingDefinitions, OceanBaseLoggingDefinitions>()
                 .TryAdd<IDatabaseProvider, DatabaseProvider<OceanBaseOptionsExtension>>()
