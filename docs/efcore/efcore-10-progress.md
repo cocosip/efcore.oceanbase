@@ -3,7 +3,7 @@
 ## Active checkpoint: 2026-11-13
 
 Development resumed on 2026-11-11 on efcore/10.0 at the user's request, following the paused Batch7e checkpoint.
-The latest checkpoint is the migrations tooling module on 2026-11-13, following the migrations core.
+The latest checkpoint is the TPT inheritance module on 2026-11-13, following migrations core/tooling.
 Test each module and review completed major modules before committing. EF8/EF9 remain postponed.
 The provider is not release-ready. The [feature checklist](efcore-10-feature-checklist.md) remains the
 acceptance authority; this document records the handoff rather than defining a different completion target.
@@ -16,6 +16,28 @@ each complete feature module. Two read-only live probes already load User Secret
 the wider native matrix remains open. EF8/EF9 adaptation remains postponed. The
 [local development plan](efcore-10-local-development-plan.md) tracks the full remaining inventory, including
 an audit of locally feasible deferred families. Finishing one batch does not finish the overall goal.
+
+### TPT inheritance checkpoint (2026-11-13)
+
+Both modes now support the local table-per-type workflow: model, offline creation, real initial/evolved/reverse
+migration differences, compiled CLI snapshots/scripts and tracked hierarchy query/CRUD. A generated inherited
+key is an identity only in its declaring root table; intermediate/leaf/sibling table PK/FK columns receive that
+value. The shared physical-table classifier replaces the two property-global identity checks and the blanket
+TPT rejection. TPC/entity splitting and unsupported generation remain rejected. See the
+[TPT design](efcore-10-tpt-design.md) and [execution record](efcore-10-tpt-plan.md).
+
+RED reproduced all 10 original schema failures; final focused schema/runtime coverage passes 14/40 cases.
+Hierarchy queries cover OfType/type tests, inherited filters, Includes, null/empty results and all tracking modes.
+Multi-table writes preserve generated keys, owning-table updates, reverse delete dependencies, original
+concurrency values and default automatic transaction control. Transaction fixtures retain provider batching/
+factory/commands but replace the connection; physical rollback and connector startup remain separate evidence.
+
+Debug/Release at EF10.0.0 and isolated EF10.0.14 Release each pass **4441 tests** (2124 unit, 1447 functional,
+868 metadata specification, two project consumers), zero failures/skips. Package `10.0.0-tpt-r2-20261113`
+passes content/runtime/full CLI consumers in both modes on both patches, with source/archive/consumer DLL
+identity checks and independent source review. Four Windows bundles build/start with help; none is applied.
+DEF-07 is partially promoted to In progress. Native DDL/joins/generated keys/FKs/rollback, TPC/entity splitting
+and the overall EF10 goal remain incomplete; wider runtime/specification modules are next.
 
 ### Migrations tooling checkpoint (2026-11-13)
 
@@ -78,7 +100,7 @@ This is the short execution view; the feature checklist remains the acceptance a
 | Schema and specification implementation | Remaining SCH-01..03 behavior, migrations native gates and additional TST-01 relational specification families. | Both-mode lifecycle, migrations core/tooling and six inherited model families have local evidence; native DDL/privileges/locking, reverse engineering and runtime specification families remain open. |
 | Native OceanBase validation | TST-02 scalar, query, write, transaction and schema matrix in both modes. | The supplied endpoint reaches TCP but closes during both mode handshakes before authentication. Classify transport/endpoint behavior, then run only the authorized non-destructive matrix before any DDL. |
 | Release evidence | REL-01 support record and REL-02 reviewed release revision. | Migrations module checks are in its execution plan; release still needs all Required rows accepted on the exact release revision. |
-| Explicitly deferred inventory | DEF-04/05/06/07/08/10 remain deferred; DEF-01/02/03/09 remain partial. | Native acceptance, reverse engineering and remaining feature profiles stay visible. A deferred label is not a release pass. |
+| Explicitly deferred inventory | DEF-04/05/06/08/10 remain deferred; DEF-01/02/03/07/09 remain partial. | Native acceptance, reverse engineering, remaining inheritance/model families and other feature profiles stay visible. A deferred label is not a release pass. |
 
 Next execution order is: complete the next relational query/write
 specification and graph runtime modules; resolve the live transport gate; then produce REL-01/02 evidence and run

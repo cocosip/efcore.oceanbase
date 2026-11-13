@@ -26,9 +26,9 @@ namespace OceanBase.EntityFrameworkCore.Migrations
         {
             if (model is not null)
             {
-                if (model.GetEntityTypes().Any(e => e.GetMappingStrategy() is "TPT" or "TPC"
+                if (model.GetEntityTypes().Any(e => e.GetMappingStrategy() == "TPC"
                     || e.GetMappingFragments(StoreObjectType.Table).Any()))
-                    throw Unsupported("TPT/TPC inheritance or entity splitting");
+                    throw Unsupported("TPC inheritance or entity splitting");
                 foreach (var table in model.GetRelationalModel().Tables.Where(t => !t.IsExcludedFromMigrations))
                 {
                     if (table.Triggers.Any()) throw Unsupported("model triggers; author their SQL explicitly");

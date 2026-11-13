@@ -1256,9 +1256,10 @@ columns use the mapped type with STORED/VIRTUAL; Oracle virtual columns infer th
 
 Reject unsupported shapes before returning a script: unspecified defaults/computed expressions, other inferred
 generation, model sequences, HasData inserts, database collations, comments/triggers, filtered indexes,
-ON DELETE SET DEFAULT, TPT/TPC inheritance, entity splitting, Oracle column collations and Oracle stored computed
-columns. Table-specific identity propagation for TPT/split mappings needs a separate generation contract; ordinary
-property-global ValueGenerated is insufficient. These are provider script
+ON DELETE SET DEFAULT, TPC inheritance, entity splitting, Oracle column collations and Oracle stored computed
+columns. TPT now shares the physical-table identity classifier with migration annotations: only the root table
+generates the inherited key. See [the TPT contract](efcore-10-tpt-design.md) for its complete local workflow;
+entity splitting remains separate. Ordinary property-global ValueGenerated is insufficient. These are provider script
 limitations, not blanket server limitations. Future support needs its own contract/tests. Explicit schema/table/
 column/constraint/index names are escaped through the provider helper; target identifier limits, identity/default/
 computed syntax versions, DDL implicit commits and type/index capacity still require live acceptance.

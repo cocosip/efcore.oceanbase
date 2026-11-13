@@ -98,7 +98,17 @@ scripts target SQL*Plus-style clients, disable variable substitution, exit on SQ
 history changes; rollback cannot undo DDL. MySQL scripts require autocommit. Raw migration SQL is trusted,
 single-statement server input; client directives and multi-statement raw batches are outside this contract.
 Native DDL/locking, script-client execution, reverse engineering, sequence/HiLo,
-TPT/TPC/entity splitting and model trigger scaffolding remain unverified or unsupported.
+TPC/entity splitting and model trigger scaffolding remain unverified or unsupported.
+
+TPT (`UseTptMappingStrategy`, with a table for each mapped type) has a locally tested schema/query/write
+workflow in both modes. The root table generates an int/long identity once; intermediate and leaf tables store
+that same key as an ordinary primary/foreign key. Assigned/composite keys and client Guid keys retain their
+existing generation rules. Initial/evolved migrations and snapshots, hierarchy/OfType queries, derived Includes
+and tracked multi-table inserts/updates/deletes have local coverage. Keep automatic transactions enabled for
+multi-table saves. As with EF's relational executor, SaveChanges counts physical modification commands in this
+profile; one leaf spanning three tables can return 3. Existing generated-key/default limitations still apply,
+including MySQL's rejection of server-default key readback. Native joins, key generation, foreign-key enforcement
+and rollback remain unverified. TPC and entity splitting remain outside this profile.
 
 The provider exposes EF design services for migrations authoring. Reference `Microsoft.EntityFrameworkCore.Design`
 as a private development dependency in the startup project, and configure the same explicit mode in its host or

@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage;
+using static OceanBase.EntityFrameworkCore.Metadata.OceanBaseRelationalAnnotationProvider;
 
 namespace OceanBase.EntityFrameworkCore.Storage
 {
@@ -18,10 +19,10 @@ namespace OceanBase.EntityFrameworkCore.Storage
             {
                 throw Unsupported("model sequences, HasData inserts or database collations");
             }
-            if (model.GetEntityTypes().Any(e => e.GetMappingStrategy() is "TPT" or "TPC"
+            if (model.GetEntityTypes().Any(e => e.GetMappingStrategy() == "TPC"
                 || e.GetMappingFragments(StoreObjectType.Table).Any()))
             {
-                throw Unsupported("TPT/TPC inheritance or entity splitting");
+                throw Unsupported("TPC inheritance or entity splitting");
             }
             var tables = model.GetRelationalModel().Tables.Where(t => !t.IsExcludedFromMigrations)
                 .OrderBy(t => t.Schema, StringComparer.Ordinal).ThenBy(t => t.Name, StringComparer.Ordinal).ToArray();
@@ -103,7 +104,7 @@ namespace OceanBase.EntityFrameworkCore.Storage
             {
                 var property = mapping.Property;
                 if (property.ValueGenerated != ValueGenerated.Never && column.DefaultValue is null && column.DefaultValueSql is null
-                    && !identity && !(property.IsPrimaryKey() && property.ClrType == typeof(Guid)))
+                    && !identity && !IsTptKeyPropagation(mapping) && !(property.IsPrimaryKey() && property.ClrType == typeof(Guid)))
                 {
                     throw Unsupported("generated columns without an identity, default or computed expression");
                 }
@@ -125,13 +126,6 @@ namespace OceanBase.EntityFrameworkCore.Storage
             if (identity && !Oracle) definition += " AUTO_INCREMENT";
             return definition;
         }
-
-        private static bool IsIdentity(IColumn column)
-            => column.DefaultValue is null && column.DefaultValueSql is null && column.ComputedColumnSql is null
-                && column.PropertyMappings.Any(mapping => mapping.Property.IsPrimaryKey()
-                    && mapping.Property.ValueGenerated == ValueGenerated.OnAdd
-                    && (mapping.TypeMapping.Converter?.ProviderClrType ?? mapping.Property.ClrType) is var type
-                    && (type == typeof(int) || type == typeof(long)));
 
         private string Q(string name) => sql.DelimitIdentifier(name);
         private string Table(ITable table) => sql.DelimitIdentifier(table.Name, table.Schema);

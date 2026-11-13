@@ -74,7 +74,6 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
         [InlineData("nonkey-generated")]
         [InlineData("unsupported-identity")]
         [InlineData("model-collation")]
-        [InlineData("tpt")]
         [InlineData("tpc")]
         [InlineData("split")]
         public void Unsupported_schema_features_fail_explicitly_without_opening(string shape)
@@ -226,11 +225,6 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
                     case "collation": row.Property(r => r.Caption).UseCollation("utf8mb4_bin"); break;
                     case "computed-collation": row.Property(r => r.Caption).UseCollation("utf8mb4_bin").HasComputedColumnSql("LOWER('X')"); break;
                     case "model-collation": modelBuilder.UseCollation("utf8mb4_bin"); break;
-                    case "tpt":
-                        modelBuilder.Ignore<Generated>();
-                        modelBuilder.Entity<BaseRow>().UseTptMappingStrategy().ToTable("BaseRows");
-                        modelBuilder.Entity<DerivedRow>().ToTable("DerivedRows");
-                        break;
                     case "tpc":
                         modelBuilder.Ignore<Generated>();
                         modelBuilder.Entity<BaseRow>().UseTpcMappingStrategy().ToTable("BaseRows");

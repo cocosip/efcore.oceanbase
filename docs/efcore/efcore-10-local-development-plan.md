@@ -3,7 +3,7 @@
 **Goal:** Implement every locally developable EF10 feature, in reviewed/tested commits, while postponing real
 database integration and EF8/EF9 adaptation as explicitly requested on 2026-11-10.
 
-**Architecture:** Continue on efcore/10.0 with migrations tooling following the migrations core. Reuse the existing EF relational services, connector 0.2.0
+**Architecture:** Continue on efcore/10.0 with TPT inheritance following migrations core/tooling. Reuse the existing EF relational services, connector 0.2.0
 public APIs and per-mode mappings/SQL. Separate local implementation evidence from server acceptance.
 
 **Spec:** efcore-10-feature-checklist.md, efcore-10-technical-baseline.md, efcore-10-query-update-design.md.
@@ -12,7 +12,7 @@ public APIs and per-mode mappings/SQL. Separate local implementation evidence fr
 The compact execution board is [efcore-10-roadmap.md](efcore-10-roadmap.md); this file remains the detailed
 batch ledger and acceptance notes.
 
-**Updated:** 2026-11-13, migrations tooling. Continue EF10 in this checkout, test each module and
+**Updated:** 2026-11-13, TPT inheritance. Continue EF10 in this checkout, test each module and
 review each completed major module before committing. EF8/EF9 remains postponed; live execution is opt-in and
 currently blocked before authentication by the supplied endpoint/transport behavior.
 The full goal remains incomplete.
@@ -37,6 +37,15 @@ Use this section to choose the next task; the feature checklist remains the deta
    full Debug/Release suites, package content gate and package consumer at EF10.0.0/10.0.14, review the
    release revision, and only then consider a release branch/tag. EF8/EF9, push and publication remain out
    of the current development sequence.
+
+### TPT inheritance module (2026-11-13)
+
+**IDs:** DEF-07, MOD-01/03, QRY-01/05/08/09, UPD-01..05, SCH-01/02. The
+[TPT design](efcore-10-tpt-design.md) and [plan](efcore-10-tpt-plan.md) cover one coherent schema/query/write/
+tooling workflow. Physical identity generation belongs only to the declaring root table. Final schema/runtime
+cases pass 14/40; Debug/Release/isolated EF10.0.14 each pass 4441, and the same TPT nupkg passes both-mode,
+both-patch runtime/CLI consumers and four bundle build/help checks. Independent source review finds no blockers.
+Native server behavior, TPC/entity splitting and the overall EF10 goal remain open.
 
 ### Migrations tooling module (2026-11-13)
 

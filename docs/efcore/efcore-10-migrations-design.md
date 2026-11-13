@@ -53,7 +53,9 @@ MySQL raw script delimiters start on a fresh line, including after line comments
 autocommit enabled and a client configured to stop on error. Raw commands must be single server statements;
 client directives and multi-statement batches are outside this profile.
 
-TPT/TPC, entity splitting, model triggers and unbacked generated scalar columns reject explicitly. Authoring
+TPT now uses the shared physical-table key-generation contract in [efcore-10-tpt-design.md](efcore-10-tpt-design.md):
+only the declaring root table generates an inherited key, while derived tables receive it. TPC, entity
+splitting, model triggers and unbacked generated scalar columns reject explicitly. Authoring
 trusted trigger SQL is supported by the raw-command seam, but is not a model trigger scaffolding feature.
 Unknown migration annotations reject rather than silently importing another provider's schema behavior.
 

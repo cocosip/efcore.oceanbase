@@ -32,8 +32,17 @@ namespace ToolingConsumer
                 if (expanded) row.Property<int?>("Revision");
                 row.HasData(new { Id = 1, Name = "R&D's\\path", Active = true });
             });
+            builder.Entity<ToolingAsset>().UseTptMappingStrategy().ToTable("ToolingAssets");
+            builder.Entity<ToolingAsset>().Property(a => a.Name).HasMaxLength(40);
+            builder.Entity<ToolingDevice>().ToTable("ToolingDevices");
+            builder.Entity<ToolingSensor>().ToTable("ToolingSensors");
+            if (expanded) builder.Entity<ToolingSensor>().Property<int?>("Calibration");
         }
     }
+
+    public abstract class ToolingAsset { public int Id { get; set; } public string? Name { get; set; } }
+    public class ToolingDevice : ToolingAsset { public int Serial { get; set; } }
+    public sealed class ToolingSensor : ToolingDevice { public int? Reading { get; set; } }
 
     public sealed class MySqlContext(DbContextOptions<MySqlContext> options, bool expanded) : ToolingContext(options, expanded);
     public sealed class OracleContext(DbContextOptions<OracleContext> options, bool expanded) : ToolingContext(options, expanded);

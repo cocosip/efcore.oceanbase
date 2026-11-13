@@ -19,6 +19,9 @@ The following required rows have complete local/package evidence for both modes:
   CLI migrations/snapshots/model checks/scripts/list/removal and four Windows bundle build/help checks pass
   both modes on EF10.0.0/10.0.14 using dotnet-ef 10.0.15; see the [tooling plan](efcore-10-migrations-tooling-plan.md).
   DEF-01/02 stay In progress pending native acceptance and reverse engineering.
+- TPT inheritance now has physical-table-aware generation plus local schema/migration/query/write and packed
+  CLI evidence. Debug/Release/selected-patch suites each pass 4441; see the [TPT plan](efcore-10-tpt-plan.md).
+  DEF-07 is partial; native TPT acceptance, TPC and entity splitting remain open.
 - Batch3as scalar `Math.Round`/`decimal.Round` digits and midpoint parameters now refresh local SQL per
   execution in both modes; invalid runtime and row-dependent arguments remain rejected.
 - Numeric and nonnumeric query slices, collection roots for integer/numeric/text/Boolean/temporal/binary/Guid
@@ -68,7 +71,7 @@ the exact release revision has not been reviewed. EF8/EF9 adaptation is outside 
 
 ## Explicitly deferred after the first release
 
-`DEF-04/05/06/07/08/10` remain deferred. `DEF-01/02`, `DEF-03` and `DEF-09` are partial: migrations core/tooling,
+`DEF-04/05/06/08/10` remain deferred. `DEF-01/02/03/07/09` are partial: migrations core/tooling and local TPT,
 ordinary bulk operations, EnsureCreated/Migrate callbacks and runtime migration locking have local evidence.
 Native migrations/locks/bundle application, reverse engineering, wider JSON/converter/model variants, execution-strategy retries
 and ambient/distributed transactions remain outside the accepted support claim. Deferred
@@ -76,7 +79,7 @@ features stay visible and must not be advertised as supported.
 
 ## Execution order from this checkpoint
 
-1. **Completed locally:** migrations core and tooling are reviewed and committed as complete modules.
+1. **Completed locally:** migrations core, tooling and TPT inheritance are reviewed/tested as complete modules.
 2. Build the next complete relational query/write specification fixture module (`TST-01`), then close the
    exposed graph materialization, tracked graph writes and transaction/connection recovery gaps together.
    Record positive/null/empty/failure boundaries by feature ID; avoid a new sequence of one-overload commits.

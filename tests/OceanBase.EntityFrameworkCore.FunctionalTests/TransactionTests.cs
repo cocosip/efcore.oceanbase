@@ -725,7 +725,7 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
 
         private sealed class Row { public int Id { get; set; } public string Name { get; set; } = ""; }
         private sealed class GeneratedRow { public int Id { get; set; } public string Name { get; set; } = ""; }
-        private sealed record Command(string Sql, DbTransaction? Transaction, bool Async, CancellationToken Token);
+        internal sealed record Command(string Sql, DbTransaction? Transaction, bool Async, CancellationToken Token);
 
         private sealed class ReleaseEvents : DbTransactionInterceptor
         {
@@ -761,7 +761,7 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
             { AsyncErrors++; TransactionFailed(transaction, eventData); return Task.CompletedTask; }
         }
 
-        private sealed class NativeConnection : DbConnection
+        internal sealed class NativeConnection : DbConnection
         {
             private ConnectionState _state;
             public List<Command> Commands { get; } = [];
@@ -816,7 +816,7 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
             }
         }
 
-        private sealed class NativeTransaction(NativeConnection connection, IsolationLevel isolation) : DbTransaction
+        internal sealed class NativeTransaction(NativeConnection connection, IsolationLevel isolation) : DbTransaction
         {
             private bool _ended;
             public int Commits { get; private set; }
@@ -851,7 +851,7 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
             public override ValueTask DisposeAsync() { Dispose(); return ValueTask.CompletedTask; }
         }
 
-        private sealed class NativeCommand(NativeConnection connection) : DbCommand
+        internal sealed class NativeCommand(NativeConnection connection) : DbCommand
         {
             private readonly OceanBaseCommand _parameters = new();
             [AllowNull] public override string CommandText { get; set; } = "";
