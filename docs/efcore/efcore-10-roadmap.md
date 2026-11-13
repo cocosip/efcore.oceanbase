@@ -27,6 +27,11 @@ The following required rows have complete local/package evidence for both modes:
   CLI evidence. Debug/Release/selected-patch suites each pass 4441; see the [TPT plan](efcore-10-tpt-plan.md).
   DEF-07 is partial; native TPT acceptance and TPC remain open. Entity/table splitting now also has local
   schema/migration/runtime evidence; see the [splitting plan](efcore-10-splitting-plan.md).
+- Ordinary many-to-many implicit/explicit joins now have local schema/query/write contract verification:
+  four schema and 62 runtime cases plus expanded packed consumers. Existing EF/provider behavior works
+  without a new algorithm; see the [many-to-many plan](efcore-10-many-to-many-plan.md). Native acceptance,
+  wider variants and upstream runtime specifications remain separate work. Final source suites each pass
+  4628 with no failures/skips after independent review's verification gaps were fixed.
 - Batch3as scalar `Math.Round`/`decimal.Round` digits and midpoint parameters now refresh local SQL per
   execution in both modes; invalid runtime and row-dependent arguments remain rejected.
 - Numeric and nonnumeric query slices, collection roots for integer/numeric/text/Boolean/temporal/binary/Guid
@@ -59,6 +64,8 @@ The current supplied endpoint is reachable at TCP level, but both mode probes fa
 `Connection closed while reading the packet`. No SQL or DDL ran. The next action for this gate is to classify the
 endpoint/protocol/TLS or proxy configuration with the server owner, then rerun the existing non-destructive
 probes before adding write or schema cases.
+The two existing read-only probes were rerun on 2026-11-13 after restoring Connector 0.3.0; both still fail
+during OpenAsync with the same packet closure. No SQL/DDL ran, and the cause is not yet assigned to the driver.
 
 Native validation must also be recorded for the local workstreams above: successful SQL generation, parameter
 metadata, or connector doubles prove provider behavior at that layer only.
@@ -88,7 +95,8 @@ features stay visible and must not be advertised as supported.
    reverse engineering are reviewed/tested as complete modules. Current source suites each pass 4562; the same
    scaffolding package passes both-mode generated-context/runtime/CLI consumers on EF10.0.0/10.0.14 and all
    four Windows bundle build/help checks. Unknown metadata remains visible through warnings.
-2. Build the next complete relational query/write specification fixture module (`TST-01`), then close the
+2. Ordinary many-to-many runtime contracts are now covered without redundant production changes. Build the
+   next complete upstream relational query/write specification fixture module (`TST-01`), then close the
    exposed graph materialization, tracked graph writes and transaction/connection recovery gaps together.
    Record positive/null/empty/failure boundaries by feature ID; avoid a new sequence of one-overload commits.
 3. Resolve the pre-auth live transport blocker and run the two-mode native matrix.

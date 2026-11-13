@@ -12,7 +12,7 @@ public APIs and per-mode mappings/SQL. Separate local implementation evidence fr
 The compact execution board is [efcore-10-roadmap.md](efcore-10-roadmap.md); this file remains the detailed
 batch ledger and acceptance notes.
 
-**Updated:** 2026-11-13, Connector 0.3.0 reverse engineering. Continue EF10 in this checkout, test each module and
+**Updated:** 2026-11-13, many-to-many runtime verification. Continue EF10 in this checkout, test each module and
 review each completed major module before committing. EF8/EF9 remains postponed; live execution is opt-in and
 currently blocked before authentication by the supplied endpoint/transport behavior.
 The full goal remains incomplete.
@@ -37,6 +37,19 @@ Use this section to choose the next task; the feature checklist remains the deta
    full Debug/Release suites, package content gate and package consumer at EF10.0.0/10.0.14, review the
    release revision, and only then consider a release branch/tag. EF8/EF9, push and publication remain out
    of the current development sequence.
+
+### Many-to-many runtime contract module (2026-11-13)
+
+**IDs:** DEF-07, MOD-01..03, QRY-03/08/09, UPD-01..05, TXN-02/03, SCH-01/02, PKG-03/04.
+The [design](efcore-10-many-to-many-design.md) and [execution record](efcore-10-many-to-many-plan.md) group
+ordinary implicit/explicit join schema evolution, Include/filter/materialization, tracked link mutations,
+generated keys, payload/nullable concurrency and transaction failure/retry. Four schema and 62 runtime cases
+pass; expanded consumers pass the existing scaffolding r2 binary on both patches/modes. Existing EF/provider
+services already implement the tested behavior, so no production algorithm or new package is added. Native
+acceptance, upstream runtime specification fixtures, wider variants and the overall goal remain open.
+Final Debug/Release and isolated EF10.0.14 each pass 4628, zero failures/skips. Independent review findings
+are fixed with exact filter predicates, explicit join conditions, renamed join columns, FK targets/cascades
+and supporting index assertions; explicit join Include covers all tracking modes.
 
 ### Connector 0.3.0 reverse-engineering module (2026-11-13)
 

@@ -20,6 +20,22 @@ range, unless a consumer dependency requires a higher version. A range permits c
 automatically test those upgrades. The package-consumer gate must record the SDK, runtime, resolved EF Core patch,
 provider package and connector.
 
+## Many-to-many runtime contracts (2026-11-13)
+
+Ordinary implicit shared-dictionary joins and explicit scalar payload/concurrency joins reuse EF10 navigation
+expansion, relationship fixup and dependency ordering. Existing provider services pass local schema/query/write
+contracts without a new production algorithm. Join PK/FK columns are assigned from principals, never separate
+identities. NoTracking projects the related entity before join identifiers; tracking/identity resolution
+projects the join entry first. Pin each projection independently of fixture rows.
+
+Check SQL parameter occurrence order rather than native parameter collection order: Oracle named UPDATE
+binds may be registered key-first while SET appears first in SQL. Principal-key readback tests use different
+keys for the two entity types. Link removal deletes only the association; explicit join concurrency uses
+original values, including NULL. Keep automatic transactions for multi-command saves; caller-owned failure
+recovery uses the existing savepoint executor. Doubles establish cleanup calls and state, not physical rollback.
+See the [many-to-many plan](efcore-10-many-to-many-plan.md). Native acceptance and wider relationship shapes
+remain open; these custom runtime contracts do not replace upstream runtime specification fixtures.
+
 ## Reverse engineering and Connector 0.3.0 (2026-11-13)
 
 The current baseline registers a scoped IDatabaseModelFactory, singleton provider code generator and

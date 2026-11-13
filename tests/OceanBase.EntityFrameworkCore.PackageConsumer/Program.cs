@@ -48,6 +48,7 @@ namespace PackageConsumer
                 MigrationsSmoke.Run(mode);
                 TptSmoke.Run(mode);
                 SplittingSmoke.Run(mode);
+                ManyToManySmoke.Run(mode);
                 var options = new DbContextOptionsBuilder<ConsumerContext>()
                     .UseOceanBase("Server=localhost;Database=package_smoke", mode).Options;
                 using var context = new ConsumerContext(options, mode);

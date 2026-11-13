@@ -3,7 +3,7 @@
 ## Active checkpoint: 2026-11-13
 
 Development resumed on 2026-11-11 on efcore/10.0 at the user's request, following the paused Batch7e checkpoint.
-The latest checkpoint is Connector 0.3.0 reverse engineering on 2026-11-13, following splitting, TPT and migrations.
+The latest checkpoint is many-to-many runtime verification on 2026-11-13, following Connector 0.3.0 reverse engineering.
 Test each module and review completed major modules before committing. EF8/EF9 remain postponed.
 The provider is not release-ready. The [feature checklist](efcore-10-feature-checklist.md) remains the
 acceptance authority; this document records the handoff rather than defining a different completion target.
@@ -16,6 +16,32 @@ each complete feature module. Two read-only live probes already load User Secret
 the wider native matrix remains open. EF8/EF9 adaptation remains postponed. The
 [local development plan](efcore-10-local-development-plan.md) tracks the full remaining inventory, including
 an audit of locally feasible deferred families. Finishing one batch does not finish the overall goal.
+
+### Many-to-many runtime verification checkpoint (2026-11-13)
+
+Ordinary implicit skip-navigation joins and explicit join entities now have local schema/query/write
+contract coverage in both modes. This module verifies existing EF/provider behavior; no missing provider
+algorithm was reproduced, so it adds tests rather than a redundant translator or write coordinator.
+See the [design](efcore-10-many-to-many-design.md) and [execution record](efcore-10-many-to-many-plan.md).
+
+Four schema/model-difference cases verify composite join keys, FKs, principal-only identities and payload
+evolution. Sixty-two runtime cases cover Include and filtered Include, all tracking modes, shared identities,
+empty collections/results, current global-filter parameters, explicit payload/NULL concurrency, link-only
+mutations, different generated principal keys, delete ordering and owned/caller transaction failure/retry.
+Reader projections and SQL-bind order are checked independently; no-tracking projection ordering differs
+from tracking/identity resolution. Package-only consumers pass the expanded public smoke against the already
+verified scaffolding r2 nupkg on both patches/modes, with exact package graphs and matching Provider DLLs.
+
+Final EF10.0.0 Debug/Release and isolated EF10.0.14 Release each pass **4628 tests** (2197 unit, 1561
+functional, 868 upstream metadata specification, two consumers), zero failures/skips. Independent review's
+two verification gaps are fixed with exact filter/join predicate and renamed-column/FK/index assertions;
+explicit Include also runs under all tracking modes. No new runtime binary or unchanged CLI rerun is needed.
+
+Native results/cascades/keys/rollback, wider relationship variants and upstream runtime specification fixtures
+remain open. This is not a new provider implementation or an overall EF10/release completion claim.
+The existing User Secrets-backed read-only probes were rerun with a verified Connector 0.3.0 restore. Both
+still fail during connection opening with `Connection closed while reading the packet`; no SQL/DDL ran.
+This evidence does not classify the failure as a driver defect.
 
 ### Connector 0.3.0 reverse-engineering checkpoint (2026-11-13)
 
