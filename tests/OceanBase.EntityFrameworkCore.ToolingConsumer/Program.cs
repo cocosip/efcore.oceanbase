@@ -37,12 +37,31 @@ namespace ToolingConsumer
             builder.Entity<ToolingDevice>().ToTable("ToolingDevices");
             builder.Entity<ToolingSensor>().ToTable("ToolingSensors");
             if (expanded) builder.Entity<ToolingSensor>().Property<int?>("Calibration");
+            var split = builder.Entity<ToolingSplit>();
+            split.ToTable("ToolingSplitRows");
+            split.Property(r => r.Name).HasMaxLength(40);
+            split.Property(r => r.Text).HasMaxLength(40);
+            if (expanded) split.Property<int?>("FragmentRevision");
+            split.SplitToTable("ToolingSplitDetails", table =>
+            {
+                table.Property(r => r.Id).HasColumnName("DetailId");
+                table.Property(r => r.Text);
+                if (expanded) table.Property("FragmentRevision");
+            });
+            builder.Entity<ToolingOwner>().ToTable("ToolingSharedRows").Property(o => o.Name).HasMaxLength(40);
+            builder.Entity<ToolingDetail>().ToTable("ToolingSharedRows").Property(d => d.Text).HasMaxLength(40);
+            builder.Entity<ToolingOwner>().Property(o => o.Version).IsConcurrencyToken();
+            builder.Entity<ToolingDetail>().Property(d => d.Version).IsConcurrencyToken();
+            builder.Entity<ToolingOwner>().HasOne(o => o.Detail).WithOne().HasForeignKey<ToolingDetail>(d => d.Id);
         }
     }
 
     public abstract class ToolingAsset { public int Id { get; set; } public string? Name { get; set; } }
     public class ToolingDevice : ToolingAsset { public int Serial { get; set; } }
     public sealed class ToolingSensor : ToolingDevice { public int? Reading { get; set; } }
+    public sealed class ToolingSplit { public int Id { get; set; } public string? Name { get; set; } public string? Text { get; set; } }
+    public sealed class ToolingOwner { public int Id { get; set; } public string? Name { get; set; } public int? Version { get; set; } public ToolingDetail? Detail { get; set; } }
+    public sealed class ToolingDetail { public int Id { get; set; } public string? Text { get; set; } public int? Version { get; set; } }
 
     public sealed class MySqlContext(DbContextOptions<MySqlContext> options, bool expanded) : ToolingContext(options, expanded);
     public sealed class OracleContext(DbContextOptions<OracleContext> options, bool expanded) : ToolingContext(options, expanded);

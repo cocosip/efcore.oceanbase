@@ -75,7 +75,6 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
         [InlineData("unsupported-identity")]
         [InlineData("model-collation")]
         [InlineData("tpc")]
-        [InlineData("split")]
         public void Unsupported_schema_features_fail_explicitly_without_opening(string shape)
         {
             foreach (var mode in Enum.GetValues<OceanBaseCompatibilityMode>())
@@ -230,7 +229,6 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
                         modelBuilder.Entity<BaseRow>().UseTpcMappingStrategy().ToTable("BaseRows");
                         modelBuilder.Entity<DerivedRow>().ToTable("DerivedRows");
                         break;
-                    case "split": row.SplitToTable("SplitRows", t => t.Property(p => p.Caption)); break;
                     default: throw new InvalidOperationException("Unknown schema fixture.");
                 }
             }

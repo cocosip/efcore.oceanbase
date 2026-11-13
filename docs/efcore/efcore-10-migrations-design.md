@@ -54,8 +54,10 @@ autocommit enabled and a client configured to stop on error. Raw commands must b
 client directives and multi-statement batches are outside this profile.
 
 TPT now uses the shared physical-table key-generation contract in [efcore-10-tpt-design.md](efcore-10-tpt-design.md):
-only the declaring root table generates an inherited key, while derived tables receive it. TPC, entity
-splitting, model triggers and unbacked generated scalar columns reject explicitly. Authoring
+only the declaring root table generates an inherited key, while derived tables receive it. Entity splitting
+uses the same physical key rule for required fragment tables; shared rows emit one physical identity and
+support EF10 conditional column propagation. See [the splitting contract](efcore-10-splitting-design.md).
+TPC, model triggers and unbacked generated scalar columns reject explicitly. Authoring
 trusted trigger SQL is supported by the raw-command seam, but is not a model trigger scaffolding feature.
 Unknown migration annotations reject rather than silently importing another provider's schema behavior.
 

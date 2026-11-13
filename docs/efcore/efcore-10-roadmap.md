@@ -21,7 +21,8 @@ The following required rows have complete local/package evidence for both modes:
   DEF-01/02 stay In progress pending native acceptance and reverse engineering.
 - TPT inheritance now has physical-table-aware generation plus local schema/migration/query/write and packed
   CLI evidence. Debug/Release/selected-patch suites each pass 4441; see the [TPT plan](efcore-10-tpt-plan.md).
-  DEF-07 is partial; native TPT acceptance, TPC and entity splitting remain open.
+  DEF-07 is partial; native TPT acceptance and TPC remain open. Entity/table splitting now also has local
+  schema/migration/runtime evidence; see the [splitting plan](efcore-10-splitting-plan.md).
 - Batch3as scalar `Math.Round`/`decimal.Round` digits and midpoint parameters now refresh local SQL per
   execution in both modes; invalid runtime and row-dependent arguments remain rejected.
 - Numeric and nonnumeric query slices, collection roots for integer/numeric/text/Boolean/temporal/binary/Guid
@@ -79,7 +80,9 @@ features stay visible and must not be advertised as supported.
 
 ## Execution order from this checkpoint
 
-1. **Completed locally:** migrations core, tooling and TPT inheritance are reviewed/tested as complete modules.
+1. **Completed locally:** migrations core, tooling, TPT inheritance and entity/table splitting are reviewed/tested
+   as complete modules. Splitting source suites each pass 4504; the same package passes both-mode runtime/CLI
+   consumers on EF10.0.0/10.0.14 and all four Windows bundle build/help checks.
 2. Build the next complete relational query/write specification fixture module (`TST-01`), then close the
    exposed graph materialization, tracked graph writes and transaction/connection recovery gaps together.
    Record positive/null/empty/failure boundaries by feature ID; avoid a new sequence of one-overload commits.

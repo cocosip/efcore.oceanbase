@@ -524,6 +524,20 @@ Existing evidence references used below identify partial coverage, not automatic
 
 `Missing` means tests and evidence still need to be added.
 
+### Entity/table splitting local module (2026-11-13)
+
+DEF-07, MOD-01..03, QRY-01/05/08, UPD-01..05, TXN-02 and SCH-01/02 gain the
+[splitting workflow](efcore-10-splitting-design.md). Twelve schema and 52 runtime cases cover required
+entity fragments, physical primary-only identity generation, renamed fragment keys, assigned/composite/Guid
+schema keys, defaults/computed expressions, fragment evolution, query filters/Includes, all tracking modes,
+shared-row merged writes, optional all-null dependents, original/shared/generated concurrency and automatic
+multi-table transaction control/failure retention. EF10's `OnUpdateSometimes` shared propagation is admitted;
+unsupported actual generation and TPC still reject. Application-managed shared tokens must be changed
+consistently on both mapped entities; generated shared values propagate through EF's column modifications.
+Full Debug/Release/isolated EF10.0.14 suites each pass 4504; packed runtime/CLI evidence is recorded in the
+[execution plan](efcore-10-splitting-plan.md). Native query/DDL/key/rollback acceptance, wider runtime
+specification families and the remaining checklist criteria stay open; no Required row becomes Done here.
+
 ## Configuration, connections and diagnostics
 
 | ID | Requirement and acceptance criteria | Priority | MySQL | Oracle | Existing evidence / gap |
@@ -644,7 +658,7 @@ Creating an Oracle tenant is never inferred.
 | TST-01 | Selected EF relational specification classes pass; exclusions map to checklist IDs and limitations. | Required | In progress | In progress | SpecificationTests now runs full inherited generic relational OneToMany/ManyToOne/OneToOne/ManyToMany/Inheritance/OwnedTypes families against real provider services in both modes:866 inherited+two guard cases pass at EF10.0.0/10.0.14, zero skips/exclusions. Other model families and query/write/runtime specification fixtures remain open. Selected metadata success does not establish deferred runtime features. |
 | TST-02 | Live core query/write/transaction/schema/scalar suites pass in at least one declared supported environment per mode. | Required | In progress | In progress | Opt-in `tests/OceanBase.EntityFrameworkCore.LiveTests` loads external User Secrets and builds cleanly. With the supplied credentials, TCP to `172.16.2.45:2881` was reachable; both MySQL and Oracle closed the packet during handshake before authentication or SQL. No SQL/DDL ran. Classify the endpoint/transport failure and rerun before expanding the live matrix. |
 | REL-01 | Support notes record server/connector/runtime/EF versions, tenant mode, direct/proxy endpoint, transport/options without credentials. | Required | Planned | Planned | Release evidence record missing. |
-| REL-02 | Tested efcore/10.0 development checkpoint is reviewed; packaging/release checks run on release revision. | Required | In progress | In progress | Migrations core/tooling and TPT received independent whole-module source review; current 4441-test/dual-patch runtime/tooling package matrix passes. Required live, wider specification/local coverage and exact release-revision acceptance remain open. |
+| REL-02 | Tested efcore/10.0 development checkpoint is reviewed; packaging/release checks run on release revision. | Required | In progress | In progress | Migrations core/tooling, TPT and splitting received independent whole-module source review; current 4504-test/dual-patch runtime/tooling package matrix passes. Required live, wider specification/local coverage and exact release-revision acceptance remain open. |
 
 ## Visible deferred inventory
 
@@ -659,7 +673,7 @@ are difficult to implement. Promoting a deferred feature requires its own design
 | DEF-04 | JSON, primitive collections/arrays and complex types, including JSON-owned/complex mappings | Deferred | Deferred | Per-mode mapping/query/update design. |
 | DEF-05 | Spatial, XML, native enum types, OBJECT, LOB locators, REF CURSOR | Deferred | Deferred | Connector capability review/live mappings; ordinary enum converters belong to MAP-07. |
 | DEF-06 | Stored-procedure modification mappings; provider-specific sequence/HiLo strategies | Deferred | Deferred | Parameter/result/generation contracts; reject unsupported mappings clearly. |
-| DEF-07 | TPH/TPT/TPC inheritance, table/entity splitting, many-to-many skip navigations | In progress | In progress | TPT now has a complete local schema/migration/query/write/tooling workflow, root-only identity and inherited key propagation, both modes/patches; see TPT design/plan. The inherited metadata specification family also passes. Native TPT behavior, TPH's wider runtime matrix, TPC, table/entity splitting and skip-navigation runtime remain open. |
+| DEF-07 | TPH/TPT/TPC inheritance, table/entity splitting, many-to-many skip navigations | In progress | In progress | TPT and entity/table splitting have complete local schema/migration/query/write/tooling workflows, physical-table identity generation, key propagation and shared-row concurrency, both modes/patches; see their designs/plans. Inherited metadata specifications also pass. Native behavior, TPH's wider runtime matrix, TPC and skip-navigation runtime remain open. |
 | DEF-08 | Split queries, lazy loading, compiled-model/tooling optimizations | Deferred | Deferred | Graph/lifetime/generated-model consumer tests. |
 | DEF-09 | EF seeding callbacks, execution-strategy retries, ambient/distributed transactions | In progress | In progress | EnsureCreated callbacks and Migrate-time callback integration/owner-row locking exist locally; opposite-only callbacks reject before work. Physical rollback/commit and native locks remain unverified. Retrying migration strategies and caller/ambient/enlisted transactions explicitly reject; no distributed-transaction guarantee. |
 | DEF-10 | Provider full-text/vector/search functions, advanced batching optimizations | Deferred | Deferred | Server-version contract and independent tests/benchmarks. |

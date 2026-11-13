@@ -98,7 +98,7 @@ scripts target SQL*Plus-style clients, disable variable substitution, exit on SQ
 history changes; rollback cannot undo DDL. MySQL scripts require autocommit. Raw migration SQL is trusted,
 single-statement server input; client directives and multi-statement raw batches are outside this contract.
 Native DDL/locking, script-client execution, reverse engineering, sequence/HiLo,
-TPC/entity splitting and model trigger scaffolding remain unverified or unsupported.
+TPC and model trigger scaffolding remain unverified or unsupported.
 
 TPT (`UseTptMappingStrategy`, with a table for each mapped type) has a locally tested schema/query/write
 workflow in both modes. The root table generates an int/long identity once; intermediate and leaf tables store
@@ -108,7 +108,17 @@ and tracked multi-table inserts/updates/deletes have local coverage. Keep automa
 multi-table saves. As with EF's relational executor, SaveChanges counts physical modification commands in this
 profile; one leaf spanning three tables can return 3. Existing generated-key/default limitations still apply,
 including MySQL's rejection of server-default key readback. Native joins, key generation, foreign-key enforcement
-and rollback remain unverified. TPC and entity splitting remain outside this profile.
+and rollback remain unverified. TPC remains outside this profile.
+
+Entity splitting (`SplitToTable`) and table splitting (related entities using the same `ToTable`) have a
+locally tested schema/migrations/query/CRUD profile in both modes. Only an entity's primary table generates
+its identity; required fragment tables receive the same key. EF requires every entity-split fragment row to
+exist. A shared row produces one physical insert/update/delete, and an optional dependent whose non-shared
+nullable values are all NULL materializes as absent. Map shared concurrency tokens consistently on both
+entities; application-managed changes must set both mapped values, while database-generated tokens are read
+once and propagated to both. Removing an optional shared dependent clears its columns without deleting the
+principal row. Keep automatic transactions enabled for multi-table saves. Native execution/rollback remains
+unverified; this profile does not add split queries or TPC.
 
 The provider exposes EF design services for migrations authoring. Reference `Microsoft.EntityFrameworkCore.Design`
 as a private development dependency in the startup project, and configure the same explicit mode in its host or

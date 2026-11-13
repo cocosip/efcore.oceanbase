@@ -21,14 +21,15 @@ namespace OceanBase.EntityFrameworkCore.Metadata
             => column.DefaultValue is null && column.DefaultValueSql is null && column.ComputedColumnSql is null
                 && column.PropertyMappings.Any(mapping => mapping.Property.IsPrimaryKey()
                     && mapping.Property.ValueGenerated == ValueGenerated.OnAdd
-                    && !IsTptKeyPropagation(mapping)
+                    && !IsKeyPropagation(mapping)
                     && (mapping.TypeMapping.Converter?.ProviderClrType ?? mapping.Property.ClrType) is var type
                     && (type == typeof(int) || type == typeof(long)));
 
-        // TPT repeats the same key property in derived tables, but only its declaring table generates it.
-        internal static bool IsTptKeyPropagation(IColumnMapping mapping)
+        // TPT and entity splitting repeat a key in other tables; only the primary table generates it.
+        internal static bool IsKeyPropagation(IColumnMapping mapping)
             => mapping.Property.IsPrimaryKey() && mapping.Property.ValueGenerated == ValueGenerated.OnAdd
-                && mapping.Property.DeclaringType is IEntityType declaringType && declaringType.GetMappingStrategy() == "TPT"
+                && mapping.Property.DeclaringType is IEntityType declaringType
+                && (declaringType.GetMappingStrategy() == "TPT" || declaringType.GetMappingFragments(StoreObjectType.Table).Any())
                 && (declaringType.GetTableName() != mapping.Column.Table.Name || declaringType.GetSchema() != mapping.Column.Table.Schema);
     }
 }

@@ -3,7 +3,7 @@
 ## Active checkpoint: 2026-11-13
 
 Development resumed on 2026-11-11 on efcore/10.0 at the user's request, following the paused Batch7e checkpoint.
-The latest checkpoint is the TPT inheritance module on 2026-11-13, following migrations core/tooling.
+The latest checkpoint is the entity/table splitting module on 2026-11-13, following TPT and migrations core/tooling.
 Test each module and review completed major modules before committing. EF8/EF9 remain postponed.
 The provider is not release-ready. The [feature checklist](efcore-10-feature-checklist.md) remains the
 acceptance authority; this document records the handoff rather than defining a different completion target.
@@ -16,6 +16,23 @@ each complete feature module. Two read-only live probes already load User Secret
 the wider native matrix remains open. EF8/EF9 adaptation remains postponed. The
 [local development plan](efcore-10-local-development-plan.md) tracks the full remaining inventory, including
 an audit of locally feasible deferred families. Finishing one batch does not finish the overall goal.
+
+### Entity/table splitting checkpoint (2026-11-13)
+
+Both modes now admit required entity fragments and shared-row mappings through schema/model differences,
+queries/materialization and tracked CRUD. Only the primary table generates an entity-split identity; fragments
+receive its value. Both schema validators now recognize EF10's conditional `OnUpdateSometimes` shared-column
+propagation without admitting unbacked server generation. See the [design](efcore-10-splitting-design.md) and
+[execution record](efcore-10-splitting-plan.md). TPC remains explicitly rejected.
+
+Twelve new schema and 52 runtime cases cover renamed fragment keys, int/long/assigned/composite/Guid schema
+profiles, fragment evolution, schemas, defaults/computed values, Includes and filters, optional all-null shared
+dependents, physical write merging, generated concurrency propagation and default multi-table transaction control.
+Debug/Release at EF10.0.0 and isolated EF10.0.14 Release each pass 4504 tests (2135 unit, 1499 functional,
+868 metadata specification, two project consumers), zero failures/skips. The previous TPT package rejects the
+new smoke; `10.0.0-splitting-r1-20261113` passes content and both-mode runtime consumers on both patches.
+Final CLI/bundle and review evidence is recorded in the execution plan. Native DDL/joins/keys/rollback, TPC,
+skip-navigation runtime, wider specification work and the overall EF10 goal remain open.
 
 ### TPT inheritance checkpoint (2026-11-13)
 

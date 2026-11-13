@@ -19,10 +19,9 @@ namespace OceanBase.EntityFrameworkCore.Storage
             {
                 throw Unsupported("model sequences, HasData inserts or database collations");
             }
-            if (model.GetEntityTypes().Any(e => e.GetMappingStrategy() == "TPC"
-                || e.GetMappingFragments(StoreObjectType.Table).Any()))
+            if (model.GetEntityTypes().Any(e => e.GetMappingStrategy() == "TPC"))
             {
-                throw Unsupported("TPC inheritance or entity splitting");
+                throw Unsupported("TPC inheritance");
             }
             var tables = model.GetRelationalModel().Tables.Where(t => !t.IsExcludedFromMigrations)
                 .OrderBy(t => t.Schema, StringComparer.Ordinal).ThenBy(t => t.Name, StringComparer.Ordinal).ToArray();
@@ -103,8 +102,9 @@ namespace OceanBase.EntityFrameworkCore.Storage
             foreach (var mapping in column.PropertyMappings)
             {
                 var property = mapping.Property;
-                if (property.ValueGenerated != ValueGenerated.Never && column.DefaultValue is null && column.DefaultValueSql is null
-                    && !identity && !IsTptKeyPropagation(mapping) && !(property.IsPrimaryKey() && property.ClrType == typeof(Guid)))
+                if (property.ValueGenerated is not (ValueGenerated.Never or ValueGenerated.OnUpdateSometimes)
+                    && column.DefaultValue is null && column.DefaultValueSql is null
+                    && !identity && !IsKeyPropagation(mapping) && !(property.IsPrimaryKey() && property.ClrType == typeof(Guid)))
                 {
                     throw Unsupported("generated columns without an identity, default or computed expression");
                 }

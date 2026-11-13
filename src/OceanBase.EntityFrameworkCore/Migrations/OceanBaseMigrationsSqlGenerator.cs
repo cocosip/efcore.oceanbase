@@ -26,15 +26,14 @@ namespace OceanBase.EntityFrameworkCore.Migrations
         {
             if (model is not null)
             {
-                if (model.GetEntityTypes().Any(e => e.GetMappingStrategy() == "TPC"
-                    || e.GetMappingFragments(StoreObjectType.Table).Any()))
-                    throw Unsupported("TPC inheritance or entity splitting");
+                if (model.GetEntityTypes().Any(e => e.GetMappingStrategy() == "TPC"))
+                    throw Unsupported("TPC inheritance");
                 foreach (var table in model.GetRelationalModel().Tables.Where(t => !t.IsExcludedFromMigrations))
                 {
                     if (table.Triggers.Any()) throw Unsupported("model triggers; author their SQL explicitly");
                     foreach (var column in table.Columns)
                         if (column.DefaultValue is null && column.DefaultValueSql is null && column.ComputedColumnSql is null
-                            && column.PropertyMappings.Any(m => m.Property.ValueGenerated != ValueGenerated.Never
+                            && column.PropertyMappings.Any(m => m.Property.ValueGenerated is not (ValueGenerated.Never or ValueGenerated.OnUpdateSometimes)
                                 && !(m.Property.IsPrimaryKey() && (m.Property.ClrType == typeof(Guid)
                                     || m.Property.ValueGenerated == ValueGenerated.OnAdd
                                     && (m.TypeMapping.Converter?.ProviderClrType ?? m.Property.ClrType) is var type
