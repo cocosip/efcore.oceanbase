@@ -50,8 +50,29 @@ retry buffering is independent of splitting. Splitting adds memory use and datab
 unique order with paging; separate commands can observe concurrent changes unless the application selects
 an appropriate transaction/isolation level. Cancellation or unknown outcomes are not automatically replayed;
 after failed graph materialization, discard or clear partially tracked entities before reusing a context.
-Native SQL/results, consistency and session reuse remain unverified. Lazy loading and compiled-model/tooling
-optimizations are separate capabilities.
+Native SQL/results, consistency and session reuse remain unverified. Lazy loading and ordinary compiled
+models have separate configuration below.
+
+Lazy loading can use EF's injected `ILazyLoader`, or the optional official
+`Microsoft.EntityFrameworkCore.Proxies` package at the application's EF10 patch version:
+
+```csharp
+optionsBuilder.UseOceanBase(connectionString, OceanBaseCompatibilityMode.MySql)
+    .UseLazyLoadingProxies();
+```
+
+Proxy entities must be public, unsealed and have virtual navigations. The provider does not require the
+Proxies package unless the application chooses it. Both modes have local query/materialization, filter,
+relationship fixup and tracked-write coverage. Getter-triggered loads are synchronous even after an async
+root query; use explicit navigation `LoadAsync` or `ILazyLoader.LoadAsync` when asynchronous loading is
+needed. Untracked entities can still lazy-load while their originating context is alive. Disable it with
+`ChangeTracker.LazyLoadingEnabled = false` when needed; disposed or explicitly detached entities cannot
+start new loads. Each unloaded navigation can issue another query (N+1).
+
+Materialize the root query before accessing unloaded navigations: OceanBase supports one active native
+reader per connection, so nested lazy queries while streaming roots are outside this profile. Avoid
+concurrent use of a DbContext. Lazy-loading proxies with compiled models and change-tracking proxies are
+not covered by this module. Native results, consistency and performance remain unverified.
 
 Ordinary EF compiled models support both compatibility modes, including provider scalar mappings and
 converters with or without mapping hints. Generate a model using the matching mode's design-time context:
@@ -65,7 +86,8 @@ Select the generated model with `UseModel(App.CompiledModels.AppDbContextModel.I
 model initialization. Regenerate after model/provider changes. EF's compiled-model restrictions still apply,
 including unsupported query filters. The public compiled-model mapping helpers and interval JSON reader are
 infrastructure used by generated code; they do not add a JSON property mapping profile. NativeAOT, precompiled
-queries, lazy-loading proxies and performance improvements have not been established by this workflow.
+queries, combining lazy-loading proxies with compiled models and performance improvements have not been
+established by this workflow.
 
 Database reverse engineering uses the driver's public `GetSchema` collections, including its typed column
 declarations and tri-state generation/default/update metadata. Scaffolding connections must specify

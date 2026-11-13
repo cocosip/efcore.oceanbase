@@ -44,6 +44,7 @@ namespace PackageConsumer
                 TransactionSmoke.Run(mode);
                 RetrySmoke.Run(mode);
                 SplitQuerySmoke.Run(mode);
+                LazyLoadingSmoke.Run(mode);
                 SchemaSmoke.Run(mode);
                 SeedingSmoke.Run(mode);
                 BulkDmlSmoke.Run(mode);

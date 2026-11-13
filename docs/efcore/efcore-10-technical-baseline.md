@@ -6,6 +6,26 @@ This document is the implementation reference for the first provider vertical sl
 contracts that must be checked against the exact EF Core 10 package before code is written. It is intentionally
 smaller than a complete EF Core feature catalog.
 
+## Lazy-loading integration (2026-11-13)
+
+Use EF's existing ILazyLoader materializer service and NavigationEntry query pipeline. Official optional
+Proxies installs its own convention/materialization plugin; no provider wrapper or mandatory Proxies/Castle
+dependency is needed. Package-consumer and functional test references align with selected EF10 patches.
+Runtime tests disable EF's process-wide service-provider cache to isolate their synthetic option variants;
+production caching remains unchanged.
+
+Proxy getters call synchronous ILazyLoader.Load, including after async root queries; explicit LoadAsync
+preserves the caller token. Verify loaded state for empty results and null/non-null missing references,
+then ensure repeated access issues no command. Injected references must start a real query rather than
+merely observe inverse fixup. Predicate and assignment assertions resolve each actual positional/named
+parameter, so canned rows cannot conceal swapped FK/filter/write values. Test untracked lazy graphs while
+their originating context lives; disposal and explicit detachment stop new loads.
+
+Both workflows reuse existing provider query/write/resource paths. Materialize root results before lazy
+access because native connections allow one active reader. No blanket buffering or custom loader is added.
+See the [design](efcore-10-lazy-loading-design.md). Native/performance claims, change-tracking proxies,
+proxy/compiled-model combinations and NativeAOT remain outside this module.
+
 ## Ordinary compiled models (2026-11-13)
 
 Extend EF10's RelationalCSharpRuntimeAnnotationCodeGenerator.CreateDefaultTypeMapping. Emit public mapping

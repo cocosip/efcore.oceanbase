@@ -6,9 +6,12 @@
     <NuGetAudit>false</NuGetAudit>
     <IsPackable>false</IsPackable>
     <OceanBaseProviderVersion Condition="'$(OceanBaseProviderVersion)' == ''">10.0.0</OceanBaseProviderVersion>
+    <OceanBaseConsumerProxiesVersion Condition="'$(OceanBaseConsumerEfCoreVersion)' != ''">$(OceanBaseConsumerEfCoreVersion)</OceanBaseConsumerProxiesVersion>
+    <OceanBaseConsumerProxiesVersion Condition="'$(OceanBaseConsumerProxiesVersion)' == ''">10.0.0</OceanBaseConsumerProxiesVersion>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="OceanBase.EntityFrameworkCore" Version="$(OceanBaseProviderVersion)" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Proxies" Version="$(OceanBaseConsumerProxiesVersion)" />
   </ItemGroup>
   <ItemGroup Condition="'$(OceanBaseConsumerEfCoreVersion)' != ''">
     <PackageReference Include="Microsoft.EntityFrameworkCore" Version="$(OceanBaseConsumerEfCoreVersion)" />

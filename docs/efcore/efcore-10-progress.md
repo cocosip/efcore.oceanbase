@@ -3,8 +3,8 @@
 ## Active checkpoint: 2026-11-13
 
 Development resumed on 2026-11-11 on efcore/10.0 at the user's request, following the paused Batch7e checkpoint.
-The latest checkpoint is ordinary compiled-model generation and use on 2026-11-13, following buffered
-split-query graph loading, opt-in execution retries, TPC, many-to-many and Connector 0.3.0 reverse engineering.
+The latest checkpoint is lazy-loading integration verification on 2026-11-13, following ordinary compiled
+models, split-query graph loading, execution retries, TPC, many-to-many and Connector 0.3.0 reverse engineering.
 Test each module and review completed major modules before committing. EF8/EF9 remain postponed.
 The provider is not release-ready. The [feature checklist](efcore-10-feature-checklist.md) remains the
 acceptance authority; this document records the handoff rather than defining a different completion target.
@@ -17,6 +17,31 @@ each complete feature module. Two read-only live probes already load User Secret
 the wider native matrix remains open. EF8/EF9 adaptation remains postponed. The
 [local development plan](efcore-10-local-development-plan.md) tracks the full remaining inventory, including
 an audit of locally feasible deferred families. Finishing one batch does not finish the overall goal.
+
+### Lazy-loading integration checkpoint (2026-11-13)
+
+Official EF Proxies and constructor-injected ILazyLoader work through the existing provider query/write
+services in both modes. This module verifies integration and adds public usage guidance; no missing provider
+algorithm or driver defect was found. Proxies remains an optional application dependency. See the
+[design](efcore-10-lazy-loading-design.md) and [execution record](efcore-10-lazy-loading-plan.md).
+
+Sixty-four runtime cases cover collection/reference loading, current filter/FK bindings and projection,
+tracking/untracked fixup, loaded/empty/null states, eager/disabled paths, detach/dispose, caller-open leases,
+failure/cancellation recovery and tracked nullable-concurrency writes. Getter queries remain synchronous
+after async roots. Independent review's injected-reference and non-null-FK/empty-target verification gaps
+are fixed; packed consumers now associate predicates/assignments with actual bound values too.
+
+Final baseline Debug/Release and isolated EF/Proxies10.0.14 Release each pass **5007 tests** (2314 unit,
+1823 functional, 868 metadata specification, two consumers), zero failures/skips. The baseline-built
+`10.0.0-lazy-loading-20261113` nupkg passes content and both-mode public runtime consumers at both patches,
+including actual optional proxies, filter/fixup/loading-state and tracked writes. Source/archive/consumer
+DLL hashes and package-only graphs match. The runtime package still has exactly three dependencies.
+
+Native results/consistency, N+1 performance and nested lazy queries while streaming roots remain outside
+this profile. Materialize roots before accessing unloaded navigations. Change-tracking proxies,
+proxy/compiled-model combinations, NativeAOT and upstream runtime specification families remain separate
+work. No unchanged CLI/bundle or live probe rerun; the previous module's tooling results retain their
+recorded artifact boundary. DEF-08 and overall EF10/release acceptance remain open.
 
 ### Ordinary compiled-model checkpoint (2026-11-13)
 
@@ -38,8 +63,9 @@ functional, 868 metadata specification, two consumers), zero failures/skips. The
 full migration CLI consumers on both patches, including four Windows bundle build/help checks. Source,
 archive and consumer DLL hashes and package-only dependency graphs match; details are in the execution record.
 
-NativeAOT, precompiled query optimization, lazy loading and upstream runtime specification families remain
-separate work. EF's named/ordinary query-filter restrictions remain visible generation errors. Native
+NativeAOT, precompiled query optimization and upstream runtime specification families remain separate work;
+lazy-loading integration is covered by the later checkpoint above. EF's named/ordinary query-filter
+restrictions remain visible generation errors. Native
 execution and performance are unverified; DEF-08, the overall EF10 goal and release acceptance stay open.
 
 ### Split-query graph loading checkpoint (2026-11-13)

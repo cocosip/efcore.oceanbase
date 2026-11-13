@@ -3,7 +3,7 @@
 **Goal:** Implement every locally developable EF10 feature, in reviewed/tested commits, while postponing real
 database integration and EF8/EF9 adaptation as explicitly requested on 2026-11-10.
 
-**Architecture:** Continue on efcore/10.0 with ordinary compiled models following split-query loading, execution retries, TPC,
+**Architecture:** Continue on efcore/10.0 with lazy-loading integration following ordinary compiled models, split queries, retries, TPC,
 many-to-many verification, Connector 0.3.0 reverse engineering, splitting, TPT and migrations core/tooling.
 Reuse the existing EF relational services, connector 0.3.0
 public APIs and per-mode mappings/SQL. Separate local implementation evidence from server acceptance.
@@ -14,7 +14,7 @@ public APIs and per-mode mappings/SQL. Separate local implementation evidence fr
 The compact execution board is [efcore-10-roadmap.md](efcore-10-roadmap.md); this file remains the detailed
 batch ledger and acceptance notes.
 
-**Updated:** 2026-11-13, ordinary compiled models. Continue EF10 in this checkout, test each module and
+**Updated:** 2026-11-13, lazy-loading integration. Continue EF10 in this checkout, test each module and
 review each completed major module before committing. EF8/EF9 remains postponed; live execution is opt-in and
 currently blocked before authentication by the supplied endpoint/transport behavior.
 The full goal remains incomplete.
@@ -41,6 +41,19 @@ and local commit before starting another. A status request does not authorize sw
    full Debug/Release suites, package content gate and package consumer at EF10.0.0/10.0.14, review the
    release revision, and only then consider a release branch/tag. EF8/EF9, push and publication remain out
    of the current development sequence.
+
+### Lazy-loading integration module (2026-11-13)
+
+**IDs:** DEF-08, QRY-08, CFG-03, CON-04/05, PKG-03/04. The [design](efcore-10-lazy-loading-design.md) and
+[execution record](efcore-10-lazy-loading-plan.md) verify official proxies/injected ILazyLoader through
+existing provider queries/writes. No provider algorithm was missing; Proxies is optional and test/consumer
+references align with the selected EF patch. Sixty-four runtime cases cover collection/reference graphs,
+tracking/filters/loaded state, lifecycle/recovery and nullable-concurrency writes. Independent review's
+injected-reference and empty-target gaps are fixed, with actual predicate-to-value checks in public smokes.
+Full baseline Debug/Release/isolated patch suites each pass 5007 tests, zero failures/skips. One baseline-
+built package passes content and both-mode public consumers on both patches; graphs/hashes match. No new
+CLI/bundle/native run is claimed. Streaming nested loads, proxy/compiled-model combinations, change-tracking
+proxies, NativeAOT/precompiled optimization, upstream runtime fixtures and native acceptance remain open.
 
 ### Ordinary compiled-model module (2026-11-13)
 

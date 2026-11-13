@@ -13,6 +13,13 @@ The following required rows have complete local/package evidence for both modes:
 
 - `CFG-01..03`, `CON-01`, `SQL-02`
 - `PKG-01..04`
+- Lazy-loading integration now verifies official optional EF Proxies and injected ILazyLoader through
+  existing both-mode provider queries/writes. Sixty-four runtime cases cover references/collections,
+  tracking/filters/state/lifecycle/recovery and writes. Independent review's injected-reference and empty-
+  target gaps are fixed. Full source suites each pass 5007 tests; a baseline-built package passes content
+  and both-mode public runtime/proxy consumers on both patches, with matching graphs/DLL hashes. See the
+  [lazy-loading plan](efcore-10-lazy-loading-plan.md). No new loader or driver change was needed. Native
+  behavior, streaming nested queries and proxy/compiled-model/change-tracking/AOT combinations remain open.
 - Ordinary compiled models now support actual dbcontext optimize, generated-code compilation and UseModel
   in both modes. Six mapping families preserve converters/facets/sentinels and write validation; mode tags
   reject opposite-mode reuse. Independent review's unhinted-converter physical mapping regression is fixed.
@@ -26,8 +33,8 @@ The following required rows have complete local/package evidence for both modes:
   cleanup. Independent review's SQL verification gap is fixed; full source suites each pass 4930. The
   same baseline-built nupkg passes content, both-mode runtime/generated-context/full CLI consumers on
   both patches and four bundle build/help checks, with matching graphs/DLL hashes.
-  See the [split-query plan](efcore-10-split-query-plan.md). DEF-08 is partial; native behavior, lazy
-  loading, NativeAOT/precompiled optimization and upstream runtime specifications remain unfinished work.
+  See the [split-query plan](efcore-10-split-query-plan.md). DEF-08 is partial; native behavior,
+  NativeAOT/precompiled optimization and upstream runtime specifications remain unfinished work.
 - Opt-in execution retries now use EF's operation strategy with conservative known-outcome server codes,
   confirmed owned rollback and early migration/lifecycle DDL rejection. Independent review's startup,
   buffered-reader disposal and post-write close replay gaps are fixed. Seventy-nine unit and 68 runtime
@@ -112,9 +119,9 @@ the exact release revision has not been reviewed. EF8/EF9 adaptation is outside 
 ## Explicitly deferred after the first release
 
 `DEF-04/05/06/10` remain deferred. `DEF-01/02/03/07/08/09` are partial: migrations core/tooling, local TPT/TPC,
-ordinary bulk operations, split-query graphs, ordinary compiled models, EnsureCreated/Migrate callbacks, execution retries and runtime
+ordinary bulk operations, split-query graphs, ordinary compiled models, lazy loading, EnsureCreated/Migrate callbacks, execution retries and runtime
 migration locking have local evidence. Native migrations/locks/bundle application, reverse-engineering
-catalogs, graph/retry behavior, wider JSON/converter/model variants, lazy loading, NativeAOT/precompiled optimization and
+catalogs, graph/retry behavior, wider JSON/converter/model variants, advanced proxy combinations, NativeAOT/precompiled optimization and
 ambient/distributed transactions remain outside the accepted support claim. Deferred
 features stay visible and must not be advertised as supported.
 
