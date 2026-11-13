@@ -150,7 +150,7 @@ remain distinct. Results use the native Boolean mapping even when operands have 
 Null-converting, ambiguous and Oracle empty-string encodings are rejected. Valid stored encodings,
 native collation/coercion and repeated volatile operand evaluation remain acceptance boundaries.
 
-`Database.GenerateCreateScript()` generates supported relational DDL offline. To create tables in an already
+`Database.GenerateCreateScript()` generates supported relational DDL and `HasData` INSERTs offline. To create tables in an already
 provisioned MySQL database or Oracle schema, explicitly name the target:
 
 ```csharp
@@ -158,6 +158,17 @@ optionsBuilder.UseOceanBase(connectionString, OceanBaseCompatibilityMode.MySql)
     .EnableOceanBaseSchemaManagement("application_database");
 // await context.Database.EnsureCreatedAsync();
 ```
+
+`HasData` uses EF's model-managed data conversions, owned/shared-row mapping and dependency order.
+Create scripts append it after DDL. `EnsureCreated` and explicit `CreateTables` apply it only when they
+create the schema, skipping excluded tables; an existing populated schema is not updated or repaired.
+After DDL, initial data runs in one owned transaction with a fresh target-scope check. Failure/cancellation
+rolls back that data transaction; DDL has already committed and requires inspection before recovery.
+Use explicit stable seed keys. Explicit identity values do not reserve a generated-key range or promise
+to advance Oracle's identity generator. `UseSeeding`/`UseAsyncSeeding` callbacks still run once after
+`EnsureCreated` schema/model-data work, in their separate existing transaction; callback failure does not
+undo previously committed model data. `CreateTables` does not invoke those callbacks. Native DDL/data
+transaction behavior remains unverified.
 
 The current database/schema must match the declared name exactly, including case. `EnsureCreated` returns false
 if any ordinary table exists; it does not reconcile or upgrade existing schemas. DDL is not atomic and a failure

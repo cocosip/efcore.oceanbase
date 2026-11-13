@@ -47,6 +47,7 @@ namespace PackageConsumer
                 LazyLoadingSmoke.Run(mode);
                 SchemaSmoke.Run(mode);
                 SeedingSmoke.Run(mode);
+                ModelDataSmoke.Run(mode);
                 BulkDmlSmoke.Run(mode);
                 MigrationsSmoke.Run(mode);
                 TptSmoke.Run(mode);

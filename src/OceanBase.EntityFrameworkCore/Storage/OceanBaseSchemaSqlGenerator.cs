@@ -15,9 +15,9 @@ namespace OceanBase.EntityFrameworkCore.Storage
 
         public IReadOnlyList<string> Generate(IModel model)
         {
-            if (model.GetSequences().Any() || model.GetEntityTypes().Any(e => e.GetSeedData().Any()) || model.GetCollation() is not null)
+            if (model.GetSequences().Any() || model.GetCollation() is not null)
             {
-                throw Unsupported("model sequences, HasData inserts or database collations");
+                throw Unsupported("model sequences or database collations");
             }
             ValidateTpcKeyGeneration(model.GetEntityTypes());
             var tables = model.GetRelationalModel().Tables.Where(t => !t.IsExcludedFromMigrations)

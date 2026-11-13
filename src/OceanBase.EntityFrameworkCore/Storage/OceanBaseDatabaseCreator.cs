@@ -106,8 +106,9 @@ namespace OceanBase.EntityFrameworkCore.Storage
 
         public string GenerateCreateScript()
         {
-            var statements = CreateStatements(currentContext.Context.GetService<IDesignTimeModel>().Model);
-            return string.Join(";\n\n", statements) + (statements.Count > 0 ? ";\n" : "");
+            var plan = BuildCreationPlan(currentContext.Context.GetService<IDesignTimeModel>().Model);
+            var statements = plan.Schema.Concat(plan.Data).ToArray();
+            return string.Join(";\n\n", statements) + (statements.Length > 0 ? ";\n" : "");
         }
 
         public bool EnsureCreated()
@@ -141,10 +142,7 @@ namespace OceanBase.EntityFrameworkCore.Storage
             return created;
         }
 
-        private IReadOnlyList<string> CreateStatements(IModel model)
-            => new OceanBaseSchemaSqlGenerator(currentContext.Context.GetService<ISqlGenerationHelper>(), _mode).Generate(model);
-
-        private IReadOnlyList<string> ValidateTableCreation()
+        private CreationPlan ValidateTableCreation()
         {
             ValidateNoRetries();
             var scope = options.FindExtension<Internal.OceanBaseOptionsExtension>()!.SchemaManagementScope;
@@ -165,7 +163,7 @@ namespace OceanBase.EntityFrameworkCore.Storage
             {
                 throw new NotSupportedException("The model contains a table outside the declared schema management scope.");
             }
-            return CreateStatements(model);
+            return BuildCreationPlan(model);
         }
 
         private void ValidateNoRetries()
@@ -188,15 +186,16 @@ namespace OceanBase.EntityFrameworkCore.Storage
 
         private bool CreateTables(bool onlyIfEmpty)
         {
-            var statements = ValidateTableCreation();
-            if (statements.Count == 0) return false;
+            var plan = ValidateTableCreation();
+            if (plan.Schema.Count == 0) return false;
             connection.Open();
             Exception? failure = null;
             try
             {
                 ValidateCurrentScope(ScopeProbe().ExecuteScalar(Parameters()));
                 if (onlyIfEmpty && HasTables()) return false;
-                foreach (var statement in statements) commands.Build(statement).ExecuteNonQuery(Parameters());
+                foreach (var statement in plan.Schema) commands.Build(statement).ExecuteNonQuery(Parameters());
+                ApplyModelData(plan.Data);
                 return true;
             }
             catch (Exception error)
@@ -217,18 +216,19 @@ namespace OceanBase.EntityFrameworkCore.Storage
         private async Task<bool> CreateTablesAsync(bool onlyIfEmpty, CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var statements = ValidateTableCreation();
-            if (statements.Count == 0) return false;
+            var plan = ValidateTableCreation();
+            if (plan.Schema.Count == 0) return false;
             await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
             Exception? failure = null;
             try
             {
                 ValidateCurrentScope(await ScopeProbe().ExecuteScalarAsync(Parameters(), cancellationToken).ConfigureAwait(false));
                 if (onlyIfEmpty && await HasTablesAsync(cancellationToken).ConfigureAwait(false)) return false;
-                foreach (var statement in statements)
+                foreach (var statement in plan.Schema)
                 {
                     await commands.Build(statement).ExecuteNonQueryAsync(Parameters(), cancellationToken).ConfigureAwait(false);
                 }
+                await ApplyModelDataAsync(plan.Data, cancellationToken).ConfigureAwait(false);
                 return true;
             }
             catch (Exception error)

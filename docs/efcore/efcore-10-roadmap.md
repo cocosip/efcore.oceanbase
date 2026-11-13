@@ -2,6 +2,7 @@
 
 **Updated:** 2026-11-13
 **Branch:** `efcore/10.0`  
+**State:** Paused at the user's request after HasData wrap-up and local commit; resume only when requested.
 **Acceptance authority:** [efcore-10-feature-checklist.md](efcore-10-feature-checklist.md)
 
 This is the execution board for the first OceanBase EF Core 10 provider. It separates provider work from
@@ -13,6 +14,14 @@ The following required rows have complete local/package evidence for both modes:
 
 - `CFG-01..03`, `CON-01`, `SQL-02`
 - `PKG-01..04`
+- HasData now participates in GenerateCreateScript, CreateTables and EnsureCreated for both modes. EF
+  orders/converts seed operations; excluded tables are filtered. DDL precedes an owned model-data transaction,
+  and EnsureCreated callbacks retain a separate phase. Twenty-two focused cases cover lifecycle, rollback,
+  scope and ownership; independent review's combined rollback/disposal lease leak is fixed. See the
+  [model-data plan](efcore-10-model-data-plan.md): full source suites each pass 5028 tests; the same baseline-
+  built package passes both-patch runtime/generated-context/compiled-model/full CLI and four bundle build/help
+  checks, with matching graphs/hashes. Native acceptance,
+  identity behavior and application recovery after partial DDL remain open under SCH-02/DEF-09.
 - Lazy-loading integration now verifies official optional EF Proxies and injected ILazyLoader through
   existing both-mode provider queries/writes. Sixty-four runtime cases cover references/collections,
   tracking/filters/state/lifecycle/recovery and writes. Independent review's injected-reference and empty-
@@ -126,6 +135,9 @@ ambient/distributed transactions remain outside the accepted support claim. Defe
 features stay visible and must not be advertised as supported.
 
 ## Execution order from this checkpoint
+
+Development is paused after the current module's local commit. The sequence below applies on user-requested
+resume; do not begin another module during this wrap-up.
 
 1. **Completed locally:** migrations core, tooling, TPT/TPC inheritance, entity/table splitting and Connector
    0.3.0 reverse engineering form complete local modules; see each plan for reviewed source/package evidence.

@@ -3,7 +3,7 @@
 **Goal:** Implement every locally developable EF10 feature, in reviewed/tested commits, while postponing real
 database integration and EF8/EF9 adaptation as explicitly requested on 2026-11-10.
 
-**Architecture:** Continue on efcore/10.0 with lazy-loading integration following ordinary compiled models, split queries, retries, TPC,
+**Architecture:** Continue on efcore/10.0 with HasData schema bootstrap following lazy-loading integration, ordinary compiled models, split queries, retries, TPC,
 many-to-many verification, Connector 0.3.0 reverse engineering, splitting, TPT and migrations core/tooling.
 Reuse the existing EF relational services, connector 0.3.0
 public APIs and per-mode mappings/SQL. Separate local implementation evidence from server acceptance.
@@ -14,8 +14,9 @@ public APIs and per-mode mappings/SQL. Separate local implementation evidence fr
 The compact execution board is [efcore-10-roadmap.md](efcore-10-roadmap.md); this file remains the detailed
 batch ledger and acceptance notes.
 
-**Updated:** 2026-11-13, lazy-loading integration. Continue EF10 in this checkout, test each module and
-review each completed major module before committing. EF8/EF9 remains postponed; live execution is opt-in and
+**Updated:** 2026-11-13, HasData schema bootstrap. Development is paused at the user's request after this
+module's verification, documentation and local commit. Resume only when requested; keep one complete module
+active and review it before committing. EF8/EF9 remains postponed; live execution is opt-in and
 currently blocked before authentication by the supplied endpoint/transport behavior.
 The full goal remains incomplete.
 
@@ -41,6 +42,24 @@ and local commit before starting another. A status request does not authorize sw
    full Debug/Release suites, package content gate and package consumer at EF10.0.0/10.0.14, review the
    release revision, and only then consider a release branch/tag. EF8/EF9, push and publication remain out
    of the current development sequence.
+
+### HasData schema bootstrap module and pause (2026-11-13)
+
+**IDs:** SCH-02, DEF-01/09, MAP-07, PKG-03/04. The [design](efcore-10-model-data-design.md) and
+[execution record](efcore-10-model-data-plan.md) enable HasData in scripts/CreateTables/EnsureCreated using
+EF dependency-ordered seed operations and provider migration SQL. Excluded tables are filtered; DDL runs
+before an owned seed transaction, followed by existing separate callbacks. Twenty-two focused cases cover
+both modes/sync/async, conversions/owned rows, existing schema skip, cancellation/rollback and leases.
+Independent review's combined rollback/disposal failure is fixed with four RED/green cases preserving the
+primary error and caller-open connection. Old invalid-plan tests now reject sequences rather than HasData.
+Final Debug/Release/isolated patch suites each pass 5028 tests, zero failures/skips; one baseline-built package
+passes both-mode runtime/generated-context/compiled-model/full CLI checks on both patches and four Windows
+bundle build/help checks. Exact graphs/hashes and artifacts are in the execution record. Native DDL/transactions,
+identity behavior and partial-schema recovery remain acceptance boundaries; Connector 0.3.0 needs no change.
+
+Pause after this module's local commit. On resume, choose one remaining coherent module from the inventory
+below, finish tests/review/docs/commit, then move on. Wider local coverage and native/release gates remain
+unfinished; do not start EF8/9, repeat unchanged live probes, push or publish during this handoff.
 
 ### Lazy-loading integration module (2026-11-13)
 

@@ -657,8 +657,8 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
         [Theory]
         [InlineData(false, "cross-scope")]
         [InlineData(true, "cross-scope")]
-        [InlineData(false, "model-data")]
-        [InlineData(true, "model-data")]
+        [InlineData(false, "sequence")]
+        [InlineData(true, "sequence")]
         public async Task Invalid_table_plans_reject_before_creating_a_database(bool async, string profile)
         {
             var capture = new Capture();
@@ -698,24 +698,24 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
             else builder.EnableOceanBaseDatabaseManagement(scope);
             if (profile == "supplied") builder.UseOceanBase(new OceanBaseConnection(native.ConnectionString), OceanBase.EntityFrameworkCore.OceanBaseCompatibilityMode.MySql);
             configure?.Invoke(builder);
-            return new TestContext(builder.Options, empty, profile == "cross-scope", profile == "model-data");
+            return new TestContext(builder.Options, empty, profile == "cross-scope", profile == "sequence");
         }
 
         public sealed class ShapeKey(ModelCacheKeyFactoryDependencies dependencies) : ModelCacheKeyFactory(dependencies)
         {
             public override object Create(DbContext context, bool designTime)
-                => (base.Create(context, designTime), ((TestContext)context).Empty, ((TestContext)context).CrossScope, ((TestContext)context).ModelData);
+                => (base.Create(context, designTime), ((TestContext)context).Empty, ((TestContext)context).CrossScope, ((TestContext)context).Sequence);
         }
 
-        private sealed class TestContext(DbContextOptions<TestContext> options, bool empty, bool crossScope, bool modelData) : DbContext(options)
+        private sealed class TestContext(DbContextOptions<TestContext> options, bool empty, bool crossScope, bool sequence) : DbContext(options)
         {
             public bool Empty => empty;
             public bool CrossScope => crossScope;
-            public bool ModelData => modelData;
+            public bool Sequence => sequence;
             protected override void OnModelCreating(ModelBuilder model)
             {
                 if (!Empty) model.Entity<Row>().ToTable("Rows", CrossScope ? "other" : null);
-                if (ModelData) model.Entity<Row>().HasData(new Row { Id = 1 });
+                if (Sequence) model.HasSequence<long>("UnsupportedSequence");
             }
         }
         private sealed class Row { public int Id { get; set; } }

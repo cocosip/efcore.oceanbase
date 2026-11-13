@@ -64,7 +64,6 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
 
         [Theory]
         [InlineData("sequence")]
-        [InlineData("seed")]
         [InlineData("trigger")]
         [InlineData("filter")]
         [InlineData("comment")]

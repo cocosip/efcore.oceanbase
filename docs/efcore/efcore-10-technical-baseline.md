@@ -6,6 +6,26 @@ This document is the implementation reference for the first provider vertical sl
 contracts that must be checked against the exact EF Core 10 package before code is written. It is intentionally
 smaller than a complete EF Core feature catalog.
 
+## Model-managed data during schema creation (2026-11-13)
+
+Build CreationPlan(Schema, Data) before opening: preserve the validated schema generator and obtain ordered
+seed operations from IMigrationsModelDiffer.GetDifferences(null, designModel.GetRelationalModel()). Filter
+Insert/Update/DeleteData operations to included (Name, Schema) table pairs before using the existing provider
+IMigrationsSqlGenerator. EF's initial data operations can include excluded tables despite excluded DDL.
+Trim the command terminator for native execution; GenerateCreateScript rejoins all DDL before seed SQL.
+
+CreateTables/EnsureCreated execute DDL outside a transaction, then apply nonempty data in one owned transaction
+with a scope recheck. Explicit rollback after failure/cancellation uses an uncancelled token; retain the
+primary error and attach cleanup errors. If failed native disposal leaves EF CurrentTransaction attached,
+detach only that transaction and balance its transaction-owned open count, preserving caller-open leases.
+Sync/async regression tests combine rollback and disposal failures, not only each failure independently.
+
+Existing populated schemas skip HasData; explicit CreateTables does not invoke EnsureCreated callbacks.
+Those callbacks still run once after schema/model data in their own existing transaction. These phases
+are not globally atomic; DDL may remain after seed failure. Stable explicit keys and application-directed
+partial-schema recovery are required. No identity-range reservation or Oracle identity advancement is
+promised. See the [design](efcore-10-model-data-design.md); native transactions/DDL remain unverified.
+
 ## Lazy-loading integration (2026-11-13)
 
 Use EF's existing ILazyLoader materializer service and NavigationEntry query pipeline. Official optional

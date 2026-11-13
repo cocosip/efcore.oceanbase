@@ -1,10 +1,10 @@
 # EF Core 10 Development Progress
 
-## Active checkpoint: 2026-11-13
+## Paused checkpoint: 2026-11-13
 
 Development resumed on 2026-11-11 on efcore/10.0 at the user's request, following the paused Batch7e checkpoint.
-The latest checkpoint is lazy-loading integration verification on 2026-11-13, following ordinary compiled
-models, split-query graph loading, execution retries, TPC, many-to-many and Connector 0.3.0 reverse engineering.
+The latest checkpoint is HasData schema bootstrap on 2026-11-13, following lazy-loading integration,
+ordinary compiled models, split queries, retries, TPC, many-to-many and Connector 0.3.0 reverse engineering.
 Test each module and review completed major modules before committing. EF8/EF9 remain postponed.
 The provider is not release-ready. The [feature checklist](efcore-10-feature-checklist.md) remains the
 acceptance authority; this document records the handoff rather than defining a different completion target.
@@ -17,6 +17,38 @@ each complete feature module. Two read-only live probes already load User Secret
 the wider native matrix remains open. EF8/EF9 adaptation remains postponed. The
 [local development plan](efcore-10-local-development-plan.md) tracks the full remaining inventory, including
 an audit of locally feasible deferred families. Finishing one batch does not finish the overall goal.
+
+### HasData schema bootstrap and pause (2026-11-13)
+
+At the user's request, finish this module, update evidence, commit locally and pause. Do not start another
+module until development is resumed. The overall local-development goal and EF10 release remain incomplete.
+
+GenerateCreateScript, CreateTables and EnsureCreated now apply model-managed HasData in both modes. EF's
+model differ supplies dependency ordering, conversions and shared owned rows; provider migration SQL is
+reused, and excluded tables are filtered explicitly. Full plans validate before opening. DDL precedes a
+separate owned model-data transaction with a fresh scope check; existing populated schemas skip HasData.
+EnsureCreated callbacks retain their separate transaction and run after model data. See the
+[design](efcore-10-model-data-design.md) and [execution record](efcore-10-model-data-plan.md).
+
+Twenty-two focused cases cover scripts, lifecycle, callbacks, scope rejection, cancellation/rollback and
+connection ownership. Independent review reproduced combined rollback/disposal failure leaving EF's
+transaction and open count attached. Cleanup now detaches the abandoned transaction and balances its lease,
+preserving the original error and caller-open connection. The four regression cases fail before the fix
+and pass after it. Obsolete HasData-rejection tests now use unsupported sequences instead.
+
+Final baseline Debug/Release and isolated EF10.0.14 Release each pass **5028 tests** (2313 unit, 1845 functional,
+868 metadata specification, two consumers), zero failures/skips. One baseline-built
+`10.0.0-model-data-20261113` nupkg passes content, both-mode runtime/generated-context/compiled-model/full
+migration CLI consumers on both patches, including four Windows bundle build/help checks. Source/archive/
+runtime/tooling DLL hashes and package-only graphs match; exact commands/artifacts are in the execution record.
+SCH-02/DEF-09 remain open for native acceptance and their wider scope. DDL, model data and callbacks are
+not globally atomic; a seed
+failure can leave created tables and requires application-directed recovery. Explicit stable seed keys do
+not reserve identity ranges. Connector 0.3.0 needs no change. No unchanged live probe, EF8/9, push or publication.
+
+On resume, use the remaining inventory in the local development plan/checklist to select one complete module;
+upstream runtime specification families, remaining mapping/query/write/lifecycle boundaries and native/release
+gates remain open. Do not treat this pause or the locally verified modules as completion of the full goal.
 
 ### Lazy-loading integration checkpoint (2026-11-13)
 
