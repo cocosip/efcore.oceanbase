@@ -25,8 +25,14 @@ The following required rows have complete local/package evidence for both modes:
   See the [scaffolding plan](efcore-10-scaffolding-plan.md); native catalogs and lossless DDL are not claimed.
 - TPT inheritance now has physical-table-aware generation plus local schema/migration/query/write and packed
   CLI evidence. Debug/Release/selected-patch suites each pass 4441; see the [TPT plan](efcore-10-tpt-plan.md).
-  DEF-07 is partial; native TPT acceptance and TPC remain open. Entity/table splitting now also has local
+  DEF-07 is partial; native TPT acceptance remains open. Entity/table splitting now also has local
   schema/migration/runtime evidence; see the [splitting plan](efcore-10-splitting-plan.md).
+- TPC now supports assigned/composite/client Guid hierarchy keys with shared schema/migration and pre-write
+  validation. Eighteen schema and 58 runtime cases cover concrete tables, UNION materialization, filters,
+  Includes, CRUD/concurrency and transactions; see the [TPC plan](efcore-10-tpc-plan.md). Independent review's
+  computed-key and converted-Guid bypasses are fixed. Native behavior and sequence allocation remain open.
+  Final source suites each pass 4704 tests; the same TPC r2 nupkg passes content/runtime/generated-context/
+  full CLI consumers on both patches/modes and four Windows bundle build/help checks.
 - Ordinary many-to-many implicit/explicit joins now have local schema/query/write contract verification:
   four schema and 62 runtime cases plus expanded packed consumers. Existing EF/provider behavior works
   without a new algorithm; see the [many-to-many plan](efcore-10-many-to-many-plan.md). Native acceptance,
@@ -83,7 +89,7 @@ the exact release revision has not been reviewed. EF8/EF9 adaptation is outside 
 
 ## Explicitly deferred after the first release
 
-`DEF-04/05/06/08/10` remain deferred. `DEF-01/02/03/07/09` are partial: migrations core/tooling and local TPT,
+`DEF-04/05/06/08/10` remain deferred. `DEF-01/02/03/07/09` are partial: migrations core/tooling and local TPT/TPC,
 ordinary bulk operations, EnsureCreated/Migrate callbacks and runtime migration locking have local evidence.
 Native migrations/locks/bundle application and reverse-engineering catalogs, wider JSON/converter/model variants, execution-strategy retries
 and ambient/distributed transactions remain outside the accepted support claim. Deferred
@@ -91,13 +97,13 @@ features stay visible and must not be advertised as supported.
 
 ## Execution order from this checkpoint
 
-1. **Completed locally:** migrations core, tooling, TPT inheritance, entity/table splitting and Connector 0.3.0
-   reverse engineering are reviewed/tested as complete modules. Current source suites each pass 4562; the same
-   scaffolding package passes both-mode generated-context/runtime/CLI consumers on EF10.0.0/10.0.14 and all
-   four Windows bundle build/help checks. Unknown metadata remains visible through warnings.
-2. Ordinary many-to-many runtime contracts are now covered without redundant production changes. Build the
-   next complete upstream relational query/write specification fixture module (`TST-01`), then close the
+1. **Completed locally:** migrations core, tooling, TPT/TPC inheritance, entity/table splitting and Connector
+   0.3.0 reverse engineering form complete local modules; see each plan for reviewed source/package evidence.
+   Unknown metadata remains visible through warnings. Native acceptance remains distinct from local results.
+2. Ordinary many-to-many runtime contracts are covered without redundant production changes. Continue the
+   locally feasible inheritance/graph/runtime modules and upstream specification coverage (`TST-01`), then close the
    exposed graph materialization, tracked graph writes and transaction/connection recovery gaps together.
+   Official runtime fixtures require an initialized store; intercepted canned results cannot replace them.
    Record positive/null/empty/failure boundaries by feature ID; avoid a new sequence of one-overload commits.
 3. Resolve the pre-auth live transport blocker and run the two-mode native matrix.
 4. Write `REL-01`, review the release revision, and run the final package/consumer matrix.

@@ -3,7 +3,7 @@
 ## Active checkpoint: 2026-11-13
 
 Development resumed on 2026-11-11 on efcore/10.0 at the user's request, following the paused Batch7e checkpoint.
-The latest checkpoint is many-to-many runtime verification on 2026-11-13, following Connector 0.3.0 reverse engineering.
+The latest checkpoint is TPC inheritance on 2026-11-13, following many-to-many verification and Connector 0.3.0 reverse engineering.
 Test each module and review completed major modules before committing. EF8/EF9 remain postponed.
 The provider is not release-ready. The [feature checklist](efcore-10-feature-checklist.md) remains the
 acceptance authority; this document records the handoff rather than defining a different completion target.
@@ -16,6 +16,32 @@ each complete feature module. Two read-only live probes already load User Secret
 the wider native matrix remains open. EF8/EF9 adaptation remains postponed. The
 [local development plan](efcore-10-local-development-plan.md) tracks the full remaining inventory, including
 an audit of locally feasible deferred families. Finishing one batch does not finish the overall goal.
+
+### TPC inheritance checkpoint (2026-11-13)
+
+TPC now supports the local schema/migrations/query/write workflow with application-assigned hierarchy-wide
+keys (including composite keys) or client Guid keys. Concrete tables repeat inherited columns; abstract
+intermediate types have no table. Existing EF UNION ALL expansion, materialization and write services are
+reused. Schema/migrations reject unsafe store generation; the scoped batch factory validates the complete
+model before the first tracked-write batch, including mixed saves with unrelated ordinary entities.
+Computed keys reject even with ValueGeneratedNever; Guid keys converted to int/long are outside this profile.
+See the [design](efcore-10-tpc-design.md) and [execution record](efcore-10-tpc-plan.md).
+
+Eighteen schema and 58 runtime cases cover concrete FK/index targets, inherited evolution/reversal, three
+tracking modes, OfType/abstract queries/current filters, concrete Includes, assigned/composite CRUD, client
+Guid generation, original nullable concurrency and automatic transaction failure cleanup. Independent review
+reproduced and fixed the computed/Never and converted-Guid guard bypasses with RED/green regressions.
+The prior scaffolding r2 package fails the new public TPC smoke at its blanket schema rejection.
+
+Final EF10.0.0 Debug/Release and isolated EF10.0.14 Release each pass **4704 tests** (2215 unit,
+1619 functional, 868 upstream metadata specification, two consumers), zero failures/skips.
+The same `10.0.0-tpc-r2-20261113` nupkg passes package content, both-mode runtime/generated-context consumers
+and full migration CLI on EF10.0.0/10.0.14, including TPC snapshots/evolution/scripts and four Windows bundle
+build/help checks. Source/archive/consumer DLL hashes and package-only graphs match; see the execution record.
+
+Native UNION typing, FK enforcement, assigned-key uniqueness and rollback remain unverified. Sequence/range
+allocation, cross-table polymorphic FKs and upstream runtime store fixtures remain separate work. This module
+does not finish DEF-07, TST-01, the overall local development goal or the EF10 release.
 
 ### Many-to-many runtime verification checkpoint (2026-11-13)
 

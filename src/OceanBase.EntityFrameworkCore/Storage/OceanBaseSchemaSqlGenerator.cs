@@ -19,10 +19,7 @@ namespace OceanBase.EntityFrameworkCore.Storage
             {
                 throw Unsupported("model sequences, HasData inserts or database collations");
             }
-            if (model.GetEntityTypes().Any(e => e.GetMappingStrategy() == "TPC"))
-            {
-                throw Unsupported("TPC inheritance");
-            }
+            ValidateTpcKeyGeneration(model.GetEntityTypes());
             var tables = model.GetRelationalModel().Tables.Where(t => !t.IsExcludedFromMigrations)
                 .OrderBy(t => t.Schema, StringComparer.Ordinal).ThenBy(t => t.Name, StringComparer.Ordinal).ToArray();
             var commands = new List<string>();

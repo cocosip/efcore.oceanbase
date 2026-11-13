@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using Microsoft.EntityFrameworkCore;
@@ -10,6 +11,25 @@ namespace OceanBase.EntityFrameworkCore.Metadata
         : RelationalAnnotationProvider(dependencies)
     {
         internal const string IdentityAnnotation = "OceanBase:Identity";
+
+        internal static void ValidateTpcKeyGeneration(IEnumerable<IEntityType> entityTypes)
+        {
+            foreach (var property in entityTypes.Where(e => e.GetMappingStrategy() == "TPC")
+                .SelectMany(e => e.FindPrimaryKey()?.Properties ?? []).Distinct())
+            {
+                var providerType = property.GetTypeMapping().Converter?.ProviderClrType ?? property.ClrType;
+                var clientGuid = property.ValueGenerated == ValueGenerated.OnAdd && property.ClrType == typeof(Guid)
+                    && providerType != typeof(int) && providerType != typeof(long)
+                    && !property.TryGetDefaultValue(out _) && property.GetDefaultValueSql() is null;
+                if (property.GetComputedColumnSql() is null && (property.ValueGenerated == ValueGenerated.Never || clientGuid))
+                    continue;
+                throw new NotSupportedException("TPC keys must be unique across the entire hierarchy. Configure "
+                    + property.DeclaringType.DisplayName() + "." + property.Name
+                    + " with ValueGeneratedNever and assign unique keys without a computed expression, "
+                    + "or use client-generated Guid keys without an integer store conversion. "
+                    + "Independent table identities and store-generated TPC keys are not supported.");
+            }
+        }
 
         public override IEnumerable<IAnnotation> For(IColumn column, bool designTime)
         {

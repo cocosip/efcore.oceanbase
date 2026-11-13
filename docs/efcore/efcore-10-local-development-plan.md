@@ -3,7 +3,7 @@
 **Goal:** Implement every locally developable EF10 feature, in reviewed/tested commits, while postponing real
 database integration and EF8/EF9 adaptation as explicitly requested on 2026-11-10.
 
-**Architecture:** Continue on efcore/10.0 with Connector 0.3.0 reverse engineering following splitting, TPT and migrations core/tooling. Reuse the existing EF relational services, connector 0.3.0
+**Architecture:** Continue on efcore/10.0 with TPC inheritance following many-to-many verification, Connector 0.3.0 reverse engineering, splitting, TPT and migrations core/tooling. Reuse the existing EF relational services, connector 0.3.0
 public APIs and per-mode mappings/SQL. Separate local implementation evidence from server acceptance.
 
 **Spec:** efcore-10-feature-checklist.md, efcore-10-technical-baseline.md, efcore-10-query-update-design.md.
@@ -12,7 +12,7 @@ public APIs and per-mode mappings/SQL. Separate local implementation evidence fr
 The compact execution board is [efcore-10-roadmap.md](efcore-10-roadmap.md); this file remains the detailed
 batch ledger and acceptance notes.
 
-**Updated:** 2026-11-13, many-to-many runtime verification. Continue EF10 in this checkout, test each module and
+**Updated:** 2026-11-13, TPC inheritance. Continue EF10 in this checkout, test each module and
 review each completed major module before committing. EF8/EF9 remains postponed; live execution is opt-in and
 currently blocked before authentication by the supplied endpoint/transport behavior.
 The full goal remains incomplete.
@@ -37,6 +37,21 @@ Use this section to choose the next task; the feature checklist remains the deta
    full Debug/Release suites, package content gate and package consumer at EF10.0.0/10.0.14, review the
    release revision, and only then consider a release branch/tag. EF8/EF9, push and publication remain out
    of the current development sequence.
+
+### TPC inheritance module (2026-11-13)
+
+**IDs:** DEF-07, MOD-01/03, QRY-01/05/08/09, UPD-01..05, TXN-02, SCH-01/02, PKG-03/04.
+The [design](efcore-10-tpc-design.md) and [execution record](efcore-10-tpc-plan.md) implement concrete tables,
+assigned/composite/client Guid keys, inherited schema evolution, UNION/filter/Include/materialization and
+tracked concrete CRUD/concurrency/transaction cleanup. The batch factory rejects unsupported model key
+strategies before any write, including mixed saves. Eighteen schema and 58 runtime cases pass; independent
+review's computed/Never and converted-Guid bypasses are fixed with regressions. The previous package fails
+the expanded public consumer specifically at its blanket TPC rejection. Native validation, sequence keys,
+upstream runtime specification fixtures and the overall EF10 goal remain open.
+Final source Debug/Release and isolated EF10.0.14 each pass 4704 tests, zero failures/skips. Both independent
+review findings have regression coverage and the follow-up review finds no remaining blockers.
+The same TPC r2 nupkg passes content, both-mode runtime/generated-context and full CLI consumers on both
+patches, including compiled snapshots, inherited evolution, scripts/removal and four bundle build/help checks.
 
 ### Many-to-many runtime contract module (2026-11-13)
 

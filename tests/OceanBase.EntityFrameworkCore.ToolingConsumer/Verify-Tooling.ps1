@@ -95,6 +95,7 @@ foreach ($toolingMode in @('MySql', 'Oracle')) {
     }
     $toolingSnapshot = Get-ChildItem $toolingMigrations -Filter '*ModelSnapshot.cs' | Select-Object -ExpandProperty FullName
     if ((Get-Content $toolingSnapshot -Raw) -notmatch 'UseTptMappingStrategy') { throw 'Snapshot lost the TPT strategy.' }
+    if ((Get-Content $toolingSnapshot -Raw) -notmatch 'UseTpcMappingStrategy') { throw 'Snapshot lost the TPC strategy.' }
     if ((Get-Content $toolingSnapshot -Raw) -notmatch 'SplitToTable') { throw 'Snapshot lost entity splitting.' }
     Build-ToolingProject
     $null = Invoke-ToolingDotNet "$toolingMode-initial-unchanged" (@('ef', 'migrations', 'has-pending-model-changes') + $toolingCommon)
@@ -120,6 +121,12 @@ foreach ($toolingMode in @('MySql', 'Oracle')) {
         }
         if ($toolingInspectedSql -notmatch '__ToolingHistory' -or $toolingInspectedSql -notmatch 'ToolingRows') { throw 'Wrong migration/history script target.' }
         if ($toolingInspectedSql -notmatch 'ToolingAssets' -or $toolingInspectedSql -notmatch 'ToolingSensors') { throw 'Script lost TPT tables.' }
+        foreach ($toolingTpcTable in @('ToolingConcreteRoots', 'ToolingConcreteLeaves', 'ToolingConcreteSiblings')) {
+            if ($toolingInspectedSql -notmatch $toolingTpcTable) { throw "Script lost TPC table $toolingTpcTable." }
+        }
+        if ($toolingScriptKind -eq 'forward' -and [regex]::Matches($toolingSql, 'ADD [^\r\n]*TpcRevision').Count -ne 3) {
+            throw 'Script must evolve the inherited TPC property in all three concrete tables.'
+        }
         if ($toolingScriptKind -eq 'forward' -and $toolingSql -notmatch 'Calibration') { throw 'Script lost TPT leaf evolution.' }
         if ($toolingInspectedSql -notmatch 'ToolingSplitDetails' -or $toolingInspectedSql -notmatch 'ToolingSharedRows') { throw 'Script lost splitting tables.' }
         if ($toolingScriptKind -eq 'forward' -and $toolingSql -notmatch 'FragmentRevision') { throw 'Script lost fragment evolution.' }

@@ -107,8 +107,8 @@ administrative removal. Generated scripts require external serialization and sto
 scripts target SQL*Plus-style clients, disable variable substitution, exit on SQL errors and commit the final
 history changes; rollback cannot undo DDL. MySQL scripts require autocommit. Raw migration SQL is trusted,
 single-statement server input; client directives and multi-statement raw batches are outside this contract.
-Native DDL/locking, script-client execution, reverse engineering, sequence/HiLo,
-TPC and model trigger scaffolding remain unverified or unsupported.
+Native DDL/locking, script-client execution, reverse engineering, sequence/HiLo
+and model trigger scaffolding remain unverified or unsupported.
 
 TPT (`UseTptMappingStrategy`, with a table for each mapped type) has a locally tested schema/query/write
 workflow in both modes. The root table generates an int/long identity once; intermediate and leaf tables store
@@ -118,7 +118,18 @@ and tracked multi-table inserts/updates/deletes have local coverage. Keep automa
 multi-table saves. As with EF's relational executor, SaveChanges counts physical modification commands in this
 profile; one leaf spanning three tables can return 3. Existing generated-key/default limitations still apply,
 including MySQL's rejection of server-default key readback. Native joins, key generation, foreign-key enforcement
-and rollback remain unverified. TPC remains outside this profile.
+and rollback remain unverified.
+
+TPC (`UseTpcMappingStrategy`) has a locally tested schema/migrations/query/CRUD profile in both modes.
+Concrete tables repeat inherited columns; abstract types have no table. Use application-assigned keys
+(`ValueGeneratedNever`, including composite keys) unique across the whole hierarchy, or client-generated
+Guid keys without an integer store conversion. Independent table identities, computed keys (even with
+ValueGeneratedNever) and store-generated TPC keys are rejected in schema/migration
+generation and before the first write batch, including when saving unrelated entities in that model.
+Base queries use EF's UNION ALL expansion; OfType, inherited filters, concrete collection Includes,
+nullable concurrency and automatic multi-entity transactions have local coverage. No sequence/range allocator
+or cross-table uniqueness/polymorphic FK enforcement is supplied. Native UNION typing, FKs and rollback
+remain unverified.
 
 Entity splitting (`SplitToTable`) and table splitting (related entities using the same `ToTable`) have a
 locally tested schema/migrations/query/CRUD profile in both modes. Only an entity's primary table generates
@@ -128,7 +139,7 @@ nullable values are all NULL materializes as absent. Map shared concurrency toke
 entities; application-managed changes must set both mapped values, while database-generated tokens are read
 once and propagated to both. Removing an optional shared dependent clears its columns without deleting the
 principal row. Keep automatic transactions enabled for multi-table saves. Native execution/rollback remains
-unverified; this profile does not add split queries or TPC.
+unverified; this profile does not add split queries.
 
 The provider exposes EF design services for migrations authoring. Reference `Microsoft.EntityFrameworkCore.Design`
 as a private development dependency in the startup project, and configure the same explicit mode in its host or

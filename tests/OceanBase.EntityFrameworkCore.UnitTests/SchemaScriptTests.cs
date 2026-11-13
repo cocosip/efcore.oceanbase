@@ -74,7 +74,7 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
         [InlineData("nonkey-generated")]
         [InlineData("unsupported-identity")]
         [InlineData("model-collation")]
-        [InlineData("tpc")]
+        [InlineData("tpc-identity")]
         public void Unsupported_schema_features_fail_explicitly_without_opening(string shape)
         {
             foreach (var mode in Enum.GetValues<OceanBaseCompatibilityMode>())
@@ -224,9 +224,10 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
                     case "collation": row.Property(r => r.Caption).UseCollation("utf8mb4_bin"); break;
                     case "computed-collation": row.Property(r => r.Caption).UseCollation("utf8mb4_bin").HasComputedColumnSql("LOWER('X')"); break;
                     case "model-collation": modelBuilder.UseCollation("utf8mb4_bin"); break;
-                    case "tpc":
+                    case "tpc-identity":
                         modelBuilder.Ignore<Generated>();
                         modelBuilder.Entity<BaseRow>().UseTpcMappingStrategy().ToTable("BaseRows");
+                        modelBuilder.Entity<BaseRow>().Property(r => r.Id).ValueGeneratedOnAdd();
                         modelBuilder.Entity<DerivedRow>().ToTable("DerivedRows");
                         break;
                     default: throw new InvalidOperationException("Unknown schema fixture.");

@@ -190,6 +190,7 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             using var context = Create(mode);
             var builder = new ModelBuilder(context.GetService<IConventionSetBuilder>().CreateConventionSet());
             builder.Entity<Animal>().UseTpcMappingStrategy();
+            builder.Entity<Animal>().Property(a => a.Id).ValueGeneratedOnAdd();
             builder.Entity<Cat>().ToTable("Cats");
             builder.Entity<Dog>().ToTable("Dogs");
             var model = context.GetService<IModelRuntimeInitializer>().Initialize(builder.FinalizeModel(), designTime: true);

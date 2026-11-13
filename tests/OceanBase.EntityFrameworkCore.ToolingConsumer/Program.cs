@@ -50,6 +50,14 @@ namespace ToolingConsumer
             builder.Entity<ToolingDevice>().ToTable("ToolingDevices");
             builder.Entity<ToolingSensor>().ToTable("ToolingSensors");
             if (expanded) builder.Entity<ToolingSensor>().Property<int?>("Calibration");
+            var tpc = builder.Entity<ToolingConcreteRoot>();
+            tpc.UseTpcMappingStrategy().ToTable("ToolingConcreteRoots");
+            tpc.Property(a => a.Id).ValueGeneratedNever();
+            tpc.Property(a => a.Name).HasMaxLength(40);
+            builder.Entity<ToolingConcreteMiddle>();
+            builder.Entity<ToolingConcreteLeaf>().ToTable("ToolingConcreteLeaves");
+            builder.Entity<ToolingConcreteSibling>().ToTable("ToolingConcreteSiblings");
+            if (expanded) tpc.Property<int?>("TpcRevision");
             var split = builder.Entity<ToolingSplit>();
             split.ToTable("ToolingSplitRows");
             split.Property(r => r.Name).HasMaxLength(40);
@@ -72,6 +80,10 @@ namespace ToolingConsumer
     public abstract class ToolingAsset { public int Id { get; set; } public string? Name { get; set; } }
     public class ToolingDevice : ToolingAsset { public int Serial { get; set; } }
     public sealed class ToolingSensor : ToolingDevice { public int? Reading { get; set; } }
+    public class ToolingConcreteRoot { public int Id { get; set; } public string? Name { get; set; } }
+    public abstract class ToolingConcreteMiddle : ToolingConcreteRoot { public int Serial { get; set; } }
+    public sealed class ToolingConcreteLeaf : ToolingConcreteMiddle { public int? Reading { get; set; } }
+    public sealed class ToolingConcreteSibling : ToolingConcreteRoot { public int Pages { get; set; } }
     public sealed class ToolingSplit { public int Id { get; set; } public string? Name { get; set; } public string? Text { get; set; } }
     public sealed class ToolingOwner { public int Id { get; set; } public string? Name { get; set; } public int? Version { get; set; } public ToolingDetail? Detail { get; set; } }
     public sealed class ToolingDetail { public int Id { get; set; } public string? Text { get; set; } public int? Version { get; set; } }

@@ -47,6 +47,7 @@ namespace PackageConsumer
                 BulkDmlSmoke.Run(mode);
                 MigrationsSmoke.Run(mode);
                 TptSmoke.Run(mode);
+                TpcSmoke.Run(mode);
                 SplittingSmoke.Run(mode);
                 ManyToManySmoke.Run(mode);
                 var options = new DbContextOptionsBuilder<ConsumerContext>()

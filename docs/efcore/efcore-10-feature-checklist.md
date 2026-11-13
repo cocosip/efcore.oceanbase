@@ -52,7 +52,19 @@ so that an undocumented feature is not accidentally advertised.
 
 ## Current evidence and blockers
 
-Latest verification: ordinary many-to-many skip-navigation schema/query/write workflow on 2026-11-13.
+Latest implementation: TPC inheritance on 2026-11-13. Concrete-table schema/model differences and existing
+EF UNION/query/write infrastructure support assigned/composite hierarchy-wide keys and client Guid keys.
+Shared validation rejects unsafe store generation before DDL and the first tracked-write batch, including
+mixed saves. Eighteen schema and 58 runtime cases pass in both modes; independent review's computed/Never
+and integer-converted Guid guard bypasses are fixed with RED/green regressions. See the
+[TPC plan](efcore-10-tpc-plan.md). Native UNION typing/FKs/rollback, sequence allocation, polymorphic FKs
+and upstream runtime store fixtures remain separate work; DEF-07/TST-01 and the overall goal stay open.
+Final source Debug/Release at EF10.0.0 and isolated EF10.0.14 Release each pass 4704 tests (2215 unit,
+1619 functional, 868 upstream metadata specification, two consumers), zero failures/skips.
+Package `10.0.0-tpc-r2-20261113` passes content, both-mode runtime/generated-context consumers and full CLI
+on EF10.0.0/10.0.14, including compiled TPC snapshots/evolution/scripts and four bundle build/help checks.
+
+Preceding verification: ordinary many-to-many skip-navigation schema/query/write workflow on 2026-11-13.
 Four schema and 62 runtime cases verify existing EF/provider behavior in both modes: implicit/explicit joins,
 principal-only identities, payload evolution, filtered Includes, tracking/identity resolution, current filters,
 link-only mutations, generated-key propagation, nullable concurrency and owned/caller transaction failure/retry.
@@ -77,11 +89,11 @@ Native catalogs and unknown generated write/DDL configuration still need accepta
 
 Preceding implementation: entity/table splitting on 2026-11-13 adds required entity fragments and shared-row
 schema/query/tracked CRUD workflows; see the [splitting plan](efcore-10-splitting-plan.md). Its 4504-test
-checkpoint and package matrix remain historical evidence; TPC stays rejected.
+checkpoint and package matrix remain historical evidence; its TPC rejection is superseded by the profile above.
 
 Preceding implementation: TPT inheritance on 2026-11-13. Both-mode creation and model-difference migrations now
-distinguish physical root identity generation from inherited PK/FK propagation; TPC and entity splitting remain
-rejected. Hierarchy query/materialization/Include/filter and tracked multi-table CRUD/transaction-control
+distinguish physical root identity generation from inherited PK/FK propagation. Its then-rejected TPC and
+entity splitting have since gained their own profiles. Hierarchy query/materialization/Include/filter and tracked multi-table CRUD/transaction-control
 fixtures pass locally. Final Debug/Release and isolated EF10.0.14 each pass 4441 tests; package
 `10.0.0-tpt-r2-20261113` passes content, runtime and full CLI consumers in both modes on both patches, including
 compiled TPT snapshots/evolution/scripts and four bundle build/help checks. See [TPT design](efcore-10-tpt-design.md)
@@ -559,7 +571,7 @@ entity fragments, physical primary-only identity generation, renamed fragment ke
 schema keys, defaults/computed expressions, fragment evolution, query filters/Includes, all tracking modes,
 shared-row merged writes, optional all-null dependents, original/shared/generated concurrency and automatic
 multi-table transaction control/failure retention. EF10's `OnUpdateSometimes` shared propagation is admitted;
-unsupported actual generation and TPC still reject. Application-managed shared tokens must be changed
+unsupported actual generation still rejects. The later TPC module adds a separate safe-key profile. Application-managed shared tokens must be changed
 consistently on both mapped entities; generated shared values propagate through EF's column modifications.
 Full Debug/Release/isolated EF10.0.14 suites each pass 4504; packed runtime/CLI evidence is recorded in the
 [execution plan](efcore-10-splitting-plan.md). Native query/DDL/key/rollback acceptance, wider runtime
@@ -679,13 +691,13 @@ Creating an Oracle tenant is never inferred.
 | ID | Requirement and acceptance criteria | Priority | MySQL | Oracle | Existing evidence / gap |
 | --- | --- | --- | --- | --- | --- |
 | PKG-01 | Build net10.0 assets against OceanBaseConnector 0.3.0 with warnings as errors. | Required | Done | Done | Current full source matrix builds against the supplied 0.3.0 release nupkg; provenance/hash and unavailable public NuGet TLS lookup are recorded in the scaffolding plan. No driver project reference. |
-| PKG-02 | Packed nuspec uses OceanBase.EntityFrameworkCore and EF ranges [10.0.0,11.0.0). | Required | Done | Done | Verify-Package.ps1 passes `10.0.0-scaffolding-ob030-r2-20261113` identity/net10.0/README/ranges and three runtime dependencies, now Connector 0.3.0; Design stays private to consumers/tests. Rerun on every release pack; runtime/live gates remain separate. |
-| PKG-03 | Isolated packed consumer restores/executes provider API without project/local connector references. | Required | Done | Done | The scaffolding r2 nupkg passes both modes on EF10.0.0/10.0.14: existing runtime smokes, compiled generated contexts for complete/documented-driver profiles, full migration CLI and bundle build/help. Package-only graphs and source/archive/consumer DLL hashes match; runtime consumer has no Design dependency. Rerun after changes. |
-| PKG-04 | Minimum EF10 and selected later available EF10 patch restore/build/test without pinning the EF patch in the provider package; EF11 cannot satisfy dependencies. | Required | Done | Done | Current source Debug/Release at EF10.0.0 and isolated EF10.0.14 Release each pass 4628 tests. Expanded many-to-many runtime consumers pass the existing scaffolding r2 binary on both patches; that binary's prior generated-context/full CLI matrix remains valid. Ranges stay [10.0.0,11.0.0); CLI is 10.0.15 and Design/runtime use selected patches. Future patches need fresh private-contract evidence. |
+| PKG-02 | Packed nuspec uses OceanBase.EntityFrameworkCore and EF ranges [10.0.0,11.0.0). | Required | Done | Done | Verify-Package.ps1 passes `10.0.0-tpc-r2-20261113` identity/net10.0/README/ranges and three runtime dependencies, including Connector 0.3.0; Design stays private to consumers/tests. Rerun on every release pack; runtime/live gates remain separate. |
+| PKG-03 | Isolated packed consumer restores/executes provider API without project/local connector references. | Required | Done | Done | The same TPC r2 nupkg passes both modes on EF10.0.0/10.0.14: existing/TPC runtime smokes, compiled generated contexts for complete/documented-driver profiles, full migration CLI and four bundle build/help checks. Package-only graphs and source/archive/consumer DLL hashes match; runtime consumer has no Design dependency. Rerun after changes. |
+| PKG-04 | Minimum EF10 and selected later available EF10 patch restore/build/test without pinning the EF patch in the provider package; EF11 cannot satisfy dependencies. | Required | Done | Done | Current source Debug/Release at EF10.0.0 and isolated EF10.0.14 Release each pass 4704 tests. The same baseline-built TPC r2 nupkg passes runtime/generated-context/full CLI/bundle consumers on both patches/modes. Ranges stay [10.0.0,11.0.0); CLI is 10.0.15 and Design/runtime use selected patches. Future patches need fresh private-contract evidence. |
 | TST-01 | Selected EF relational specification classes pass; exclusions map to checklist IDs and limitations. | Required | In progress | In progress | SpecificationTests now runs full inherited generic relational OneToMany/ManyToOne/OneToOne/ManyToMany/Inheritance/OwnedTypes families against real provider services in both modes:866 inherited+two guard cases pass at EF10.0.0/10.0.14, zero skips/exclusions. Other model families and query/write/runtime specification fixtures remain open. Selected metadata success does not establish deferred runtime features. |
 | TST-02 | Live core query/write/transaction/schema/scalar suites pass in at least one declared supported environment per mode. | Required | In progress | In progress | Opt-in `tests/OceanBase.EntityFrameworkCore.LiveTests` loads external User Secrets and builds cleanly. With the supplied credentials, TCP to `172.16.2.45:2881` was reachable; both MySQL and Oracle closed the packet during handshake before authentication or SQL. No SQL/DDL ran. Classify the endpoint/transport failure and rerun before expanding the live matrix. |
 | REL-01 | Support notes record server/connector/runtime/EF versions, tenant mode, direct/proxy endpoint, transport/options without credentials. | Required | Planned | Planned | Release evidence record missing. |
-| REL-02 | Tested efcore/10.0 development checkpoint is reviewed; packaging/release checks run on release revision. | Required | In progress | In progress | Migrations core/tooling, TPT and splitting received independent whole-module source review; current 4504-test/dual-patch runtime/tooling package matrix passes. Required live, wider specification/local coverage and exact release-revision acceptance remain open. |
+| REL-02 | Tested efcore/10.0 development checkpoint is reviewed; packaging/release checks run on release revision. | Required | In progress | In progress | Migrations core/tooling, TPT/TPC, splitting, scaffolding and many-to-many received independent module review; current 4704-test/dual-patch runtime/tooling package matrix passes. Required live, wider specification/local coverage and exact release-revision acceptance remain open. |
 
 ## Visible deferred inventory
 
@@ -700,7 +712,7 @@ are difficult to implement. Promoting a deferred feature requires its own design
 | DEF-04 | JSON, primitive collections/arrays and complex types, including JSON-owned/complex mappings | Deferred | Deferred | Per-mode mapping/query/update design. |
 | DEF-05 | Spatial, XML, native enum types, OBJECT, LOB locators, REF CURSOR | Deferred | Deferred | Connector capability review/live mappings; ordinary enum converters belong to MAP-07. |
 | DEF-06 | Stored-procedure modification mappings; provider-specific sequence/HiLo strategies | Deferred | Deferred | Parameter/result/generation contracts; reject unsupported mappings clearly. |
-| DEF-07 | TPH/TPT/TPC inheritance, table/entity splitting, many-to-many skip navigations | In progress | In progress | TPT and entity/table splitting have local schema/migration/query/write/tooling workflows. Ordinary many-to-many implicit/explicit joins now have four schema and 62 runtime contract cases plus expanded existing-package consumers on both patches/modes; existing EF/provider behavior required no new production algorithm. See the module designs/plans. Native behavior, TPH's wider matrix, TPC, wider skip-navigation variants and upstream runtime specifications remain open. |
+| DEF-07 | TPH/TPT/TPC inheritance, table/entity splitting, many-to-many skip navigations | In progress | In progress | TPT, TPC and entity/table splitting have local schema/migration/query/write workflows. TPC supports assigned/composite/client Guid keys and rejects unsafe store generation before schema or tracked writes; 18 schema and 58 runtime cases cover the profile. Ordinary many-to-many has four schema and 62 runtime cases. See module designs/plans for package/tooling evidence. Native behavior, TPH's wider matrix, sequence allocation, wider skip-navigation variants and upstream runtime specifications remain open. |
 | DEF-08 | Split queries, lazy loading, compiled-model/tooling optimizations | Deferred | Deferred | Graph/lifetime/generated-model consumer tests. |
 | DEF-09 | EF seeding callbacks, execution-strategy retries, ambient/distributed transactions | In progress | In progress | EnsureCreated callbacks and Migrate-time callback integration/owner-row locking exist locally; opposite-only callbacks reject before work. Physical rollback/commit and native locks remain unverified. Retrying migration strategies and caller/ambient/enlisted transactions explicitly reject; no distributed-transaction guarantee. |
 | DEF-10 | Provider full-text/vector/search functions, advanced batching optimizations | Deferred | Deferred | Server-version contract and independent tests/benchmarks. |

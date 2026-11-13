@@ -26,8 +26,7 @@ namespace OceanBase.EntityFrameworkCore.Migrations
         {
             if (model is not null)
             {
-                if (model.GetEntityTypes().Any(e => e.GetMappingStrategy() == "TPC"))
-                    throw Unsupported("TPC inheritance");
+                OceanBaseRelationalAnnotationProvider.ValidateTpcKeyGeneration(model.GetEntityTypes());
                 foreach (var table in model.GetRelationalModel().Tables.Where(t => !t.IsExcludedFromMigrations))
                 {
                     if (table.Triggers.Any()) throw Unsupported("model triggers; author their SQL explicitly");

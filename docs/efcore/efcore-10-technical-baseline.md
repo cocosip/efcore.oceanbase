@@ -20,6 +20,22 @@ range, unless a consumer dependency requires a higher version. A range permits c
 automatically test those upgrades. The package-consumer gate must record the SDK, runtime, resolved EF Core patch,
 provider package and connector.
 
+## TPC inheritance (2026-11-13)
+
+Use EF10's concrete-table/UNION ALL/query/write infrastructure. Concrete roots, leaf/sibling types repeat
+inherited columns; abstract intermediates have no physical table. Assigned keys (including composites) must
+be unique across the entire hierarchy; ordinary client Guid generation is supported without integer store
+conversions. Independent identities and unsupported store-generated keys reject consistently before DDL or
+tracked writes. Computed key expressions reject even when the value-generation enum says Never.
+
+The scoped modification-batch factory validates the immutable context model once, before producing its first
+batch. A per-entity batch guard is too late for mixed saves: earlier ordinary writes may already have run.
+This model-wide validation also rejects unrelated tracked writes while the model has an unsafe TPC strategy.
+GetDefaultValue returns CLR defaults even without configuration; use TryGetDefaultValue to distinguish
+Guid.Empty from a configured default. Inspect converter ProviderClrType because physical identity detection
+uses the int/long storage type. Keep sequence/range allocators and polymorphic FK/global uniqueness guarantees
+outside this profile. See the [TPC plan](efcore-10-tpc-plan.md) for source/package/CLI evidence and native limits.
+
 ## Many-to-many runtime contracts (2026-11-13)
 
 Ordinary implicit shared-dictionary joins and explicit scalar payload/concurrency joins reuse EF10 navigation
