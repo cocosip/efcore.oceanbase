@@ -20,6 +20,24 @@ range, unless a consumer dependency requires a higher version. A range permits c
 automatically test those upgrades. The package-consumer gate must record the SDK, runtime, resolved EF Core patch,
 provider package and connector.
 
+## Migrations core (2026-11-13)
+
+DEF-01 now has a complete local runtime/script core; the exact contract is in
+[migrations design](efcore-10-migrations-design.md). Register scoped IMigrationsSqlGenerator, IHistoryRepository
+and IMigrator plus the design-time relational column annotation provider. Reuse EF10's model differ, migrations
+assembly and command executor. The wrapper subclasses EF10's internal Migrator only at execution/script seams;
+review this constructor and its cleanup behavior for every tested EF patch.
+
+Require an already provisioned, exact opted-in namespace. Reject caller/ambient/enlisted transactions and
+retrying execution strategies before DDL. Preserve caller-open connections, primary errors and matching
+sync/async seeding callbacks. The outer lease releases the durable owner-row lock even when history bootstrap,
+claim acknowledgement, migration commands or callbacks fail. Unknown cleanup outcomes leave an explicit
+administrative recovery requirement; DDL is never rolled back automatically.
+
+Operation/model tests and intercepted public migrations cover local behavior. Native DDL, concurrent sessions,
+client-run scripts, reverse engineering, CLI scaffolding and bundles remain open. Required runtime rows retain
+their native acceptance gates. EF8/EF9 adaptation remains postponed.
+
 ## Oracle owned user/schema lifecycle (Batch7f)
 
 SCH-01/02/03 and DIA-01: `EnableOceanBaseUserManagement(userName, Func<string> passwordFactory)`
@@ -88,10 +106,12 @@ verified against the 10.x assemblies before each task:
 | Updates | IUpdateSqlGenerator and modification-command batch services | Emit INSERT, UPDATE and DELETE with parameters. |
 | Key retrieval | Generated-value and result-column mapping services | Read database-generated keys without assuming SQL Server OUTPUT. |
 | Database | IRelationalDatabaseCreator | Implement connection/database existence and EnsureCreated boundaries. |
+| Migrations | IMigrationsSqlGenerator, IHistoryRepository, IMigrator, IRelationalAnnotationProvider | Both-mode operation SQL, identity metadata, scoped history/locking/execution and forward/reverse/idempotent scripts; see migrations design for exclusions. |
 | Conventions | IProviderConventionSetBuilder and model validation services | Apply only conventions required by the first feature profile. |
 
-Migrations, reverse engineering, design-time services, JSON/LOB/OBJECT/REF CURSOR mappings and provider-specific
-bulk operations are separate milestones. Their service contracts must not be added as placeholders.
+Migrations core and ordinary relational bulk operations now have local implementations. Reverse engineering,
+CLI design-time services, bundles and JSON/advanced LOB/OBJECT/REF CURSOR mappings remain separate milestones.
+Their service contracts must not be added as placeholders.
 
 ## Mode-specific SQL contract
 

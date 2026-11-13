@@ -22,6 +22,8 @@ deferred features. The implementation plan follows those requirements; it does n
 | [EF Core 10 implementation plan](efcore/efcore-10-implementation-plan.md) | Development tasks mapped to checklist IDs and remaining acceptance work. |
 | [EF Core 10 local development plan](efcore/efcore-10-local-development-plan.md) | Active end-to-end local implementation ledger; live database and EF8/EF9 work postponed. |
 | [EF Core 10 query and update pipeline](efcore/efcore-10-query-update-design.md) | EF10 service contracts, generated-value paths and command-test evidence limits. |
+| [EF Core 10 migrations core](efcore/efcore-10-migrations-design.md) | Operation SQL, scoped execution/history/locking, upgrade/downgrade scripts and unsupported boundaries. |
+| [EF Core 10 migrations execution plan](efcore/efcore-10-migrations-plan.md) | Whole-module development, review and validation evidence. |
 | [EF Core references](efcore/official-references.md) | Official Microsoft documentation to read before implementing each version. |
 
 The version documents describe intended support. They are not evidence of implementation or live OceanBase

@@ -52,10 +52,17 @@ so that an undocumented feature is not accidentally advertised.
 
 ## Current evidence and blockers
 
-Latest implementation: Batch3az on 2026-11-13. Explicitly configured temporal `EF.Parameter` roots for
+Latest implementation: migrations core on 2026-11-13. DEF-01 is partially promoted: both-mode operation SQL,
+real model differences, history/owner-row locking, guarded Migrate/MigrateAsync and forward/reverse/idempotent
+scripts are implemented. See [migrations design](efcore-10-migrations-design.md) and its execution plan for
+module verification. Native DDL/locking/script execution and CLI tooling/bundles remain open; this is not a
+release pass. Required rows remain unchanged.
+
+Preceding implementation: Batch3az on 2026-11-13. Explicitly configured temporal `EF.Parameter` roots for
 DateTime, DateTimeOffset, DateOnly, TimeOnly and TimeSpan now pass the existing temporal admission gate when
-Constant or MultipleParameters is explicitly selected. Focused unit/intercepted coverage passes 15/36 cases;
-full source, package and consumer evidence for this batch is pending. EF10 emits scalar IN parameters for these
+Constant or MultipleParameters is explicitly selected. Original focused unit/intercepted coverage passed 15/36
+cases; the current combined revision's full source/package/consumer matrix is recorded in the migrations plan.
+EF10 emits scalar IN parameters for these
 explicit roots, while captured/inline roots retain the existing VALUES path. Native temporal precision,
 timezone, interval coercion and live results remain open. The preceding Batch3ay implementation supports
 explicitly configured `EF.Parameter(bool[])`, nullable
@@ -426,7 +433,9 @@ defect. Live comparison, server coercion and session behavior remain open.
 Database addresses were already supplied by the user. Follow the
 [live-test credentials and ownership contract](../repository-guidelines.md#live-test-credentials-and-ownership):
 use .NET User Secrets for local connection strings and confirm the test-owned schema/cleanup scope before DDL.
-The live fixture and secret loading are still to be implemented; credentials are not needed for local tests.
+The opt-in LiveTests fixture already loads external User Secrets and contains two read-only connection/scope
+probes. The wider scalar/query/write/transaction/schema live matrix remains to be implemented and accepted;
+credentials are not needed for local tests.
 
 Other gaps include large Oracle string LOB query restrictions, remaining scalar/literal semantics and live mapping
 round trips, transactions, database creation and package validation. The [query/update design](efcore-10-query-update-design.md)
@@ -612,13 +621,13 @@ Creating an Oracle tenant is never inferred.
 | ID | Requirement and acceptance criteria | Priority | MySQL | Oracle | Existing evidence / gap |
 | --- | --- | --- | --- | --- | --- |
 | PKG-01 | Build net10.0 assets against published OceanBaseConnector 0.2.0 with warnings as errors. | Required | Done | Done | Current solution test command builds assets; not a package-content assertion. |
-| PKG-02 | Packed nuspec uses OceanBase.EntityFrameworkCore and EF ranges [10.0.0,11.0.0). | Required | Done | Done | Verify-Package.ps1 passes `10.0.0-trig-20261112` identity/net10.0/README/ranges and unchanged three runtime dependencies; prior negative probes remain historical evidence. Rerun on every release pack; runtime/live gates are separate. |
-| PKG-03 | Isolated packed consumer restores/executes provider API without project/local connector references. | Required | Done | Done | `10.0.0-trig-20261112` passes both modes on EF10.0.0/10.0.14, including the packed Sin/Cos/Tan SQL smoke and existing lifecycle/query/mapping checks. Package-only graphs and provider/archive/consumer DLL identity are inspected; rerun after changes. |
-| PKG-04 | Minimum EF10 and selected later available EF10 patch restore/build/test without pinning the EF patch in the provider package; EF11 cannot satisfy dependencies. | Required | Done | Done | Source Debug/Release pass 4061 at EF10.0.0; the same Trig nupkg passes both consumers at EF10.0.0/10.0.14 and ranges remain [10.0.0,11.0.0). Future patches need fresh private-contract evidence. |
+| PKG-02 | Packed nuspec uses OceanBase.EntityFrameworkCore and EF ranges [10.0.0,11.0.0). | Required | Done | Done | Verify-Package.ps1 passes `10.0.0-migrations-r2-20261113` identity/net10.0/README/ranges and unchanged three runtime dependencies; prior negative probes remain historical evidence. Rerun on every release pack; runtime/live gates are separate. |
+| PKG-03 | Isolated packed consumer restores/executes provider API without project/local connector references. | Required | Done | Done | `10.0.0-migrations-r2-20261113` passes both modes on EF10.0.0/10.0.14, including model differences, migration discovery and forward/reverse/idempotent scripts plus existing runtime/query/mapping smoke. Package-only graphs and source/archive/consumer DLL hashes match; rerun after changes. |
+| PKG-04 | Minimum EF10 and selected later available EF10 patch restore/build/test without pinning the EF patch in the provider package; EF11 cannot satisfy dependencies. | Required | Done | Done | Source Debug/Release at EF10.0.0 and isolated EF10.0.14 Release each pass 4367 tests; the same migrations nupkg passes both-patch consumers and ranges remain [10.0.0,11.0.0). Future patches need fresh private-contract evidence. |
 | TST-01 | Selected EF relational specification classes pass; exclusions map to checklist IDs and limitations. | Required | In progress | In progress | SpecificationTests now runs full inherited generic relational OneToMany/ManyToOne/OneToOne/ManyToMany/Inheritance/OwnedTypes families against real provider services in both modes:866 inherited+two guard cases pass at EF10.0.0/10.0.14, zero skips/exclusions. Other model families and query/write/runtime specification fixtures remain open. Selected metadata success does not establish deferred runtime features. |
 | TST-02 | Live core query/write/transaction/schema/scalar suites pass in at least one declared supported environment per mode. | Required | In progress | In progress | Opt-in `tests/OceanBase.EntityFrameworkCore.LiveTests` loads external User Secrets and builds cleanly. With the supplied credentials, TCP to `172.16.2.45:2881` was reachable; both MySQL and Oracle closed the packet during handshake before authentication or SQL. No SQL/DDL ran. Classify the endpoint/transport failure and rerun before expanding the live matrix. |
 | REL-01 | Support notes record server/connector/runtime/EF versions, tenant mode, direct/proxy endpoint, transport/options without credentials. | Required | Planned | Planned | Release evidence record missing. |
-| REL-02 | Tested efcore/10.0 development checkpoint is reviewed; packaging/release checks run on release revision. | Required | In progress | In progress | Development continues directly on efcore/10.0; Batch3al source was reviewed and its package validated. Required live, specification and wider local gates remain open. |
+| REL-02 | Tested efcore/10.0 development checkpoint is reviewed; packaging/release checks run on release revision. | Required | In progress | In progress | Migrations core received independent whole-module/final source review and the 4367-test/dual-patch package matrix. Required live, wider specification/local coverage and exact release-revision acceptance remain open. |
 
 ## Visible deferred inventory
 
@@ -627,7 +636,7 @@ are difficult to implement. Promoting a deferred feature requires its own design
 
 | ID | Feature | MySQL | Oracle | Promotion criteria |
 | --- | --- | --- | --- | --- |
-| DEF-01 | Migrations/history table/scripts/idempotent scripts/bundles | Deferred | Deferred | DDL/history/design-time plan; upgrade/downgrade tests. |
+| DEF-01 | Migrations/history table/scripts/idempotent scripts/bundles | In progress | In progress | Migrations core has real model-difference, dialect DDL/seed, history/owner-row lock, guarded sync/async execution and upgrade/downgrade/idempotent script evidence. Unknown annotations, cross-scope data/history, unsupported models and retrying strategies reject. See migrations design/plan. Native DDL/locking, client script execution and CLI scaffolding/bundles remain open. |
 | DEF-02 | Reverse engineering/provider design-time services/dotnet ef tooling | Deferred | Deferred | Live schema fixtures; packed tooling consumer tests. |
 | DEF-03 | ExecuteUpdate/ExecuteDelete, including EF10 lambda/JSON variants | In progress | In progress | Ordinary bulk operations, Oracle joined/paged scalar/EXISTS rewrites and MySQL cyclic/dependent/derived-source snapshots have local coverage, including physical keys, left joins, nullable Boolean encodings, filters, paging, binding and aliases. Final full3480 pass on both selected patches. Arbitrary cross-converter expressions, wider model/JSON shapes and native optimizer/read consistency/results remain open. |
 | DEF-04 | JSON, primitive collections/arrays and complex types, including JSON-owned/complex mappings | Deferred | Deferred | Per-mode mapping/query/update design. |
@@ -635,7 +644,7 @@ are difficult to implement. Promoting a deferred feature requires its own design
 | DEF-06 | Stored-procedure modification mappings; provider-specific sequence/HiLo strategies | Deferred | Deferred | Parameter/result/generation contracts; reject unsupported mappings clearly. |
 | DEF-07 | TPH/TPT/TPC inheritance, table/entity splitting, many-to-many skip navigations | Deferred | Deferred | Model/query/update specification fixtures. |
 | DEF-08 | Split queries, lazy loading, compiled-model/tooling optimizations | Deferred | Deferred | Graph/lifetime/generated-model consumer tests. |
-| DEF-09 | EF seeding callbacks, execution-strategy retries, ambient/distributed transactions | In progress | In progress | EnsureCreated callbacks are locally implemented under SCH-02; physical rollback/commit remains unverified. Migrate-time callbacks/locking, execution-strategy retries and ambient/distributed transactions remain unimplemented; no serialization or retry guarantee. |
+| DEF-09 | EF seeding callbacks, execution-strategy retries, ambient/distributed transactions | In progress | In progress | EnsureCreated callbacks and Migrate-time callback integration/owner-row locking exist locally; opposite-only callbacks reject before work. Physical rollback/commit and native locks remain unverified. Retrying migration strategies and caller/ambient/enlisted transactions explicitly reject; no distributed-transaction guarantee. |
 | DEF-10 | Provider full-text/vector/search functions, advanced batching optimizations | Deferred | Deferred | Server-version contract and independent tests/benchmarks. |
 
 Ordinary string/byte-array scalar values remain required even when advanced LOB locator APIs are deferred.
@@ -653,7 +662,7 @@ not an automatic feature claim.
 | Complex-type/JSON changes | DEF-04 | Stay deferred until a tested mapping profile is promoted. |
 | LINQ/operator and parameterized-collection changes | QRY-03/06/07/11 | Enumerate supported translations and negative cases. |
 | ExecuteUpdate changes | DEF-03 | Ordinary relational operations and both-mode join/snapshot rewrites have local independent suites; keep native acceptance and wider converter/model/JSON/complex variants open. |
-| Seeding/schema lifecycle changes | SCH-02/DEF-09 | Distinguish local EnsureCreated callbacks from native/live behavior and unimplemented Migrate-time seeding/locking. |
+| Seeding/schema lifecycle changes | SCH-02/DEF-09 | Distinguish local EnsureCreated/Migrate callbacks and owner-row locking from native/live acceptance; preserve explicit retry and transaction rejection. |
 | Diagnostics/security changes | DIA-01/02 | Verify events and sensitive-data protection. |
 
 ## Definition of complete and development order

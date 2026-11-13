@@ -45,6 +45,7 @@ namespace PackageConsumer
                 SchemaSmoke.Run(mode);
                 SeedingSmoke.Run(mode);
                 BulkDmlSmoke.Run(mode);
+                MigrationsSmoke.Run(mode);
                 var options = new DbContextOptionsBuilder<ConsumerContext>()
                     .UseOceanBase("Server=localhost;Database=package_smoke", mode).Options;
                 using var context = new ConsumerContext(options, mode);

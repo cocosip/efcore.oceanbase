@@ -20,13 +20,15 @@ checklist rows, implementation, tests and package impact are updated together.
 Development resumed on 2026-11-11 at the user's request on efcore/10.0. The
 [progress handoff](efcore-10-progress.md) records the current checkpoint, verification and next work.
 
-Latest local slice Batch3ag (`fecaa95`) extends the shared collection-root pipeline to captured and inline
-DateTime roots and adds the EF10 JSON reader/writer metadata required by primitive collection mapping. Full
-Debug/Release each pass 3962 tests (1890 unit, 1202 intercepted functional, 868 specification and 2 consumer
-tests), with zero failures/skips. The preceding Boolean-roots package remains the latest recorded package
-gate; other collection carriers,
-broader converter/operator compositions, wider query/model/write families, native execution and release
-gates remain incomplete.
+Latest local module is the 2026-11-13 [migrations core](efcore-10-migrations-design.md), following Batch3az.
+It implements model-difference SQL, scoped history/locking/execution and forward/reverse/idempotent scripts
+in both modes. Its [module plan](efcore-10-migrations-plan.md) and progress handoff record current verification;
+the earlier Batch3ag/3962-test checkpoint is historical. Native execution, CLI tooling/bundles, wider required
+query/model/write/runtime specification coverage and release gates remain incomplete.
+
+Advance complete modules with their callers, fixtures, package smoke and documentation. Query carrier or
+overload admission changes alone must not displace the remaining runtime/specification modules. Review each
+completed major module before its feature commit.
 
 The feature checklist is the release authority. Task checkboxes describe work steps, not proof that all features
 in a category are supported. Before starting a step, name its checklist IDs and required evidence; after it,

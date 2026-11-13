@@ -82,7 +82,23 @@ optionsBuilder.UseOceanBase(connectionString, OceanBaseCompatibilityMode.MySql)
 The current database/schema must match the declared name exactly, including case. `EnsureCreated` returns false
 if any ordinary table exists; it does not reconcile or upgrade existing schemas. DDL is not atomic and a failure
 can leave partially created objects requiring manual cleanup. Caller transactions are rejected. This option
-enables table creation only.
+enables supported table creation and migrations in that existing namespace.
+
+`Database.Migrate()` / `MigrateAsync()` now provide a locally tested migrations core for both modes under
+the same schema opt-in. It supports table/column/index/constraint changes, seed data, identity/default/computed
+metadata, history, upgrade/downgrade and idempotent scripts. Provision the namespace first; do not mix
+EnsureCreated-managed tables with migrations. Caller/ambient/enlisted transactions and automatic retry
+strategies reject before migration work because DDL commits implicitly. Inspect partial schema changes before
+manual recovery. Configure the matching sync/async seeding callback; the opposite-only callback rejects early.
+
+Runtime migrations serialize through an owner row in `__EFMigrationsHistoryLock`. Cleanup never removes another
+owner's row. A process crash or failed cleanup can leave a stale row: verify that no migrator is active before
+administrative removal. Generated scripts require external serialization and stop-on-error execution. Oracle
+scripts target SQL*Plus-style clients, disable variable substitution, exit on SQL errors and commit the final
+history changes; rollback cannot undo DDL. MySQL scripts require autocommit. Raw migration SQL is trusted,
+single-statement server input; client directives and multi-statement raw batches are outside this contract.
+Native DDL/locking, script-client execution, CLI scaffolding/bundles, reverse engineering, sequence/HiLo,
+TPT/TPC/entity splitting and model trigger scaffolding remain unverified or unsupported.
 
 `UseSeeding` and `UseAsyncSeeding` run after successful `EnsureCreated` schema processing, including when it
 returns false. Configure the callback matching the sync/async operation; configuring only the opposite callback

@@ -71,7 +71,7 @@ namespace Microsoft.EntityFrameworkCore
                     : new OceanBaseOptionsExtension();
 
         /// <summary>
-        /// Enables table creation in the named, already provisioned MySQL database or Oracle schema.
+        /// Enables table creation and migrations in the named, already provisioned MySQL database or Oracle schema.
         /// The current schema must match exactly. This does not enable database/user creation or deletion.
         /// </summary>
         public static DbContextOptionsBuilder EnableOceanBaseSchemaManagement(
@@ -83,7 +83,7 @@ namespace Microsoft.EntityFrameworkCore
             return optionsBuilder;
         }
 
-        /// <summary>Enables table creation within an explicitly named existing database or schema.</summary>
+        /// <summary>Enables table creation and migrations within an explicitly named existing database or schema.</summary>
         public static DbContextOptionsBuilder<TContext> EnableOceanBaseSchemaManagement<TContext>(
             this DbContextOptionsBuilder<TContext> optionsBuilder, string databaseOrSchema)
             where TContext : DbContext

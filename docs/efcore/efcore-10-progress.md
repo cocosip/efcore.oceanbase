@@ -3,7 +3,7 @@
 ## Active checkpoint: 2026-11-13
 
 Development resumed on 2026-11-11 on efcore/10.0 at the user's request, following the paused Batch7e checkpoint.
-The latest checkpoint is Batch3az on 2026-11-13.
+The latest checkpoint is the migrations core module on 2026-11-13, following Batch3az.
 Test each module and review completed major modules before committing. EF8/EF9 remain postponed.
 The provider is not release-ready. The [feature checklist](efcore-10-feature-checklist.md) remains the
 acceptance authority; this document records the handoff rather than defining a different completion target.
@@ -12,25 +12,50 @@ The consolidated development/release board is [efcore-10-roadmap.md](efcore-10-r
 remaining provider work, local evidence, native OceanBase validation and release gates.
 
 The current user goal is to finish all locally developable EF10 functionality, with tested/reviewed commits after
-each small group. Live database validation is now being wired for the supplied tenants; EF8/EF9 adaptation remains postponed. The
+each complete feature module. Two read-only live probes already load User Secrets for the supplied tenants;
+the wider native matrix remains open. EF8/EF9 adaptation remains postponed. The
 [local development plan](efcore-10-local-development-plan.md) tracks the full remaining inventory, including
 an audit of locally feasible deferred families. Finishing one batch does not finish the overall goal.
 
-### EF10 release-readiness dashboard (2026-11-12)
+### Migrations core checkpoint (2026-11-13)
+
+The previous four collection-admission commits expanded existing query paths rather than completing another
+provider module. Development now groups work by complete behavior. Migrations core adds real model-difference
+SQL, table/column/index/constraint evolution and seed DML, history, a durable owner-row lock, guarded
+Migrate/MigrateAsync, matching seed callbacks and forward/reverse/idempotent scripts in both modes.
+The [design](efcore-10-migrations-design.md) and [execution plan](efcore-10-migrations-plan.md) own the exact scope
+and evidence. No namespace is created by Migrate; use a provisioned, explicitly opted-in namespace.
+
+Review and boundary tests drove fixes for cross-scope seed/default-schema and DropColumn targets,
+Oracle native history terminators, history-bootstrap/uncertain-claim lock cleanup, preservation of primary
+errors, unsupported inheritance/generated properties, MySQL literal defaults and raw-script separators,
+case-folding catalog lookups, and Oracle script grammar/client behavior. Native SQL/client acceptance is not
+inferred from this source review. Retrying migration strategies reject before work; partial DDL needs manual
+inspection, and a stale lock needs administrator verification before removal.
+
+Debug/Release on EF10.0.0 and isolated EF10.0.14 Release each pass 4367 tests (2090 unit, 1407 functional,
+868 specification, two project consumers), with zero failures/skips. Package `10.0.0-migrations-r2-20261113`
+passes content verification and package-only consumers for both modes on both patches, with matching
+source/package/consumer DLL hashes. Independent final review found no remaining source blockers.
+Both User Secrets live probes still close during the handshake before authentication/SQL; no SQL/DDL ran.
+Detailed commands/evidence are recorded in the module plan. DEF-01 is In progress rather than Deferred. Native DDL,
+concurrent sessions, script-client execution, CLI scaffolding/bundles and reverse engineering remain open.
+
+### EF10 release-readiness dashboard (2026-11-13)
 
 This is the short execution view; the feature checklist remains the acceptance authority.
 
 | Work class | Still required | Current evidence / next action |
 | --- | --- | --- |
-| Local query and mapping implementation | Remaining uncharacterized carriers, wider converter/operator compositions, and uncovered function/aggregate overloads under QRY-01/03/04/06/07/11 and MAP-01/02/04/06/07. | Integer, numeric, contextual numeric, Boolean, text, temporal, Oracle interval, binary and Guid collection-root slices are covered locally. Continue with the next bounded carrier or operator only after a RED test and contract review. |
+| Local query and mapping implementation | Remaining uncharacterized carriers, wider converter/operator compositions, and uncovered function/aggregate overloads under QRY-01/03/04/06/07/11 and MAP-01/02/04/06/07. | Existing scalar/collection paths have local evidence. Group remaining work into complete runtime/specification modules; individual overload admission is not the primary roadmap. |
 | Local model and runtime implementation | Wider MOD-01/02/03, QRY-02/05/08/09, UPD-01..05, TXN-01..03, CON-02..05 and DIA-01/02 coverage. | Existing doubles and intercepted pipelines cover selected shapes; complete required rows still need implementation or broader boundary tests. |
-| Schema and specification implementation | Remaining SCH-01..03 behavior and additional TST-01 relational specification families. | MySQL/Oracle ownership profiles and six inherited model families have local evidence; native DDL/privilege behavior and other specification families remain open. |
+| Schema and specification implementation | Remaining SCH-01..03 behavior, migrations native/tooling gates and additional TST-01 relational specification families. | Both-mode lifecycle and migrations cores plus six inherited model families have local evidence; native DDL/privileges/locking and runtime specification families remain open. |
 | Native OceanBase validation | TST-02 scalar, query, write, transaction and schema matrix in both modes. | The supplied endpoint reaches TCP but closes during both mode handshakes before authentication. Classify transport/endpoint behavior, then run only the authorized non-destructive matrix before any DDL. |
-| Release evidence | REL-01 support record and REL-02 reviewed release revision. | The current inverse-trigonometric package passes content and both-patch package-consumer checks; every later provider change still requires fresh Debug/Release, package-content, package-consumer and review evidence. |
-| Explicitly deferred inventory | DEF-01/02/04/05/06/07/08/10 remain deferred; DEF-03 and DEF-09 remain partial. | Run the documented feasibility audit after required local work stabilizes. A deferred label is not a release pass. |
+| Release evidence | REL-01 support record and REL-02 reviewed release revision. | Migrations module checks are in its execution plan; release still needs all Required rows accepted on the exact release revision. |
+| Explicitly deferred inventory | DEF-02/04/05/06/07/08/10 remain deferred; DEF-01/03/09 remain partial. | Native/tooling acceptance and remaining feature profiles stay visible. A deferred label is not a release pass. |
 
-Next execution order is: finish the next bounded QRY/MAP carrier or operator; widen required model/write/
-transaction/specification fixtures; resolve the live transport gate; then produce REL-01/02 evidence and run
+Next execution order is: finish/review/commit migrations core; complete the next relational query/write
+specification and graph runtime modules; resolve the live transport gate; then produce REL-01/02 evidence and run
 the final package matrix. EF8/EF9 adaptation, push and publication stay outside this sequence.
 
 ### Explicit temporal parameter-root checkpoint (Batch3az, 2026-11-13)
@@ -43,9 +68,9 @@ NULL cells materialize through the existing temporal readers, and empty captures
 Unconfigured contexts and EF's single JSON-style `Parameter` mode remain rejected. Native temporal precision,
 timezone, interval coercion and server results remain open.
 
-Focused coverage passes 15 unit cases and 36 intercepted sync/async cases across both modes and both explicit
-translation policies. Full Debug/Release, isolated EF10.0.14, package and consumer evidence is still pending
-for this batch.
+Original focused coverage passed 15 unit cases and 36 intercepted sync/async cases across both modes and both
+explicit translation policies. Aggregate full-source/patch/package evidence for the current combined revision
+is now recorded in the migrations checkpoint above; it does not retroactively identify an older package.
 
 ### Explicit Boolean parameter-root checkpoint (Batch3ay, 2026-11-13)
 

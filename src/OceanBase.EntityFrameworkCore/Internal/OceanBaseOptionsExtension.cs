@@ -4,14 +4,18 @@ using System.Data.Common;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.EntityFrameworkCore.Metadata.Conventions.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Query;
 using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.EntityFrameworkCore.Update;
 using Microsoft.Extensions.DependencyInjection;
-using OceanBase.EntityFrameworkCore.Storage;
+using OceanBase.EntityFrameworkCore.Metadata;
 using OceanBase.EntityFrameworkCore.Metadata.Conventions;
+using OceanBase.EntityFrameworkCore.Migrations;
 using OceanBase.EntityFrameworkCore.Query;
+using OceanBase.EntityFrameworkCore.Storage;
 using OceanBase.EntityFrameworkCore.Update;
 using OceanBaseConnector;
 
@@ -147,6 +151,10 @@ namespace OceanBase.EntityFrameworkCore.Internal
                 .TryAdd<LoggingDefinitions, OceanBaseLoggingDefinitions>()
                 .TryAdd<IDatabaseProvider, DatabaseProvider<OceanBaseOptionsExtension>>()
                 .TryAdd<IProviderConventionSetBuilder, OceanBaseConventionSetBuilder>()
+                .TryAdd<IRelationalAnnotationProvider, OceanBaseRelationalAnnotationProvider>()
+                .TryAdd<IMigrationsSqlGenerator, OceanBaseMigrationsSqlGenerator>()
+                .TryAdd<IHistoryRepository, OceanBaseHistoryRepository>()
+                .TryAdd<IMigrator, OceanBaseMigrator>()
                 .TryAdd<IModelRuntimeInitializer, RelationalModelRuntimeInitializer>()
                 .TryAdd<IModelCustomizer, RelationalModelCustomizer>()
                 .TryAdd<IModelValidator, RelationalModelValidator>()

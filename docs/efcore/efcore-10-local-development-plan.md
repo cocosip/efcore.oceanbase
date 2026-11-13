@@ -3,7 +3,7 @@
 **Goal:** Implement every locally developable EF10 feature, in reviewed/tested commits, while postponing real
 database integration and EF8/EF9 adaptation as explicitly requested on 2026-11-10.
 
-**Architecture:** Continue on efcore/10.0 at the current Batch3az explicit temporal parameter-root slice. Reuse the existing EF relational services, connector 0.2.0
+**Architecture:** Continue on efcore/10.0 with the migrations core following Batch3az. Reuse the existing EF relational services, connector 0.2.0
 public APIs and per-mode mappings/SQL. Separate local implementation evidence from server acceptance.
 
 **Spec:** efcore-10-feature-checklist.md, efcore-10-technical-baseline.md, efcore-10-query-update-design.md.
@@ -12,7 +12,7 @@ public APIs and per-mode mappings/SQL. Separate local implementation evidence fr
 The compact execution board is [efcore-10-roadmap.md](efcore-10-roadmap.md); this file remains the detailed
 batch ledger and acceptance notes.
 
-**Updated:** 2026-11-13 after Batch3az. Continue EF10 in this checkout, test each module and
+**Updated:** 2026-11-13, migrations core. Continue EF10 in this checkout, test each module and
 review each completed major module before committing. EF8/EF9 remains postponed; live execution is opt-in and
 currently blocked before authentication by the supplied endpoint/transport behavior.
 The full goal remains incomplete.
@@ -21,12 +21,12 @@ The full goal remains incomplete.
 
 Use this section to choose the next task; the feature checklist remains the detailed acceptance authority.
 
-1. **Finish local QRY/MAP slices.** Implement the next bounded interval or other collection carrier and
-   the remaining function/aggregate or converter/operator overloads. Each slice needs a RED test, a
-   provider contract, both-mode sync/async evidence, negative boundaries and independent review.
-2. **Finish local model/write/runtime slices.** Expand MOD/QRY materialization and filter shapes, then
-   UPD/TXN/CON/DIA graph, concurrency, cancellation and diagnostics boundaries. Keep intercepted evidence
-   separate from native result or transaction claims.
+1. **Finish the migrations core module.** Follow [its execution plan](efcore-10-migrations-plan.md): complete
+   operation/model SQL, history/locking/execution/scripts, package smoke, review and one feature commit.
+2. **Complete runtime/specification modules.** Add the next relational query/write specification fixtures,
+   then resolve the exposed MOD/QRY graph/materialization and UPD/TXN/CON/DIA write/recovery gaps as complete
+   features. QRY/MAP overload work belongs inside those modules, rather than a new sequence of admission-only
+   commits. Keep intercepted evidence separate from native result or transaction claims.
 3. **Finish schema and specification coverage.** Complete the remaining SCH ownership/DDL/error paths and
    add the next TST-01 relational fixture families with explicit exclusions mapped to checklist IDs.
 4. **Resolve the live gate.** Classify the supplied endpoint's pre-auth packet closure, then run the
@@ -36,6 +36,13 @@ Use this section to choose the next task; the feature checklist remains the deta
    full Debug/Release suites, package content gate and package consumer at EF10.0.0/10.0.14, review the
    release revision, and only then consider a release branch/tag. EF8/EF9, push and publication remain out
    of the current development sequence.
+
+### Migrations core module (2026-11-13)
+
+**IDs:** DEF-01, DEF-09, SCH-01/02, MOD-03, REL-02. The module owns model differences through native command
+generation, history, explicit locking, migration application/reversion and scripts. Its design/plan record
+unsupported cases, RED/GREEN evidence, package/patch gates and independent review. Native DDL/script execution,
+tooling/bundles and the wider EF10 goal remain incomplete. No EF8/EF9, push, tag or publication is implied.
 
 ### Batch3az brief: explicit temporal parameter roots
 
@@ -48,7 +55,8 @@ Use this section to choose the next task; the feature checklist remains the deta
   and Guid explicit roots outside this slice and preserve the JSON-style parameter rejection boundary.
 - [x] Add intercepted sync/async coverage for MySQL/Oracle temporal readers, current parameter values and
   Oracle interval values. Explicit EF parameters use EF's scalar `IN` form; captured roots retain `VALUES`.
-- [ ] Run full Debug/Release, isolated EF10.0.14, package-content and both EF10 patch consumers.
+- [x] Run aggregate full Debug/Release, isolated EF10.0.14, package-content and both EF10 patch consumers
+  on the combined current revision; see the migrations module plan for exact evidence.
 
 Focused coverage passes 15 unit cases and 36 intercepted sync/async cases. Native temporal coercion and live
 OceanBase execution remain separate gates.
