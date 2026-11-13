@@ -3,7 +3,7 @@
 **Goal:** Implement every locally developable EF10 feature, in reviewed/tested commits, while postponing real
 database integration and EF8/EF9 adaptation as explicitly requested on 2026-11-10.
 
-**Architecture:** Continue on efcore/10.0 with the migrations core following Batch3az. Reuse the existing EF relational services, connector 0.2.0
+**Architecture:** Continue on efcore/10.0 with migrations tooling following the migrations core. Reuse the existing EF relational services, connector 0.2.0
 public APIs and per-mode mappings/SQL. Separate local implementation evidence from server acceptance.
 
 **Spec:** efcore-10-feature-checklist.md, efcore-10-technical-baseline.md, efcore-10-query-update-design.md.
@@ -12,7 +12,7 @@ public APIs and per-mode mappings/SQL. Separate local implementation evidence fr
 The compact execution board is [efcore-10-roadmap.md](efcore-10-roadmap.md); this file remains the detailed
 batch ledger and acceptance notes.
 
-**Updated:** 2026-11-13, migrations core. Continue EF10 in this checkout, test each module and
+**Updated:** 2026-11-13, migrations tooling. Continue EF10 in this checkout, test each module and
 review each completed major module before committing. EF8/EF9 remains postponed; live execution is opt-in and
 currently blocked before authentication by the supplied endpoint/transport behavior.
 The full goal remains incomplete.
@@ -21,8 +21,9 @@ The full goal remains incomplete.
 
 Use this section to choose the next task; the feature checklist remains the detailed acceptance authority.
 
-1. **Finish the migrations core module.** Follow [its execution plan](efcore-10-migrations-plan.md): complete
-   operation/model SQL, history/locking/execution/scripts, package smoke, review and one feature commit.
+1. **Completed locally: migrations core and tooling.** The core is committed at `a8cbccf`; the
+   [tooling execution plan](efcore-10-migrations-tooling-plan.md) records the complete configuration/discovery/
+   scaffolding/snapshot/script/removal/bundle workflow, package matrix, review and feature commit.
 2. **Complete runtime/specification modules.** Add the next relational query/write specification fixtures,
    then resolve the exposed MOD/QRY graph/materialization and UPD/TXN/CON/DIA write/recovery gaps as complete
    features. QRY/MAP overload work belongs inside those modules, rather than a new sequence of admission-only
@@ -37,12 +38,23 @@ Use this section to choose the next task; the feature checklist remains the deta
    release revision, and only then consider a release branch/tag. EF8/EF9, push and publication remain out
    of the current development sequence.
 
+### Migrations tooling module (2026-11-13)
+
+**IDs:** DEF-01/02, CFG-04, PKG-03/04. The module preserves existing UseOceanBase APIs, adds migration
+assembly/history callbacks and discoverable EF design services, and verifies the complete package-only CLI
+authoring workflow. EF10.0.0 Debug/Release and isolated EF10.0.14 Release each pass 4388 tests; the same
+`10.0.0-tooling-r2-20261113` package passes ordinary runtime and full CLI consumers in both modes/patches,
+including four Windows bundle build/help checks. Independent source review finds no blockers. The
+[execution plan](efcore-10-migrations-tooling-plan.md) records RED/GREEN, commands and detailed evidence.
+Native migration/bundle/script acceptance and reverse engineering remain open. The overall goal is incomplete.
+
 ### Migrations core module (2026-11-13)
 
 **IDs:** DEF-01, DEF-09, SCH-01/02, MOD-03, REL-02. The module owns model differences through native command
 generation, history, explicit locking, migration application/reversion and scripts. Its design/plan record
-unsupported cases, RED/GREEN evidence, package/patch gates and independent review. Native DDL/script execution,
-tooling/bundles and the wider EF10 goal remain incomplete. No EF8/EF9, push, tag or publication is implied.
+unsupported cases, RED/GREEN evidence, package/patch gates and independent review. Native DDL/script execution
+and the wider EF10 goal remain incomplete; local tooling/bundles are covered by the next module above.
+No EF8/EF9, push, tag or publication is implied.
 
 ### Batch3az brief: explicit temporal parameter roots
 

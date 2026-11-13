@@ -3,6 +3,7 @@ using System.Data.Common;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.Extensions.DependencyInjection;
 using OceanBase.EntityFrameworkCore;
+using OceanBase.EntityFrameworkCore.Infrastructure;
 using OceanBase.EntityFrameworkCore.Internal;
 using OceanBaseConnection = OceanBaseConnector.OceanBaseConnection;
 
@@ -63,6 +64,42 @@ namespace Microsoft.EntityFrameworkCore
             where TContext : DbContext
             => (DbContextOptionsBuilder<TContext>)(object)((DbContextOptionsBuilder)optionsBuilder)
                 .UseOceanBase(connection, compatibilityMode);
+
+        /// <summary>Configures an OceanBase connection string, mode and migrations options.</summary>
+        public static DbContextOptionsBuilder UseOceanBase(
+            this DbContextOptionsBuilder optionsBuilder, string? connectionString,
+            OceanBaseCompatibilityMode compatibilityMode, Action<OceanBaseDbContextOptionsBuilder>? oceanBaseOptionsAction)
+        {
+            optionsBuilder.UseOceanBase(connectionString, compatibilityMode);
+            oceanBaseOptionsAction?.Invoke(new OceanBaseDbContextOptionsBuilder(optionsBuilder));
+            return optionsBuilder;
+        }
+
+        /// <summary>Configures a typed builder with an OceanBase connection string, mode and migrations options.</summary>
+        public static DbContextOptionsBuilder<TContext> UseOceanBase<TContext>(
+            this DbContextOptionsBuilder<TContext> optionsBuilder, string? connectionString,
+            OceanBaseCompatibilityMode compatibilityMode, Action<OceanBaseDbContextOptionsBuilder>? oceanBaseOptionsAction)
+            where TContext : DbContext
+            => (DbContextOptionsBuilder<TContext>)(object)((DbContextOptionsBuilder)optionsBuilder)
+                .UseOceanBase(connectionString, compatibilityMode, oceanBaseOptionsAction);
+
+        /// <summary>Configures an existing OceanBase connection, mode and migrations options.</summary>
+        public static DbContextOptionsBuilder UseOceanBase(
+            this DbContextOptionsBuilder optionsBuilder, DbConnection connection,
+            OceanBaseCompatibilityMode compatibilityMode, Action<OceanBaseDbContextOptionsBuilder>? oceanBaseOptionsAction)
+        {
+            optionsBuilder.UseOceanBase(connection, compatibilityMode);
+            oceanBaseOptionsAction?.Invoke(new OceanBaseDbContextOptionsBuilder(optionsBuilder));
+            return optionsBuilder;
+        }
+
+        /// <summary>Configures a typed builder with an existing OceanBase connection, mode and migrations options.</summary>
+        public static DbContextOptionsBuilder<TContext> UseOceanBase<TContext>(
+            this DbContextOptionsBuilder<TContext> optionsBuilder, DbConnection connection,
+            OceanBaseCompatibilityMode compatibilityMode, Action<OceanBaseDbContextOptionsBuilder>? oceanBaseOptionsAction)
+            where TContext : DbContext
+            => (DbContextOptionsBuilder<TContext>)(object)((DbContextOptionsBuilder)optionsBuilder)
+                .UseOceanBase(connection, compatibilityMode, oceanBaseOptionsAction);
 
         private static OceanBaseOptionsExtension GetOrCreateExtension(DbContextOptionsBuilder optionsBuilder)
             => optionsBuilder.Options.FindExtension<OceanBaseOptionsExtension>()

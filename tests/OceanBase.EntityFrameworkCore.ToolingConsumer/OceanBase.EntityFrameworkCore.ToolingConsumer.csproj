@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally>
+    <IsPackable>false</IsPackable>
+    <OceanBaseProviderVersion Condition="'$(OceanBaseProviderVersion)' == ''">10.0.0</OceanBaseProviderVersion>
+    <OceanBaseConsumerEfCoreVersion Condition="'$(OceanBaseConsumerEfCoreVersion)' == ''">10.0.0</OceanBaseConsumerEfCoreVersion>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="OceanBase.EntityFrameworkCore" Version="$(OceanBaseProviderVersion)" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="$(OceanBaseConsumerEfCoreVersion)"
+                      PrivateAssets="all" IncludeAssets="all" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="$(OceanBaseConsumerEfCoreVersion)" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="$(OceanBaseConsumerEfCoreVersion)" />
+  </ItemGroup>
+</Project>

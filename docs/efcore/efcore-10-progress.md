@@ -3,7 +3,7 @@
 ## Active checkpoint: 2026-11-13
 
 Development resumed on 2026-11-11 on efcore/10.0 at the user's request, following the paused Batch7e checkpoint.
-The latest checkpoint is the migrations core module on 2026-11-13, following Batch3az.
+The latest checkpoint is the migrations tooling module on 2026-11-13, following the migrations core.
 Test each module and review completed major modules before committing. EF8/EF9 remain postponed.
 The provider is not release-ready. The [feature checklist](efcore-10-feature-checklist.md) remains the
 acceptance authority; this document records the handoff rather than defining a different completion target.
@@ -16,6 +16,31 @@ each complete feature module. Two read-only live probes already load User Secret
 the wider native matrix remains open. EF8/EF9 adaptation remains postponed. The
 [local development plan](efcore-10-local-development-plan.md) tracks the full remaining inventory, including
 an audit of locally feasible deferred families. Finishing one batch does not finish the overall goal.
+
+### Migrations tooling checkpoint (2026-11-13)
+
+The complete local migrations authoring workflow now works from a package-only consumer in both modes:
+discover provider design services, configure migrations assembly/history, generate initial/evolved migrations
+and snapshots, compile them, detect pending model changes, list migrations, generate upgrade/reverse/idempotent
+scripts, remove the latest migration and build/start framework-dependent Windows bundles. The
+[design](efcore-10-migrations-tooling-design.md) and [execution plan](efcore-10-migrations-tooling-plan.md)
+record the exact contracts and repeatable commands. Existing UseOceanBase signatures remain intact; the four
+new callback overloads preserve mode, connection ownership and namespace management configuration. EF Design
+is a private test/consumer dependency; the provider's three runtime dependencies remain unchanged.
+
+Original RED reproduced 11 missing-feature failures and the preceding package fails the new callback consumer.
+Final focused coverage passes 21 tests. Debug/Release at EF10.0.0 and isolated EF10.0.14 Release each pass
+**4388 tests** (2111 unit, 1407 intercepted functional, 868 metadata specification, two project consumers), zero
+failures/skips. Package `10.0.0-tooling-r2-20261113` passes content, ordinary runtime consumers and the full
+CLI workflow in both modes on both patches. The installed dotnet-ef is 10.0.15; Design/runtime packages select
+10.0.0/10.0.14 explicitly. Four bundles build and start with `--help`; none was applied. All fixture opens
+reject before network access, including EF force-remove's history inspection. Independent source review found
+no remaining blockers; package-only graphs and DLL identity checks pass.
+
+DEF-01/02 remain partial: native DDL, migration-lock concurrency, external SQL-client scripts and reverse
+engineering still need acceptance or implementation. This module does not close Required runtime/live rows.
+The overall EF10 goal remains active; the next complete module is broader relational runtime/specification
+coverage, with positive/null/empty/error cases grouped by behavior rather than individual overload admission.
 
 ### Migrations core checkpoint (2026-11-13)
 
@@ -39,7 +64,8 @@ passes content verification and package-only consumers for both modes on both pa
 source/package/consumer DLL hashes. Independent final review found no remaining source blockers.
 Both User Secrets live probes still close during the handshake before authentication/SQL; no SQL/DDL ran.
 Detailed commands/evidence are recorded in the module plan. DEF-01 is In progress rather than Deferred. Native DDL,
-concurrent sessions, script-client execution, CLI scaffolding/bundles and reverse engineering remain open.
+concurrent sessions, script-client execution, CLI scaffolding/bundles and reverse engineering were open at this
+checkpoint; local CLI/bundle work is now covered by the tooling checkpoint above.
 
 ### EF10 release-readiness dashboard (2026-11-13)
 
@@ -49,12 +75,12 @@ This is the short execution view; the feature checklist remains the acceptance a
 | --- | --- | --- |
 | Local query and mapping implementation | Remaining uncharacterized carriers, wider converter/operator compositions, and uncovered function/aggregate overloads under QRY-01/03/04/06/07/11 and MAP-01/02/04/06/07. | Existing scalar/collection paths have local evidence. Group remaining work into complete runtime/specification modules; individual overload admission is not the primary roadmap. |
 | Local model and runtime implementation | Wider MOD-01/02/03, QRY-02/05/08/09, UPD-01..05, TXN-01..03, CON-02..05 and DIA-01/02 coverage. | Existing doubles and intercepted pipelines cover selected shapes; complete required rows still need implementation or broader boundary tests. |
-| Schema and specification implementation | Remaining SCH-01..03 behavior, migrations native/tooling gates and additional TST-01 relational specification families. | Both-mode lifecycle and migrations cores plus six inherited model families have local evidence; native DDL/privileges/locking and runtime specification families remain open. |
+| Schema and specification implementation | Remaining SCH-01..03 behavior, migrations native gates and additional TST-01 relational specification families. | Both-mode lifecycle, migrations core/tooling and six inherited model families have local evidence; native DDL/privileges/locking, reverse engineering and runtime specification families remain open. |
 | Native OceanBase validation | TST-02 scalar, query, write, transaction and schema matrix in both modes. | The supplied endpoint reaches TCP but closes during both mode handshakes before authentication. Classify transport/endpoint behavior, then run only the authorized non-destructive matrix before any DDL. |
 | Release evidence | REL-01 support record and REL-02 reviewed release revision. | Migrations module checks are in its execution plan; release still needs all Required rows accepted on the exact release revision. |
-| Explicitly deferred inventory | DEF-02/04/05/06/07/08/10 remain deferred; DEF-01/03/09 remain partial. | Native/tooling acceptance and remaining feature profiles stay visible. A deferred label is not a release pass. |
+| Explicitly deferred inventory | DEF-04/05/06/07/08/10 remain deferred; DEF-01/02/03/09 remain partial. | Native acceptance, reverse engineering and remaining feature profiles stay visible. A deferred label is not a release pass. |
 
-Next execution order is: finish/review/commit migrations core; complete the next relational query/write
+Next execution order is: complete the next relational query/write
 specification and graph runtime modules; resolve the live transport gate; then produce REL-01/02 evidence and run
 the final package matrix. EF8/EF9 adaptation, push and publication stay outside this sequence.
 

@@ -97,8 +97,28 @@ administrative removal. Generated scripts require external serialization and sto
 scripts target SQL*Plus-style clients, disable variable substitution, exit on SQL errors and commit the final
 history changes; rollback cannot undo DDL. MySQL scripts require autocommit. Raw migration SQL is trusted,
 single-statement server input; client directives and multi-statement raw batches are outside this contract.
-Native DDL/locking, script-client execution, CLI scaffolding/bundles, reverse engineering, sequence/HiLo,
+Native DDL/locking, script-client execution, reverse engineering, sequence/HiLo,
 TPT/TPC/entity splitting and model trigger scaffolding remain unverified or unsupported.
+
+The provider exposes EF design services for migrations authoring. Reference `Microsoft.EntityFrameworkCore.Design`
+as a private development dependency in the startup project, and configure the same explicit mode in its host or
+`IDesignTimeDbContextFactory`. The existing three-argument `UseOceanBase` overloads remain available; a callback
+can select a separate migrations assembly and history table:
+
+```csharp
+optionsBuilder.UseOceanBase(connectionString, OceanBaseCompatibilityMode.MySql, options => options
+    .MigrationsAssembly("Application.Migrations")
+    .MigrationsHistoryTable("__ApplicationHistory"))
+    .EnableOceanBaseSchemaManagement("application_database");
+```
+
+Omit `MigrationsAssembly` to keep migrations in the context assembly. A history schema, when supplied, must
+match the opted-in namespace. Initial/evolved migrations, model snapshots, pending-model checks, forward/reverse/
+idempotent scripts, migration listing/removal and framework-dependent Windows bundles have a package-only
+verification fixture under `tests/OceanBase.EntityFrameworkCore.ToolingConsumer`. Reverse engineering is not
+implemented. `dotnet ef migrations remove --force` may inspect or change a live database; the fixture blocks all
+connection opens and tests local file removal only. Bundle verification builds the executable and runs `--help`;
+applying a bundle remains a separate native acceptance step.
 
 `UseSeeding` and `UseAsyncSeeding` run after successful `EnsureCreated` schema processing, including when it
 returns false. Configure the callback matching the sync/async operation; configuring only the opposite callback

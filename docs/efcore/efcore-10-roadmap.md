@@ -14,8 +14,11 @@ The following required rows have complete local/package evidence for both modes:
 - `CFG-01..03`, `CON-01`, `SQL-02`
 - `PKG-01..04`
 - Migrations core now supplies both-mode model-difference/operation SQL, scoped history and owner-row locking,
-  Migrate/MigrateAsync and forward/reverse/idempotent scripts. DEF-01 stays In progress pending native and
-  tooling/bundle acceptance; see the [module plan](efcore-10-migrations-plan.md).
+  Migrate/MigrateAsync and forward/reverse/idempotent scripts; see the [core plan](efcore-10-migrations-plan.md).
+- Migrations tooling supplies public assembly/history options and discoverable design services. Package-only
+  CLI migrations/snapshots/model checks/scripts/list/removal and four Windows bundle build/help checks pass
+  both modes on EF10.0.0/10.0.14 using dotnet-ef 10.0.15; see the [tooling plan](efcore-10-migrations-tooling-plan.md).
+  DEF-01/02 stay In progress pending native acceptance and reverse engineering.
 - Batch3as scalar `Math.Round`/`decimal.Round` digits and midpoint parameters now refresh local SQL per
   execution in both modes; invalid runtime and row-dependent arguments remain rejected.
 - Numeric and nonnumeric query slices, collection roots for integer/numeric/text/Boolean/temporal/binary/Guid
@@ -36,7 +39,7 @@ The provider is still a development checkpoint. It is not a release candidate.
 | Tracked writes and transactions | `UPD-01..05`, `TXN-01..03` | Finish generated/default/computed readback, composite and nullable concurrency, graph save ordering, atomic failure/cancellation recovery, enlistment and savepoint boundaries. | Deterministic command/transaction tests in both modes plus native readback/rollback evidence. |
 | Schema and database lifecycle | `SCH-01..03` | Finish existence/error classification, owned namespace boundaries, table/database/user creation and deletion behavior, privilege checks, and cleanup rules. | Offline SQL/double tests plus controlled live DDL/privilege/deletion matrix with an isolated owned target. |
 | EF relational specification coverage | `TST-01` | Add the next required relational model/query/write/runtime families and map each exclusion to a checklist ID. | Selected specification classes pass for both modes with zero unexplained skips. |
-| Migrations tooling and native acceptance | `DEF-01/02` | Core runtime/scripts exist locally; add a deliberate design-time configuration/scaffolding/bundle profile, then native migration/script and concurrency acceptance. | Packed tooling consumers plus an authorized isolated upgrade/revert/lock/script matrix. |
+| Migrations and reverse engineering | `DEF-01/02` | Core runtime/scripts and the package-only migration-tooling workflow pass locally. Implement reverse engineering separately; close native migration/script/bundle/concurrency acceptance. | Live schema fixtures and an authorized isolated upgrade/revert/lock/script matrix; retain packed tooling matrix. |
 
 ## Work that is implemented locally but still needs native validation
 
@@ -65,15 +68,15 @@ the exact release revision has not been reviewed. EF8/EF9 adaptation is outside 
 
 ## Explicitly deferred after the first release
 
-`DEF-02/04/05/06/07/08/10` remain deferred. `DEF-01`, `DEF-03` and `DEF-09` are partial: migrations core,
+`DEF-04/05/06/07/08/10` remain deferred. `DEF-01/02`, `DEF-03` and `DEF-09` are partial: migrations core/tooling,
 ordinary bulk operations, EnsureCreated/Migrate callbacks and runtime migration locking have local evidence.
-Native migrations/locks, CLI tooling/bundles, wider JSON/converter/model variants, execution-strategy retries
+Native migrations/locks/bundle application, reverse engineering, wider JSON/converter/model variants, execution-strategy retries
 and ambient/distributed transactions remain outside the accepted support claim. Deferred
 features stay visible and must not be advertised as supported.
 
 ## Execution order from this checkpoint
 
-1. Finish/review/commit the migrations core as one module, with its full package/patch evidence.
+1. **Completed locally:** migrations core and tooling are reviewed and committed as complete modules.
 2. Build the next complete relational query/write specification fixture module (`TST-01`), then close the
    exposed graph materialization, tracked graph writes and transaction/connection recovery gaps together.
    Record positive/null/empty/failure boundaries by feature ID; avoid a new sequence of one-overload commits.
