@@ -13,6 +13,14 @@ The following required rows have complete local/package evidence for both modes:
 
 - `CFG-01..03`, `CON-01`, `SQL-02`
 - `PKG-01..04`
+- Split queries now buffer effective SplitQuery result sets before opening another native reader, using
+  EF graph coordinators with public context-wide options and per-query overrides. Seven unit and 72
+  runtime cases cover tracking, nested/sibling graphs, filters/paging, empty results and retry/error
+  cleanup. Independent review's SQL verification gap is fixed; full source suites each pass 4930. The
+  same baseline-built nupkg passes content, both-mode runtime/generated-context/full CLI consumers on
+  both patches and four bundle build/help checks, with matching graphs/DLL hashes.
+  See the [split-query plan](efcore-10-split-query-plan.md). DEF-08 is partial; native behavior, lazy
+  loading, compiled models and upstream runtime specifications remain separate unfinished work.
 - Opt-in execution retries now use EF's operation strategy with conservative known-outcome server codes,
   confirmed owned rollback and early migration/lifecycle DDL rejection. Independent review's startup,
   buffered-reader disposal and post-write close replay gaps are fixed. Seventy-nine unit and 68 runtime
@@ -96,10 +104,11 @@ the exact release revision has not been reviewed. EF8/EF9 adaptation is outside 
 
 ## Explicitly deferred after the first release
 
-`DEF-04/05/06/08/10` remain deferred. `DEF-01/02/03/07/09` are partial: migrations core/tooling and local TPT/TPC,
-ordinary bulk operations, EnsureCreated/Migrate callbacks and runtime migration locking have local evidence.
-Native migrations/locks/bundle application and reverse-engineering catalogs, wider JSON/converter/model variants, execution-strategy retries
-and ambient/distributed transactions remain outside the accepted support claim. Deferred
+`DEF-04/05/06/10` remain deferred. `DEF-01/02/03/07/08/09` are partial: migrations core/tooling, local TPT/TPC,
+ordinary bulk operations, split-query graphs, EnsureCreated/Migrate callbacks, execution retries and runtime
+migration locking have local evidence. Native migrations/locks/bundle application, reverse-engineering
+catalogs, graph/retry behavior, wider JSON/converter/model variants, lazy loading, compiled models and
+ambient/distributed transactions remain outside the accepted support claim. Deferred
 features stay visible and must not be advertised as supported.
 
 ## Execution order from this checkpoint

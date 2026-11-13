@@ -6,6 +6,22 @@ This document is the implementation reference for the first provider vertical sl
 contracts that must be checked against the exact EF Core 10 package before code is written. It is intentionally
 smaller than a complete EF Core feature catalog.
 
+## Split-query graph loading (2026-11-13)
+
+OceanBase supports one active native reader per connection. EF10's generic relational compilation context
+only enables buffering for retries; replace its factory with a provider context whose IsBuffering is
+base.IsBuffering OR effective QuerySplittingBehavior.SplitQuery. Evaluate the property dynamically because
+AsSplitQuery/AsSingleQuery normalization occurs after construction. Preserve CreatePrecompiled without
+claiming compiled-model/tooling support. Register the normal EF factory service; reuse graph coordinators.
+
+Public UseQuerySplittingBehavior validates the enum and clones the relational option. Existing relational
+cache keys already distinguish query-splitting/retry behavior. SingleQuery remains the default. Test
+one-active-reader enforcement separately from synthetic graph rows, and assert paging/window/join/order
+SQL independently. Buffered command retries expose no partial rows; unknown/cancelled reads preserve the
+error, dispose results and retain caller leases. Clear/discard partially tracked entities after failure.
+See the [split-query design](efcore-10-split-query-design.md). Native isolation/session/memory behavior,
+lazy loading, compiled models and upstream runtime fixtures remain independent acceptance work.
+
 ## Execution retries (2026-11-13)
 
 EnableRetryOnFailure installs a per-context factory through RelationalOptionsExtension. Reuse EF10's retry

@@ -3,7 +3,9 @@
 **Goal:** Implement every locally developable EF10 feature, in reviewed/tested commits, while postponing real
 database integration and EF8/EF9 adaptation as explicitly requested on 2026-11-10.
 
-**Architecture:** Continue on efcore/10.0 with execution retries following TPC, many-to-many verification, Connector 0.3.0 reverse engineering, splitting, TPT and migrations core/tooling. Reuse the existing EF relational services, connector 0.3.0
+**Architecture:** Continue on efcore/10.0 with split-query graph loading following execution retries, TPC,
+many-to-many verification, Connector 0.3.0 reverse engineering, splitting, TPT and migrations core/tooling.
+Reuse the existing EF relational services, connector 0.3.0
 public APIs and per-mode mappings/SQL. Separate local implementation evidence from server acceptance.
 
 **Spec:** efcore-10-feature-checklist.md, efcore-10-technical-baseline.md, efcore-10-query-update-design.md.
@@ -12,7 +14,7 @@ public APIs and per-mode mappings/SQL. Separate local implementation evidence fr
 The compact execution board is [efcore-10-roadmap.md](efcore-10-roadmap.md); this file remains the detailed
 batch ledger and acceptance notes.
 
-**Updated:** 2026-11-13, TPC inheritance. Continue EF10 in this checkout, test each module and
+**Updated:** 2026-11-13, split-query graph loading. Continue EF10 in this checkout, test each module and
 review each completed major module before committing. EF8/EF9 remains postponed; live execution is opt-in and
 currently blocked before authentication by the supplied endpoint/transport behavior.
 The full goal remains incomplete.
@@ -37,6 +39,19 @@ Use this section to choose the next task; the feature checklist remains the deta
    full Debug/Release suites, package content gate and package consumer at EF10.0.0/10.0.14, review the
    release revision, and only then consider a release branch/tag. EF8/EF9, push and publication remain out
    of the current development sequence.
+
+### Split-query graph loading module (2026-11-13)
+
+**IDs:** DEF-08, QRY-01/05/08/09, CON-04/05, CFG-02/03, PKG-03/04. The
+[design](efcore-10-split-query-design.md) and [execution record](efcore-10-split-query-plan.md) add public
+splitting options and effective-behavior buffering, reusing EF graph coordinators and existing reader
+ownership. Seven unit and 72 runtime cases pass; the initial one-active-reader regression failed all 12
+graph cases before implementation. Independent review's SQL ordering/window/correlation verification gap
+is fixed. Full Debug/Release/isolated patch suites each pass 4930 tests, zero failures/skips. One
+baseline-built nupkg passes content, both-mode runtime/generated-context/full CLI consumers on both
+patches and four bundle build/help checks, with matching graphs/DLL hashes. Native
+graph/session/isolation acceptance, lazy loading, compiled models and upstream runtime specifications stay
+open; this module does not finish the full goal. Connector 0.3.0 needs no changes.
 
 ### Execution retries module (2026-11-13)
 

@@ -3,7 +3,8 @@
 ## Active checkpoint: 2026-11-13
 
 Development resumed on 2026-11-11 on efcore/10.0 at the user's request, following the paused Batch7e checkpoint.
-The latest checkpoint is opt-in execution retries on 2026-11-13, following TPC, many-to-many and Connector 0.3.0 reverse engineering.
+The latest checkpoint is buffered split-query graph loading on 2026-11-13, following opt-in execution retries,
+TPC, many-to-many and Connector 0.3.0 reverse engineering.
 Test each module and review completed major modules before committing. EF8/EF9 remain postponed.
 The provider is not release-ready. The [feature checklist](efcore-10-feature-checklist.md) remains the
 acceptance authority; this document records the handoff rather than defining a different completion target.
@@ -16,6 +17,32 @@ each complete feature module. Two read-only live probes already load User Secret
 the wider native matrix remains open. EF8/EF9 adaptation remains postponed. The
 [local development plan](efcore-10-local-development-plan.md) tracks the full remaining inventory, including
 an audit of locally feasible deferred families. Finishing one batch does not finish the overall goal.
+
+### Split-query graph loading checkpoint (2026-11-13)
+
+AsSplitQuery and public UseQuerySplittingBehavior now enable ordinary sibling/nested collection loading in
+both modes. The provider buffers each result before opening the next native reader, using EF's existing
+graph coordinators. Effective per-query overrides determine buffering after normalization; retry buffering
+remains independent. No new driver API, dependency or graph coordinator is introduced. See the
+[design](efcore-10-split-query-design.md) and [execution record](efcore-10-split-query-plan.md).
+
+Seven unit and 72 runtime cases cover options/cache isolation, all tracking modes, filters/paging, empty
+graphs, SingleQuery overrides, later-command retry and unknown/cancelled read cleanup. The fixture rejects
+overlapping native readers: all 12 initial graph cases failed before the fix. Independent review found one
+SQL verification gap; final assertions pin parent-page order, child windows/limits, join keys and final
+correlation order independently of canned rows. No production defect was reported by that review.
+
+Final EF10.0.0 Debug/Release and isolated EF10.0.14 Release each pass **4930 tests** (2301 unit,
+1759 functional, 868 metadata specification, two consumers), zero failures/skips. The baseline-built
+`10.0.0-split-query-20261113` package passes content and both-mode runtime/generated-context/full migration
+CLI consumers on both patches, including four Windows bundle build/help checks. Source/archive/consumer
+DLL hashes and package-only graphs match; details are in the execution record. Connector 0.3.0 meets this
+module's needs without changes.
+
+Native SQL/results, physical session reuse, isolation and memory/timing remain unverified. Splitting adds
+buffering and round trips; use a unique paging order and application-selected isolation. Lazy loading,
+compiled models and upstream runtime fixtures remain independent work. DEF-08 is partial; the full EF10
+goal and release acceptance remain open.
 
 ### Opt-in execution retries checkpoint (2026-11-13)
 

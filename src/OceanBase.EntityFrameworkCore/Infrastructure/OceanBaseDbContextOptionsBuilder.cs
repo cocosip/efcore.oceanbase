@@ -17,6 +17,14 @@ namespace OceanBase.EntityFrameworkCore.Infrastructure
 
         private OceanBaseOptionsExtension Options => _optionsBuilder.Options.FindExtension<OceanBaseOptionsExtension>()!;
 
+        /// <summary>Selects single-query or buffered split-query loading for related collections.</summary>
+        public OceanBaseDbContextOptionsBuilder UseQuerySplittingBehavior(QuerySplittingBehavior querySplittingBehavior)
+        {
+            if (!Enum.IsDefined(querySplittingBehavior)) throw new ArgumentOutOfRangeException(nameof(querySplittingBehavior));
+            Update(Options.WithUseQuerySplittingBehavior(querySplittingBehavior));
+            return this;
+        }
+
         /// <summary>Enables operation-level retries for confirmed transient server errors.</summary>
         /// <remarks>Unknown outcomes, cancellation and XA never retry. Schema/migration execution rejects retries.</remarks>
         public OceanBaseDbContextOptionsBuilder EnableRetryOnFailure(int maxRetryCount = 6,

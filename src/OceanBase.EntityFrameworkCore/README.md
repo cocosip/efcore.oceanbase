@@ -37,6 +37,22 @@ DDL lifecycle operations and Migrate reject configured or active strategies beca
 use a separate context without retries for these operations. Offline script generation remains available.
 This local retry policy does not establish native failover or rollback acceptance.
 
+Split queries support ordinary collection Includes, sibling/nested collections, filtering and paging:
+
+```csharp
+optionsBuilder.UseOceanBase(connectionString, OceanBaseCompatibilityMode.MySql,
+    options => options.UseQuerySplittingBehavior(QuerySplittingBehavior.SplitQuery));
+// Use AsSplitQuery() or AsSingleQuery() on an individual LINQ query to override the context default.
+```
+
+Both modes buffer split result sets before opening the next native reader. Single-query remains the default;
+retry buffering is independent of splitting. Splitting adds memory use and database round trips. Use a fully
+unique order with paging; separate commands can observe concurrent changes unless the application selects
+an appropriate transaction/isolation level. Cancellation or unknown outcomes are not automatically replayed;
+after failed graph materialization, discard or clear partially tracked entities before reusing a context.
+Native SQL/results, consistency and session reuse remain unverified. Lazy loading and compiled-model/tooling
+optimizations are separate capabilities.
+
 Database reverse engineering uses the driver's public `GetSchema` collections, including its typed column
 declarations and tri-state generation/default/update metadata. Scaffolding connections must specify
 `ExpectedMode=MySql` or `ExpectedMode=Oracle`; generated `UseOceanBase` code selects that mode explicitly.
