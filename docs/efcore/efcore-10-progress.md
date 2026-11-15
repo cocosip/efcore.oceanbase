@@ -6,14 +6,15 @@ The ordered development and acceptance rules are in
 [efcore-10-development-acceptance-plan.md](efcore-10-development-acceptance-plan.md). This file keeps the
 historical handoff and module evidence; it does not authorize jumping between unfinished feature families.
 
-The latest committed local module is `d4fc4df` (CFG-04 DatabaseFacade service graph characterization), following
+The latest committed local feature module is `e3119f5` (DateTime/TimeOnly fractional temporal members), following
 the CON-03/04/05 connection boundary commits `051ea06`, `34f84f4` and `fe71f2a`. The current worktree Release
 test baseline is 5,098 passed,
 zero failed/skipped; the older 5,036 count below belongs to the pre-TimeSpan-total checkpoint.
 
 ## Current checkpoint: 2026-11-15
 
-Development is active on efcore/10.0 following the HasData, connection-boundary and CFG-04 checkpoints.
+Development is active on efcore/10.0 following the HasData, connection-boundary, CFG-04, Boolean conversion and
+temporal fractional checkpoints.
 The current local checkpoint includes lazy-loading integration, ordinary compiled models, split queries, retries,
 TPC, many-to-many and Connector 0.3.0 reverse engineering.
 Test each module and review completed major modules before committing. EF8/EF9 remain postponed.
