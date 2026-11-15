@@ -60,6 +60,16 @@ endpoint. Direct-versus-proxy routing and effective transport options are still 
 probes close during the pre-authentication handshake, so `REL-01` is now `In progress` rather than
 `Planned`, and `TST-02` remains open. No credentials or Connector changes were added.
 
+### TST-01 non-relationship specification checkpoint (2026-11-16)
+
+The official `RelationalNonRelationshipTestBase` family now runs through the real provider services in both
+modes. The initial RED run exposed the same eight profile-incompatible facet cases per mode (346 total:
+330 pass, 16 fail); the derived fixtures now retain 330 unchanged passes and mark only those 16 cases as
+explicit skips mapped to `MAP-01/03/05/06`. The complete SpecificationTests project now passes 1,198 cases
+with those 16 mapped skips. Details and the focused command are in
+[the specification exclusion record](efcore-10-specification-exclusions.md). This extends TST-01 local
+evidence without claiming query/write/live specification support.
+
 ### HasData schema bootstrap and pause (2026-11-13)
 
 At the user's request, finish this module, update evidence, commit locally and pause. Do not start another

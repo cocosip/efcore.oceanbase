@@ -43,6 +43,11 @@ module. Its focused Release evidence is TemporalMemberQueryTests 39/39, the new 
 suite 4/4, and selected temporal regressions 32/32. The module remains local complete only;
 native precision/range and release gates stay open.
 
+2026-11-16 的 TST-01 增量加入官方 `RelationalNonRelationshipTestBase`。两种模式各运行 173 个
+用例，共 330 个未修改通过和 16 个明确映射到 `MAP-01/03/05/06` 的排除；完整 SpecificationTests
+项目为 1,198 通过、16 个同样映射的排除；详见
+[specification exclusions](efcore-10-specification-exclusions.md)。这些是模型元数据证据，不关闭查询、写入或 live 门槛。
+
 ## 完成状态的定义
 
 一个功能只能在以下条件全部满足后标记为 `Done`：

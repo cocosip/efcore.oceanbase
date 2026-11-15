@@ -14,12 +14,15 @@ public APIs and per-mode mappings/SQL. Separate local implementation evidence fr
 The compact execution board is [efcore-10-roadmap.md](efcore-10-roadmap.md); this file remains the detailed
 batch ledger and acceptance notes.
 
-**Updated:** 2026-11-15, temporal fractional members following Boolean conversion and explicit binary/Guid parameter roots following HasData schema
+**Updated:** 2026-11-16, TST-01 non-relationship specification coverage following temporal fractional members and the REL-01 support record
 bootstrap. Keep one complete module active and review it before committing. EF8/EF9 remains postponed; live execution is opt-in and
 currently blocked before authentication by the supplied endpoint/transport behavior.
 The full goal remains incomplete.
 
-The current local module is `e3119f5`: DateTime/TimeOnly fractional members. Its code, focused
+The current local module is the TST-01 non-relationship specification family. It runs the official
+`RelationalNonRelationshipTestBase` in both modes with 330 unchanged passes and 16 explicit, checklist-mapped
+profile exclusions; see [the specification exclusion record](efcore-10-specification-exclusions.md). The earlier
+`e3119f5` temporal fractional module remains locally complete. Its code, focused
 tests, full source Release suites and documentation are complete locally; native temporal precision,
 timezone/range behavior and final package/release evidence remain open. The detailed acceptance record
 is [efcore-10-temporal-fractional-plan.md](efcore-10-temporal-fractional-plan.md).
