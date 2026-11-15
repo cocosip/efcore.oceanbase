@@ -503,6 +503,24 @@ was needed.
 Next module: continue one remaining mapping, query, write or transaction module and record its evidence before moving on.
 Evidence commit: `d4fc4df` (implementation characterization); this documentation is a follow-up record.
 
+### 2026-11-16：`DateTimeOffset.UtcDateTime` translation
+
+Module: UTC instant projection from `DateTimeOffset`
+Checklist IDs: `MAP-05`, `QRY-07`, `QRY-11`
+Implementation files: `OceanBaseTemporalMemberTranslator.cs`, `OceanBaseQuerySqlGenerator.cs`
+Tests added/changed: `TemporalMemberQueryTests.cs`, `DateTimeMemberFunctionalTests.cs`, packed `Program.cs`
+Focused command and result: Unit 4/4 and Functional 4/4 in Release across MySQL/Oracle sync/async; RED was observed
+in both modes before the translator branch.
+Full local command and result: Debug Unit 2381 and Functional 1915 pass; Release Unit 2381 and Functional 1915 pass;
+the prior Specification baseline is 1446 with 16 mapped skips.
+Package/tooling command and result: EF10.0.0 packed consumer passes in both modes with an isolated repository NuGet
+cache. The default global cache is contaminated: its `oceanbaseconnector/0.3.0` file has assembly version 0.2.0.0.
+No Connector change was needed.
+Live command and result: not run; the supplied endpoint still closes during the pre-authentication handshake.
+Evidence boundary: MySQL reuses UTC-normalized `DATETIME`; Oracle emits `SYS_EXTRACT_UTC` and casts to `TIMESTAMP`.
+Native timezone/precision, live results and release rows remain open.
+Next module: finish this module's full/package gates, then select one remaining mapping/query/write/transaction gap.
+
 每个波次完成后，在对应 plan/progress 文档增加一段记录，字段必须完整：
 
 ```text

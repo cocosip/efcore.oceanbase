@@ -168,6 +168,18 @@ the generated SQL shape for the same members in both modes. This is local transl
 evidence only; offset conversion, native precision/range, server coercion and live OceanBase results remain open.
 See [the DateTimeOffset member plan](efcore-10-date-time-offset-members-plan.md).
 
+### QRY-07/QRY-11/MAP-05 `DateTimeOffset.UtcDateTime` checkpoint (2026-11-16)
+
+`DateTimeOffset.UtcDateTime` is now translated as a server expression. MySQL reuses its UTC-normalized
+`DATETIME` carrier; Oracle emits `CAST(SYS_EXTRACT_UTC(input) AS TIMESTAMP)`. The translator rejects unrelated
+and null-converting carriers before SQL generation, and no Connector change was needed.
+
+Focused Release evidence is 4 Unit and 4 functional cases across both modes, including a predicate that proves
+server translation, sync/async reader materialization and NULL/carrier boundaries. Full Debug Unit/Functional suites
+pass 2381/1915; the EF10.0.0 packed consumer passes in both modes with an isolated repository NuGet cache. The
+default global cache is contaminated with an `OceanBaseConnector 0.2.0.0` assembly under the 0.3.0 package path.
+Native timezone/precision and live OceanBase results remain open. See [the UtcDateTime plan](efcore-10-date-time-offset-utc-date-time-plan.md).
+
 ### QRY-07/QRY-11/MAP-05 server clock checkpoint (2026-11-16)
 
 The provider now translates `DateTime.Now`, `DateTime.UtcNow` and `DateTime.Today` using explicit mode-specific

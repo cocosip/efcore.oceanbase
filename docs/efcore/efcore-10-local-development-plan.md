@@ -14,13 +14,16 @@ public APIs and per-mode mappings/SQL. Separate local implementation evidence fr
 The compact execution board is [efcore-10-roadmap.md](efcore-10-roadmap.md); this file remains the detailed
 batch ledger and acceptance notes.
 
-**Updated:** 2026-11-16, DateTimeOffset members following the server clock, DateTime.Ticks, TimeOnly.Ticks, TimeSpan.Ticks, DateOnly.DayNumber, DateTime.TimeOfDay and TST-01
+**Updated:** 2026-11-16, DateTimeOffset.UtcDateTime following DateTimeOffset members, the server clock, DateTime.Ticks, TimeOnly.Ticks, TimeSpan.Ticks, DateOnly.DayNumber, DateTime.TimeOfDay and TST-01
 model-building 101 checkpoints.
 Keep one complete module active and review it before committing. EF8/EF9 remains postponed; live execution is opt-in and
 currently blocked before authentication by the supplied endpoint/transport behavior.
 The full goal remains incomplete.
 
-The current local module is the QRY-07/QRY-11/MAP-05 `DateTimeOffset` member slice. It translates calendar,
+The current local module is the QRY-07/QRY-11/MAP-05 `DateTimeOffset.UtcDateTime` slice. It translates the UTC
+instant through MySQL's normalized carrier and Oracle `SYS_EXTRACT_UTC`, with both-mode SQL-shape and intercepted
+sync/async reader coverage; see [the UtcDateTime plan](efcore-10-date-time-offset-utc-date-time-plan.md). The preceding
+`DateTimeOffset` member slice translates calendar,
 fractional, `Date`, and `TimeOfDay` members with both-mode SQL-shape and intercepted sync/async reader coverage;
 see [the DateTimeOffset member plan](efcore-10-date-time-offset-members-plan.md). The preceding server clock
 slice translates `DateTime.Now`,

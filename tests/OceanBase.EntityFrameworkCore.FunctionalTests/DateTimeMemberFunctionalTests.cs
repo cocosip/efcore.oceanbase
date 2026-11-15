@@ -55,7 +55,7 @@ public sealed class DateTimeMemberFunctionalTests
             new DateTime(2026, 11, 16));
         var capture = new Capture(table);
         await using var context = Create(mode, capture);
-        var query = context.Rows.Select(row => new
+        var query = context.Rows.Where(row => row.Zoned.UtcDateTime > new DateTime(2026, 1, 1)).Select(row => new
         {
             Now = DateTime.Now,
             UtcNow = DateTime.UtcNow,
@@ -80,18 +80,20 @@ public sealed class DateTimeMemberFunctionalTests
         using var table = new DataTable();
         table.Columns.Add("Date", typeof(object));
         table.Columns.Add("TimeOfDay", typeof(object));
+        table.Columns.Add("UtcDateTime", typeof(object));
         foreach (var name in new[] { "Year", "Month", "Day", "Hour", "Minute", "Second", "Millisecond", "Microsecond", "Nanosecond", "DayOfYear" })
             table.Columns.Add(name, typeof(int));
         var timeOfDay = new TimeSpan(10, 20, 30).Add(TimeSpan.FromTicks(1234560));
         table.Rows.Add(new DateTime(2026, 11, 16), mode == OceanBaseCompatibilityMode.Oracle
             ? new OceanBaseIntervalDayToSecond(false, 0, 10, 20, 30, 123456000, 9, 6)
-            : timeOfDay, 2026, 11, 16, 10, 20, 30, 123, 123456, 123456700, 320);
+            : timeOfDay, new DateTime(2026, 11, 16, 2, 20, 30), 2026, 11, 16, 10, 20, 30, 123, 123456, 123456700, 320);
         var capture = new Capture(table);
         await using var context = Create(mode, capture);
-        var query = context.Rows.Select(row => new
+        var query = context.Rows.Where(row => row.Zoned.UtcDateTime > new DateTime(2026, 1, 1)).Select(row => new
         {
             Date = row.Zoned.Date,
             TimeOfDay = row.Zoned.TimeOfDay,
+            UtcDateTime = row.Zoned.UtcDateTime,
             row.Zoned.Year,
             row.Zoned.Month,
             row.Zoned.Day,
@@ -107,12 +109,17 @@ public sealed class DateTimeMemberFunctionalTests
         var result = Assert.Single(async ? await query.ToListAsync() : query.ToList());
         Assert.Equal(new DateTime(2026, 11, 16), result.Date);
         Assert.Equal(timeOfDay, result.TimeOfDay);
+        Assert.Equal(new DateTime(2026, 11, 16, 2, 20, 30), result.UtcDateTime);
         Assert.Equal(2026, result.Year);
         Assert.Equal(123456, result.Microsecond);
         Assert.Equal(123456700, result.Nanosecond);
         Assert.Equal(320, result.DayOfYear);
         var sql = Assert.Single(capture.Sql);
         Assert.DoesNotContain("__oceanbase_internal", sql);
+        if (mode == OceanBaseCompatibilityMode.MySql)
+            Assert.Contains("WHERE `r`.`Zoned` >", sql);
+        else
+            Assert.Contains("SYS_EXTRACT_UTC", sql);
     }
 
     private static TestContext Create(OceanBaseCompatibilityMode mode, Capture capture)

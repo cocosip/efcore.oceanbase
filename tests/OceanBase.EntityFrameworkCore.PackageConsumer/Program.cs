@@ -414,10 +414,20 @@ namespace PackageConsumer
                     ? new[] { "YEAR(`r`.`OffsetAt`)", "DAYOFYEAR(`r`.`OffsetAt`)", "DATE(`r`.`OffsetAt`)",
                         "TIME(`r`.`OffsetAt`)", "MICROSECOND(`r`.`OffsetAt`)" }
                     : new[] { "EXTRACT(YEAR FROM", "'YYYY'", "TRUNC(\"r\".\"OffsetAt\")",
-                        "NUMTODSINTERVAL", "EXTRACT(SECOND FROM" };
+                        "EXTRACT(SECOND FROM" };
                 if (offsetParts.Any(part => !offsetPartsSql.Contains(part, StringComparison.Ordinal))
+                    || (mode == OceanBaseCompatibilityMode.Oracle
+                        && !offsetPartsSql.Contains("NUMTODSINTERVAL", StringComparison.Ordinal)
+                        && !offsetPartsSql.Contains(" - CAST(TRUNC(", StringComparison.Ordinal))
                     || offsetPartsSql.Contains("__oceanbase_internal_", StringComparison.Ordinal))
                     throw new Exception("Packed provider did not translate DateTimeOffset members.");
+                var offsetUtcSql = context.Set<Row>().Where(row => row.OffsetAt.UtcDateTime > new DateTime(2026, 1, 1))
+                    .Select(row => row.OffsetAt.UtcDateTime).ToQueryString();
+                if ((mode == OceanBaseCompatibilityMode.MySql
+                        ? !offsetUtcSql.Contains("`r`.`OffsetAt`", StringComparison.Ordinal)
+                        : !offsetUtcSql.Contains("SYS_EXTRACT_UTC", StringComparison.Ordinal))
+                    || offsetUtcSql.Contains("__oceanbase_internal_", StringComparison.Ordinal))
+                    throw new Exception("Packed provider did not translate DateTimeOffset.UtcDateTime.");
                 var clockSql = context.Set<Row>().Select(row => new
                 {
                     Now = DateTime.Now,

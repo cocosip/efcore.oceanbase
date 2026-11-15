@@ -488,6 +488,32 @@ namespace OceanBase.EntityFrameworkCore.Query
                 return sqlFunctionExpression;
             }
 
+            if (sqlFunctionExpression.Name == OceanBaseTemporalMemberTranslator.DateTimeOffsetUtcDateTimeMarker)
+            {
+                if (sqlFunctionExpression is not { IsBuiltIn: true, Schema: null, Instance: null, Arguments.Count: 1,
+                        IsNullable: true, ArgumentsPropagateNullability: [false], Type: var resultType,
+                        TypeMapping: { } resultMapping }
+                    || resultType != typeof(DateTime)
+                    || !IsDateTimeMapping(resultMapping)
+                    || sqlFunctionExpression.Arguments[0] is not { Type: var inputType, TypeMapping: { } inputMapping }
+                    || inputType != typeof(DateTimeOffset)
+                    || !IsDateTimeMapping(inputMapping))
+                    throw new InvalidOperationException("Invalid internal DateTimeOffset.UtcDateTime expression.");
+
+                if (_mode == OceanBaseCompatibilityMode.MySql)
+                {
+                    Visit(sqlFunctionExpression.Arguments[0]);
+                }
+                else
+                {
+                    Sql.Append("CAST(SYS_EXTRACT_UTC(");
+                    Visit(sqlFunctionExpression.Arguments[0]);
+                    Sql.Append(") AS TIMESTAMP)");
+                }
+
+                return sqlFunctionExpression;
+            }
+
             if (sqlFunctionExpression.Name == OceanBaseTemporalMemberTranslator.DayNumberMarker)
             {
                 if (sqlFunctionExpression is not { IsBuiltIn: true, Schema: null, Instance: null, Arguments.Count: 1,
