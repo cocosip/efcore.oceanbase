@@ -381,6 +381,14 @@ namespace PackageConsumer
                 if (!dayNumberSql.Contains(dayNumberFunction, StringComparison.Ordinal)
                     || dayNumberSql.Contains("__oceanbase_internal_", StringComparison.Ordinal))
                     throw new Exception("Packed provider did not translate DateOnly.DayNumber.");
+                var ticksSql = context.Set<Row>().Where(row => row.Duration.Ticks != 0)
+                    .Select(row => row.Duration.Ticks).ToQueryString();
+                if (!ticksSql.Contains(mode == OceanBaseCompatibilityMode.MySql ? "TIME_TO_SEC" : "EXTRACT(DAY FROM",
+                        StringComparison.Ordinal)
+                    || !ticksSql.Contains(mode == OceanBaseCompatibilityMode.MySql ? "MICROSECOND" : "EXTRACT(SECOND FROM",
+                        StringComparison.Ordinal)
+                    || ticksSql.Contains("__oceanbase_internal_", StringComparison.Ordinal))
+                    throw new Exception("Packed provider did not translate TimeSpan.Ticks.");
 
                 var calendarSql = context.Set<Row>().Where(row => row.OccurredAt.DayOfWeek == DayOfWeek.Sunday
                     && row.Day.DayOfYear == 60).ToQueryString();

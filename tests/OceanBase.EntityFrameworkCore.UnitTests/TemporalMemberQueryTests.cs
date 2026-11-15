@@ -524,6 +524,59 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
         [Theory]
         [InlineData(OceanBaseCompatibilityMode.MySql)]
         [InlineData(OceanBaseCompatibilityMode.Oracle)]
+        public void TimeSpan_Ticks_translate_with_100ns_precision(OceanBaseCompatibilityMode mode)
+        {
+            using var context = CreateContext(mode);
+            var sql = context.Rows
+                .Where(row => row.Duration.Ticks > TimeSpan.TicksPerDay)
+                .OrderBy(row => row.Duration.Ticks)
+                .Select(row => row.Duration.Ticks)
+                .ToQueryString();
+
+            Assert.DoesNotContain("__oceanbase_internal", sql);
+            if (mode == OceanBaseCompatibilityMode.MySql)
+            {
+                Assert.Contains("TIME_TO_SEC", sql);
+                Assert.Contains("MICROSECOND", sql);
+                Assert.Contains("10000000", sql);
+            }
+            else
+            {
+                Assert.Contains("EXTRACT(DAY FROM", sql);
+                Assert.Contains("EXTRACT(SECOND FROM", sql);
+                Assert.Contains("864000000000", sql);
+            }
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle)]
+        public void TimeSpan_Ticks_reject_non_interval_and_null_converting_carriers(OceanBaseCompatibilityMode mode)
+        {
+            using var context = CreateContext(mode);
+            var source = context.GetService<IRelationalTypeMappingSource>();
+            var factory = context.GetService<ISqlExpressionFactory>();
+            var members = context.GetService<IMemberTranslatorProvider>();
+            var logger = context.GetService<IDiagnosticsLogger<DbLoggerCategory.Query>>();
+            var ticks = typeof(TimeSpan).GetProperty(nameof(TimeSpan.Ticks))!;
+            var mapping = mode == OceanBaseCompatibilityMode.MySql
+                ? (RelationalTypeMapping)source.FindMapping(typeof(TimeSpan))!.WithComposedConverter(
+                    new ValueConverter<TimeSpan, TimeSpan>(value => value, value => value, convertsNulls: true))
+                : (RelationalTypeMapping)source.FindMapping(typeof(OceanBaseIntervalDayToSecond))!.WithComposedConverter(
+                    new ValueConverter<TimeSpan, OceanBaseIntervalDayToSecond>(
+                        value => new OceanBaseIntervalDayToSecond(false, 0, 0, 0, 0),
+                        value => value.ToTimeSpan(), convertsNulls: true));
+
+            Assert.Null(members.Translate(factory.Constant(TimeSpan.FromSeconds(1), mapping), ticks, typeof(long), logger));
+
+            var text = (RelationalTypeMapping)source.FindMapping(typeof(string))!.WithComposedConverter(
+                new ValueConverter<TimeSpan, string>(value => value.ToString(), value => TimeSpan.Parse(value)));
+            Assert.Null(members.Translate(factory.Constant(TimeSpan.FromSeconds(1), text), ticks, typeof(long), logger));
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle)]
         public void TimeSpan_component_members_translate_with_signed_duration_semantics(OceanBaseCompatibilityMode mode)
         {
             using var context = CreateContext(mode);

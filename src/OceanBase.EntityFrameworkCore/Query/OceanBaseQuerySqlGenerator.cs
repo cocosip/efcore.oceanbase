@@ -515,6 +515,45 @@ namespace OceanBase.EntityFrameworkCore.Query
                 return sqlFunctionExpression;
             }
 
+            if (sqlFunctionExpression.Name == OceanBaseTemporalMemberTranslator.TicksMarker)
+            {
+                if (sqlFunctionExpression is not { IsBuiltIn: true, Schema: null, Instance: null, Arguments.Count: 1,
+                        IsNullable: true, ArgumentsPropagateNullability: [false], Type: var resultType,
+                        TypeMapping: { } resultMapping }
+                    || resultMapping.Converter?.ConvertsNulls == true
+                    || resultType != typeof(long)
+                    || (resultMapping.Converter?.ProviderClrType ?? resultMapping.ClrType) != typeof(long)
+                    || sqlFunctionExpression.Arguments[0] is not { Type: var inputType, TypeMapping: { } inputMapping }
+                    || inputType != typeof(TimeSpan)
+                    || !IsTimeSpanMapping(inputMapping))
+                    throw new InvalidOperationException("Invalid internal TimeSpan.Ticks expression.");
+
+                if (_mode == OceanBaseCompatibilityMode.MySql)
+                {
+                    Sql.Append("((TIME_TO_SEC(");
+                    Visit(sqlFunctionExpression.Arguments[0]);
+                    Sql.Append(") * 10000000 + ");
+                    AppendMySqlTimeSpanSign(sqlFunctionExpression.Arguments[0]);
+                    Sql.Append(" * ABS(MICROSECOND(");
+                    Visit(sqlFunctionExpression.Arguments[0]);
+                    Sql.Append(") * 10))");
+                }
+                else
+                {
+                    Sql.Append("((EXTRACT(DAY FROM ");
+                    Visit(sqlFunctionExpression.Arguments[0]);
+                    Sql.Append(") * 864000000000 + EXTRACT(HOUR FROM ");
+                    Visit(sqlFunctionExpression.Arguments[0]);
+                    Sql.Append(") * 36000000000 + EXTRACT(MINUTE FROM ");
+                    Visit(sqlFunctionExpression.Arguments[0]);
+                    Sql.Append(") * 600000000 + TRUNC(EXTRACT(SECOND FROM ");
+                    Visit(sqlFunctionExpression.Arguments[0]);
+                    Sql.Append(") * 10000000))");
+                }
+
+                return sqlFunctionExpression;
+            }
+
             if (sqlFunctionExpression.Name == OceanBaseTemporalMemberTranslator.TotalMarker)
             {
                 if (sqlFunctionExpression is not { IsBuiltIn: true, Schema: null, Instance: null, Arguments.Count: 2,

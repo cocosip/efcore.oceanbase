@@ -19,6 +19,7 @@ namespace OceanBase.EntityFrameworkCore.Query
         internal const string TotalMarker = "__oceanbase_internal_total";
         internal const string TimeOfDayMarker = "__oceanbase_internal_time_of_day";
         internal const string DayNumberMarker = "__oceanbase_internal_day_number";
+        internal const string TicksMarker = "__oceanbase_internal_ticks";
 
         private static readonly Dictionary<MemberInfo, (Type Receiver, string Unit, string MySqlFunction)> Parts = new()
         {
@@ -69,6 +70,7 @@ namespace OceanBase.EntityFrameworkCore.Query
         private static readonly MemberInfo DateTimeDate = typeof(DateTime).GetProperty(nameof(DateTime.Date))!;
         private static readonly MemberInfo DateTimeTimeOfDay = typeof(DateTime).GetProperty(nameof(DateTime.TimeOfDay))!;
         private static readonly MemberInfo DateOnlyDayNumber = typeof(DateOnly).GetProperty(nameof(DateOnly.DayNumber))!;
+        private static readonly MemberInfo TimeSpanTicks = typeof(TimeSpan).GetProperty(nameof(TimeSpan.Ticks))!;
 
         public SqlExpression? Translate(SqlExpression? instance, MemberInfo member, Type returnType,
             IDiagnosticsLogger<DbLoggerCategory.Query> logger)
@@ -111,6 +113,19 @@ namespace OceanBase.EntityFrameworkCore.Query
 
                 return factory.Function(DayNumberMarker, [instance], nullable: true,
                     argumentsPropagateNullability: [false], typeof(int), mappingSource.FindMapping(typeof(int)));
+            }
+
+            if (instance is not null && member == TimeSpanTicks && instance.Type == typeof(TimeSpan)
+                && returnType == typeof(long))
+            {
+                instance = factory.ApplyDefaultTypeMapping(instance);
+                var durationMapping = instance.TypeMapping;
+                if (durationMapping is null || durationMapping.Converter?.ConvertsNulls == true
+                    || !SupportsCarrier(typeof(TimeSpan), durationMapping))
+                    return null;
+
+                return factory.Function(TicksMarker, [instance], nullable: true,
+                    argumentsPropagateNullability: [false], typeof(long), mappingSource.FindMapping(typeof(long)));
             }
 
             if (instance is not null && CalendarParts.TryGetValue(member, out var weekday)

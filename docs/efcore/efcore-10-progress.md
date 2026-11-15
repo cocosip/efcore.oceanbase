@@ -6,7 +6,7 @@ The ordered development and acceptance rules are in
 [efcore-10-development-acceptance-plan.md](efcore-10-development-acceptance-plan.md). This file keeps the
 historical handoff and module evidence; it does not authorize jumping between unfinished feature families.
 
-The latest local feature module is the 2026-11-16 `DateOnly.DayNumber` checkpoint recorded below. Earlier commit
+The latest local feature module is the 2026-11-16 `TimeSpan.Ticks` checkpoint recorded below. Earlier commit
 identifiers and test totals remain historical evidence for their original modules; they are not the current branch
 baseline. The current feature evidence is recorded in the latest checkpoint sections and module plan.
 
@@ -110,6 +110,22 @@ functional sync/async cases, all passing; functional coverage includes projectio
 materialization. This is local SQL/mapping/intercepted-reader evidence only; native date arithmetic, calendar
 behavior and live results remain open under `MAP-05`, `QRY-07` and `TST-02`. The detailed record is in
 [the DateOnly.DayNumber plan](efcore-10-date-only-day-number-plan.md).
+
+### QRY-07/MAP-05 `TimeSpan.Ticks` checkpoint (2026-11-16)
+
+The provider now translates `TimeSpan.Ticks` through the existing MySQL `TIME` and Oracle `INTERVAL DAY TO
+SECOND` carriers. MySQL combines `TIME_TO_SEC` with the signed absolute microsecond remainder; Oracle combines
+the interval components and truncates the second fraction at seven decimal places. The result preserves the
+signed .NET 100ns tick scale, and unrelated or null-converting carriers reject before SQL generation. No Connector
+change was needed.
+
+The RED query failed in both modes before implementation. Focused Release evidence is 4 Unit and 4 functional
+sync/async cases, all passing; functional coverage includes projection, predicate, ordering, exact tick values
+and NULL materialization. Package consumers include an explicit SQL assertion for this member. Native interval
+precision, sign behavior and live results remain open under `MAP-05`, `QRY-07` and `TST-02`. The detailed record
+is in [the TimeSpan.Ticks plan](efcore-10-time-span-ticks-plan.md). Package
+`10.0.0-time-span-ticks-20261116` passed content verification and the standalone consumer on EF10.0.0/10.0.14
+in both modes; this remains offline/package evidence and does not close the live gate.
 
 ### HasData schema bootstrap and pause (2026-11-13)
 

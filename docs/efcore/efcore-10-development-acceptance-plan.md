@@ -69,6 +69,17 @@ mapping and intercepted-reader evidence only; native date arithmetic, calendar b
 Package `10.0.0-date-only-day-number-20261116` passed package content verification and the standalone consumer
 on EF10.0.0/10.0.14 in both modes; this remains offline/package evidence and does not close the live gate.
 
+### QRY-07/MAP-05 `TimeSpan.Ticks` checkpoint (2026-11-16)
+
+`TimeSpan.Ticks` now uses the existing duration carriers in both modes. MySQL combines `TIME_TO_SEC` with the
+signed microsecond remainder; Oracle combines `EXTRACT(DAY|HOUR|MINUTE|SECOND)` and truncates at the .NET
+100ns boundary. The RED query failed in both modes before implementation. Focused Release evidence is 4 Unit
+and 4 functional cases, with sync/async projection, predicate, ordering, exact 100ns values and NULL
+materialization. The detailed record is in [the TimeSpan.Ticks plan](efcore-10-time-span-ticks-plan.md).
+Package consumers include explicit SQL assertions for this member. Native interval precision, sign behavior
+and live results remain open. Package `10.0.0-time-span-ticks-20261116` passed package content verification
+and the standalone consumer on EF10.0.0/10.0.14 in both modes; this remains offline/package evidence.
+
 下一模块：继续一个尚未完成的 Required 映射/查询边界；优先处理仍缺少完整同步/异步和负面覆盖的
 时间或数值 overload。不得把 `DEF-04` JSON-only 规范族提前提升为 Required。
 
