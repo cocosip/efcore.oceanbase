@@ -19,7 +19,7 @@
 ## 当前检查点
 
 创建本文档时记录的历史提交和测试总数属于此前的模块检查点；当前最新模块、测试结果和包版本分别记录在下面的
-`DateOnly.AddMonths` checkpoint 和对应 plan 中。不要使用旧 handoff 行推断当前 HEAD 或当前测试总数。
+`DateOnly.AddYears` checkpoint 和对应 plan 中。不要使用旧 handoff 行推断当前 HEAD 或当前测试总数。
 - 当前没有真实 OceanBase SQL/DDL 验收。已有 live 探针在握手阶段报 `Connection closed while reading the packet`，没有执行 SQL 或 DDL。
 
 因此，CFG-04 已完成本地 characterization；连接波次已转入剩余映射、查询、更新和事务边界。不得重复已经完成的连接 characterization。
@@ -83,6 +83,24 @@ Live command and result: not run; the supplied endpoint still closes during the 
 Evidence boundary: local SQL, mapping, intercepted sync/async materialization and offline package consumption;
 no native server behavior is claimed.
 Known gaps: native month arithmetic/end-of-month/calendar/coercion and final release gates remain open.
+
+### 2026-11-16：`DateOnly.AddYears` translation
+
+Module: `DateOnly.AddYears(int)` through the existing `DATE` carrier
+Checklist IDs: `MAP-05`, `QRY-07`, `QRY-11`
+Base commit: `cd72111`
+Implementation files: `OceanBaseTemporalMethodTranslator.cs`, `OceanBaseQuerySqlGenerator.cs`
+Tests added/changed: `TemporalMemberQueryTests.cs`, `DateOnlyDayNumberFunctionalTests.cs`, packed `Program.cs`
+Focused command and result: Unit 4/4 and Functional 4/4 in Release across MySQL/Oracle sync/async; RED failed
+in both modes before the translator branch. Negative unrelated/null-converting carrier cases are included.
+Full local command and result: Debug/Release Unit 2395 and Functional 1931 pass; Release Specification 1446 pass
+with 16 mapped skips; ConsumerTests 2/2 pass.
+Package/tooling command and result: `10.0.0-date-only-add-years-20261116` passes `Verify-Package.ps1` and
+the packed PackageConsumer on EF10.0.0/10.0.14 in both modes with isolated caches.
+Live command and result: not run; the supplied endpoint still closes during the pre-authentication handshake.
+Evidence boundary: local SQL, mapping, intercepted sync/async materialization and offline package consumption;
+no native server behavior is claimed.
+Known gaps: native year arithmetic/leap-day/calendar/coercion and final release gates remain open.
 
 此前的 `QRY-07/MAP-05` `DateTime.TimeOfDay` 模块使用 `TIME(input)`；Oracle
 对 DATE 使用 `NUMTODSINTERVAL((input - TRUNC(input)), 'DAY')`，对 TIMESTAMP 使用

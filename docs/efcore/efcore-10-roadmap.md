@@ -2,7 +2,7 @@
 
 **Updated:** 2026-11-16
 **Branch:** `efcore/10.0`  
-**State:** Active local development; QRY-07/QRY-11/MAP-05 `DateOnly.AddMonths` is the latest local module.
+**State:** Active local development; QRY-07/QRY-11/MAP-05 `DateOnly.AddYears` is the latest local module.
 **Acceptance authority:** [efcore-10-feature-checklist.md](efcore-10-feature-checklist.md)
 
 The `REL-01` support record now exists at [efcore-10-release-support.md](efcore-10-release-support.md),
@@ -130,6 +130,11 @@ The following required rows have complete local/package evidence for both modes:
   carrier boundaries pass locally. Package `10.0.0-date-only-add-months-20261116` passes content verification
   and packed consumers on EF10.0.0/10.0.14 in both modes. Native month arithmetic and live results remain open;
   see [the DateOnly.AddMonths plan](efcore-10-date-only-add-months-plan.md).
+- `DateOnly.AddYears(int)` now translates through the existing `DATE` carrier: MySQL uses `DATE_ADD` and Oracle
+  uses `ADD_MONTHS(input, years * 12)`. Both-mode projection/predicate, sync/async intercepted materialization
+  and unsupported carrier boundaries pass locally. Package `10.0.0-date-only-add-years-20261116` passes content
+  verification and packed consumers on EF10.0.0/10.0.14 in both modes. Native year arithmetic and live results
+  remain open; see [the DateOnly.AddYears plan](efcore-10-date-only-add-years-plan.md).
 - `CON-02` now rechecks the compatibility mode after sync/async open callbacks and restores EF's connection lease
   accounting when the post-open check rejects a conflict. Native handshake detection and live cleanup remain open.
 
