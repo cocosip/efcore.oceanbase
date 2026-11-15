@@ -19,6 +19,7 @@ deferred features. The implementation plan follows those requirements; it does n
 | [EF Core 10 design](efcore/efcore-10-design.md) | EF Core 10 porting boundary and feature review checklist. |
 | [EF Core 10 technical baseline](efcore/efcore-10-technical-baseline.md) | Exact provider contracts and first-slice verification gates. |
 | [EF Core 10 feature checklist](efcore/efcore-10-feature-checklist.md) | Release feature boundary, statuses and definition of complete. |
+| [EF Core 10 release workboard](efcore/efcore-10-release-workboard.md) | Current progress, concrete gaps, development order and acceptance gates. |
 | [EF Core 10 development and acceptance plan](efcore/efcore-10-development-acceptance-plan.md) | Ordered implementation waves, per-feature acceptance gates and handoff record. |
 | [EF Core 10 implementation plan](efcore/efcore-10-implementation-plan.md) | Development tasks mapped to checklist IDs and remaining acceptance work. |
 | [EF Core 10 local development plan](efcore/efcore-10-local-development-plan.md) | Active end-to-end local implementation ledger; live database and EF8/EF9 work postponed. |
