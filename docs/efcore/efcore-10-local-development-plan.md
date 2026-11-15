@@ -14,13 +14,16 @@ public APIs and per-mode mappings/SQL. Separate local implementation evidence fr
 The compact execution board is [efcore-10-roadmap.md](efcore-10-roadmap.md); this file remains the detailed
 batch ledger and acceptance notes.
 
-**Updated:** 2026-11-16, DateTimeOffset.UtcNow following DateTimeOffset.UtcDateTime, DateTimeOffset members, the server clock, DateTime.Ticks, TimeOnly.Ticks, TimeSpan.Ticks, DateOnly.DayNumber, DateTime.TimeOfDay and TST-01
+**Updated:** 2026-11-16, DateOnly.AddDays following DateTimeOffset.UtcNow, DateTimeOffset.UtcDateTime, DateTimeOffset members, the server clock, DateTime.Ticks, TimeOnly.Ticks, TimeSpan.Ticks, DateOnly.DayNumber, DateTime.TimeOfDay and TST-01
 model-building 101 checkpoints.
 Keep one complete module active and review it before committing. EF8/EF9 remains postponed; live execution is opt-in and
 currently blocked before authentication by the supplied endpoint/transport behavior.
 The full goal remains incomplete.
 
-The current local module is the QRY-07/QRY-11/MAP-05 `DateTimeOffset.UtcNow` slice. It translates the current UTC
+The current local module is the QRY-07/QRY-11/MAP-05 `DateOnly.AddDays` slice. It translates DateOnly day
+arithmetic through MySQL `DATE_ADD` and Oracle date addition with both-mode SQL-shape, negative-carrier and
+intercepted sync/async reader coverage; see [the DateOnly.AddDays plan](efcore-10-date-only-add-days-plan.md).
+The preceding `DateTimeOffset.UtcNow` slice translates the current UTC
 instant through MySQL `UTC_TIMESTAMP(6)` and Oracle `SYS_EXTRACT_UTC`, with both-mode SQL-shape and intercepted
 sync/async reader coverage; see [the UtcNow plan](efcore-10-date-time-offset-utc-now-plan.md). The preceding
 `DateTimeOffset.UtcDateTime` slice translates the UTC instant from an existing value through MySQL's normalized
@@ -38,9 +41,9 @@ see [the DateTime.Ticks plan](efcore-10-date-time-ticks-plan.md). The preceding
 The preceding
 `TimeSpan.Ticks` slice translates signed duration ticks; see [the TimeSpan.Ticks plan](efcore-10-time-span-ticks-plan.md).
 
-The server clock package gate is complete: `10.0.0-date-time-clocks-20261116` passes package content verification
-and packed consumers on EF10.0.0/10.0.14 in both modes. After the UtcNow slice, the current full source regression
-is Release/Debug Unit 2383, Functional 1919 and Specification 1446 with 16 explicitly mapped skips. Native
+The DateOnly.AddDays package gate is complete: `10.0.0-date-only-add-days-20261116` passes package content
+verification and packed consumers on EF10.0.0/10.0.14 in both modes. The current full source regression is
+Release/Debug Unit 2387, Functional 1923 and Specification 1446 with 16 explicitly mapped skips. Native
 temporal/session-timezone validation remains open.
 The preceding
 `DateOnly.DayNumber` slice uses the existing DATE mapping and zero-based Gregorian arithmetic; see

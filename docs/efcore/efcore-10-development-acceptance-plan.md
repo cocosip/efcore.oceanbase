@@ -19,7 +19,7 @@
 ## 当前检查点
 
 创建本文档时记录的历史提交和测试总数属于此前的模块检查点；当前最新模块、测试结果和包版本分别记录在下面的
-server clock checkpoint 和对应 plan 中。不要使用旧 handoff 行推断当前 HEAD 或当前测试总数。
+`DateOnly.AddDays` checkpoint 和对应 plan 中。不要使用旧 handoff 行推断当前 HEAD 或当前测试总数。
 - 当前没有真实 OceanBase SQL/DDL 验收。已有 live 探针在握手阶段报 `Connection closed while reading the packet`，没有执行 SQL 或 DDL。
 
 因此，CFG-04 已完成本地 characterization；连接波次已转入剩余映射、查询、更新和事务边界。不得重复已经完成的连接 characterization。
@@ -47,7 +47,26 @@ native precision/range and release gates stay open.
 已解释跳过（1,462 总计）。反射确认 `Types.RelationalTypeTestBase<T,TFixture>` 只包含 JSON 查询/更新
 场景，因此保留在 `DEF-04`，不把它伪装成 Required `TST-01` 覆盖。
 
-2026-11-16 的当前模块为 `QRY-07/MAP-05` 的 `DateTime.TimeOfDay`。MySQL 使用 `TIME(input)`；Oracle
+### 2026-11-16：`DateOnly.AddDays` translation
+
+Module: `DateOnly.AddDays(int)` through the existing `DATE` carrier
+Checklist IDs: `MAP-05`, `QRY-07`, `QRY-11`
+Base commit: `3515b8f`
+Implementation files: `OceanBaseTemporalMethodTranslator.cs`, `OceanBaseMethodCallTranslatorProvider.cs`,
+`OceanBaseQuerySqlGenerator.cs`
+Tests added/changed: `TemporalMemberQueryTests.cs`, `DateOnlyDayNumberFunctionalTests.cs`, packed `Program.cs`
+Focused command and result: Unit 4/4 and Functional 4/4 in Release across MySQL/Oracle sync/async; RED failed
+in both modes before the translator branch. Negative unrelated/null-converting carrier cases are included.
+Full local command and result: Debug/Release Unit 2387 and Functional 1923 pass; Release Specification 1446 pass
+with 16 mapped skips; ConsumerTests 2/2 pass.
+Package/tooling command and result: `10.0.0-date-only-add-days-20261116` passes `Verify-Package.ps1` and
+the packed PackageConsumer on EF10.0.0/10.0.14 in both modes with isolated caches.
+Live command and result: not run; the supplied endpoint still closes during the pre-authentication handshake.
+Evidence boundary: local SQL, mapping, intercepted sync/async materialization and offline package consumption;
+no native server behavior is claimed.
+Known gaps: native date arithmetic/calendar/coercion and final release gates remain open.
+
+此前的 `QRY-07/MAP-05` `DateTime.TimeOfDay` 模块使用 `TIME(input)`；Oracle
 对 DATE 使用 `NUMTODSINTERVAL((input - TRUNC(input)), 'DAY')`，对 TIMESTAMP 使用
 `input - CAST(TRUNC(input) AS TIMESTAMP)`，返回现有 `TimeSpan`/TIME 或 Oracle interval
 映射。Unit focused 4/4、Functional sync/async 4/4；时间相关 Unit 174/174、Functional 36/36，完整
@@ -540,8 +559,9 @@ Evidence boundary: MySQL emits `UTC_TIMESTAMP(6)` through the UTC-normalized DAT
 `CAST(SYS_EXTRACT_UTC(SYSTIMESTAMP) AS TIMESTAMP)` and the existing reader restores zero offset. Native clock
 accuracy, session timezone, precision and live results are not proved.
 Known gaps: `DateTimeOffset.Now` remains outside this contract because MySQL cannot preserve application-local offset;
-EF10.0.14 packed compatibility and the live gate remain open.
-Next module: finish Debug full rerun, review this module, commit, then select one remaining mapping/query/write/transaction gap.
+the live gate remains open. EF10.0.14 packed compatibility passed for this module.
+Next module: finish the current `DateOnly.AddDays` documentation checkpoint, then select one remaining
+mapping/query/write/transaction gap.
 Commit: `0f12524`.
 
 每个波次完成后，在对应 plan/progress 文档增加一段记录，字段必须完整：
