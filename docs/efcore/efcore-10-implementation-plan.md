@@ -20,10 +20,9 @@ checklist rows, implementation, tests and package impact are updated together.
 Development resumed on 2026-11-11 at the user's request on efcore/10.0. The
 [progress handoff](efcore-10-progress.md) records the current checkpoint, verification and next work.
 
-Latest local module is the 2026-11-13 [migrations core](efcore-10-migrations-design.md), following Batch3az.
-It implements model-difference SQL, scoped history/locking/execution and forward/reverse/idempotent scripts
-in both modes. Its [module plan](efcore-10-migrations-plan.md) and progress handoff record current verification;
-the earlier Batch3ag/3962-test checkpoint is historical. Native execution, CLI tooling/bundles, wider required
+Latest local module is the 2026-11-13 CI portability and explicit binary/Guid parameter-root slice (Batch3ba),
+following migrations core/tooling and HasData schema bootstrap. Its [progress handoff](efcore-10-progress.md)
+records the focused verification and the Connector 0.3.0 cache limitation. Native execution, wider required
 query/model/write/runtime specification coverage and release gates remain incomplete.
 
 Advance complete modules with their callers, fixtures, package smoke and documentation. Query carrier or

@@ -78,8 +78,9 @@ text mapping validation; preserve model-to-string converters, current captures, 
 empty roots and MySQL/Oracle parameter binding. Oracle's string normalizer continues to apply its
 empty-string-as-NULL rule after expansion.
 
-An unconfigured context and EF's single JSON-style `Parameter` collection mode remain unsupported. Binary,
-Boolean, temporal and Guid explicit roots keep their existing boundaries. Null-converting and non-text
+An unconfigured context and EF's single JSON-style `Parameter` collection mode remain unsupported. Boolean,
+temporal explicit roots keep their existing boundaries; binary and Guid roots use the explicit contract below.
+Null-converting and non-text
 carriers reject before command execution. Unit, intercepted sync/async and packed-consumer tests establish
 local translation, provider values, readers and empty metadata only; native text collation, UNION coercion
 and live OceanBase results remain separate gates.
@@ -109,16 +110,30 @@ provider admits the existing temporal mappings through the same primitive collec
 conversion are covered by the local unit/intercepted tests.
 
 Unconfigured contexts and EF's single JSON-style collection parameter remain rejected. Binary and Guid explicit
-roots are outside this slice. The focused evidence is local translation, parameter binding, reader conversion
+roots use the following shared admission contract. The focused evidence is local translation, parameter binding, reader conversion
 and empty predicates; native temporal precision, timezone, interval coercion and live OceanBase results remain
 separate gates.
+
+## Explicit binary and Guid parameter-root contract (Batch3ba, QRY-03/11, MAP-04/06/07)
+
+Support explicitly configured `EF.Parameter` binary arrays and nullable Guid arrays when the context selects
+`Constant` or `MultipleParameters`. Reuse the existing primitive collection `VALUES` expansion and mapping
+validation: byte arrays retain the provider binary carrier, MySQL Guid mappings retain their 36-character text
+carrier, and Oracle Guid mappings retain `RAW(16)` with the existing Guid-to-bytes converter. Preserve current
+captures, NULL cells, duplicates and empty-root typed metadata; reject null-converting converters and unknown
+layouts before command execution.
+
+Focused unit coverage passes 16 cases across both modes and both explicit policies. This establishes local
+translation and SQL-shape behavior only; binary/Guid equality, byte order, carrier coercion, Oracle empty-BLOB
+transport and live OceanBase results remain separate acceptance gates.
 
 ## Boolean collection-root contract (Batch3af, QRY-03/06/11, MAP-06/07)
 
 Support captured arrays/lists and originally empty inline `bool`/`bool?` roots in both compatibility modes by
 reusing the general VALUES expansion. Preserve current captures, order, duplicates, NULL cells, empty roots,
 `Constant`/`MultipleParameters` policies, provider-owned Boolean mappings and non-null-converting Boolean-to-
-integer/decimal converters. `EF.Parameter(collection)` remains outside this translator boundary.
+integer/decimal converters. `EF.Parameter(collection)` remains outside this general captured-root boundary;
+explicit Boolean roots use the Batch3ay contract above.
 
 MySQL synthetic collection typing uses `CAST(... AS SIGNED)` or the carrier's unsigned/decimal target; Oracle
 uses `CAST(... AS NUMBER)` and emits `FROM DUAL` for every SELECT arm. Oracle's decimal Boolean carrier and
@@ -156,8 +171,9 @@ expansion when the element mapping is the provider-owned binary mapping and its 
 nulls. Preserve one raw byte array per row, NULL cells, current captures and typed zero-row metadata in both
 modes. MySQL synthetic typing uses `CAST(NULL AS BINARY)`; Oracle uses the mapped `RAW(n)` or `BLOB` store
 declaration. Binary parameters and projected readers retain the existing byte-array mapping and validation.
-`EF.Parameter(collection)`, scalar `byte[]` roots, null-converting converters and unknown layouts remain outside
-this translator boundary. Oracle non-null empty binary inputs remain the existing unsupported transport case.
+Explicit `EF.Parameter(collection)` roots use Batch3ba; scalar `byte[]` roots, null-converting converters and
+unknown layouts remain outside this translator boundary. Oracle non-null empty binary inputs remain the existing
+unsupported transport case.
 Interception proves local binding, reader shaping and SQL typing only; binary equality, LOB coercion and native
 UNION behavior remain live acceptance gates.
 
@@ -180,8 +196,8 @@ Support captured `Guid`/`Guid?` arrays and originally empty inline roots through
 by the provider-owned Guid mapping. MySQL's default Guid mapping uses the 36-character text carrier and
 Oracle's default mapping uses `RAW(16)` with the existing Guid-to-bytes converter. Preserve current captures,
 NULL cells, duplicates and typed zero-row metadata; projected readers must continue to decode the declared
-carrier back to `Guid?` in both sync and async commands. `EF.Parameter(collection)`, null-converting custom
-converters and unknown collection layouts remain outside this translator boundary.
+carrier back to `Guid?` in both sync and async commands. Explicit `EF.Parameter(collection)` roots use Batch3ba;
+null-converting custom converters and unknown collection layouts remain outside this translator boundary.
 
 The local contract is limited to translation, parameter binding, reader conversion and empty-root metadata.
 Native Guid equality, byte order, text collation, RAW/CHAR coercion and live execution remain acceptance gates.
@@ -846,8 +862,7 @@ string normalization must exclude collection envelopes, especially null collecti
 
 EF.Constant/context Constant use mapping-owned literals. Context Parameter mode can use an inherited Contains
 fallback to scalar IN. Explicit integer, numeric, text and Boolean roots use the bounded Batch3at/Batch3aw/
-Batch3ax/Batch3ay contracts; temporal, binary and Guid explicit roots remain unsupported without their own
-primitive-collection translator. Test both boundaries. Text lists need provider-converted Oracle empty/NULL normalization before
+Batch3ax/Batch3ay/Batch3ba contracts. Test both boundaries. Text lists need provider-converted Oracle empty/NULL normalization before
 membership compensation; general VALUES roots need their own integer-ordinal and dialect rendering fixes.
 Those and APPLY/collection projections remain separate locally feasible work. Numeric aggregate promotion/
 result normalization has the contract above; nonnumeric aggregate extrema are implemented in Batch3ad, while
@@ -884,8 +899,8 @@ compensation, NOT/CASE/Boolean projections and relational-null differences after
 Characterize empty/null/all-null/duplicate/converted-empty collections, changed captures, bucket boundaries,
 name collisions, hostile literal data, fixed/national/LOB bindings and both modes/null settings. Native
 collation/padding/LOB equality/charset/server limits remain live gates. General VALUES roots and explicit
-integer/numeric/text/Boolean `EF.Parameter(collection)` roots have separate bounded contracts; other explicit
-carrier families remain locally feasible follow-up work with clear unsupported-shape tests.
+integer/numeric/text/Boolean/binary/Guid `EF.Parameter(collection)` roots have separate bounded contracts; other
+explicit carrier families remain locally feasible follow-up work with clear unsupported-shape tests.
 
 The independently reviewed slice passes 25 focused unit and 20 intercepted cases. Full Debug/Release and isolated
 EF10.0.14 Release pass 1200 tests. Real EF array/list queries cover both modes/null settings and changed

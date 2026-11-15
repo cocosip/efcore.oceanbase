@@ -2,6 +2,7 @@ using System;
 using System.Linq;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Query;
 using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using OceanBase.EntityFrameworkCore.Query;
@@ -62,10 +63,44 @@ public sealed class BinaryCollectionRootQueryTests
         Assert.False(OceanBaseCollectionParameterExpandingVisitor.IsSupportedBinary(nullConverted));
     }
 
-    private static TestContext CreateContext(OceanBaseCompatibilityMode mode)
-        => new(new DbContextOptionsBuilder<TestContext>()
+    [Theory]
+    [InlineData(OceanBaseCompatibilityMode.MySql, ParameterTranslationMode.Constant)]
+    [InlineData(OceanBaseCompatibilityMode.MySql, ParameterTranslationMode.MultipleParameters)]
+    [InlineData(OceanBaseCompatibilityMode.Oracle, ParameterTranslationMode.Constant)]
+    [InlineData(OceanBaseCompatibilityMode.Oracle, ParameterTranslationMode.MultipleParameters)]
+    public void Explicit_parameter_binary_roots_translate_and_rebind(
+        OceanBaseCompatibilityMode mode, ParameterTranslationMode translation)
+    {
+        using var context = CreateContext(mode, translation);
+        byte[]?[] values = [new byte[] { 1, 2 }, null, new byte[] { 3, 4 }];
+        var query = context.Rows.Where(row => EF.Parameter(values).Contains(row.Payload));
+
+        foreach (var input in new byte[]?[][] { values, [new byte[] { 7 }], [] })
+        {
+            values = input;
+            var sql = query.ToQueryString();
+            Assert.DoesNotContain("JSON", sql, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("IN ()", sql, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal(input.Length == 0, sql.Contains("WHERE 1 = 0", StringComparison.Ordinal)
+                || sql.Contains("WHERE 0", StringComparison.Ordinal));
+        }
+    }
+
+    private static TestContext CreateContext(OceanBaseCompatibilityMode mode,
+        ParameterTranslationMode? translation = null)
+    {
+        var builder = new DbContextOptionsBuilder<TestContext>()
             .UseOceanBase("Server=localhost;Database=binary_roots", mode)
-            .EnableServiceProviderCaching(false).Options);
+            .EnableServiceProviderCaching(false);
+        if (translation.HasValue)
+        {
+            var extension = builder.Options.Extensions.OfType<RelationalOptionsExtension>().Single()
+                .WithUseParameterizedCollectionMode(translation.Value);
+            ((IDbContextOptionsBuilderInfrastructure)builder).AddOrUpdateExtension(extension);
+        }
+
+        return new TestContext(builder.Options);
+    }
 
     private sealed class TestContext(DbContextOptions<TestContext> options) : DbContext(options)
     {

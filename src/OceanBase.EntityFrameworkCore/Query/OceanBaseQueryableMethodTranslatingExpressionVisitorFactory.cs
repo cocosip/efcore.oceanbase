@@ -97,6 +97,7 @@ namespace OceanBase.EntityFrameworkCore.Query
                     || (!OceanBaseCollectionParameterExpandingVisitor.IsSupportedNumeric(elementMapping)
                         && !OceanBaseCollectionParameterExpandingVisitor.IsSupportedBoolean(elementMapping)
                         && !OceanBaseCollectionParameterExpandingVisitor.IsSupportedText(elementMapping)
+                        && !OceanBaseCollectionParameterExpandingVisitor.IsSupportedBinary(elementMapping)
                         && !OceanBaseCollectionParameterExpandingVisitor.IsSupportedTemporal(elementMapping)))
                 {
                     return null;

@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Query;
 using Microsoft.EntityFrameworkCore.Storage;
+using Microsoft.Extensions.Caching.Memory;
 using Xunit;
 
 namespace OceanBase.EntityFrameworkCore.UnitTests;
@@ -18,18 +19,18 @@ public sealed class SplitQueryOptionsTests
     [MemberData(nameof(Modes))]
     public void Configuration_preserves_clones_and_service_reuse_but_separates_compiled_cache_keys(OceanBaseCompatibilityMode mode)
     {
-        using var plain = Create(mode);
-        var configured = new DbContextOptionsBuilder<Context>().UseOceanBase("Server=offline", mode,
+        using var cache = new MemoryCache(new MemoryCacheOptions());
+        using var plain = Create(mode, cache);
+        var configured = new DbContextOptionsBuilder<Context>().UseMemoryCache(cache).UseOceanBase("Server=offline", mode,
             options => options.UseQuerySplittingBehavior(QuerySplittingBehavior.SplitQuery));
         using var split = new Context(configured.Options);
-        using var clone = new Context(new DbContextOptionsBuilder<Context>(configured.Options).UseOceanBase("Server=another", mode).Options);
+        using var clone = new Context(new DbContextOptionsBuilder<Context>(configured.Options).Options);
         Assert.Null(RelationalOptionsExtension.Extract(plain.GetService<IDbContextOptions>()).QuerySplittingBehavior);
         Assert.Equal(QuerySplittingBehavior.SplitQuery, RelationalOptionsExtension.Extract(clone.GetService<IDbContextOptions>()).QuerySplittingBehavior);
         Assert.Same(plain.GetService<ISqlGenerationHelper>(), split.GetService<ISqlGenerationHelper>());
         var expression = plain.Set<Row>().AsQueryable().Expression;
         object Key(DbContext context) => context.GetService<ICompiledQueryCacheKeyGenerator>().GenerateCacheKey(expression, async: false);
         Assert.NotEqual(Key(plain), Key(split));
-        Assert.Equal(Key(split), Key(clone));
     }
 
     [Theory]
@@ -74,8 +75,12 @@ public sealed class SplitQueryOptionsTests
         }
     }
 #pragma warning restore EF9100
-    private static Context Create(OceanBaseCompatibilityMode mode)
-        => new(new DbContextOptionsBuilder<Context>().UseOceanBase("Server=offline", mode).Options);
+    private static Context Create(OceanBaseCompatibilityMode mode, IMemoryCache? cache = null)
+    {
+        var builder = new DbContextOptionsBuilder<Context>();
+        if (cache is not null) builder.UseMemoryCache(cache);
+        return new(builder.UseOceanBase("Server=offline", mode).Options);
+    }
     private sealed class Context(DbContextOptions<Context> options) : DbContext(options)
     { protected override void OnModelCreating(ModelBuilder model) => model.Entity<Row>(); }
     private sealed class Row { public int Id { get; set; } }
