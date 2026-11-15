@@ -6,7 +6,7 @@ The ordered development and acceptance rules are in
 [efcore-10-development-acceptance-plan.md](efcore-10-development-acceptance-plan.md). This file keeps the
 historical handoff and module evidence; it does not authorize jumping between unfinished feature families.
 
-The latest local feature module is the 2026-11-16 `DateOnly.AddDays` checkpoint recorded below. Earlier commit
+The latest local feature module is the 2026-11-16 `DateOnly.AddMonths` checkpoint recorded below. Earlier commit
 identifiers and test totals remain historical evidence for their original modules; they are not the current branch
 baseline. The current feature evidence is recorded in the latest checkpoint sections and module plan.
 
@@ -19,6 +19,21 @@ TPC, many-to-many and Connector 0.3.0 reverse engineering.
 Test each module and review completed major modules before committing. EF8/EF9 remain postponed.
 The provider is not release-ready. The [feature checklist](efcore-10-feature-checklist.md) remains the
 acceptance authority; this document records the handoff rather than defining a different completion target.
+
+### QRY-07/QRY-11/MAP-05 `DateOnly.AddMonths` checkpoint (2026-11-16)
+
+`DateOnly.AddMonths(int)` now uses the existing `DATE` carrier. MySQL emits
+`DATE_ADD(input, INTERVAL months MONTH)`; Oracle emits `ADD_MONTHS(input, months)` so the result remains a
+`DATE` for the existing DateOnly reader. Unrelated and null-converting carriers are rejected before SQL
+generation; no Connector change was needed. The RED query failed in both modes before the translator was added.
+
+Focused Release evidence is Unit 4/4 and Functional 4/4 across both modes and sync/async. Full Debug/Release
+Unit and Functional suites pass 2391/1927; Release Specification is 1446 passed with 16 mapped skips and
+ConsumerTests is 2/2. Package `10.0.0-date-only-add-months-20261116` passes `Verify-Package.ps1` and packed
+consumers on EF10.0.0/10.0.14 in both modes with isolated caches. This is local SQL, intercepted-reader and
+offline package evidence; native month arithmetic and live OceanBase results remain open. See
+[the DateOnly.AddMonths plan](efcore-10-date-only-add-months-plan.md).
+Implementation commit: `7e6c129` (local only).
 
 ### QRY-07/QRY-11/MAP-05 `DateOnly.AddDays` checkpoint (2026-11-16)
 
