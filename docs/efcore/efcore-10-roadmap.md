@@ -5,6 +5,10 @@
 **State:** Paused at the user's request after HasData wrap-up and local commit; resume only when requested.
 **Acceptance authority:** [efcore-10-feature-checklist.md](efcore-10-feature-checklist.md)
 
+**Execution control:** Follow [efcore-10-development-acceptance-plan.md](efcore-10-development-acceptance-plan.md)
+for the ordered waves, evidence levels and handoff format. The committed 5028-test HasData checkpoint and any
+uncommitted follow-up work must be reported separately.
+
 This is the execution board for the first OceanBase EF Core 10 provider. It separates provider work from
 evidence work so an intercepted test cannot be mistaken for native OceanBase acceptance.
 

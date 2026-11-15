@@ -1,5 +1,15 @@
 # EF Core 10 Development Progress
 
+## Execution control
+
+The ordered development and acceptance rules are in
+[efcore-10-development-acceptance-plan.md](efcore-10-development-acceptance-plan.md). This file keeps the
+historical handoff and module evidence; it does not authorize jumping between unfinished feature families.
+
+The committed checkpoint is Batch3ba commit `df67ff8` (explicit Binary/Guid `EF.Parameter` collection roots
+plus cache/CI corrections), following HasData commit `1f6046f`. The current worktree Release test baseline is
+5036 passed, zero failed/skipped; the 5028 count below belongs to the HasData checkpoint before Batch3ba.
+
 ## Paused checkpoint: 2026-11-13
 
 Development resumed on 2026-11-11 on efcore/10.0 at the user's request, following the paused Batch7e checkpoint.
