@@ -557,6 +557,61 @@ namespace OceanBase.EntityFrameworkCore.Query
                 return sqlFunctionExpression;
             }
 
+            if (sqlFunctionExpression.Name == OceanBaseTemporalMemberTranslator.DateTimeTicksMarker)
+            {
+                if (sqlFunctionExpression is not { IsBuiltIn: true, Schema: null, Instance: null, Arguments.Count: 1,
+                        IsNullable: true, ArgumentsPropagateNullability: [false], Type: var resultType,
+                        TypeMapping: { } resultMapping }
+                    || resultMapping.Converter?.ConvertsNulls == true
+                    || resultType != typeof(long)
+                    || (resultMapping.Converter?.ProviderClrType ?? resultMapping.ClrType) != typeof(long)
+                    || sqlFunctionExpression.Arguments[0] is not { Type: var inputType, TypeMapping: { } inputMapping }
+                    || inputType != typeof(DateTime)
+                    || !IsDateTimeMapping(inputMapping))
+                    throw new InvalidOperationException("Invalid internal DateTime.Ticks expression.");
+
+                if (_mode == OceanBaseCompatibilityMode.MySql)
+                {
+                    Sql.Append("((DATEDIFF(");
+                    Visit(sqlFunctionExpression.Arguments[0]);
+                    Sql.Append(", '0001-01-01') * 864000000000) + (TIME_TO_SEC(TIME(");
+                    Visit(sqlFunctionExpression.Arguments[0]);
+                    Sql.Append(")) * 10000000) + (ABS(MICROSECOND(TIME(");
+                    Visit(sqlFunctionExpression.Arguments[0]);
+                    Sql.Append(")) * 10))");
+                }
+                else if (inputMapping.StoreTypeNameBase.Equals("DATE", StringComparison.OrdinalIgnoreCase))
+                {
+                    Sql.Append("((TRUNC(");
+                    Visit(sqlFunctionExpression.Arguments[0]);
+                    Sql.Append(") - DATE '0001-01-01') * 864000000000 + TRUNC((");
+                    Visit(sqlFunctionExpression.Arguments[0]);
+                    Sql.Append(" - TRUNC(");
+                    Visit(sqlFunctionExpression.Arguments[0]);
+                    Sql.Append(")) * 864000000000)");
+                }
+                else
+                {
+                    Sql.Append("((TRUNC(");
+                    Visit(sqlFunctionExpression.Arguments[0]);
+                    Sql.Append(") - DATE '0001-01-01') * 864000000000 + EXTRACT(HOUR FROM (");
+                    Visit(sqlFunctionExpression.Arguments[0]);
+                    Sql.Append(" - CAST(TRUNC(");
+                    Visit(sqlFunctionExpression.Arguments[0]);
+                    Sql.Append(") AS TIMESTAMP))) * 36000000000 + EXTRACT(MINUTE FROM (");
+                    Visit(sqlFunctionExpression.Arguments[0]);
+                    Sql.Append(" - CAST(TRUNC(");
+                    Visit(sqlFunctionExpression.Arguments[0]);
+                    Sql.Append(") AS TIMESTAMP))) * 600000000 + TRUNC(EXTRACT(SECOND FROM (");
+                    Visit(sqlFunctionExpression.Arguments[0]);
+                    Sql.Append(" - CAST(TRUNC(");
+                    Visit(sqlFunctionExpression.Arguments[0]);
+                    Sql.Append(") AS TIMESTAMP))) * 10000000)");
+                }
+
+                return sqlFunctionExpression;
+            }
+
             if (sqlFunctionExpression.Name == OceanBaseTemporalMemberTranslator.TotalMarker)
             {
                 if (sqlFunctionExpression is not { IsBuiltIn: true, Schema: null, Instance: null, Arguments.Count: 2,

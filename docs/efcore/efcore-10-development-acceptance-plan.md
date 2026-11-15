@@ -90,6 +90,17 @@ Package consumers include explicit SQL assertions for this member. Native interv
 remain open. Package `10.0.0-time-only-ticks-20261116` passed package content verification and the standalone
 consumer on EF10.0.0/10.0.14 in both modes; this remains offline/package evidence.
 
+### QRY-07/MAP-05 `DateTime.Ticks` checkpoint (2026-11-16)
+
+`DateTime.Ticks` now translates Gregorian epoch-based 100ns values through MySQL `DATETIME` and Oracle
+`DATE`/`TIMESTAMP` carriers. The RED query failed in both modes before implementation. Focused Release
+evidence is 2 Unit and 4 functional cases, with sync/async projection, predicate, exact epoch-based values and
+NULL materialization. The detailed record is in [the DateTime.Ticks plan](efcore-10-date-time-ticks-plan.md).
+`DateTimeOffset.Ticks` remains outside this module pending offset semantics. Package consumers include an
+explicit SQL assertion; native date arithmetic, precision and live results remain open.
+Package `10.0.0-date-time-ticks-20261116` passed package content verification and the standalone consumer on
+EF10.0.0/10.0.14 in both modes; this remains offline/package evidence.
+
 下一模块：继续一个尚未完成的 Required 映射/查询边界；优先处理仍缺少完整同步/异步和负面覆盖的
 时间或数值 overload。不得把 `DEF-04` JSON-only 规范族提前提升为 Required。
 

@@ -397,6 +397,13 @@ namespace PackageConsumer
                         StringComparison.Ordinal)
                     || clockTicksSql.Contains("__oceanbase_internal_", StringComparison.Ordinal))
                     throw new Exception("Packed provider did not translate TimeOnly.Ticks.");
+                var dateTimeTicksSql = context.Set<Row>().Where(row => row.OccurredAt.Ticks > TimeSpan.TicksPerDay)
+                    .Select(row => row.OccurredAt.Ticks).ToQueryString();
+                if (!dateTimeTicksSql.Contains(mode == OceanBaseCompatibilityMode.MySql
+                        ? "DATEDIFF(`r`.`OccurredAt`, '0001-01-01')" : "TRUNC(\"r\".\"OccurredAt\") - DATE '0001-01-01'",
+                        StringComparison.Ordinal)
+                    || dateTimeTicksSql.Contains("__oceanbase_internal_", StringComparison.Ordinal))
+                    throw new Exception("Packed provider did not translate DateTime.Ticks.");
 
                 var calendarSql = context.Set<Row>().Where(row => row.OccurredAt.DayOfWeek == DayOfWeek.Sunday
                     && row.Day.DayOfYear == 60).ToQueryString();

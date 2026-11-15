@@ -602,6 +602,55 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
         [Theory]
         [InlineData(OceanBaseCompatibilityMode.MySql)]
         [InlineData(OceanBaseCompatibilityMode.Oracle)]
+        public void DateTime_Ticks_translate_from_the_gregorian_epoch(OceanBaseCompatibilityMode mode)
+        {
+            using var context = CreateContext(mode);
+            var sql = context.Rows
+                .Where(row => row.Stamp.Ticks > TimeSpan.TicksPerDay)
+                .OrderBy(row => row.Stamp.Ticks)
+                .Select(row => row.Stamp.Ticks)
+                .ToQueryString();
+
+            Assert.DoesNotContain("__oceanbase_internal", sql);
+            if (mode == OceanBaseCompatibilityMode.MySql)
+            {
+                Assert.Contains("DATEDIFF(`r`.`Stamp`, '0001-01-01')", sql);
+                Assert.Contains("TIME_TO_SEC(TIME(`r`.`Stamp`))", sql);
+                Assert.Contains("MICROSECOND(TIME(`r`.`Stamp`))", sql);
+            }
+            else
+            {
+                Assert.Contains("TRUNC(\"r\".\"Stamp\") - DATE '0001-01-01'", sql);
+                Assert.Contains("EXTRACT(SECOND FROM", sql);
+                var dateSql = context.Rows.Select(row => row.DateStamp.Ticks).ToQueryString();
+                Assert.Contains("TRUNC((\"r\".\"DateStamp\" - TRUNC(\"r\".\"DateStamp\")) * 864000000000)", dateSql);
+            }
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle)]
+        public void DateTime_Ticks_reject_unowned_and_null_converting_carriers(OceanBaseCompatibilityMode mode)
+        {
+            using var context = CreateContext(mode);
+            var source = context.GetService<IRelationalTypeMappingSource>();
+            var factory = context.GetService<ISqlExpressionFactory>();
+            var members = context.GetService<IMemberTranslatorProvider>();
+            var logger = context.GetService<IDiagnosticsLogger<DbLoggerCategory.Query>>();
+            var ticks = typeof(DateTime).GetProperty(nameof(DateTime.Ticks))!;
+            var binary = (RelationalTypeMapping)source.FindMapping(typeof(byte[]))!.WithComposedConverter(
+                new ValueConverter<DateTime, byte[]>(value => BitConverter.GetBytes(value.Ticks),
+                    value => new DateTime(BitConverter.ToInt64(value))));
+            var nullConverter = (RelationalTypeMapping)source.FindMapping(typeof(DateTime))!.WithComposedConverter(
+                new ValueConverter<DateTime, DateTime>(value => value, value => value, convertsNulls: true));
+
+            Assert.Null(members.Translate(factory.Constant(DateTime.UtcNow, binary), ticks, typeof(long), logger));
+            Assert.Null(members.Translate(factory.Constant(DateTime.UtcNow, nullConverter), ticks, typeof(long), logger));
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle)]
         public void TimeSpan_component_members_translate_with_signed_duration_semantics(OceanBaseCompatibilityMode mode)
         {
             using var context = CreateContext(mode);

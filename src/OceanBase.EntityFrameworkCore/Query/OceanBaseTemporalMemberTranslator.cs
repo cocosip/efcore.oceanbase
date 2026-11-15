@@ -20,6 +20,7 @@ namespace OceanBase.EntityFrameworkCore.Query
         internal const string TimeOfDayMarker = "__oceanbase_internal_time_of_day";
         internal const string DayNumberMarker = "__oceanbase_internal_day_number";
         internal const string TicksMarker = "__oceanbase_internal_ticks";
+        internal const string DateTimeTicksMarker = "__oceanbase_internal_datetime_ticks";
 
         private static readonly Dictionary<MemberInfo, (Type Receiver, string Unit, string MySqlFunction)> Parts = new()
         {
@@ -72,6 +73,7 @@ namespace OceanBase.EntityFrameworkCore.Query
         private static readonly MemberInfo DateOnlyDayNumber = typeof(DateOnly).GetProperty(nameof(DateOnly.DayNumber))!;
         private static readonly MemberInfo TimeSpanTicks = typeof(TimeSpan).GetProperty(nameof(TimeSpan.Ticks))!;
         private static readonly MemberInfo TimeOnlyTicks = typeof(TimeOnly).GetProperty(nameof(TimeOnly.Ticks))!;
+        private static readonly MemberInfo DateTimeTicks = typeof(DateTime).GetProperty(nameof(DateTime.Ticks))!;
 
         public SqlExpression? Translate(SqlExpression? instance, MemberInfo member, Type returnType,
             IDiagnosticsLogger<DbLoggerCategory.Query> logger)
@@ -139,6 +141,19 @@ namespace OceanBase.EntityFrameworkCore.Query
                     return null;
 
                 return factory.Function(TicksMarker, [instance], nullable: true,
+                    argumentsPropagateNullability: [false], typeof(long), mappingSource.FindMapping(typeof(long)));
+            }
+
+            if (instance is not null && member == DateTimeTicks && instance.Type == typeof(DateTime)
+                && returnType == typeof(long))
+            {
+                instance = factory.ApplyDefaultTypeMapping(instance);
+                var dateMapping = instance.TypeMapping;
+                if (dateMapping is null || dateMapping.Converter?.ConvertsNulls == true
+                    || !SupportsDate(dateMapping))
+                    return null;
+
+                return factory.Function(DateTimeTicksMarker, [instance], nullable: true,
                     argumentsPropagateNullability: [false], typeof(long), mappingSource.FindMapping(typeof(long)));
             }
 
