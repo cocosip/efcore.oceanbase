@@ -442,6 +442,13 @@ namespace PackageConsumer
                         : !dateAddSql.Contains(" + ", StringComparison.Ordinal))
                     || dateAddSql.Contains("__oceanbase_internal_", StringComparison.Ordinal))
                     throw new Exception("Packed provider did not translate DateOnly.AddDays.");
+                var dateMonthsSql = context.Set<Row>().Where(row => row.Day.AddMonths(1) > new DateOnly(2024, 1, 1))
+                    .Select(row => row.Day.AddMonths(1)).ToQueryString();
+                if ((mode == OceanBaseCompatibilityMode.MySql
+                        ? !dateMonthsSql.Contains("DATE_ADD", StringComparison.Ordinal)
+                        : !dateMonthsSql.Contains("ADD_MONTHS", StringComparison.Ordinal))
+                    || dateMonthsSql.Contains("__oceanbase_internal_", StringComparison.Ordinal))
+                    throw new Exception("Packed provider did not translate DateOnly.AddMonths.");
                 var clockSql = context.Set<Row>().Select(row => new
                 {
                     Now = DateTime.Now,

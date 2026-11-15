@@ -12,12 +12,14 @@ namespace OceanBase.EntityFrameworkCore.Query
     internal sealed class OceanBaseTemporalMethodTranslator(ISqlExpressionFactory sqlExpressionFactory) : IMethodCallTranslator
     {
         internal const string DateOnlyAddDaysMarker = "__oceanbase_internal_dateonly_add_days";
+        internal const string DateOnlyAddMonthsMarker = "__oceanbase_internal_dateonly_add_months";
         private static readonly MethodInfo DateOnlyAddDays = typeof(DateOnly).GetMethod(nameof(DateOnly.AddDays), [typeof(int)])!;
+        private static readonly MethodInfo DateOnlyAddMonths = typeof(DateOnly).GetMethod(nameof(DateOnly.AddMonths), [typeof(int)])!;
 
         public SqlExpression? Translate(SqlExpression? instance, MethodInfo method, IReadOnlyList<SqlExpression> arguments,
             IDiagnosticsLogger<DbLoggerCategory.Query> logger)
         {
-            if (instance is null || method != DateOnlyAddDays || arguments.Count != 1)
+            if (instance is null || (method != DateOnlyAddDays && method != DateOnlyAddMonths) || arguments.Count != 1)
                 return null;
 
             instance = sqlExpressionFactory.ApplyDefaultTypeMapping(instance);
@@ -30,7 +32,8 @@ namespace OceanBase.EntityFrameworkCore.Query
                 || (daysMapping.Converter?.ProviderClrType ?? daysMapping.ClrType) != typeof(int))
                 return null;
 
-            return sqlExpressionFactory.Function(DateOnlyAddDaysMarker, [instance, days], nullable: true,
+            return sqlExpressionFactory.Function(method == DateOnlyAddDays ? DateOnlyAddDaysMarker : DateOnlyAddMonthsMarker,
+                [instance, days], nullable: true,
                 argumentsPropagateNullability: [false, false], typeof(DateOnly), dateMapping);
         }
 

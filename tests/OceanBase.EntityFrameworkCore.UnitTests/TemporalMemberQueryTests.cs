@@ -134,6 +134,43 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
         [Theory]
         [InlineData(OceanBaseCompatibilityMode.MySql)]
         [InlineData(OceanBaseCompatibilityMode.Oracle)]
+        public void DateOnly_add_months_translates_to_server_expression(OceanBaseCompatibilityMode mode)
+        {
+            using var context = CreateContext(mode);
+            var sql = context.Rows.Where(row => row.Date.AddMonths(1) > new DateOnly(2024, 1, 1))
+                .Select(row => row.Date.AddMonths(1)).ToQueryString();
+
+            Assert.DoesNotContain("__oceanbase_internal", sql);
+            Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? "DATE_ADD" : "ADD_MONTHS", sql);
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle)]
+        public void DateOnly_add_months_rejects_unowned_and_null_converting_carriers(OceanBaseCompatibilityMode mode)
+        {
+            using var context = CreateContext(mode);
+            var source = context.GetService<IRelationalTypeMappingSource>();
+            var factory = context.GetService<ISqlExpressionFactory>();
+            var methods = context.GetService<IMethodCallTranslatorProvider>();
+            var logger = context.GetService<IDiagnosticsLogger<DbLoggerCategory.Query>>();
+            var addMonths = typeof(DateOnly).GetMethod(nameof(DateOnly.AddMonths), [typeof(int)])!;
+            var text = (RelationalTypeMapping)source.FindMapping(typeof(string))!.WithComposedConverter(
+                new ValueConverter<DateOnly, string>(value => value.ToString(), value => DateOnly.Parse(value)));
+            var nullConverter = (RelationalTypeMapping)source.FindMapping(typeof(DateTime))!.WithComposedConverter(
+                new ValueConverter<DateOnly, DateTime>(value => value.ToDateTime(TimeOnly.MinValue),
+                    value => DateOnly.FromDateTime(value), convertsNulls: true));
+            var months = factory.Constant(1, source.FindMapping(typeof(int)));
+
+            Assert.Null(methods.Translate(context.Model, factory.Constant(new DateOnly(2024, 1, 31), text), addMonths,
+                [months], logger));
+            Assert.Null(methods.Translate(context.Model, factory.Constant(new DateOnly(2024, 1, 31), nullConverter), addMonths,
+                [months], logger));
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle)]
         public void DateTimeOffset_parts_translate_in_projection_and_predicate(OceanBaseCompatibilityMode mode)
         {
             using var context = CreateContext(mode);
