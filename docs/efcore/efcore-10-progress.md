@@ -6,9 +6,9 @@ The ordered development and acceptance rules are in
 [efcore-10-development-acceptance-plan.md](efcore-10-development-acceptance-plan.md). This file keeps the
 historical handoff and module evidence; it does not authorize jumping between unfinished feature families.
 
-The latest committed local module is `747c61a` (TimeSpan component-member translation), following the TimeSpan
-total-member commit `27509aa` and its evidence record `537eede`, and Batch3ba commit `df67ff8`. The current
-worktree Release test baseline is 5,068 passed,
+The latest committed local module is `04a6fe7` (CON-02 post-open mode recheck), following the TimeSpan
+component-member commit `747c61a`, total-member commit `27509aa` and its evidence record `537eede`, and Batch3ba
+commit `df67ff8`. The current worktree Release test baseline is 5,072 passed,
 zero failed/skipped; the older 5,036 count below belongs to the pre-TimeSpan-total checkpoint.
 
 ## Paused checkpoint: 2026-11-13
@@ -1021,9 +1021,14 @@ return. A callback or connector handshake that exposes the opposite mode fails b
 Oracle in sync and async paths with a network-suppressing callback that changes the closed connection's expected mode.
 
 Focused evidence: the new regression passed 4 cases; the full `ConnectionLifecycleTests` class passed 40 cases. Full
-Release/package/tooling evidence is recorded below after completion. This local evidence proves post-open provider
-validation and accounting rollback only; connector handshake detection, physical cleanup and live behavior remain
-open under `CON-02` and `TST-02`.
+Release Unit 2,333, Functional 1,869, Specification 868 and Consumer 2 passed, with zero failures/skips.
+Verify-Package and the packed PackageConsumer passed on EF10.0.0/10.0.14 in both modes using an isolated feed/cache.
+ToolingConsumer passed catalog, compiled-model and migration/script checks on both patches with `-SkipBundle`; the
+bundle substep remains blocked by missing 10.0.14 runtime packs. This local evidence proves post-open provider
+validation, accounting rollback, package compatibility and non-bundle tooling checks only; connector handshake
+detection, physical cleanup and live behavior remain open under `CON-02` and `TST-02`.
+
+Commit: `04a6fe7`.
 
 ### Resume here: remaining EF10 local inventory
 

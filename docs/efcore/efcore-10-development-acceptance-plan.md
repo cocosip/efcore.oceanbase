@@ -20,10 +20,10 @@
 
 创建本文档时的仓库状态：
 
-- `HEAD` 的最新功能提交是 `747c61a`，内容为 TimeSpan component-member translation；TimeSpan total-member 验收记录在 `537eede`。
+- `HEAD` 的最新功能提交是 `04a6fe7`，内容为 CON-02 post-open mode recheck；TimeSpan component-member 提交为 `747c61a`。
 - Batch3ba 提交 `df67ff8` 是前一个显式 Binary/Guid `EF.Parameter` 集合根检查点。
 - HasData schema bootstrap 是前一个已提交检查点 `1f6046f`。
-- 当前工作树的 Release 本地测试为：Unit 2329、Functional 1869、Specification 868、Consumer 2，共 5068 个测试，0 失败、0 跳过。
+- 当前工作树的 Release 本地测试为：Unit 2333、Functional 1869、Specification 868、Consumer 2，共 5072 个测试，0 失败、0 跳过。
 - 文档中原有的 5028 测试数字是 HasData 已提交检查点的基线；Batch3ba 已在 `df67ff8` 中新增 8 个单元测试。
 - 当前没有真实 OceanBase SQL/DDL 验收。已有 live 探针在握手阶段报 `Connection closed while reading the packet`，没有执行 SQL 或 DDL。
 
@@ -298,13 +298,13 @@ Base commit: `88dae84`
 Implementation files: `src/OceanBase.EntityFrameworkCore/Storage/OceanBaseRelationalConnection.cs`
 Tests added/changed: `tests/OceanBase.EntityFrameworkCore.UnitTests/ConnectionLifecycleTests.cs`
 Focused command and result: `ConnectionLifecycleTests.Open_rechecks_mode_after_open_callback_and_restores_accounting` — 4 passed; full `ConnectionLifecycleTests` — 40 passed.
-Full local command and result: pending until the complete Release matrix finishes.
-Package/tooling command and result: pending until the complete Release matrix finishes.
+Full local command and result: Release Unit 2,333 passed; Release Functional 1,869 passed; Release Specification 868 passed; Consumer 2 passed; zero failures/skips.
+Package/tooling command and result: Verify-Package and PackageConsumer passed on EF10.0.0/10.0.14 in both modes using an isolated feed/cache; ToolingConsumer passed catalog, compiled-model and migration/script checks on both patches with `-SkipBundle`. The full bundle substep remains environment-blocked by missing 10.0.14 runtime packs.
 Live command and result: not run; the existing User Secrets probes still close before SQL during the pre-authentication handshake.
 Evidence boundary: post-open mode validation and EF lease rollback are proved for both modes and sync/async callback paths; connector handshake detection, physical cleanup and live connection behavior are not proved.
 Known gaps: native/live connection gates remain open.
 Next module: continue the remaining `CON-03..05` lifecycle boundaries in the execution plan.
-Commit: pending.
+Commit: `04a6fe7`.
 
 每个波次完成后，在对应 plan/progress 文档增加一段记录，字段必须完整：
 
