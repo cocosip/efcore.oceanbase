@@ -398,6 +398,27 @@ Known gaps: `CFG-04` remains `In progress` until wider schema/native lifecycle e
 Next module: continue `DIA-01/02` diagnostics boundaries, then remaining mapping/query/write/transaction gaps.
 Commit: `d4fc4df`.
 
+### 2026-11-15：DIA-01/02 diagnostics and error-boundary characterization
+
+Module: EF command logging, sensitive-data protection, update error identity and cancellation boundaries
+Checklist IDs: `DIA-01`, `DIA-02`
+Base commit: `2f01d73`
+Implementation files: no production change; existing EF diagnostics and update-batch boundaries are reused.
+Tests added/changed: existing `CommandLoggingTests` and `GraphUpdateTests` were revalidated as module evidence.
+Focused command and result: `CommandLoggingTests` — 16 passed; `GraphUpdateTests` — 26 passed; zero failures/skips.
+Full local command and result: the current Release baseline remains Unit 2349, Functional 1879, Specification 868 and
+Consumer 2, with zero failures/skips in the recorded full matrix.
+Package/tooling command and result: packed package `10.0.0-cfg04-20261115` consumers pass both EF10 patches;
+packed Oracle lifecycle smoke keeps credentials redacted. Tooling checks pass with `-SkipBundle`.
+Live command and result: not run; supplied User Secrets endpoints still close before SQL during pre-authentication.
+Evidence boundary: local command/failure events, default versus sensitive parameter policy, packed credential redaction,
+connector-error identity, failed entries and cancellation tokens are proved. Native server/network diagnostics and wire
+cancellation are not proved.
+Known gaps: `DIA-01/02` remain `In progress` until native/live logging and error behavior is available; no Connector change
+was needed.
+Next module: continue one remaining mapping, query, write or transaction module and record its evidence before moving on.
+Evidence commit: `d4fc4df` (implementation characterization); this documentation is a follow-up record.
+
 每个波次完成后，在对应 plan/progress 文档增加一段记录，字段必须完整：
 
 ```text

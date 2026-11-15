@@ -155,9 +155,9 @@ repeat completed connection characterization without a reproduced defect.
 1. **Completed locally:** migrations core, tooling, TPT/TPC inheritance, entity/table splitting and Connector
    0.3.0 reverse engineering form complete local modules; see each plan for reviewed source/package evidence.
    Unknown metadata remains visible through warnings. Native acceptance remains distinct from local results.
-2. CFG-04 service-graph wiring is locally characterized without a redundant provider implementation. Continue
-   with `DIA-01/02` diagnostics boundaries, then close the
-   exposed graph materialization, tracked graph writes and transaction/connection recovery gaps together.
+2. CFG-04 service-graph wiring and the DIA-01/02 diagnostics boundaries are locally characterized without a redundant
+   provider implementation. Continue with the exposed graph materialization, tracked graph writes and
+   transaction/connection recovery gaps together.
    Official runtime fixtures require an initialized store; intercepted canned results cannot replace them.
    Record positive/null/empty/failure boundaries by feature ID; avoid a new sequence of one-overload commits.
 3. Resolve the pre-auth live transport blocker and run the two-mode native matrix.

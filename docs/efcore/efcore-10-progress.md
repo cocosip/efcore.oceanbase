@@ -1085,6 +1085,25 @@ Known gaps: `CFG-04` remains `In progress` until the wider schema/native lifecyc
 Next module: continue `DIA-01/02` diagnostics boundaries, then remaining mapping/query/write/transaction gaps.
 Commit: `d4fc4df`.
 
+### DIA-01/02 diagnostics and error-boundary characterization (2026-11-15)
+
+Module: Command diagnostics, sensitive-data protection, provider errors and cancellation boundaries
+Checklist IDs: `DIA-01`, `DIA-02`
+Base commit: `2f01d73`
+Implementation files: no production change; EF diagnostics and existing update-batch exception boundaries are reused.
+Tests added/changed: existing `CommandLoggingTests` and `GraphUpdateTests` revalidated as the module evidence.
+Focused command and result: `CommandLoggingTests` — 16 passed; `GraphUpdateTests` — 26 passed; zero failures/skips.
+Full local command and result: current Release baseline remains Unit 2349, Functional 1879, Specification 868 and Consumer 2;
+the full matrix previously passed with zero failures/skips.
+Package/tooling command and result: packed provider `10.0.0-cfg04-20261115` package/consumer evidence passes both EF10 patches;
+packed Oracle lifecycle smoke verifies credential redaction. Tooling checks pass with `-SkipBundle`.
+Live command and result: not run; supplied User Secrets endpoints still close before SQL during pre-authentication.
+Evidence boundary: local command events, default/sensitive parameter policy, packed credential redaction, connector error identity,
+failing entries and cancellation tokens are proved. Native server/network diagnostics and wire cancellation are not proved.
+Known gaps: `DIA-01/02` remain `In progress` until native/live logging and error behavior is available; no Connector change was needed.
+Next module: continue remaining mapping/query/write/transaction gaps after this diagnostics characterization.
+Commit: `d4fc4df` (existing implementation characterization; documentation follows).
+
 1. Recheck branch/worktree and saved commit before editing. Batch3ai binary collection roots, Batch3ah
    temporal collection roots, Batch3af Boolean collection roots, Batch3ae text collection roots,
    Batch3ad text/temporal extrema, Batch3ac contextual numeric element projections, Batch3ab
