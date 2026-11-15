@@ -404,6 +404,20 @@ namespace PackageConsumer
                         StringComparison.Ordinal)
                     || dateTimeTicksSql.Contains("__oceanbase_internal_", StringComparison.Ordinal))
                     throw new Exception("Packed provider did not translate DateTime.Ticks.");
+                var offsetPartsSql = context.Set<Row>().Where(row => row.OffsetAt.Year == 2026
+                    && row.OffsetAt.DayOfYear > 300 && row.OffsetAt.TimeOfDay > TimeSpan.Zero)
+                    .Select(row => new { row.OffsetAt.Date, row.OffsetAt.TimeOfDay, row.OffsetAt.Year,
+                        row.OffsetAt.Month, row.OffsetAt.Day, row.OffsetAt.Hour, row.OffsetAt.Minute,
+                        row.OffsetAt.Second, row.OffsetAt.Millisecond, row.OffsetAt.Microsecond,
+                        row.OffsetAt.Nanosecond, row.OffsetAt.DayOfYear }).ToQueryString();
+                var offsetParts = mode == OceanBaseCompatibilityMode.MySql
+                    ? new[] { "YEAR(`r`.`OffsetAt`)", "DAYOFYEAR(`r`.`OffsetAt`)", "DATE(`r`.`OffsetAt`)",
+                        "TIME(`r`.`OffsetAt`)", "MICROSECOND(`r`.`OffsetAt`)" }
+                    : new[] { "EXTRACT(YEAR FROM", "'YYYY'", "TRUNC(\"r\".\"OffsetAt\")",
+                        "NUMTODSINTERVAL", "EXTRACT(SECOND FROM" };
+                if (offsetParts.Any(part => !offsetPartsSql.Contains(part, StringComparison.Ordinal))
+                    || offsetPartsSql.Contains("__oceanbase_internal_", StringComparison.Ordinal))
+                    throw new Exception("Packed provider did not translate DateTimeOffset members.");
                 var clockSql = context.Set<Row>().Select(row => new
                 {
                     Now = DateTime.Now,

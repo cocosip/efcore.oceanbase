@@ -7,6 +7,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
+using OceanBaseConnector;
 using Xunit;
 
 namespace OceanBase.EntityFrameworkCore.FunctionalTests;
@@ -69,6 +70,51 @@ public sealed class DateTimeMemberFunctionalTests
         Assert.DoesNotContain("__oceanbase_internal", sql);
     }
 
+    [Theory]
+    [InlineData(OceanBaseCompatibilityMode.MySql, false)]
+    [InlineData(OceanBaseCompatibilityMode.MySql, true)]
+    [InlineData(OceanBaseCompatibilityMode.Oracle, false)]
+    [InlineData(OceanBaseCompatibilityMode.Oracle, true)]
+    public async Task DateTimeOffset_parts_materialize_server_values(OceanBaseCompatibilityMode mode, bool async)
+    {
+        using var table = new DataTable();
+        table.Columns.Add("Date", typeof(object));
+        table.Columns.Add("TimeOfDay", typeof(object));
+        foreach (var name in new[] { "Year", "Month", "Day", "Hour", "Minute", "Second", "Millisecond", "Microsecond", "Nanosecond", "DayOfYear" })
+            table.Columns.Add(name, typeof(int));
+        var timeOfDay = new TimeSpan(10, 20, 30).Add(TimeSpan.FromTicks(1234560));
+        table.Rows.Add(new DateTime(2026, 11, 16), mode == OceanBaseCompatibilityMode.Oracle
+            ? new OceanBaseIntervalDayToSecond(false, 0, 10, 20, 30, 123456000, 9, 6)
+            : timeOfDay, 2026, 11, 16, 10, 20, 30, 123, 123456, 123456700, 320);
+        var capture = new Capture(table);
+        await using var context = Create(mode, capture);
+        var query = context.Rows.Select(row => new
+        {
+            Date = row.Zoned.Date,
+            TimeOfDay = row.Zoned.TimeOfDay,
+            row.Zoned.Year,
+            row.Zoned.Month,
+            row.Zoned.Day,
+            row.Zoned.Hour,
+            row.Zoned.Minute,
+            row.Zoned.Second,
+            row.Zoned.Millisecond,
+            row.Zoned.Microsecond,
+            row.Zoned.Nanosecond,
+            row.Zoned.DayOfYear
+        });
+
+        var result = Assert.Single(async ? await query.ToListAsync() : query.ToList());
+        Assert.Equal(new DateTime(2026, 11, 16), result.Date);
+        Assert.Equal(timeOfDay, result.TimeOfDay);
+        Assert.Equal(2026, result.Year);
+        Assert.Equal(123456, result.Microsecond);
+        Assert.Equal(123456700, result.Nanosecond);
+        Assert.Equal(320, result.DayOfYear);
+        var sql = Assert.Single(capture.Sql);
+        Assert.DoesNotContain("__oceanbase_internal", sql);
+    }
+
     private static TestContext Create(OceanBaseCompatibilityMode mode, Capture capture)
         => new(new DbContextOptionsBuilder<TestContext>()
             .UseOceanBase("Server=offline;Database=datetime_member", mode)
@@ -85,6 +131,7 @@ public sealed class DateTimeMemberFunctionalTests
         public int Id { get; set; }
         public DateTime Stamp { get; set; }
         public DateTime? OptionalStamp { get; set; }
+        public DateTimeOffset Zoned { get; set; }
     }
 
     private sealed class NoNetwork : DbConnectionInterceptor

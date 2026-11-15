@@ -155,6 +155,19 @@ timestamp precision and live results remain open under `MAP-05`, `QRY-07` and `T
 `10.0.0-date-time-ticks-20261116` passed content verification and the standalone consumer on EF10.0.0/10.0.14
 in both modes; this remains offline/package evidence and does not close the live gate.
 
+### QRY-07/QRY-11/MAP-05 `DateTimeOffset` member checkpoint (2026-11-16)
+
+The provider now translates `DateTimeOffset` calendar/fractional members (`Year` through `Nanosecond`,
+`DayOfYear`, `DayOfWeek`) plus `Date` and `TimeOfDay`. MySQL uses the existing UTC-normalized temporal carriers;
+Oracle retains the numeric offset through its timestamp mapping. Unrelated and null-converting carriers are rejected
+before SQL generation, and no Connector change was needed.
+
+Focused Release evidence is 8 Unit and 8 functional cases across both modes, with sync/async materialization,
+MySQL `TimeSpan` and Oracle interval readers, NULL propagation and SQL marker checks. PackageConsumer now asserts
+the generated SQL shape for the same members in both modes. This is local translation, mapping and package-shape
+evidence only; offset conversion, native precision/range, server coercion and live OceanBase results remain open.
+See [the DateTimeOffset member plan](efcore-10-date-time-offset-members-plan.md).
+
 ### QRY-07/QRY-11/MAP-05 server clock checkpoint (2026-11-16)
 
 The provider now translates `DateTime.Now`, `DateTime.UtcNow` and `DateTime.Today` using explicit mode-specific

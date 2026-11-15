@@ -80,6 +80,50 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
         }
 
         [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle)]
+        public void DateTimeOffset_parts_translate_in_projection_and_predicate(OceanBaseCompatibilityMode mode)
+        {
+            using var context = CreateContext(mode);
+            var sql = context.Rows
+                .Where(row => row.Zoned.Year == 2026 && row.Zoned.DayOfYear == 320)
+                .Select(row => new
+                {
+                    row.Zoned.Year,
+                    row.Zoned.Month,
+                    row.Zoned.Day,
+                    row.Zoned.Hour,
+                    row.Zoned.Minute,
+                    row.Zoned.Second,
+                    row.Zoned.Millisecond,
+                    row.Zoned.Microsecond,
+                    row.Zoned.Nanosecond,
+                    row.Zoned.DayOfYear
+                })
+                .ToQueryString();
+
+            Assert.DoesNotContain("__oceanbase_internal", sql);
+            Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? "YEAR(`r`.`Zoned`)" : "EXTRACT(YEAR FROM", sql);
+            Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? "DAYOFYEAR(`r`.`Zoned`)" : "TRUNC(\"r\".\"Zoned\"", sql);
+            Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? "MICROSECOND(`r`.`Zoned`)" : "EXTRACT(SECOND FROM", sql);
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle)]
+        public void DateTimeOffset_date_and_time_of_day_translate(OceanBaseCompatibilityMode mode)
+        {
+            using var context = CreateContext(mode);
+            var sql = context.Rows.Select(row => new { row.Zoned.Date, row.Zoned.TimeOfDay }).ToQueryString();
+
+            Assert.DoesNotContain("__oceanbase_internal", sql);
+            Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? "DATE(`r`.`Zoned`)" : "TRUNC(\"r\".\"Zoned\")", sql);
+            Assert.Contains(mode == OceanBaseCompatibilityMode.MySql
+                ? "TIME(`r`.`Zoned`)"
+                : "(\"r\".\"Zoned\" - CAST(TRUNC(\"r\".\"Zoned\") AS TIMESTAMP))", sql);
+        }
+
+        [Theory]
         [InlineData(OceanBaseCompatibilityMode.MySql, false)]
         [InlineData(OceanBaseCompatibilityMode.MySql, true)]
         [InlineData(OceanBaseCompatibilityMode.Oracle, false)]
@@ -152,8 +196,10 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
                 }
                 else Assert.Same(mapping, mappedInput.TypeMapping);
             }
-            Assert.Null(members.Translate(factory.Constant(DateTime.UtcNow, source.FindMapping(typeof(DateTime))!),
-                typeof(DateTimeOffset).GetProperty(nameof(DateTimeOffset.Year))!, typeof(int), logger));
+            var offsetYear = members.Translate(factory.Constant(DateTimeOffset.UtcNow, source.FindMapping(typeof(DateTimeOffset))!),
+                typeof(DateTimeOffset).GetProperty(nameof(DateTimeOffset.Year))!, typeof(int), logger);
+            Assert.NotNull(offsetYear);
+            Assert.Equal(typeof(int), offsetYear.TypeMapping!.ClrType);
             var fractional = new[] { nameof(DateTime.Millisecond), nameof(DateTime.Microsecond), nameof(DateTime.Nanosecond) };
             foreach (var name in fractional)
             {
@@ -214,7 +260,6 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
                 context.Rows.Where(row => row.TextDate.Month == 2),
                 context.Rows.Where(row => row.TextClock.Second == 59),
                 context.Rows.Where(row => row.TextClock.Nanosecond == 100),
-                context.Rows.Where(row => row.Zoned.Year == 2024)
             ];
             foreach (var query in unsupported)
                 Assert.Contains("could not be translated", Assert.Throws<InvalidOperationException>(() => query.ToQueryString()).Message);
@@ -397,8 +442,9 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
                 typeof(DateTime).GetProperty(nameof(DateTime.Date))!, typeof(DateTime), logger));
             Assert.Null(members.Translate(factory.Constant(DateTime.UtcNow, nullConverter),
                 typeof(DateTime).GetProperty(nameof(DateTime.Date))!, typeof(DateTime), logger));
-            Assert.Null(members.Translate(factory.Constant(DateTimeOffset.UtcNow, source.FindMapping(typeof(DateTimeOffset))!),
-                typeof(DateTimeOffset).GetProperty(nameof(DateTimeOffset.Date))!, typeof(DateTime), logger));
+            var offsetDate = members.Translate(factory.Constant(DateTimeOffset.UtcNow, source.FindMapping(typeof(DateTimeOffset))!),
+                typeof(DateTimeOffset).GetProperty(nameof(DateTimeOffset.Date))!, typeof(DateTime), logger);
+            Assert.NotNull(offsetDate);
         }
 
         [Theory]
@@ -444,8 +490,9 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
 
             Assert.Null(members.Translate(factory.Constant(DateTime.UtcNow, binary), timeOfDay, typeof(TimeSpan), logger));
             Assert.Null(members.Translate(factory.Constant(DateTime.UtcNow, nullConverter), timeOfDay, typeof(TimeSpan), logger));
-            Assert.Null(members.Translate(factory.Constant(DateTimeOffset.UtcNow, source.FindMapping(typeof(DateTimeOffset))!),
-                typeof(DateTimeOffset).GetProperty(nameof(DateTimeOffset.TimeOfDay))!, typeof(TimeSpan), logger));
+            var offsetTimeOfDay = members.Translate(factory.Constant(DateTimeOffset.UtcNow, source.FindMapping(typeof(DateTimeOffset))!),
+                typeof(DateTimeOffset).GetProperty(nameof(DateTimeOffset.TimeOfDay))!, typeof(TimeSpan), logger);
+            Assert.NotNull(offsetTimeOfDay);
         }
 
         [Theory]

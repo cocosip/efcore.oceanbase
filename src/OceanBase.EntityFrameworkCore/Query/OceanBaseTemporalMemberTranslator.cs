@@ -36,6 +36,15 @@ namespace OceanBase.EntityFrameworkCore.Query
             [typeof(DateTime).GetProperty(nameof(DateTime.Millisecond))!] = (typeof(DateTime), "MILLISECOND", "MICROSECOND"),
             [typeof(DateTime).GetProperty(nameof(DateTime.Microsecond))!] = (typeof(DateTime), "MICROSECOND", "MICROSECOND"),
             [typeof(DateTime).GetProperty(nameof(DateTime.Nanosecond))!] = (typeof(DateTime), "NANOSECOND", "MICROSECOND"),
+            [typeof(DateTimeOffset).GetProperty(nameof(DateTimeOffset.Year))!] = (typeof(DateTimeOffset), "YEAR", "YEAR"),
+            [typeof(DateTimeOffset).GetProperty(nameof(DateTimeOffset.Month))!] = (typeof(DateTimeOffset), "MONTH", "MONTH"),
+            [typeof(DateTimeOffset).GetProperty(nameof(DateTimeOffset.Day))!] = (typeof(DateTimeOffset), "DAY", "DAYOFMONTH"),
+            [typeof(DateTimeOffset).GetProperty(nameof(DateTimeOffset.Hour))!] = (typeof(DateTimeOffset), "HOUR", "HOUR"),
+            [typeof(DateTimeOffset).GetProperty(nameof(DateTimeOffset.Minute))!] = (typeof(DateTimeOffset), "MINUTE", "MINUTE"),
+            [typeof(DateTimeOffset).GetProperty(nameof(DateTimeOffset.Second))!] = (typeof(DateTimeOffset), "SECOND", "SECOND"),
+            [typeof(DateTimeOffset).GetProperty(nameof(DateTimeOffset.Millisecond))!] = (typeof(DateTimeOffset), "MILLISECOND", "MICROSECOND"),
+            [typeof(DateTimeOffset).GetProperty(nameof(DateTimeOffset.Microsecond))!] = (typeof(DateTimeOffset), "MICROSECOND", "MICROSECOND"),
+            [typeof(DateTimeOffset).GetProperty(nameof(DateTimeOffset.Nanosecond))!] = (typeof(DateTimeOffset), "NANOSECOND", "MICROSECOND"),
             [typeof(DateOnly).GetProperty(nameof(DateOnly.Year))!] = (typeof(DateOnly), "YEAR", "YEAR"),
             [typeof(DateOnly).GetProperty(nameof(DateOnly.Month))!] = (typeof(DateOnly), "MONTH", "MONTH"),
             [typeof(DateOnly).GetProperty(nameof(DateOnly.Day))!] = (typeof(DateOnly), "DAY", "DAYOFMONTH"),
@@ -59,6 +68,8 @@ namespace OceanBase.EntityFrameworkCore.Query
             [typeof(DateTime).GetProperty(nameof(DateTime.DayOfYear))!] = false,
             [typeof(DateOnly).GetProperty(nameof(DateOnly.DayOfYear))!] = false,
             [typeof(DateTime).GetProperty(nameof(DateTime.DayOfWeek))!] = true,
+            [typeof(DateTimeOffset).GetProperty(nameof(DateTimeOffset.DayOfYear))!] = false,
+            [typeof(DateTimeOffset).GetProperty(nameof(DateTimeOffset.DayOfWeek))!] = true,
             [typeof(DateOnly).GetProperty(nameof(DateOnly.DayOfWeek))!] = true
         };
         private static readonly Dictionary<MemberInfo, string> TotalMembers = new()
@@ -72,7 +83,9 @@ namespace OceanBase.EntityFrameworkCore.Query
             [typeof(TimeSpan).GetProperty(nameof(TimeSpan.TotalNanoseconds))!] = "NANOSECOND"
         };
         private static readonly MemberInfo DateTimeDate = typeof(DateTime).GetProperty(nameof(DateTime.Date))!;
+        private static readonly MemberInfo DateTimeOffsetDate = typeof(DateTimeOffset).GetProperty(nameof(DateTimeOffset.Date))!;
         private static readonly MemberInfo DateTimeTimeOfDay = typeof(DateTime).GetProperty(nameof(DateTime.TimeOfDay))!;
+        private static readonly MemberInfo DateTimeOffsetTimeOfDay = typeof(DateTimeOffset).GetProperty(nameof(DateTimeOffset.TimeOfDay))!;
         private static readonly MemberInfo DateOnlyDayNumber = typeof(DateOnly).GetProperty(nameof(DateOnly.DayNumber))!;
         private static readonly MemberInfo TimeSpanTicks = typeof(TimeSpan).GetProperty(nameof(TimeSpan.Ticks))!;
         private static readonly MemberInfo TimeOnlyTicks = typeof(TimeOnly).GetProperty(nameof(TimeOnly.Ticks))!;
@@ -84,26 +97,29 @@ namespace OceanBase.EntityFrameworkCore.Query
         public SqlExpression? Translate(SqlExpression? instance, MemberInfo member, Type returnType,
             IDiagnosticsLogger<DbLoggerCategory.Query> logger)
         {
-            if (instance is not null && member == DateTimeDate && returnType == typeof(DateTime))
+            if (instance is not null && (member == DateTimeDate || member == DateTimeOffsetDate)
+                && returnType == typeof(DateTime))
             {
                 instance = factory.ApplyDefaultTypeMapping(instance);
                 var dateMapping = instance.TypeMapping;
-                if (dateMapping is null || !SupportsDate(dateMapping) || dateMapping.Converter?.ConvertsNulls == true)
+                if (dateMapping is null || !SupportsDate(member.DeclaringType!, dateMapping)
+                    || dateMapping.Converter?.ConvertsNulls == true)
                     return null;
 
                 var resultMapping = (RelationalTypeMapping)mappingSource.FindMapping(typeof(DateTime),
                     mode == OceanBaseCompatibilityMode.MySql ? "DATETIME(0)" : "DATE")!;
-                if (dateMapping.Converter is { } converter)
+                if (member == DateTimeDate && dateMapping.Converter is { } converter)
                     resultMapping = (RelationalTypeMapping)resultMapping.WithComposedConverter(converter);
                 return factory.Function(mode == OceanBaseCompatibilityMode.MySql ? "DATE" : "TRUNC", [instance],
                     nullable: true, argumentsPropagateNullability: [false], typeof(DateTime), resultMapping);
             }
 
-            if (instance is not null && member == DateTimeTimeOfDay && returnType == typeof(TimeSpan))
+            if (instance is not null && (member == DateTimeTimeOfDay || member == DateTimeOffsetTimeOfDay)
+                && returnType == typeof(TimeSpan))
             {
                 instance = factory.ApplyDefaultTypeMapping(instance);
                 var dateMapping = instance.TypeMapping;
-                if (dateMapping is null || !SupportsCarrier(typeof(DateTime), dateMapping)
+                if (dateMapping is null || !SupportsCarrier(member.DeclaringType!, dateMapping)
                     || dateMapping.Converter?.ConvertsNulls == true)
                     return null;
 
@@ -156,7 +172,7 @@ namespace OceanBase.EntityFrameworkCore.Query
                 instance = factory.ApplyDefaultTypeMapping(instance);
                 var dateMapping = instance.TypeMapping;
                 if (dateMapping is null || dateMapping.Converter?.ConvertsNulls == true
-                    || !SupportsDate(dateMapping))
+                    || !SupportsDate(typeof(DateTime), dateMapping))
                     return null;
 
                 return factory.Function(DateTimeTicksMarker, [instance], nullable: true,
@@ -261,6 +277,10 @@ namespace OceanBase.EntityFrameworkCore.Query
             return receiver == typeof(DateTime)
                 ? providerType == typeof(DateTime) && (mode == OceanBaseCompatibilityMode.MySql
                     ? store == "DATETIME" : store is "DATE" or "TIMESTAMP")
+                : receiver == typeof(DateTimeOffset)
+                    ? (mode == OceanBaseCompatibilityMode.MySql
+                        ? providerType == typeof(DateTime) && store == "DATETIME"
+                        : providerType == typeof(DateTimeOffset) && store == "TIMESTAMP")
                 : receiver == typeof(DateOnly)
                     ? providerType == typeof(DateTime) && store == "DATE"
                     : mode == OceanBaseCompatibilityMode.MySql
@@ -268,11 +288,15 @@ namespace OceanBase.EntityFrameworkCore.Query
                         : providerType == typeof(OceanBaseIntervalDayToSecond) && store.StartsWith("INTERVAL DAY", StringComparison.Ordinal);
         }
 
-        private static bool SupportsDate(RelationalTypeMapping mapping)
+        private bool SupportsDate(Type receiver, RelationalTypeMapping mapping)
         {
             var store = mapping.StoreTypeNameBase.Trim().ToUpperInvariant();
             var providerType = mapping.Converter?.ProviderClrType ?? mapping.ClrType;
-            return providerType == typeof(DateTime) && store is "DATE" or "DATETIME" or "TIMESTAMP";
+            return receiver == typeof(DateTime)
+                ? providerType == typeof(DateTime) && (store is "DATE" or "DATETIME" or "TIMESTAMP")
+                : receiver == typeof(DateTimeOffset) && (mode == OceanBaseCompatibilityMode.MySql
+                    ? providerType == typeof(DateTime) && store == "DATETIME"
+                    : providerType == typeof(DateTimeOffset) && store == "TIMESTAMP");
         }
     }
 }

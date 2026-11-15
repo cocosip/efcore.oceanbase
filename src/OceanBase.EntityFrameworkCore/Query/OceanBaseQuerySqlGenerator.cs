@@ -404,6 +404,7 @@ namespace OceanBase.EntityFrameworkCore.Query
                 }
                 else if (_mode == OceanBaseCompatibilityMode.MySql
                     && (sqlFunctionExpression.Arguments[1].Type == typeof(DateTime)
+                        || sqlFunctionExpression.Arguments[1].Type == typeof(DateTimeOffset)
                         || sqlFunctionExpression.Arguments[1].Type == typeof(TimeOnly))
                     && unit is "MILLISECOND" or "MICROSECOND" or "NANOSECOND")
                 {
@@ -457,7 +458,7 @@ namespace OceanBase.EntityFrameworkCore.Query
                     || timeOfDayType != typeof(TimeSpan)
                     || !IsTimeSpanMapping(resultMapping)
                     || sqlFunctionExpression.Arguments[0] is not { Type: var inputType, TypeMapping: { } inputMapping }
-                    || inputType != typeof(DateTime)
+                    || (inputType != typeof(DateTime) && inputType != typeof(DateTimeOffset))
                     || !IsDateTimeMapping(inputMapping))
                     throw new InvalidOperationException("Invalid internal TimeOfDay expression.");
 
@@ -740,8 +741,10 @@ namespace OceanBase.EntityFrameworkCore.Query
             if (mapping.Converter?.ConvertsNulls == true) return false;
             var providerType = mapping.Converter?.ProviderClrType ?? mapping.ClrType;
             var store = mapping.StoreTypeNameBase.Trim().ToUpperInvariant();
-            return providerType == typeof(DateTime)
-                && (_mode == OceanBaseCompatibilityMode.MySql ? store == "DATETIME" : store is "DATE" or "TIMESTAMP");
+            return _mode == OceanBaseCompatibilityMode.MySql
+                ? providerType == typeof(DateTime) && store == "DATETIME"
+                : (providerType == typeof(DateTime) || providerType == typeof(DateTimeOffset))
+                && (store is "DATE" or "TIMESTAMP");
         }
 
         private bool IsDateOnlyMapping(RelationalTypeMapping mapping)

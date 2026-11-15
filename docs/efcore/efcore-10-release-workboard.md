@@ -13,17 +13,18 @@
 - 模式：MySQL、Oracle
 - Required 行：53 行；两种模式均为 9 行 `Done`、44 行 `In progress`
 - 已完成 Required 行：`CFG-01..03`、`CON-01`、`SQL-02`、`PKG-01..04`
-- 当前提交：`9c9a6c9`（server clock 模块）
+- 当前提交：`84f11d0`（DateTimeOffset 成员模块）
 
 最近一次完整本地证据：
 
 | 检查 | 结果 | 证据边界 |
 | --- | --- | --- |
-| Release Unit | 2373 通过 | Provider 单元和本地 doubles |
-| Release Functional | 1911 通过 | 拦截式同步/异步命令管线 |
+| Release Unit | 2377 通过 | Provider 单元和本地 doubles |
+| Release Functional | 1915 通过 | 拦截式同步/异步命令管线 |
 | Release Specification | 1446 通过，16 个明确跳过 | 跳过已映射到 `MAP-01/03/05/06` |
-| Debug Unit / Functional | 2373 / 1911 通过 | 本地源代码 |
+| Debug Unit / Functional | 2377 / 1915 通过 | 本地源代码 |
 | server clock package | `10.0.0-date-time-clocks-20261116` 通过 | 包内容、EF10.0.0/10.0.14、两模式 consumer |
+| DateTimeOffset member focused tests | Unit 8/8、Functional 8/8 通过 | 两模式、同步/异步、MySQL TimeSpan/Oracle interval reader；包内容校验通过，packed consumer 受当前 NuGet TLS/认证环境阻塞 |
 
 这些结果不能关闭真实 OceanBase 验收。当前提供的端点在认证前报
 `Connection closed while reading the packet`，没有执行 SQL 或 DDL。
