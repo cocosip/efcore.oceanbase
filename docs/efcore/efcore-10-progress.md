@@ -6,10 +6,9 @@ The ordered development and acceptance rules are in
 [efcore-10-development-acceptance-plan.md](efcore-10-development-acceptance-plan.md). This file keeps the
 historical handoff and module evidence; it does not authorize jumping between unfinished feature families.
 
-The latest committed local feature module is `e3119f5` (DateTime/TimeOnly fractional temporal members), following
-the CON-03/04/05 connection boundary commits `051ea06`, `34f84f4` and `fe71f2a`. The current worktree Release
-test baseline is 5,098 passed,
-zero failed/skipped; the older 5,036 count below belongs to the pre-TimeSpan-total checkpoint.
+The latest local feature module is the 2026-11-16 `DateOnly.DayNumber` checkpoint recorded below. Earlier commit
+identifiers and test totals remain historical evidence for their original modules; they are not the current branch
+baseline. The current feature evidence is recorded in the latest checkpoint sections and module plan.
 
 ## Current checkpoint: 2026-11-16
 
@@ -97,7 +96,20 @@ NULL propagation. This is local SQL/mapping/materialization evidence only; nativ
 coercion, timezone behavior and live results remain open under `MAP-05`, `QRY-07` and `TST-02`.
 The unique package `10.0.0-time-of-day-20261116-r2` passed `Verify-Package.ps1` and the packed PackageConsumer in
 both modes on EF10.0.0 and EF10.0.14. Final release-revision review and native server evidence remain open.
-Implementation commit: `6ecca4f` (local only).
+Implementation commit: `ac71b6c` (local only).
+
+### QRY-07/MAP-05 `DateOnly.DayNumber` checkpoint (2026-11-16)
+
+The provider now translates `DateOnly.DayNumber` through the existing `DATE` carrier. MySQL emits
+`DATEDIFF(input, '0001-01-01')`; Oracle emits `TRUNC(input) - DATE '0001-01-01'`. The translation preserves
+the .NET zero-based Gregorian semantics (`2024-02-29` is `738944`) and rejects unrelated or null-converting
+carriers before SQL generation. No Connector change was needed.
+
+The RED query failed in both modes before implementation. Focused Release evidence is 4 Unit cases and 4
+functional sync/async cases, all passing; functional coverage includes projection, predicate and NULL
+materialization. This is local SQL/mapping/intercepted-reader evidence only; native date arithmetic, calendar
+behavior and live results remain open under `MAP-05`, `QRY-07` and `TST-02`. The detailed record is in
+[the DateOnly.DayNumber plan](efcore-10-date-only-day-number-plan.md).
 
 ### HasData schema bootstrap and pause (2026-11-13)
 

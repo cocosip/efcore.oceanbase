@@ -423,6 +423,45 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
         [Theory]
         [InlineData(OceanBaseCompatibilityMode.MySql)]
         [InlineData(OceanBaseCompatibilityMode.Oracle)]
+        public void DateOnly_DayNumber_translates_in_projection_and_predicate(OceanBaseCompatibilityMode mode)
+        {
+            using var context = CreateContext(mode);
+            var sql = context.Rows
+                .Where(row => row.Date.DayNumber > 700000)
+                .Select(row => row.Date.DayNumber)
+                .ToQueryString();
+
+            Assert.DoesNotContain("__oceanbase_internal", sql);
+            if (mode == OceanBaseCompatibilityMode.MySql)
+                Assert.Contains("DATEDIFF(`r`.`Date`, '0001-01-01')", sql);
+            else
+                Assert.Contains("TRUNC(\"r\".\"Date\") - DATE '0001-01-01'", sql);
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle)]
+        public void DateOnly_DayNumber_rejects_unowned_and_null_converting_carriers(OceanBaseCompatibilityMode mode)
+        {
+            using var context = CreateContext(mode);
+            var source = context.GetService<IRelationalTypeMappingSource>();
+            var factory = context.GetService<ISqlExpressionFactory>();
+            var members = context.GetService<IMemberTranslatorProvider>();
+            var logger = context.GetService<IDiagnosticsLogger<DbLoggerCategory.Query>>();
+            var dayNumber = typeof(DateOnly).GetProperty(nameof(DateOnly.DayNumber))!;
+            var text = (RelationalTypeMapping)source.FindMapping(typeof(string))!.WithComposedConverter(
+                new ValueConverter<DateOnly, string>(value => value.ToString(), value => DateOnly.Parse(value)));
+            var nullConverter = (RelationalTypeMapping)source.FindMapping(typeof(DateTime))!.WithComposedConverter(
+                new ValueConverter<DateOnly, DateTime>(value => value.ToDateTime(TimeOnly.MinValue),
+                    value => DateOnly.FromDateTime(value), convertsNulls: true));
+
+            Assert.Null(members.Translate(factory.Constant(new DateOnly(2024, 2, 29), text), dayNumber, typeof(int), logger));
+            Assert.Null(members.Translate(factory.Constant(new DateOnly(2024, 2, 29), nullConverter), dayNumber, typeof(int), logger));
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle)]
         public void TimeSpan_total_members_translate_in_projection_and_predicate(OceanBaseCompatibilityMode mode)
         {
             using var context = CreateContext(mode);

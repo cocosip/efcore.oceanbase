@@ -374,6 +374,14 @@ namespace PackageConsumer
                 if (mode == OceanBaseCompatibilityMode.Oracle && !temporalPartsSql.Contains("AS TIMESTAMP(7)", StringComparison.Ordinal))
                     throw new Exception("Oracle DATE clock extraction lacked a timestamp cast.");
 
+                var dayNumberSql = context.Set<Row>().Where(row => row.Day.DayNumber > 700000)
+                    .Select(row => row.Day.DayNumber).ToQueryString();
+                var dayNumberFunction = mode == OceanBaseCompatibilityMode.MySql
+                    ? "DATEDIFF(`r`.`Day`, '0001-01-01')" : "TRUNC(\"r\".\"Day\") - DATE '0001-01-01'";
+                if (!dayNumberSql.Contains(dayNumberFunction, StringComparison.Ordinal)
+                    || dayNumberSql.Contains("__oceanbase_internal_", StringComparison.Ordinal))
+                    throw new Exception("Packed provider did not translate DateOnly.DayNumber.");
+
                 var calendarSql = context.Set<Row>().Where(row => row.OccurredAt.DayOfWeek == DayOfWeek.Sunday
                     && row.Day.DayOfYear == 60).ToQueryString();
                 var calendarParts = mode == OceanBaseCompatibilityMode.MySql

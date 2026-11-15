@@ -487,6 +487,34 @@ namespace OceanBase.EntityFrameworkCore.Query
                 return sqlFunctionExpression;
             }
 
+            if (sqlFunctionExpression.Name == OceanBaseTemporalMemberTranslator.DayNumberMarker)
+            {
+                if (sqlFunctionExpression is not { IsBuiltIn: true, Schema: null, Instance: null, Arguments.Count: 1,
+                        IsNullable: true, ArgumentsPropagateNullability: [false], Type: var resultType,
+                        TypeMapping: { } resultMapping }
+                    || resultMapping.Converter?.ConvertsNulls == true
+                    || resultType != typeof(int)
+                    || sqlFunctionExpression.Arguments[0] is not { Type: var inputType, TypeMapping: { } inputMapping }
+                    || inputType != typeof(DateOnly)
+                    || !IsDateOnlyMapping(inputMapping))
+                    throw new InvalidOperationException("Invalid internal DateOnly.DayNumber expression.");
+
+                if (_mode == OceanBaseCompatibilityMode.MySql)
+                {
+                    Sql.Append("(DATEDIFF(");
+                    Visit(sqlFunctionExpression.Arguments[0]);
+                    Sql.Append(", '0001-01-01'))");
+                }
+                else
+                {
+                    Sql.Append("(TRUNC(");
+                    Visit(sqlFunctionExpression.Arguments[0]);
+                    Sql.Append(") - DATE '0001-01-01')");
+                }
+
+                return sqlFunctionExpression;
+            }
+
             if (sqlFunctionExpression.Name == OceanBaseTemporalMemberTranslator.TotalMarker)
             {
                 if (sqlFunctionExpression is not { IsBuiltIn: true, Schema: null, Instance: null, Arguments.Count: 2,
@@ -584,6 +612,14 @@ namespace OceanBase.EntityFrameworkCore.Query
             var store = mapping.StoreTypeNameBase.Trim().ToUpperInvariant();
             return providerType == typeof(DateTime)
                 && (_mode == OceanBaseCompatibilityMode.MySql ? store == "DATETIME" : store is "DATE" or "TIMESTAMP");
+        }
+
+        private bool IsDateOnlyMapping(RelationalTypeMapping mapping)
+        {
+            if (mapping.Converter?.ConvertsNulls == true) return false;
+            var providerType = mapping.Converter?.ProviderClrType ?? mapping.ClrType;
+            var store = mapping.StoreTypeNameBase.Trim().ToUpperInvariant();
+            return mapping.ClrType == typeof(DateOnly) && providerType == typeof(DateTime) && store == "DATE";
         }
 
         private void AppendMySqlTimeSpanSign(SqlExpression input)

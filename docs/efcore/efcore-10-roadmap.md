@@ -2,7 +2,7 @@
 
 **Updated:** 2026-11-16
 **Branch:** `efcore/10.0`  
-**State:** Active local development; QRY-07/MAP-05 `DateTime.TimeOfDay` is the latest local module.
+**State:** Active local development; QRY-07/MAP-05 `DateOnly.DayNumber` is the latest local module.
 **Acceptance authority:** [efcore-10-feature-checklist.md](efcore-10-feature-checklist.md)
 
 The `REL-01` support record now exists at [efcore-10-release-support.md](efcore-10-release-support.md),
@@ -101,6 +101,10 @@ The following required rows have complete local/package evidence for both modes:
 - `DateTime.TimeOfDay` now uses the existing MySQL `TIME` and Oracle `INTERVAL DAY TO SECOND` carriers, with
   both-mode SQL-shape and intercepted sync/async NULL/materialization coverage. Native interval semantics remain
   a live gate; see the [TimeOfDay plan](efcore-10-time-of-day-plan.md).
+- `DateOnly.DayNumber` now translates the zero-based Gregorian day number through the existing `DATE` carrier:
+  MySQL uses `DATEDIFF` and Oracle uses `TRUNC` date subtraction. Both-mode projection/predicate and intercepted
+  sync/async NULL/materialization coverage pass; native date arithmetic remains a live gate. See the
+  [DateOnly.DayNumber plan](efcore-10-date-only-day-number-plan.md).
 - `CON-02` now rechecks the compatibility mode after sync/async open callbacks and restores EF's connection lease
   accounting when the post-open check rejects a conflict. Native handshake detection and live cleanup remain open.
 

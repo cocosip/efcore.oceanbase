@@ -14,14 +14,17 @@ public APIs and per-mode mappings/SQL. Separate local implementation evidence fr
 The compact execution board is [efcore-10-roadmap.md](efcore-10-roadmap.md); this file remains the detailed
 batch ledger and acceptance notes.
 
-**Updated:** 2026-11-16, QRY-07/MAP-05 DateTime.TimeOfDay following TST-01 model-building 101 coverage.
+**Updated:** 2026-11-16, QRY-07/MAP-05 DateOnly.DayNumber following the DateTime.TimeOfDay and TST-01
+model-building 101 checkpoints.
 Keep one complete module active and review it before committing. EF8/EF9 remains postponed; live execution is opt-in and
 currently blocked before authentication by the supplied endpoint/transport behavior.
 The full goal remains incomplete.
 
-The current local module is the QRY-07/MAP-05 `DateTime.TimeOfDay` slice. It uses the existing TIME/INTERVAL
-result mappings, has both-mode SQL-shape and unsupported-carrier unit tests, and intercepted sync/async reader
-coverage; see [the TimeOfDay plan](efcore-10-time-of-day-plan.md). The preceding TST-01
+The current local module is the QRY-07/MAP-05 `DateOnly.DayNumber` slice. It uses the existing DATE mapping,
+translates zero-based Gregorian day numbers in both modes, and has both-mode SQL-shape, unsupported-carrier,
+and intercepted sync/async reader coverage; see [the DateOnly.DayNumber plan](efcore-10-date-only-day-number-plan.md).
+The preceding `DateTime.TimeOfDay` slice uses existing TIME/INTERVAL result mappings; see
+[the TimeOfDay plan](efcore-10-time-of-day-plan.md). The preceding TST-01
 `ModelBuilding101RelationalTestBase` family has 248 unchanged metadata passes and a connection-opening guard;
 the preceding `RelationalNonRelationshipTestBase` remains at 330 unchanged passes and 16 explicit, checklist-
 mapped profile exclusions. Reflection classified the next `RelationalTypeTestBase<T,TFixture>` candidate as

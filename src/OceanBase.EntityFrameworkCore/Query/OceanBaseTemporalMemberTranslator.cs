@@ -18,6 +18,7 @@ namespace OceanBase.EntityFrameworkCore.Query
         internal const string ExtractMarker = "__oceanbase_internal_extract";
         internal const string TotalMarker = "__oceanbase_internal_total";
         internal const string TimeOfDayMarker = "__oceanbase_internal_time_of_day";
+        internal const string DayNumberMarker = "__oceanbase_internal_day_number";
 
         private static readonly Dictionary<MemberInfo, (Type Receiver, string Unit, string MySqlFunction)> Parts = new()
         {
@@ -67,6 +68,7 @@ namespace OceanBase.EntityFrameworkCore.Query
         };
         private static readonly MemberInfo DateTimeDate = typeof(DateTime).GetProperty(nameof(DateTime.Date))!;
         private static readonly MemberInfo DateTimeTimeOfDay = typeof(DateTime).GetProperty(nameof(DateTime.TimeOfDay))!;
+        private static readonly MemberInfo DateOnlyDayNumber = typeof(DateOnly).GetProperty(nameof(DateOnly.DayNumber))!;
 
         public SqlExpression? Translate(SqlExpression? instance, MemberInfo member, Type returnType,
             IDiagnosticsLogger<DbLoggerCategory.Query> logger)
@@ -96,6 +98,19 @@ namespace OceanBase.EntityFrameworkCore.Query
 
                 return factory.Function(TimeOfDayMarker, [instance], nullable: true,
                     argumentsPropagateNullability: [false], typeof(TimeSpan), mappingSource.FindMapping(typeof(TimeSpan)));
+            }
+
+            if (instance is not null && member == DateOnlyDayNumber && instance.Type == typeof(DateOnly)
+                && returnType == typeof(int))
+            {
+                instance = factory.ApplyDefaultTypeMapping(instance);
+                var dateMapping = instance.TypeMapping;
+                if (dateMapping is null || dateMapping.Converter?.ConvertsNulls == true
+                    || !SupportsCarrier(typeof(DateOnly), dateMapping))
+                    return null;
+
+                return factory.Function(DayNumberMarker, [instance], nullable: true,
+                    argumentsPropagateNullability: [false], typeof(int), mappingSource.FindMapping(typeof(int)));
             }
 
             if (instance is not null && CalendarParts.TryGetValue(member, out var weekday)

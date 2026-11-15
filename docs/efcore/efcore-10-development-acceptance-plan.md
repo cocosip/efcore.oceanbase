@@ -18,14 +18,8 @@
 
 ## 当前检查点
 
-创建本文档时的仓库状态：
-
-- `HEAD` 的最新功能提交是 `e3119f5`，内容为 DateTime/TimeOnly fractional-member translation；此前
-  CON-03/04/05 连接边界提交分别为 `051ea06`、`34f84f4`、`fe71f2a`。
-- Batch3ba 提交 `df67ff8` 是前一个显式 Binary/Guid `EF.Parameter` 集合根检查点。
-- HasData schema bootstrap 是前一个已提交检查点 `1f6046f`。
-- 当前工作树的 Release 本地测试为：Unit 2349、Functional 1879、Specification 868、Consumer 2，共 5098 个测试，0 失败、0 跳过。
-- 文档中原有的 5028 测试数字是 HasData 已提交检查点的基线；Batch3ba 已在 `df67ff8` 中新增 8 个单元测试。
+创建本文档时记录的历史提交和测试总数属于此前的模块检查点；当前最新模块、测试结果和包版本分别记录在下面的
+`DateOnly.DayNumber` checkpoint 和对应 plan 中。不要使用旧 handoff 行推断当前 HEAD 或当前测试总数。
 - 当前没有真实 OceanBase SQL/DDL 验收。已有 live 探针在握手阶段报 `Connection closed while reading the packet`，没有执行 SQL 或 DDL。
 
 因此，CFG-04 已完成本地 characterization；连接波次已转入剩余映射、查询、更新和事务边界。不得重复已经完成的连接 characterization。
@@ -62,6 +56,18 @@ Release Unit 2357、Functional 1891 均通过。模块记录见 [TimeOfDay plan]
 
 唯一临时包 `10.0.0-time-of-day-20261116-r2` 已通过 `Verify-Package.ps1`，并在 EF10.0.0 与 EF10.0.14
 上通过两种模式的 packed PackageConsumer；该结果仍是离线/拦截式证据，不是 live OceanBase 验收。
+
+### QRY-07/MAP-05 `DateOnly.DayNumber` checkpoint (2026-11-16)
+
+`DateOnly.DayNumber` now uses the existing `DATE` carrier in both modes. MySQL emits
+`DATEDIFF(input, '0001-01-01')`; Oracle emits `TRUNC(input) - DATE '0001-01-01'`. The zero-based
+Gregorian value is asserted (`2024-02-29` is `738944`), and unrelated or null-converting carriers reject
+before SQL generation. The RED query failed in both modes before implementation. Focused Release evidence is
+4 Unit and 4 functional cases, with sync/async projection, predicate and NULL materialization. The detailed
+record is in [the DateOnly.DayNumber plan](efcore-10-date-only-day-number-plan.md). This is local SQL,
+mapping and intercepted-reader evidence only; native date arithmetic, calendar behavior and release gates remain open.
+Package `10.0.0-date-only-day-number-20261116` passed package content verification and the standalone consumer
+on EF10.0.0/10.0.14 in both modes; this remains offline/package evidence and does not close the live gate.
 
 下一模块：继续一个尚未完成的 Required 映射/查询边界；优先处理仍缺少完整同步/异步和负面覆盖的
 时间或数值 overload。不得把 `DEF-04` JSON-only 规范族提前提升为 Required。
