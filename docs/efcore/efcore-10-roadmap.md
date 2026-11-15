@@ -1,8 +1,8 @@
 # EF Core 10 Development and Release Roadmap
 
-**Updated:** 2026-11-15
+**Updated:** 2026-11-16
 **Branch:** `efcore/10.0`  
-**State:** Active local development; DateTime/TimeOnly fractional members are the latest local feature module.
+**State:** Active local development; TST-01 ModelBuilding101 relational metadata coverage is the latest local module.
 **Acceptance authority:** [efcore-10-feature-checklist.md](efcore-10-feature-checklist.md)
 
 The `REL-01` support record now exists at [efcore-10-release-support.md](efcore-10-release-support.md),
@@ -10,8 +10,8 @@ but remains `In progress` while the supplied endpoint's direct/proxy routing, tr
 pre-authentication failure are unresolved.
 
 **Execution control:** Follow [efcore-10-development-acceptance-plan.md](efcore-10-development-acceptance-plan.md)
-for the ordered waves, evidence levels and handoff format. The current Release source baseline is Unit 2349,
-Functional 1879 and Specification 868, with two consumers; all recorded local checks have zero failures/skips.
+for the ordered waves, evidence levels and handoff format. The latest focused SpecificationTests result is 1,446
+passed and 16 explicitly mapped skips (1,462 total); the new module's 248 tests have zero failures/skips.
 
 This is the execution board for the first OceanBase EF Core 10 provider. It separates provider work from
 evidence work so an intercepted test cannot be mistaken for native OceanBase acceptance.
@@ -112,7 +112,7 @@ The provider is still a development checkpoint. It is not a release candidate.
 | Query translation and materialization | `QRY-01..11` | Finish the supported overload matrix, remaining temporal/math cases, collection/operator compositions, cardinality, Include/ThenInclude, split/graph filter boundaries, and unsupported translation errors. | RED/green unit tests, intercepted sync/async functional tests, selected EF specification coverage, and explicit unsupported-case records. |
 | Tracked writes and transactions | `UPD-01..05`, `TXN-01..03` | Finish generated/default/computed readback, composite and nullable concurrency, graph save ordering, atomic failure/cancellation recovery, enlistment and savepoint boundaries. | Deterministic command/transaction tests in both modes plus native readback/rollback evidence. |
 | Schema and database lifecycle | `SCH-01..03` | Finish existence/error classification, owned namespace boundaries, table/database/user creation and deletion behavior, privilege checks, and cleanup rules. | Offline SQL/double tests plus controlled live DDL/privilege/deletion matrix with an isolated owned target. |
-| EF relational specification coverage | `TST-01` | Add the next required relational model/query/write/runtime families and map each exclusion to a checklist ID. | Selected specification classes pass for both modes with zero unexplained skips. |
+| EF relational specification coverage | `TST-01` | Add the next required relational model/query/write/runtime families and map each exclusion to a checklist ID. JSON-only `RelationalTypeTestBase` remains under `DEF-04`. | Selected specification classes pass for both modes with zero unexplained skips. |
 | Migrations and reverse engineering | `DEF-01/02` | Core runtime/scripts, package-only migration tooling and Connector 0.3.0 metadata-to-compiled-context workflow pass locally. Close native catalog/migration/script/bundle/concurrency acceptance; review unknown generated configuration before writes or DDL. | Live schema fixtures and an authorized isolated upgrade/revert/lock/script matrix; retain packed tooling matrix. |
 
 ## Work that is implemented locally but still needs native validation

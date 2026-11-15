@@ -45,3 +45,17 @@ OceanBase behavior.
 The exclusions can be removed only after the corresponding mapping contract is implemented and covered by
 positive, boundary and negative tests without weakening the provider's range, transport or unsupported-shape
 validation.
+
+## Model-building 101 relational family
+
+`tests/OceanBase.EntityFrameworkCore.SpecificationTests/ModelBuilding101Tests.cs` adds the official
+`ModelBuilding101RelationalTestBase` for both MySQL and Oracle. This family only builds and inspects the
+relational model; the fixture installs a connection-opening guard so it cannot be mistaken for live CRUD or
+schema evidence.
+
+Focused Release result: 248 passed, 0 failed, 0 skipped. The family requires no provider exclusion.
+
+The next reflected candidate, `Types.RelationalTypeTestBase<T,TFixture>`, contains only JSON-property query,
+`SaveChanges` and `ExecuteUpdate` cases. It is therefore an explicit `DEF-04` candidate and is not admitted to
+the Required `TST-01` suite until JSON/complex/primitive-collection support is scheduled. This audit prevents
+the deferred JSON family from being counted as ordinary relational type coverage.

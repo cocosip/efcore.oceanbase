@@ -70,6 +70,18 @@ with those 16 mapped skips. Details and the focused command are in
 [the specification exclusion record](efcore-10-specification-exclusions.md). This extends TST-01 local
 evidence without claiming query/write/live specification support.
 
+### TST-01 model-building 101 checkpoint (2026-11-16)
+
+The official `ModelBuilding101RelationalTestBase` is now wired for MySQL and Oracle in
+`ModelBuilding101Tests.cs`. The family runs entirely through the Provider model-building services and uses a
+connection-opening guard; it adds no database or Connector dependency. Focused Release evidence is 248 passed,
+0 failed and 0 skipped. The complete SpecificationTests project now passes 1,446 cases with the existing 16
+explicit mapping skips (1,462 total).
+
+Reflection also classified `Types.RelationalTypeTestBase<T,TFixture>` as six JSON-property query/update tests.
+That family remains under deferred `DEF-04` and is deliberately not counted as Required `TST-01` coverage.
+The new model metadata evidence does not close `MOD-01/02`, native schema/CRUD behavior, `TST-02` or release gates.
+
 ### HasData schema bootstrap and pause (2026-11-13)
 
 At the user's request, finish this module, update evidence, commit locally and pause. Do not start another

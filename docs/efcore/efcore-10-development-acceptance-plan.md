@@ -48,6 +48,11 @@ native precision/range and release gates stay open.
 项目为 1,198 通过、16 个同样映射的排除；详见
 [specification exclusions](efcore-10-specification-exclusions.md)。这些是模型元数据证据，不关闭查询、写入或 live 门槛。
 
+随后加入官方 `ModelBuilding101RelationalTestBase`。两种模式共运行 248 个模型元数据用例，248 通过、
+0 失败、0 跳过；连接开启被测试拦截器明确禁止。完整 SpecificationTests 当前为 1,446 通过、16 个
+已解释跳过（1,462 总计）。反射确认 `Types.RelationalTypeTestBase<T,TFixture>` 只包含 JSON 查询/更新
+场景，因此保留在 `DEF-04`，不把它伪装成 Required `TST-01` 覆盖。
+
 ## 完成状态的定义
 
 一个功能只能在以下条件全部满足后标记为 `Done`：
