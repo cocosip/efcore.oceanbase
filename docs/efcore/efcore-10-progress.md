@@ -6,7 +6,7 @@ The ordered development and acceptance rules are in
 [efcore-10-development-acceptance-plan.md](efcore-10-development-acceptance-plan.md). This file keeps the
 historical handoff and module evidence; it does not authorize jumping between unfinished feature families.
 
-The latest local feature module is the 2026-11-16 `DateTime.Ticks` checkpoint recorded below. Earlier commit
+The latest local feature module is the 2026-11-16 server clock checkpoint recorded below. Earlier commit
 identifiers and test totals remain historical evidence for their original modules; they are not the current branch
 baseline. The current feature evidence is recorded in the latest checkpoint sections and module plan.
 
@@ -154,6 +154,23 @@ timestamp precision and live results remain open under `MAP-05`, `QRY-07` and `T
 [the DateTime.Ticks plan](efcore-10-date-time-ticks-plan.md). Package
 `10.0.0-date-time-ticks-20261116` passed content verification and the standalone consumer on EF10.0.0/10.0.14
 in both modes; this remains offline/package evidence and does not close the live gate.
+
+### QRY-07/QRY-11/MAP-05 server clock checkpoint (2026-11-16)
+
+The provider now translates `DateTime.Now`, `DateTime.UtcNow` and `DateTime.Today` using explicit mode-specific
+server functions. MySQL emits `CURRENT_TIMESTAMP(6)`, `UTC_TIMESTAMP(6)` and `CURDATE()`; Oracle emits
+`CAST(CURRENT_TIMESTAMP AS TIMESTAMP)`, `CAST(SYS_EXTRACT_UTC(SYSTIMESTAMP) AS TIMESTAMP)` and
+`TRUNC(CURRENT_DATE)`. The expressions use existing DateTime mappings and do not expose internal markers.
+No Connector change was needed.
+
+The RED queries produced no server clock expressions before implementation. Focused Release evidence is 2 Unit
+and 4 functional sync/async cases, all passing. The PackageConsumer now asserts all three SQL functions in both
+modes. Package `10.0.0-date-time-clocks-20261116` passes content verification and packed consumers on
+EF10.0.0/10.0.14 in both modes. The current full source regression is Release Unit 2373, Functional 1911 and
+Specification 1446 with 16 explicitly mapped skips; Debug Unit 2373 and Functional 1911 also pass. This remains
+local SQL, intercepted-reader and offline package evidence; server clock accuracy, session timezone, UTC
+conversion, precision and live results remain open. The detailed record is in
+[the server clock plan](efcore-10-date-time-clocks-plan.md).
 
 ### HasData schema bootstrap and pause (2026-11-13)
 

@@ -2,7 +2,7 @@
 
 **Updated:** 2026-11-16
 **Branch:** `efcore/10.0`  
-**State:** Active local development; QRY-07/MAP-05 `DateTime.Ticks` is the latest local module.
+**State:** Active local development; QRY-07/QRY-11/MAP-05 server clock members are the latest local module.
 **Acceptance authority:** [efcore-10-feature-checklist.md](efcore-10-feature-checklist.md)
 
 The `REL-01` support record now exists at [efcore-10-release-support.md](efcore-10-release-support.md),
@@ -116,6 +116,10 @@ The following required rows have complete local/package evidence for both modes:
   `DATE`/`TIMESTAMP` carriers. Both-mode projection/predicate and intercepted sync/async NULL/materialization
   coverage pass; native date arithmetic and precision remain a live gate. See the
   [DateTime.Ticks plan](efcore-10-date-time-ticks-plan.md).
+- `DateTime.Now`, `DateTime.UtcNow` and `DateTime.Today` now translate to explicit MySQL and Oracle server clock
+  functions with both-mode sync/async intercepted coverage. Server clock accuracy, session timezone and UTC
+  conversion remain live gates. Package `10.0.0-date-time-clocks-20261116` passes content verification and
+  packed consumers on EF10.0.0/10.0.14 in both modes. See the [server clock plan](efcore-10-date-time-clocks-plan.md).
 - `CON-02` now rechecks the compatibility mode after sync/async open callbacks and restores EF's connection lease
   accounting when the post-open check rejects a conflict. Native handshake detection and live cleanup remain open.
 

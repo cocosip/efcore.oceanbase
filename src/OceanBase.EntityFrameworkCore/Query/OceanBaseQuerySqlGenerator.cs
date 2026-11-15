@@ -612,6 +612,39 @@ namespace OceanBase.EntityFrameworkCore.Query
                 return sqlFunctionExpression;
             }
 
+            if (sqlFunctionExpression.Name is OceanBaseTemporalMemberTranslator.DateTimeNowMarker
+                or OceanBaseTemporalMemberTranslator.DateTimeUtcNowMarker
+                or OceanBaseTemporalMemberTranslator.DateTimeTodayMarker)
+            {
+                if (sqlFunctionExpression is not { IsBuiltIn: true, Schema: null, Instance: null, Arguments.Count: 0,
+                        IsNullable: false, Type: var resultType, TypeMapping: { } resultMapping }
+                    || resultType != typeof(DateTime)
+                    || resultMapping.Converter?.ConvertsNulls == true
+                    || !IsDateTimeMapping(resultMapping))
+                    throw new InvalidOperationException("Invalid internal DateTime clock expression.");
+
+                if (_mode == OceanBaseCompatibilityMode.MySql)
+                {
+                    Sql.Append(sqlFunctionExpression.Name switch
+                    {
+                        OceanBaseTemporalMemberTranslator.DateTimeNowMarker => "CURRENT_TIMESTAMP(6)",
+                        OceanBaseTemporalMemberTranslator.DateTimeUtcNowMarker => "UTC_TIMESTAMP(6)",
+                        _ => "CURDATE()"
+                    });
+                }
+                else
+                {
+                    Sql.Append(sqlFunctionExpression.Name switch
+                    {
+                        OceanBaseTemporalMemberTranslator.DateTimeNowMarker => "CAST(CURRENT_TIMESTAMP AS TIMESTAMP)",
+                        OceanBaseTemporalMemberTranslator.DateTimeUtcNowMarker => "CAST(SYS_EXTRACT_UTC(SYSTIMESTAMP) AS TIMESTAMP)",
+                        _ => "TRUNC(CURRENT_DATE)"
+                    });
+                }
+
+                return sqlFunctionExpression;
+            }
+
             if (sqlFunctionExpression.Name == OceanBaseTemporalMemberTranslator.TotalMarker)
             {
                 if (sqlFunctionExpression is not { IsBuiltIn: true, Schema: null, Instance: null, Arguments.Count: 2,

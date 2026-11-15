@@ -404,6 +404,19 @@ namespace PackageConsumer
                         StringComparison.Ordinal)
                     || dateTimeTicksSql.Contains("__oceanbase_internal_", StringComparison.Ordinal))
                     throw new Exception("Packed provider did not translate DateTime.Ticks.");
+                var clockSql = context.Set<Row>().Select(row => new
+                {
+                    Now = DateTime.Now,
+                    UtcNow = DateTime.UtcNow,
+                    Today = DateTime.Today
+                }).ToQueryString();
+                var clockFunctions = mode == OceanBaseCompatibilityMode.MySql
+                    ? new[] { "CURRENT_TIMESTAMP(6)", "UTC_TIMESTAMP(6)", "CURDATE()" }
+                    : new[] { "CAST(CURRENT_TIMESTAMP AS TIMESTAMP)",
+                        "CAST(SYS_EXTRACT_UTC(SYSTIMESTAMP) AS TIMESTAMP)", "TRUNC(CURRENT_DATE)" };
+                if (clockFunctions.Any(function => !clockSql.Contains(function, StringComparison.Ordinal))
+                    || clockSql.Contains("__oceanbase_internal_", StringComparison.Ordinal))
+                    throw new Exception("Packed provider did not translate DateTime server clock members.");
 
                 var calendarSql = context.Set<Row>().Where(row => row.OccurredAt.DayOfWeek == DayOfWeek.Sunday
                     && row.Day.DayOfYear == 60).ToQueryString();

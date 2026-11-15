@@ -14,18 +14,26 @@ public APIs and per-mode mappings/SQL. Separate local implementation evidence fr
 The compact execution board is [efcore-10-roadmap.md](efcore-10-roadmap.md); this file remains the detailed
 batch ledger and acceptance notes.
 
-**Updated:** 2026-11-16, QRY-07/MAP-05 DateTime.Ticks following the TimeOnly.Ticks, TimeSpan.Ticks, DateOnly.DayNumber, DateTime.TimeOfDay and TST-01
+**Updated:** 2026-11-16, QRY-07/QRY-11/MAP-05 server clock members following DateTime.Ticks, TimeOnly.Ticks, TimeSpan.Ticks, DateOnly.DayNumber, DateTime.TimeOfDay and TST-01
 model-building 101 checkpoints.
 Keep one complete module active and review it before committing. EF8/EF9 remains postponed; live execution is opt-in and
 currently blocked before authentication by the supplied endpoint/transport behavior.
 The full goal remains incomplete.
 
-The current local module is the QRY-07/MAP-05 `DateTime.Ticks` slice. It uses the existing DATETIME/DATE/TIMESTAMP
-mappings, translates Gregorian epoch-based 100ns ticks in both modes, and has both-mode SQL-shape and intercepted
-sync/async reader coverage; see [the DateTime.Ticks plan](efcore-10-date-time-ticks-plan.md). The preceding
+The current local module is the QRY-07/QRY-11/MAP-05 server clock slice. It translates `DateTime.Now`,
+`DateTime.UtcNow` and `DateTime.Today` with explicit MySQL/Oracle server functions and has both-mode SQL-shape
+and intercepted sync/async reader coverage; see [the server clock plan](efcore-10-date-time-clocks-plan.md). The preceding
+QRY-07/MAP-05 `DateTime.Ticks` slice uses the existing DATETIME/DATE/TIMESTAMP mappings, translates Gregorian
+epoch-based 100ns ticks in both modes, and has both-mode SQL-shape and intercepted sync/async reader coverage;
+see [the DateTime.Ticks plan](efcore-10-date-time-ticks-plan.md). The preceding
 `TimeOnly.Ticks` slice translates midnight-based time ticks; see [the TimeOnly.Ticks plan](efcore-10-time-only-ticks-plan.md).
 The preceding
 `TimeSpan.Ticks` slice translates signed duration ticks; see [the TimeSpan.Ticks plan](efcore-10-time-span-ticks-plan.md).
+
+The server clock package gate is complete: `10.0.0-date-time-clocks-20261116` passes package content verification
+and packed consumers on EF10.0.0/10.0.14 in both modes. The current full source regression is Release Unit 2373,
+Functional 1911 and Specification 1446 with 16 explicitly mapped skips; Debug Unit 2373 and Functional 1911
+also pass. Native server clock/session-timezone validation remains open.
 The preceding
 `DateOnly.DayNumber` slice uses the existing DATE mapping and zero-based Gregorian arithmetic; see
 [the DateOnly.DayNumber plan](efcore-10-date-only-day-number-plan.md). The earlier `DateTime.TimeOfDay` slice

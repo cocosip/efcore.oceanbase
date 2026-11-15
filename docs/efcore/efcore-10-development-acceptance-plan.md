@@ -19,7 +19,7 @@
 ## 当前检查点
 
 创建本文档时记录的历史提交和测试总数属于此前的模块检查点；当前最新模块、测试结果和包版本分别记录在下面的
-`DateOnly.DayNumber` checkpoint 和对应 plan 中。不要使用旧 handoff 行推断当前 HEAD 或当前测试总数。
+server clock checkpoint 和对应 plan 中。不要使用旧 handoff 行推断当前 HEAD 或当前测试总数。
 - 当前没有真实 OceanBase SQL/DDL 验收。已有 live 探针在握手阶段报 `Connection closed while reading the packet`，没有执行 SQL 或 DDL。
 
 因此，CFG-04 已完成本地 characterization；连接波次已转入剩余映射、查询、更新和事务边界。不得重复已经完成的连接 characterization。
@@ -100,6 +100,16 @@ NULL materialization. The detailed record is in [the DateTime.Ticks plan](efcore
 explicit SQL assertion; native date arithmetic, precision and live results remain open.
 Package `10.0.0-date-time-ticks-20261116` passed package content verification and the standalone consumer on
 EF10.0.0/10.0.14 in both modes; this remains offline/package evidence.
+
+### QRY-07/QRY-11/MAP-05 server clock checkpoint (2026-11-16)
+
+`DateTime.Now`, `DateTime.UtcNow` and `DateTime.Today` now use explicit MySQL and Oracle server expressions.
+Focused Release evidence is 2 Unit and 4 functional sync/async cases. PackageConsumer includes SQL assertions
+for all three members in both modes. Package `10.0.0-date-time-clocks-20261116` passes content verification and
+the packed consumer on EF10.0.0/10.0.14 in both modes. The current full source regression is Release Unit 2373,
+Functional 1911 and Specification 1446 with 16 explicitly mapped skips; Debug Unit 2373 and Functional 1911
+also pass. The detailed scope and remaining native gates are recorded in
+[the server clock plan](efcore-10-date-time-clocks-plan.md).
 
 下一模块：继续一个尚未完成的 Required 映射/查询边界；优先处理仍缺少完整同步/异步和负面覆盖的
 时间或数值 overload。不得把 `DEF-04` JSON-only 规范族提前提升为 Required。

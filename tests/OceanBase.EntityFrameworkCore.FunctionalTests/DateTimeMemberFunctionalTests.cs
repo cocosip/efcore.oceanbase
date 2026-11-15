@@ -39,6 +39,36 @@ public sealed class DateTimeMemberFunctionalTests
         Assert.Contains(capture.Inputs, parameter => Equals(parameter.Value, target));
     }
 
+    [Theory]
+    [InlineData(OceanBaseCompatibilityMode.MySql, false)]
+    [InlineData(OceanBaseCompatibilityMode.MySql, true)]
+    [InlineData(OceanBaseCompatibilityMode.Oracle, false)]
+    [InlineData(OceanBaseCompatibilityMode.Oracle, true)]
+    public async Task DateTime_clock_members_materialize_server_values(OceanBaseCompatibilityMode mode, bool async)
+    {
+        using var table = new DataTable();
+        table.Columns.Add("Now", typeof(object));
+        table.Columns.Add("UtcNow", typeof(object));
+        table.Columns.Add("Today", typeof(object));
+        table.Rows.Add(new DateTime(2026, 11, 16, 10, 20, 30), new DateTime(2026, 11, 16, 2, 20, 30),
+            new DateTime(2026, 11, 16));
+        var capture = new Capture(table);
+        await using var context = Create(mode, capture);
+        var query = context.Rows.Select(row => new
+        {
+            Now = DateTime.Now,
+            UtcNow = DateTime.UtcNow,
+            Today = DateTime.Today
+        });
+
+        var result = Assert.Single(async ? await query.ToListAsync() : query.ToList());
+        Assert.Equal(new DateTime(2026, 11, 16, 10, 20, 30), result.Now);
+        Assert.Equal(new DateTime(2026, 11, 16, 2, 20, 30), result.UtcNow);
+        Assert.Equal(new DateTime(2026, 11, 16), result.Today);
+        var sql = Assert.Single(capture.Sql);
+        Assert.DoesNotContain("__oceanbase_internal", sql);
+    }
+
     private static TestContext Create(OceanBaseCompatibilityMode mode, Capture capture)
         => new(new DbContextOptionsBuilder<TestContext>()
             .UseOceanBase("Server=offline;Database=datetime_member", mode)

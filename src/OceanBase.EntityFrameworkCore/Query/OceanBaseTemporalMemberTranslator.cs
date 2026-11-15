@@ -21,6 +21,9 @@ namespace OceanBase.EntityFrameworkCore.Query
         internal const string DayNumberMarker = "__oceanbase_internal_day_number";
         internal const string TicksMarker = "__oceanbase_internal_ticks";
         internal const string DateTimeTicksMarker = "__oceanbase_internal_datetime_ticks";
+        internal const string DateTimeNowMarker = "__oceanbase_internal_datetime_now";
+        internal const string DateTimeUtcNowMarker = "__oceanbase_internal_datetime_utc_now";
+        internal const string DateTimeTodayMarker = "__oceanbase_internal_datetime_today";
 
         private static readonly Dictionary<MemberInfo, (Type Receiver, string Unit, string MySqlFunction)> Parts = new()
         {
@@ -74,6 +77,9 @@ namespace OceanBase.EntityFrameworkCore.Query
         private static readonly MemberInfo TimeSpanTicks = typeof(TimeSpan).GetProperty(nameof(TimeSpan.Ticks))!;
         private static readonly MemberInfo TimeOnlyTicks = typeof(TimeOnly).GetProperty(nameof(TimeOnly.Ticks))!;
         private static readonly MemberInfo DateTimeTicks = typeof(DateTime).GetProperty(nameof(DateTime.Ticks))!;
+        private static readonly MemberInfo DateTimeNow = typeof(DateTime).GetProperty(nameof(DateTime.Now))!;
+        private static readonly MemberInfo DateTimeUtcNow = typeof(DateTime).GetProperty(nameof(DateTime.UtcNow))!;
+        private static readonly MemberInfo DateTimeToday = typeof(DateTime).GetProperty(nameof(DateTime.Today))!;
 
         public SqlExpression? Translate(SqlExpression? instance, MemberInfo member, Type returnType,
             IDiagnosticsLogger<DbLoggerCategory.Query> logger)
@@ -155,6 +161,19 @@ namespace OceanBase.EntityFrameworkCore.Query
 
                 return factory.Function(DateTimeTicksMarker, [instance], nullable: true,
                     argumentsPropagateNullability: [false], typeof(long), mappingSource.FindMapping(typeof(long)));
+            }
+
+            if (instance is null && returnType == typeof(DateTime)
+                && member is MemberInfo clock
+                && (clock == DateTimeNow || clock == DateTimeUtcNow || clock == DateTimeToday))
+            {
+                var storeType = clock == DateTimeToday
+                    ? mode == OceanBaseCompatibilityMode.MySql ? "DATETIME(0)" : "DATE"
+                    : mode == OceanBaseCompatibilityMode.MySql ? "DATETIME(6)" : "TIMESTAMP(7)";
+                var marker = clock == DateTimeNow ? DateTimeNowMarker
+                    : clock == DateTimeUtcNow ? DateTimeUtcNowMarker : DateTimeTodayMarker;
+                return factory.Function(marker, [], nullable: false, argumentsPropagateNullability: [],
+                    typeof(DateTime), mappingSource.FindMapping(typeof(DateTime), storeType));
             }
 
             if (instance is not null && CalendarParts.TryGetValue(member, out var weekday)

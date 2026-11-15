@@ -52,6 +52,34 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
         }
 
         [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle)]
+        public void DateTime_clock_members_translate_to_server_functions(OceanBaseCompatibilityMode mode)
+        {
+            using var context = CreateContext(mode);
+            var sql = context.Rows.Select(row => new
+            {
+                Now = DateTime.Now,
+                UtcNow = DateTime.UtcNow,
+                Today = DateTime.Today
+            }).ToQueryString();
+
+            Assert.DoesNotContain("__oceanbase_internal", sql);
+            if (mode == OceanBaseCompatibilityMode.MySql)
+            {
+                Assert.Contains("CURRENT_TIMESTAMP(6)", sql);
+                Assert.Contains("UTC_TIMESTAMP(6)", sql);
+                Assert.Contains("CURDATE()", sql);
+            }
+            else
+            {
+                Assert.Contains("CAST(CURRENT_TIMESTAMP AS TIMESTAMP)", sql);
+                Assert.Contains("CAST(SYS_EXTRACT_UTC(SYSTIMESTAMP) AS TIMESTAMP)", sql);
+                Assert.Contains("TRUNC(CURRENT_DATE)", sql);
+            }
+        }
+
+        [Theory]
         [InlineData(OceanBaseCompatibilityMode.MySql, false)]
         [InlineData(OceanBaseCompatibilityMode.MySql, true)]
         [InlineData(OceanBaseCompatibilityMode.Oracle, false)]
