@@ -1,6 +1,6 @@
 # EF Core 10 DatabaseFacade service graph module
 
-**Status:** Active local module
+**Status:** Completed local characterization; native/schema gates remain open
 
 **Scope:** `CFG-04`: prove that the EF10 `DatabaseFacade` dependency graph resolves in both
 compatibility modes and that the ordinary read-only facade entry points use the registered provider
@@ -41,3 +41,16 @@ and authorized non-destructive matrix succeed.
   is unavailable and record that limitation.
 - A local commit and an entry in `efcore-10-development-acceptance-plan.md`, `efcore-10-progress.md`
   and `efcore-10-feature-checklist.md`.
+
+## Recorded evidence
+
+- The focused MySQL/Oracle test passes with two cases and zero failures/skips.
+- Release source suites pass Unit 2349, Functional 1879 and Specification 868; the two package consumers
+  also pass.
+- Package `10.0.0-cfg04-20261115` passes content and both EF10.0.0/10.0.14 package consumers in both
+  modes. Tooling catalog, compiled-model and migration/script/remove checks pass on both patches with
+  `-SkipBundle`; the bundle substep remains unavailable because the EF10.0.14 runtime pack is absent.
+- No provider production code or `OceanBaseConnector` code changed. Native schema, privilege, deletion and
+  live OceanBase behavior remain open.
+
+Local commit: `d4fc4df`.

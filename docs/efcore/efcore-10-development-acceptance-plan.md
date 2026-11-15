@@ -20,14 +20,15 @@
 
 创建本文档时的仓库状态：
 
-- `HEAD` 的最新功能提交是 `04a6fe7`，内容为 CON-02 post-open mode recheck；TimeSpan component-member 提交为 `747c61a`。
+- `HEAD` 的最新功能提交是 `d4fc4df`，内容为 CFG-04 DatabaseFacade service graph characterization；此前
+  CON-03/04/05 连接边界提交分别为 `051ea06`、`34f84f4`、`fe71f2a`。
 - Batch3ba 提交 `df67ff8` 是前一个显式 Binary/Guid `EF.Parameter` 集合根检查点。
 - HasData schema bootstrap 是前一个已提交检查点 `1f6046f`。
-- 当前工作树的 Release 本地测试为：Unit 2333、Functional 1869、Specification 868、Consumer 2，共 5072 个测试，0 失败、0 跳过。
+- 当前工作树的 Release 本地测试为：Unit 2349、Functional 1879、Specification 868、Consumer 2，共 5098 个测试，0 失败、0 跳过。
 - 文档中原有的 5028 测试数字是 HasData 已提交检查点的基线；Batch3ba 已在 `df67ff8` 中新增 8 个单元测试。
 - 当前没有真实 OceanBase SQL/DDL 验收。已有 live 探针在握手阶段报 `Connection closed while reading the packet`，没有执行 SQL 或 DDL。
 
-因此，Batch3ba 已收口；下一步固定为：统一进度文档、完成一次独立审查，然后进入连接边界波次。不得再开新的查询函数或参数载体来绕过连接边界工作。
+因此，CFG-04 已完成本地 characterization；下一步固定为：进入 DIA-01/02 诊断边界，然后继续剩余映射、查询、更新和事务波次。不得重复已经完成的连接 characterization。
 
 ## 完成状态的定义
 
@@ -374,6 +375,28 @@ Known gaps: native/live timeout and cancellation gates remain open; no Connector
 Next module: continue the remaining local service/diagnostic or query/write gaps; do not repeat completed
 connection characterization without a reproduced defect.
 Commit: `16da9b7`.
+
+### 2026-11-15：CFG-04 DatabaseFacade service graph characterization
+
+Module: EF10 DatabaseFacade dependency graph and ordinary read-only facade entry points
+Checklist IDs: `CFG-04`
+Base commit: `fe71f2a`
+Implementation files: no production change; existing `OceanBaseDatabaseCreator` and EF relational service graph are reused.
+Tests added/changed: `BasicRelationalTests.Database_facade_resolves_the_complete_relational_service_graph` with a minimal single-table model.
+Focused command and result: MySQL/Oracle service graph and `GenerateCreateScript` — 2 passed, zero failures/skips.
+Full local command and result: Release Unit 2349, Functional 1879, Specification 868 and Consumer 2 passed;
+zero failures/skips.
+Package/tooling command and result: package `10.0.0-cfg04-20261115` passed `Verify-Package.ps1` and
+PackageConsumer on EF10.0.0/10.0.14 in both modes. ToolingConsumer catalog, compiled-model and
+migration/script/remove checks passed on both patches with `-SkipBundle`.
+Live command and result: not run; supplied User Secrets endpoints still close before SQL during pre-authentication.
+Evidence boundary: local service registration, scoped identity, migration/history services, mode-specific
+script generation and facade wiring are proved. Native existence/permission/DDL/deletion behavior,
+physical cleanup and live OceanBase results are not proved.
+Known gaps: `CFG-04` remains `In progress` until wider schema/native lifecycle evidence is closed;
+`SCH-01..03` and `TST-02` remain open. No Connector change was needed.
+Next module: continue `DIA-01/02` diagnostics boundaries, then remaining mapping/query/write/transaction gaps.
+Commit: `d4fc4df`.
 
 每个波次完成后，在对应 plan/progress 文档增加一段记录，字段必须完整：
 

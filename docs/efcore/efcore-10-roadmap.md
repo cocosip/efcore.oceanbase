@@ -1,13 +1,13 @@
 # EF Core 10 Development and Release Roadmap
 
-**Updated:** 2026-11-13
+**Updated:** 2026-11-15
 **Branch:** `efcore/10.0`  
-**State:** Paused at the user's request after HasData wrap-up and local commit; resume only when requested.
+**State:** Active local development; CFG-04 DatabaseFacade service graph characterization is the latest local commit.
 **Acceptance authority:** [efcore-10-feature-checklist.md](efcore-10-feature-checklist.md)
 
 **Execution control:** Follow [efcore-10-development-acceptance-plan.md](efcore-10-development-acceptance-plan.md)
-for the ordered waves, evidence levels and handoff format. The committed 5028-test HasData checkpoint and any
-uncommitted follow-up work must be reported separately.
+for the ordered waves, evidence levels and handoff format. The current Release source baseline is Unit 2349,
+Functional 1879 and Specification 868, with two consumers; all recorded local checks have zero failures/skips.
 
 This is the execution board for the first OceanBase EF Core 10 provider. It separates provider work from
 evidence work so an intercepted test cannot be mistaken for native OceanBase acceptance.
@@ -17,6 +17,7 @@ evidence work so an intercepted test cannot be mistaken for native OceanBase acc
 The following required rows have complete local/package evidence for both modes:
 
 - `CFG-01..03`, `CON-01`, `SQL-02`
+- `CFG-04` local service-graph/facade characterization (native schema and lifecycle gates remain open)
 - `PKG-01..04`
 - HasData now participates in GenerateCreateScript, CreateTables and EnsureCreated for both modes. EF
   orders/converts seed operations; excluded tables are filtered. DDL precedes an owned model-data transaction,
@@ -148,14 +149,14 @@ features stay visible and must not be advertised as supported.
 
 ## Execution order from this checkpoint
 
-Development is paused after the current module's local commit. The sequence below applies on user-requested
-resume; do not begin another module during this wrap-up.
+Development continues after the CFG-04 local commit. Keep one feature module active at a time and do not
+repeat completed connection characterization without a reproduced defect.
 
 1. **Completed locally:** migrations core, tooling, TPT/TPC inheritance, entity/table splitting and Connector
    0.3.0 reverse engineering form complete local modules; see each plan for reviewed source/package evidence.
    Unknown metadata remains visible through warnings. Native acceptance remains distinct from local results.
-2. Ordinary many-to-many runtime contracts are covered without redundant production changes. Continue the
-   locally feasible inheritance/graph/runtime modules and upstream specification coverage (`TST-01`), then close the
+2. CFG-04 service-graph wiring is locally characterized without a redundant provider implementation. Continue
+   with `DIA-01/02` diagnostics boundaries, then close the
    exposed graph materialization, tracked graph writes and transaction/connection recovery gaps together.
    Official runtime fixtures require an initialized store; intercepted canned results cannot replace them.
    Record positive/null/empty/failure boundaries by feature ID; avoid a new sequence of one-overload commits.

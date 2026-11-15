@@ -6,16 +6,16 @@ The ordered development and acceptance rules are in
 [efcore-10-development-acceptance-plan.md](efcore-10-development-acceptance-plan.md). This file keeps the
 historical handoff and module evidence; it does not authorize jumping between unfinished feature families.
 
-The latest committed local module is `04a6fe7` (CON-02 post-open mode recheck), following the TimeSpan
-component-member commit `747c61a`, total-member commit `27509aa` and its evidence record `537eede`, and Batch3ba
-commit `df67ff8`. The current worktree Release test baseline is 5,072 passed,
+The latest committed local module is `d4fc4df` (CFG-04 DatabaseFacade service graph characterization), following
+the CON-03/04/05 connection boundary commits `051ea06`, `34f84f4` and `fe71f2a`. The current worktree Release
+test baseline is 5,098 passed,
 zero failed/skipped; the older 5,036 count below belongs to the pre-TimeSpan-total checkpoint.
 
-## Paused checkpoint: 2026-11-13
+## Current checkpoint: 2026-11-15
 
-Development resumed on 2026-11-11 on efcore/10.0 at the user's request, following the paused Batch7e checkpoint.
-The latest checkpoint is HasData schema bootstrap on 2026-11-13, following lazy-loading integration,
-ordinary compiled models, split queries, retries, TPC, many-to-many and Connector 0.3.0 reverse engineering.
+Development is active on efcore/10.0 following the HasData, connection-boundary and CFG-04 checkpoints.
+The current local checkpoint includes lazy-loading integration, ordinary compiled models, split queries, retries,
+TPC, many-to-many and Connector 0.3.0 reverse engineering.
 Test each module and review completed major modules before committing. EF8/EF9 remain postponed.
 The provider is not release-ready. The [feature checklist](efcore-10-feature-checklist.md) remains the
 acceptance authority; this document records the handoff rather than defining a different completion target.
@@ -1063,6 +1063,27 @@ tracked Added state for SaveChanges and leave the EF-visible connection closed. 
 change was needed. Release Unit 2349, Functional 1877, Specification 868 and Consumer 2 pass with zero
 failures/skips. Package `10.0.0-timeout-cancellation-20261115` passes content, both-patch consumers and
 both-patch tooling checks with `-SkipBundle`. The local commit is `16da9b7`.
+
+### CFG-04 DatabaseFacade service graph characterization (2026-11-15)
+
+Module: EF10 DatabaseFacade dependency graph and ordinary read-only facade entry points
+Checklist IDs: `CFG-04`
+Base commit: `fe71f2a`
+Implementation files: no production change; existing `OceanBaseDatabaseCreator` and EF relational service graph are reused.
+Tests added/changed: `BasicRelationalTests.Database_facade_resolves_the_complete_relational_service_graph` with a minimal single-table model.
+Focused command and result: MySQL/Oracle service graph and `GenerateCreateScript` — 2 passed, zero failures/skips.
+Full local command and result: Release Unit 2349, Functional 1879, Specification 868; zero failures/skips.
+Package/tooling command and result: package `10.0.0-cfg04-20261115` passed `Verify-Package.ps1` and
+PackageConsumer on EF10.0.0/10.0.14 in both modes. ToolingConsumer catalog, compiled-model and
+migration/script/remove checks passed on both patches with `-SkipBundle`.
+Live command and result: not run; supplied User Secrets endpoints still close before SQL during pre-authentication.
+Evidence boundary: local service registration, scoped identity, migration/history services, mode-specific
+script generation and facade wiring are proved. Native existence/permission/DDL/deletion behavior,
+physical cleanup and live OceanBase results are not proved.
+Known gaps: `CFG-04` remains `In progress` until the wider schema/native lifecycle evidence is closed;
+`SCH-01..03` and `TST-02` remain open. No Connector change was needed.
+Next module: continue `DIA-01/02` diagnostics boundaries, then remaining mapping/query/write/transaction gaps.
+Commit: `d4fc4df`.
 
 1. Recheck branch/worktree and saved commit before editing. Batch3ai binary collection roots, Batch3ah
    temporal collection roots, Batch3af Boolean collection roots, Batch3ae text collection roots,
