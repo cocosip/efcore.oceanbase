@@ -14,10 +14,15 @@ public APIs and per-mode mappings/SQL. Separate local implementation evidence fr
 The compact execution board is [efcore-10-roadmap.md](efcore-10-roadmap.md); this file remains the detailed
 batch ledger and acceptance notes.
 
-**Updated:** 2026-11-13, CI portability and explicit binary/Guid parameter roots following HasData schema
+**Updated:** 2026-11-15, temporal fractional members following Boolean conversion and explicit binary/Guid parameter roots following HasData schema
 bootstrap. Keep one complete module active and review it before committing. EF8/EF9 remains postponed; live execution is opt-in and
 currently blocked before authentication by the supplied endpoint/transport behavior.
 The full goal remains incomplete.
+
+The current local module is `e3119f5`: DateTime/TimeOnly fractional members. Its code, focused
+tests, full source Release suites and documentation are complete locally; native temporal precision,
+timezone/range behavior and final package/release evidence remain open. The detailed acceptance record
+is [efcore-10-temporal-fractional-plan.md](efcore-10-temporal-fractional-plan.md).
 
 ## Execution order and release gates
 
@@ -25,7 +30,7 @@ Use this section to choose the next task; the feature checklist remains the deta
 Keep one feature module active at a time: finish its implementation, verification, review fixes, evidence
 and local commit before starting another. A status request does not authorize switching modules.
 
-1. **Completed locally: migrations core and tooling, followed by the current Batch3ba slice.** The core is committed at `a8cbccf`; the
+1. **Completed locally: migrations core and tooling, followed by the current temporal fractional slice.** The core is committed at `a8cbccf`; the
    [tooling execution plan](efcore-10-migrations-tooling-plan.md) records the complete configuration/discovery/
    scaffolding/snapshot/script/removal/bundle workflow, package matrix, review and feature commit.
 2. **Complete runtime/specification modules.** Add the next relational query/write specification fixtures,
