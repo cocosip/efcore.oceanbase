@@ -290,6 +290,22 @@ Known gaps: bundle/runtime-pack verification and native/live gates remain open.
 Next module: begin the execution plan's connection/service/diagnostic boundary wave (`CFG-04`, `CON-02..05`, `DIA-01..02`, `SQL-01`).
 Commit: `747c61a`.
 
+### 2026-11-15：CON-02 post-open mode recheck
+
+Module: Connection compatibility-mode recheck after opening callbacks
+Checklist IDs: CON-02
+Base commit: `88dae84`
+Implementation files: `src/OceanBase.EntityFrameworkCore/Storage/OceanBaseRelationalConnection.cs`
+Tests added/changed: `tests/OceanBase.EntityFrameworkCore.UnitTests/ConnectionLifecycleTests.cs`
+Focused command and result: `ConnectionLifecycleTests.Open_rechecks_mode_after_open_callback_and_restores_accounting` — 4 passed; full `ConnectionLifecycleTests` — 40 passed.
+Full local command and result: pending until the complete Release matrix finishes.
+Package/tooling command and result: pending until the complete Release matrix finishes.
+Live command and result: not run; the existing User Secrets probes still close before SQL during the pre-authentication handshake.
+Evidence boundary: post-open mode validation and EF lease rollback are proved for both modes and sync/async callback paths; connector handshake detection, physical cleanup and live connection behavior are not proved.
+Known gaps: native/live connection gates remain open.
+Next module: continue the remaining `CON-03..05` lifecycle boundaries in the execution plan.
+Commit: pending.
+
 每个波次完成后，在对应 plan/progress 文档增加一段记录，字段必须完整：
 
 ```text

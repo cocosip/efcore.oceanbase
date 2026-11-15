@@ -73,6 +73,28 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
         }
 
         [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true)]
+        public async Task Open_rechecks_mode_after_open_callback_and_restores_accounting(
+            OceanBaseCompatibilityMode mode, bool async)
+        {
+            await using var context = new DbContext(new DbContextOptionsBuilder()
+                .UseOceanBase("Server=localhost;Database=test", mode)
+                .AddInterceptors(new ModeConflictAfterOpen(mode)).Options);
+            var connection = context.GetService<IRelationalConnection>();
+
+            var error = async
+                ? await Assert.ThrowsAsync<InvalidOperationException>(() => connection.OpenAsync(CancellationToken.None))
+                : Assert.Throws<InvalidOperationException>(() => connection.Open());
+
+            Assert.Contains("connection mode does not match", error.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal(0, OpenCount(connection));
+            Assert.False(OpenedInternally(connection));
+        }
+
+        [Theory]
         [MemberData(nameof(PhysicalFailureCases))]
         public async Task Failed_open_snapshot_restores_physical_state_and_exact_accounting(
             OceanBaseCompatibilityMode mode, bool async, string phase, string initial)
@@ -207,6 +229,30 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             {
                 if (Failure is not null) throw Failure;
             }
+
+            public override Task ConnectionOpenedAsync(DbConnection connection, ConnectionEndEventData eventData,
+                CancellationToken cancellationToken = default)
+            {
+                ConnectionOpened(connection, eventData);
+                return Task.CompletedTask;
+            }
+        }
+
+        private sealed class ModeConflictAfterOpen(OceanBaseCompatibilityMode expected) : DbConnectionInterceptor
+        {
+            private readonly OceanBaseCompatibilityMode _conflict = expected == OceanBaseCompatibilityMode.MySql
+                ? OceanBaseCompatibilityMode.Oracle
+                : OceanBaseCompatibilityMode.MySql;
+
+            public override InterceptionResult ConnectionOpening(DbConnection connection, ConnectionEventData eventData,
+                InterceptionResult result) => InterceptionResult.Suppress();
+
+            public override ValueTask<InterceptionResult> ConnectionOpeningAsync(DbConnection connection,
+                ConnectionEventData eventData, InterceptionResult result, CancellationToken cancellationToken = default)
+                => ValueTask.FromResult(InterceptionResult.Suppress());
+
+            public override void ConnectionOpened(DbConnection connection, ConnectionEndEventData eventData)
+                => connection.ConnectionString = $"Server=localhost;Database=test;ExpectedMode={_conflict}";
 
             public override Task ConnectionOpenedAsync(DbConnection connection, ConnectionEndEventData eventData,
                 CancellationToken cancellationToken = default)

@@ -93,6 +93,8 @@ The following required rows have complete local/package evidence for both modes:
   precision/range and live results remain open.
 - `DateTime.Date` now has both-mode SQL-shape, mapping and intercepted reader coverage; native date semantics remain
   a live gate.
+- `CON-02` now rechecks the compatibility mode after sync/async open callbacks and restores EF's connection lease
+  accounting when the post-open check rejects a conflict. Native handshake detection and live cleanup remain open.
 
 The provider is still a development checkpoint. It is not a release candidate.
 

@@ -1013,6 +1013,18 @@ interval precision/range, server arithmetic and live OceanBase results remain op
 
 Commit: `747c61a`.
 
+### CON-02 post-open mode-recheck checkpoint (2026-11-15)
+
+`OceanBaseRelationalConnection.Open` and `OpenAsync` now validate the compatibility mode after EF's open callbacks
+return. A callback or connector handshake that exposes the opposite mode fails before execution, and the existing
+`OceanBaseConnectionOpenState` restores the previous lease count/internal-open flag. The regression covers MySQL and
+Oracle in sync and async paths with a network-suppressing callback that changes the closed connection's expected mode.
+
+Focused evidence: the new regression passed 4 cases; the full `ConnectionLifecycleTests` class passed 40 cases. Full
+Release/package/tooling evidence is recorded below after completion. This local evidence proves post-open provider
+validation and accounting rollback only; connector handshake detection, physical cleanup and live behavior remain
+open under `CON-02` and `TST-02`.
+
 ### Resume here: remaining EF10 local inventory
 
 1. Recheck branch/worktree and saved commit before editing. Batch3ai binary collection roots, Batch3ah

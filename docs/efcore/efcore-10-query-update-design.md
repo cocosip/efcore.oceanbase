@@ -1662,6 +1662,16 @@ the command interceptors do not execute a connector wire operation, so these tes
 reuse, server timeout enforcement, network cancellation, connector resource cleanup, transaction
 rollback or live connection behavior. Those gates remain under CON-05/TXN and the live matrix.
 
+### Connection mode recheck local contract (CON-02)
+
+`OceanBaseRelationalConnection` validates the configured or supplied compatibility mode before opening and again
+after EF's sync/async open callbacks return. A connector callback or handshake that detects or exposes a conflicting
+mode therefore fails before the connection is used; `OceanBaseConnectionOpenState` restores the prior EF lease count
+and internal-open flag on that failure. The regression uses a network-suppressing callback that changes the closed
+connection's expected mode during `ConnectionOpened`/`ConnectionOpenedAsync`, covering MySQL and Oracle in both
+sync and async paths. This proves the provider's post-open validation and accounting rollback only; it does not prove
+server handshake mode detection, connector wire cleanup or native live behavior.
+
 ### Command diagnostics and redaction local contract
 
 Batch5c's CommandLoggingTests uses `LogTo` with the provider's normal EF relational services and runs successful
@@ -1676,7 +1686,7 @@ Both provider-created and caller-owned connections are checked for compatibility
 without `ExpectedMode` receives the configured provider mode before opening. An already-open connection must agree
 with that mode. MySQL requires `UseAffectedRows=false`: EF concurrency checks count matched rows, including a match
 whose stored values do not change. A conflicting option is rejected before execution rather than silently changed.
-Validation happens at construction, creation, replacement and opening boundaries; the DbConnection getter stays
+Validation happens at construction, creation, replacement, before opening and after opening callbacks; the DbConnection getter stays
 safe for EF's disposal/reset paths after rejection. Locally tested ownership covers closed supplied and created
 connections, including sync/async disposal; opened-connection ownership still requires live evidence.
 

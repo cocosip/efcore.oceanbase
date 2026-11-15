@@ -54,7 +54,9 @@ namespace OceanBase.EntityFrameworkCore.Storage
             var entry = new OceanBaseConnectionOpenState(this);
             try
             {
-                return base.Open(errorsExpected);
+                var opened = base.Open(errorsExpected);
+                ValidateConnection(DbConnection);
+                return opened;
             }
             catch (Exception error)
             {
@@ -70,7 +72,9 @@ namespace OceanBase.EntityFrameworkCore.Storage
             var entry = new OceanBaseConnectionOpenState(this);
             try
             {
-                return await base.OpenAsync(cancellationToken, errorsExpected).ConfigureAwait(false);
+                var opened = await base.OpenAsync(cancellationToken, errorsExpected).ConfigureAwait(false);
+                ValidateConnection(DbConnection);
+                return opened;
             }
             catch (Exception error)
             {
