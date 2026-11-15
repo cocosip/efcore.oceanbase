@@ -42,6 +42,28 @@ public sealed class DateOnlyDayNumberFunctionalTests
             : "TRUNC(\"r\".\"Date\") - DATE '0001-01-01'", sql);
     }
 
+    [Theory]
+    [InlineData(OceanBaseCompatibilityMode.MySql, false)]
+    [InlineData(OceanBaseCompatibilityMode.MySql, true)]
+    [InlineData(OceanBaseCompatibilityMode.Oracle, false)]
+    [InlineData(OceanBaseCompatibilityMode.Oracle, true)]
+    public async Task DateOnly_AddDays_materializes_server_value(OceanBaseCompatibilityMode mode, bool async)
+    {
+        using var table = new DataTable();
+        table.Columns.Add("Value", typeof(object));
+        table.Rows.Add(new DateTime(2024, 3, 3));
+        var capture = new Capture(table);
+        await using var context = Create(mode, capture);
+        var query = context.Rows.Where(row => row.Date.AddDays(3) > new DateOnly(2024, 1, 1))
+            .Select(row => row.Date.AddDays(3));
+
+        var result = Assert.Single(async ? await query.ToListAsync() : query.ToList());
+        Assert.Equal(new DateOnly(2024, 3, 3), result);
+        var sql = Assert.Single(capture.Sql);
+        Assert.DoesNotContain("__oceanbase_internal", sql);
+        Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? "DATE_ADD" : " + ", sql);
+    }
+
     private static TestContext Create(OceanBaseCompatibilityMode mode, Capture capture)
         => new(new DbContextOptionsBuilder<TestContext>()
             .UseOceanBase("Server=offline;Database=dateonly_day_number", mode)

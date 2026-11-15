@@ -435,6 +435,13 @@ namespace PackageConsumer
                         : !offsetClockSql.Contains("CAST(SYS_EXTRACT_UTC(SYSTIMESTAMP) AS TIMESTAMP)", StringComparison.Ordinal))
                     || offsetClockSql.Contains("__oceanbase_internal_", StringComparison.Ordinal))
                     throw new Exception("Packed provider did not translate DateTimeOffset.UtcNow.");
+                var dateAddSql = context.Set<Row>().Where(row => row.Day.AddDays(3) > new DateOnly(2024, 1, 1))
+                    .Select(row => row.Day.AddDays(3)).ToQueryString();
+                if ((mode == OceanBaseCompatibilityMode.MySql
+                        ? !dateAddSql.Contains("DATE_ADD", StringComparison.Ordinal)
+                        : !dateAddSql.Contains(" + ", StringComparison.Ordinal))
+                    || dateAddSql.Contains("__oceanbase_internal_", StringComparison.Ordinal))
+                    throw new Exception("Packed provider did not translate DateOnly.AddDays.");
                 var clockSql = context.Set<Row>().Select(row => new
                 {
                     Now = DateTime.Now,
