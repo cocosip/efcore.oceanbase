@@ -1032,6 +1032,20 @@ Commit: `04a6fe7`.
 
 ### Resume here: remaining EF10 local inventory
 
+The next active module is [connection ownership](efcore-10-connection-ownership-plan.md): close `CON-03`
+with a caller-owned/provider-owned sync/async disposal matrix before moving to `CON-04` or `CON-05`.
+
+### Active CON-03 characterization (2026-11-15)
+
+The registered provider's existing EF10 ownership path passes the new 16-case matrix in both modes and
+sync/async paths. Caller-owned connections remain usable after context disposal, while provider-created
+connections are disposed after successful open and command failure. No production change or Connector change
+was needed. Release Unit 2349, Functional 1869, Specification 868 and Consumer 2 pass with zero
+failures/skips. Package `10.0.0-connection-ownership-20261115` passes content and PackageConsumer on
+EF10.0.0/10.0.14 in both modes; ToolingConsumer passes catalog, compiled-model and migration/script/remove
+checks on both patches with `-SkipBundle`. Suppressed opening proves EF/provider ownership and lease behavior
+only, not physical connector cleanup or live state. The module was committed locally as `f116d6e` after review.
+
 1. Recheck branch/worktree and saved commit before editing. Batch3ai binary collection roots, Batch3ah
    temporal collection roots, Batch3af Boolean collection roots, Batch3ae text collection roots,
    Batch3ad text/temporal extrema, Batch3ac contextual numeric element projections, Batch3ab

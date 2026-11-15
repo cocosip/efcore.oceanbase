@@ -303,8 +303,32 @@ Package/tooling command and result: Verify-Package and PackageConsumer passed on
 Live command and result: not run; the existing User Secrets probes still close before SQL during the pre-authentication handshake.
 Evidence boundary: post-open mode validation and EF lease rollback are proved for both modes and sync/async callback paths; connector handshake detection, physical cleanup and live connection behavior are not proved.
 Known gaps: native/live connection gates remain open.
-Next module: continue the remaining `CON-03..05` lifecycle boundaries in the execution plan.
+Next module: execute the [connection ownership module](efcore-10-connection-ownership-plan.md) for `CON-03`,
+then continue the remaining `CON-04..05` lifecycle boundaries.
 Commit: `04a6fe7`.
+
+### 2026-11-15：CON-03 connection ownership characterization
+
+Module: Caller-owned/provider-owned connection lifetime
+Checklist IDs: `CON-03`
+Base commit: `bfe12bb`
+Implementation files: no production change; EF10 `RelationalConnection` ownership behavior is reused.
+Tests added/changed: `tests/OceanBase.EntityFrameworkCore.UnitTests/ConnectionOwnershipTests.cs`
+Focused command and result: `ConnectionOwnershipTests` — 16 passed, zero failures/skips, covering MySQL/Oracle,
+sync/async provider opens, command failure, caller-owned survival and provider-owned disposal. The cases passed
+against the existing implementation, so no production RED/GREEN fix was required.
+Full local command and result: Release Unit 2349, Functional 1869, Specification 868 and Consumer 2 passed;
+zero failures/skips.
+Package/tooling command and result: package `10.0.0-connection-ownership-20261115` passed
+`Verify-Package.ps1` and PackageConsumer on EF10.0.0/10.0.14 in both modes. ToolingConsumer passed
+catalog, compiled-model and migration/script/remove checks on both patches with `-SkipBundle`; bundle remains
+blocked by missing EF10.0.14 runtime packs.
+Live command and result: not run; the supplied User Secrets probes still close before SQL during pre-authentication.
+Evidence boundary: local EF ownership flags, lease release, context disposal and command-failure cleanup are proved;
+physical opened-state survival, connector pool cleanup and live server behavior are not proved by the suppressed-open tests.
+Known gaps: native/live ownership and cleanup remain open; no Connector change is requested.
+Next module: after this checkpoint, continue `CON-04` sync/async execution and reuse boundaries.
+Commit: `f116d6e`.
 
 每个波次完成后，在对应 plan/progress 文档增加一段记录，字段必须完整：
 
