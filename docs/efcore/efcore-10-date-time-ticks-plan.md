@@ -32,8 +32,9 @@ Focused Release evidence:
 - Functional cases cover sync and async execution, projection, predicate, exact epoch-based tick values and
   NULL propagation using the existing offline reader interception boundary.
 - The standalone PackageConsumer includes a `DateTime.Ticks` SQL assertion for both modes.
-- Package `10.0.0-date-time-ticks-20261116` passed `Verify-Package.ps1` and the standalone PackageConsumer
-  on EF10.0.0 and EF10.0.14 in both modes.
+- Package `10.0.0-date-time-ticks-20261116`, rebuilt from commit `45c81fb` after the Oracle `DATE` fraction
+  correction, passed `Verify-Package.ps1` and the standalone PackageConsumer on EF10.0.0 and EF10.0.14 in
+  both modes.
 
 The intercepted reader proves provider SQL/materialization behavior only. It does not prove server date
 arithmetic, timestamp precision, calendar/session behavior or native coercion.
@@ -49,7 +50,8 @@ arithmetic, timestamp precision, calendar/session behavior or native coercion.
 - [x] No Connector change is required.
 - [x] Unique package content and both selected EF10 package consumers pass.
 - [ ] Run a real non-destructive query in both declared OceanBase tenants.
-- [ ] Re-run package and release-revision gates after the module commit.
+- [x] Re-run package content and selected EF10 package-consumer gates after commit `45c81fb`.
+- [ ] Run the final release-revision gates after all Required rows are complete.
 
 ## Remaining risk
 
