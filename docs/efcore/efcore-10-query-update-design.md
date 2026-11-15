@@ -607,6 +607,22 @@ DateTimeOffset, clocks/Now/UtcNow/Today, fractional parts/Ticks, Date/TimeOfDay/
 parts and Add operations need their own timezone/range/precision/calendar/wrapping contracts. This slice makes
 no server extraction, DATE cast, calendar/zero-date, interval-clock or result-metadata claim without live evidence.
 
+### TimeSpan component-member local contract (QRY-07/11, MAP-05/06)
+
+The provider translates the exact `TimeSpan.Days`, `Hours`, `Minutes`, `Seconds`, `Milliseconds`,
+`Microseconds` and `Nanoseconds` members to nullable `int` results in both compatibility modes. These are
+component values, so they retain .NET's signed duration semantics rather than returning total values. For MySQL,
+the SQL derives the sign from the complete `TIME` value and applies it to the absolute day/hour/minute/second or
+fractional component; this preserves values such as `TimeSpan.FromMilliseconds(-500)`. For Oracle, day/hour/minute/
+second use `EXTRACT` from the interval and fractional components use the truncated fractional second modulo 1000.
+
+Only the existing MySQL `TIME` and Oracle `INTERVAL DAY TO SECOND` provider carriers are accepted. Nulls propagate;
+null-converting, text, numeric and binary carriers are rejected before execution. Unit tests assert both-mode SQL
+shape, balanced SQL, input carrier validation and the rejection boundary. Intercepted functional tests assert
+synchronous and asynchronous materialization for a mixed negative duration and positive/negative pure-subsecond
+durations. These tests prove local translation and reader shaping only; native interval precision, range and live
+OceanBase arithmetic remain open under `MAP-05`, `QRY-07` and `TST-02`.
+
 ## Numeric Abs, Sign and Truncate local contract
 
 The implemented QRY-07 numeric slice covers twenty-two exact unary static signatures: Math.Abs and Math.Sign for

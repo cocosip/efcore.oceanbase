@@ -88,6 +88,9 @@ The following required rows have complete local/package evidence for both modes:
 - `TimeSpan.TotalDays`, `TotalHours`, `TotalMinutes`, `TotalSeconds`, `TotalMilliseconds`, `TotalMicroseconds`
   and `TotalNanoseconds` now have both-mode translation and intercepted sync/async materialization coverage.
   Native interval precision/range and live results remain open.
+- `TimeSpan.Days`, `Hours`, `Minutes`, `Seconds`, `Milliseconds`, `Microseconds` and `Nanoseconds` now have
+  both-mode signed-component translation and intercepted sync/async materialization coverage. Native interval
+  precision/range and live results remain open.
 - `DateTime.Date` now has both-mode SQL-shape, mapping and intercepted reader coverage; native date semantics remain
   a live gate.
 

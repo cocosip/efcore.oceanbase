@@ -274,6 +274,22 @@ Known gaps: bundle verification requires unavailable 10.0.14 runtime packs; nati
 Next module: choose the next complete local query/mapping module after this commit.
 Commit: `27509aa`.
 
+### 2026-11-15：TimeSpan component-member translation
+
+Module: TimeSpan component-member translation
+Checklist IDs: QRY-07, QRY-11, MAP-05, MAP-06
+Base commit: `27509aa`
+Implementation files: `OceanBaseTemporalMemberTranslator.cs`, `OceanBaseQuerySqlGenerator.cs`
+Tests added/changed: `TemporalMemberQueryTests.cs`, `TimeSpanComponentFunctionalTests.cs`
+Focused command and result: Unit filtered component tests 4 passed; Functional filtered component tests 12 passed.
+Full local command and result: Release Unit 2,329 passed; Release Functional 1,869 passed; Release Specification 868 passed; Consumer 2 passed; zero failures/skips.
+Package/tooling command and result: Verify-Package and PackageConsumer passed on EF10.0.0/10.0.14 in both modes using an isolated feed/cache; ToolingConsumer passed catalog, compiled-model and migration/script checks on both patches with `-SkipBundle`. The full bundle substep remains environment-blocked by missing 10.0.14 runtime packs.
+Live command and result: not run; the existing User Secrets probes still close before SQL during the pre-authentication handshake.
+Evidence boundary: local SQL generation, signed component semantics, carrier validation and intercepted sync/async reader shaping are covered; native interval precision/range/arithmetic and live OceanBase results are not proved.
+Known gaps: bundle/runtime-pack verification and native/live gates remain open.
+Next module: after this commit, continue the next complete local query/mapping module from the execution plan.
+Commit: pending.
+
 每个波次完成后，在对应 plan/progress 文档增加一段记录，字段必须完整：
 
 ```text

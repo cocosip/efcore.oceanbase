@@ -141,8 +141,7 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
                 context.Rows.Where(row => row.TextStamp.Year == 2024),
                 context.Rows.Where(row => row.TextDate.Month == 2),
                 context.Rows.Where(row => row.TextClock.Second == 59),
-                context.Rows.Where(row => row.Zoned.Year == 2024),
-                context.Rows.Where(row => row.Duration.Hours == 23)
+                context.Rows.Where(row => row.Zoned.Year == 2024)
             ];
             foreach (var query in unsupported)
                 Assert.Contains("could not be translated", Assert.Throws<InvalidOperationException>(() => query.ToQueryString()).Message);
@@ -389,6 +388,73 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
                 new ValueConverter<TimeSpan, string>(value => value.ToString(), value => TimeSpan.Parse(value)));
             Assert.Null(members.Translate(factory.Constant(TimeSpan.FromSeconds(1), text),
                 typeof(TimeSpan).GetProperty(nameof(TimeSpan.TotalSeconds))!, typeof(double), logger));
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle)]
+        public void TimeSpan_component_members_translate_with_signed_duration_semantics(OceanBaseCompatibilityMode mode)
+        {
+            using var context = CreateContext(mode);
+            var query = context.Rows
+                .Where(row => row.Duration.Days != 0 && row.Duration.Milliseconds < 0)
+                .OrderBy(row => row.Duration.Nanoseconds)
+                .Select(row => new
+                {
+                    row.Duration.Days,
+                    row.Duration.Hours,
+                    row.Duration.Minutes,
+                    row.Duration.Seconds,
+                    row.Duration.Milliseconds,
+                    row.Duration.Microseconds,
+                    row.Duration.Nanoseconds
+                });
+
+            var sql = query.ToQueryString();
+            Assert.DoesNotContain("__oceanbase_internal", sql);
+            Assert.Equal(sql.Count(c => c == '('), sql.Count(c => c == ')'));
+            if (mode == OceanBaseCompatibilityMode.MySql)
+            {
+                Assert.Contains("TIME_TO_SEC", sql);
+                Assert.Contains("DIV 86400", sql);
+                Assert.Contains("CAST(`r`.`Duration` AS CHAR)", sql);
+                Assert.Contains("LIKE '-%'", sql);
+                Assert.Contains("MICROSECOND", sql);
+            }
+            else
+            {
+                Assert.Contains("EXTRACT(DAY FROM", sql);
+                Assert.Contains("EXTRACT(HOUR FROM", sql);
+                Assert.Contains("EXTRACT(SECOND FROM", sql);
+                Assert.Contains("* 1000", sql);
+            }
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle)]
+        public void TimeSpan_component_members_reject_non_interval_carriers(OceanBaseCompatibilityMode mode)
+        {
+            using var context = CreateContext(mode);
+            var source = context.GetService<IRelationalTypeMappingSource>();
+            var factory = context.GetService<ISqlExpressionFactory>();
+            var members = context.GetService<IMemberTranslatorProvider>();
+            var logger = context.GetService<IDiagnosticsLogger<DbLoggerCategory.Query>>();
+            var mapping = mode == OceanBaseCompatibilityMode.MySql
+                ? (RelationalTypeMapping)source.FindMapping(typeof(TimeSpan))!.WithComposedConverter(
+                    new ValueConverter<TimeSpan, TimeSpan>(value => value, value => value, convertsNulls: true))
+                : (RelationalTypeMapping)source.FindMapping(typeof(OceanBaseIntervalDayToSecond))!.WithComposedConverter(
+                    new ValueConverter<TimeSpan, OceanBaseIntervalDayToSecond>(
+                        value => new OceanBaseIntervalDayToSecond(false, 0, 0, 0, 0),
+                        value => value.ToTimeSpan(), convertsNulls: true));
+
+            Assert.Null(members.Translate(factory.Constant(TimeSpan.FromSeconds(1), mapping),
+                typeof(TimeSpan).GetProperty(nameof(TimeSpan.Hours))!, typeof(int), logger));
+
+            var text = (RelationalTypeMapping)source.FindMapping(typeof(string))!.WithComposedConverter(
+                new ValueConverter<TimeSpan, string>(value => value.ToString(), value => TimeSpan.Parse(value)));
+            Assert.Null(members.Translate(factory.Constant(TimeSpan.FromSeconds(1), text),
+                typeof(TimeSpan).GetProperty(nameof(TimeSpan.Milliseconds))!, typeof(int), logger));
         }
 
         private static TestContext CreateContext(OceanBaseCompatibilityMode mode, bool relationalNulls = false)

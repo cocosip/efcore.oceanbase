@@ -347,17 +347,85 @@ namespace OceanBase.EntityFrameworkCore.Query
                 return sqlFunctionExpression;
             }
 
-            if (_mode == OceanBaseCompatibilityMode.Oracle
-                && sqlFunctionExpression.Name == OceanBaseTemporalMemberTranslator.ExtractMarker)
+            if (sqlFunctionExpression.Name == OceanBaseTemporalMemberTranslator.ExtractMarker)
             {
-                if (sqlFunctionExpression is not { IsBuiltIn: true, Arguments.Count: 2 }
+                if (sqlFunctionExpression is not { IsBuiltIn: true, IsNullable: true, Arguments.Count: 2,
+                        ArgumentsPropagateNullability: [false, false] }
                     || sqlFunctionExpression.Arguments[0] is not SqlFragmentExpression { Sql: var unit }
-                    || unit is not ("YEAR" or "MONTH" or "DAY" or "HOUR" or "MINUTE" or "SECOND"))
+                    || unit is not ("YEAR" or "MONTH" or "DAY" or "HOUR" or "MINUTE" or "SECOND"
+                        or "MILLISECOND" or "MICROSECOND" or "NANOSECOND"))
                     throw new InvalidOperationException("Invalid internal EXTRACT expression.");
 
-                Sql.Append("EXTRACT(").Append(unit).Append(" FROM ");
-                Visit(sqlFunctionExpression.Arguments[1]);
-                Sql.Append(")");
+                if (_mode == OceanBaseCompatibilityMode.MySql
+                    && sqlFunctionExpression.Arguments[1].Type == typeof(TimeSpan))
+                {
+                    AppendMySqlTimeSpanSign(sqlFunctionExpression.Arguments[1]);
+                    Sql.Append(" * ");
+                    if (unit == "DAY")
+                    {
+                        Sql.Append("(ABS(TIME_TO_SEC(");
+                        Visit(sqlFunctionExpression.Arguments[1]);
+                        Sql.Append(")) DIV 86400)");
+                    }
+                    else if (unit == "HOUR")
+                    {
+                        Sql.Append("(MOD(ABS(TIME_TO_SEC(");
+                        Visit(sqlFunctionExpression.Arguments[1]);
+                        Sql.Append(")), 86400) DIV 3600)");
+                    }
+                    else if (unit == "MINUTE")
+                    {
+                        Sql.Append("(MOD(ABS(TIME_TO_SEC(");
+                        Visit(sqlFunctionExpression.Arguments[1]);
+                        Sql.Append(")), 3600) DIV 60)");
+                    }
+                    else if (unit == "SECOND")
+                    {
+                        Sql.Append("MOD(ABS(TIME_TO_SEC(");
+                        Visit(sqlFunctionExpression.Arguments[1]);
+                        Sql.Append(")), 60)");
+                    }
+                    else if (unit == "MILLISECOND")
+                    {
+                        Sql.Append("(ABS(MICROSECOND(");
+                        Visit(sqlFunctionExpression.Arguments[1]);
+                        Sql.Append(")) DIV 1000)");
+                    }
+                    else if (unit is "MICROSECOND" or "NANOSECOND")
+                    {
+                        Sql.Append("MOD(ABS(MICROSECOND(");
+                        Visit(sqlFunctionExpression.Arguments[1]);
+                        Sql.Append(")), 1000)");
+                        if (unit == "NANOSECOND")
+                            Sql.Append(" * 100");
+                    }
+                    else
+                        throw new InvalidOperationException("Invalid MySQL duration extraction expression.");
+                }
+                else if (_mode == OceanBaseCompatibilityMode.Oracle)
+                {
+                    if (unit == "MILLISECOND")
+                    {
+                        Sql.Append("MOD(TRUNC(EXTRACT(SECOND FROM ");
+                        Visit(sqlFunctionExpression.Arguments[1]);
+                        Sql.Append(") * 1000), 1000)");
+                    }
+                    else if (unit is "MICROSECOND" or "NANOSECOND")
+                    {
+                        Sql.Append("MOD(TRUNC(EXTRACT(SECOND FROM ");
+                        Visit(sqlFunctionExpression.Arguments[1]);
+                        Sql.Append(") * ").Append(unit == "MICROSECOND" ? "1000000" : "1000000000")
+                            .Append("), 1000)");
+                    }
+                    else
+                    {
+                        Sql.Append("EXTRACT(").Append(unit).Append(" FROM ");
+                        Visit(sqlFunctionExpression.Arguments[1]);
+                        Sql.Append(")");
+                    }
+                }
+                else
+                    throw new InvalidOperationException("Invalid internal temporal extraction mode.");
                 return sqlFunctionExpression;
             }
 

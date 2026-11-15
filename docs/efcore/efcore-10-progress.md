@@ -985,6 +985,31 @@ After this commit, continue the next complete local query/mapping module from th
 Commit:
 `27509aa`
 
+### TimeSpan component-member checkpoint (QRY-07/11, MAP-05/06; 2026-11-15)
+
+The current branch now translates the seven exact `TimeSpan` component members (`Days`, `Hours`, `Minutes`,
+`Seconds`, `Milliseconds`, `Microseconds`, `Nanoseconds`) to nullable `int` SQL in MySQL and Oracle modes.
+MySQL derives the signed component from the complete `TIME` value and its absolute component, preserving mixed
+negative durations and pure negative subsecond values. Oracle uses interval `EXTRACT` for day/hour/minute/second
+and truncated fractional-second modulo arithmetic for the three subsecond members. Only TIME/INTERVAL DAY TO
+SECOND carriers are admitted; null-converting and unrelated carriers are rejected before execution. No Connector
+change was required.
+
+Tests added:
+
+- `TemporalMemberQueryTests`: both-mode projection/predicate/order SQL shape, balanced SQL and non-interval carrier rejection.
+- `TimeSpanComponentFunctionalTests`: both-mode intercepted sync/async materialization for mixed negative and
+  positive/negative pure-subsecond durations.
+
+Focused evidence: Unit component tests 4 passed; Functional component tests 12 passed. Full Release Unit 2,329,
+Functional 1,869, Specification 868 and Consumer 2 passed, with zero failures/skips. Verify-Package and the packed
+PackageConsumer passed on EF10.0.0/10.0.14 in both modes using an isolated feed/cache. ToolingConsumer passed
+catalog, compiled-model and migration/script checks on both patches with `-SkipBundle`; the bundle substep remains
+blocked by missing 10.0.14 runtime packs. This local evidence proves SQL generation, carrier admission, signed
+component semantics, intercepted reader shaping, package compatibility and non-bundle tooling checks only; native
+interval precision/range, server arithmetic and live OceanBase results remain open under `MAP-05`, `QRY-07` and
+`TST-02`.
+
 ### Resume here: remaining EF10 local inventory
 
 1. Recheck branch/worktree and saved commit before editing. Batch3ai binary collection roots, Batch3ah

@@ -31,7 +31,14 @@ namespace OceanBase.EntityFrameworkCore.Query
             [typeof(DateOnly).GetProperty(nameof(DateOnly.Day))!] = (typeof(DateOnly), "DAY", "DAYOFMONTH"),
             [typeof(TimeOnly).GetProperty(nameof(TimeOnly.Hour))!] = (typeof(TimeOnly), "HOUR", "HOUR"),
             [typeof(TimeOnly).GetProperty(nameof(TimeOnly.Minute))!] = (typeof(TimeOnly), "MINUTE", "MINUTE"),
-            [typeof(TimeOnly).GetProperty(nameof(TimeOnly.Second))!] = (typeof(TimeOnly), "SECOND", "SECOND")
+            [typeof(TimeOnly).GetProperty(nameof(TimeOnly.Second))!] = (typeof(TimeOnly), "SECOND", "SECOND"),
+            [typeof(TimeSpan).GetProperty(nameof(TimeSpan.Days))!] = (typeof(TimeSpan), "DAY", "DAY"),
+            [typeof(TimeSpan).GetProperty(nameof(TimeSpan.Hours))!] = (typeof(TimeSpan), "HOUR", "HOUR"),
+            [typeof(TimeSpan).GetProperty(nameof(TimeSpan.Minutes))!] = (typeof(TimeSpan), "MINUTE", "MINUTE"),
+            [typeof(TimeSpan).GetProperty(nameof(TimeSpan.Seconds))!] = (typeof(TimeSpan), "SECOND", "SECOND"),
+            [typeof(TimeSpan).GetProperty(nameof(TimeSpan.Milliseconds))!] = (typeof(TimeSpan), "MILLISECOND", "MICROSECOND"),
+            [typeof(TimeSpan).GetProperty(nameof(TimeSpan.Microseconds))!] = (typeof(TimeSpan), "MICROSECOND", "MICROSECOND"),
+            [typeof(TimeSpan).GetProperty(nameof(TimeSpan.Nanoseconds))!] = (typeof(TimeSpan), "NANOSECOND", "MICROSECOND")
         };
 
         private static readonly Dictionary<MemberInfo, bool> CalendarParts = new()
@@ -100,10 +107,16 @@ namespace OceanBase.EntityFrameworkCore.Query
 
             instance = factory.ApplyDefaultTypeMapping(instance);
             var mapping = instance.TypeMapping;
-            if (mapping is null || !SupportsCarrier(part.Receiver, mapping))
+            if (mapping is null || mapping.Converter?.ConvertsNulls == true || !SupportsCarrier(part.Receiver, mapping))
                 return null;
 
             var intMapping = mappingSource.FindMapping(typeof(int))!;
+            if (part.Receiver == typeof(TimeSpan))
+            {
+                return factory.Function(ExtractMarker, [factory.Fragment(part.Unit), instance], nullable: true,
+                    argumentsPropagateNullability: [false, false], typeof(int), intMapping);
+            }
+
             if (mode == OceanBaseCompatibilityMode.MySql)
                 return factory.Function(part.MySqlFunction, [instance], nullable: true,
                     argumentsPropagateNullability: [false], typeof(int), intMapping);
