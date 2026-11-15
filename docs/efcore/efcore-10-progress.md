@@ -983,7 +983,7 @@ Oracle/MySQL native interval semantics and the wider temporal/math matrix remain
 Next module:
 After this commit, continue the next complete local query/mapping module from the execution plan.
 Commit:
-`be876cd`
+`27509aa`
 
 ### Resume here: remaining EF10 local inventory
 

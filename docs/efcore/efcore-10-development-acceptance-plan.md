@@ -271,7 +271,7 @@ Evidence boundary: local translation, carrier validation, intercepted sync/async
 compatibility are proved; native interval precision/range/arithmetic and live results are not proved.
 Known gaps: bundle verification requires unavailable 10.0.14 runtime packs; native and live gates remain open.
 Next module: choose the next complete local query/mapping module after this commit.
-Commit: `be876cd`.
+Commit: `27509aa`.
 
 每个波次完成后，在对应 plan/progress 文档增加一段记录，字段必须完整：
 
