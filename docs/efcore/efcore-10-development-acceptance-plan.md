@@ -542,7 +542,7 @@ accuracy, session timezone, precision and live results are not proved.
 Known gaps: `DateTimeOffset.Now` remains outside this contract because MySQL cannot preserve application-local offset;
 EF10.0.14 packed compatibility and the live gate remain open.
 Next module: finish Debug full rerun, review this module, commit, then select one remaining mapping/query/write/transaction gap.
-Commit: pending.
+Commit: `0f12524`.
 
 每个波次完成后，在对应 plan/progress 文档增加一段记录，字段必须完整：
 
