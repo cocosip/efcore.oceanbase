@@ -51,6 +51,23 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
         }
 
         [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle)]
+        public async Task Pre_cancelled_query_does_not_open_or_execute(OceanBaseCompatibilityMode mode)
+        {
+            var commands = new CommandProbe(null);
+            await using var context = CreateContext(mode, commands);
+            using var cancellation = new CancellationTokenSource();
+            cancellation.Cancel();
+
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(
+                () => context.Set<Row>().Select(row => row.Id).ToListAsync(cancellation.Token));
+
+            Assert.Equal(0, commands.Executions);
+            Assert.Equal(ConnectionState.Closed, context.Database.GetDbConnection().State);
+        }
+
+        [Theory]
         [InlineData(OceanBaseCompatibilityMode.MySql, false)]
         [InlineData(OceanBaseCompatibilityMode.MySql, true)]
         [InlineData(OceanBaseCompatibilityMode.Oracle, false)]

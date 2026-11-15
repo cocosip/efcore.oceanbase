@@ -352,6 +352,29 @@ Known gaps: native/live connection gates remain open; no Connector change is req
 Next module: continue `CON-05` timeout/cancellation/resource-release boundaries.
 Commit: `42ff0e9`.
 
+### 2026-11-15：CON-05 timeout and cancellation characterization
+
+Module: Command timeout, pre-cancelled query/save and resource release
+Checklist IDs: `CON-05`
+Base commit: `34f84f4`
+Implementation files: no production change; existing EF10 command and batch cleanup paths are reused.
+Tests added/changed: `CommandExecutionBoundaryTests.cs`, `GraphUpdateTests.cs`
+Focused command and result: pre-cancelled query/save cases — 4 passed across MySQL/Oracle; existing timeout
+and in-flight cancellation cases remain green. No production RED/GREEN fix was required.
+Full local command and result: Release Unit 2349, Functional 1877, Specification 868 and Consumer 2 passed;
+zero failures/skips.
+Package/tooling command and result: package `10.0.0-timeout-cancellation-20261115` passed `Verify-Package.ps1`
+and PackageConsumer on EF10.0.0/10.0.14 in both modes. ToolingConsumer passed catalog, compiled-model and
+migration/script/remove checks on both patches with `-SkipBundle`; bundle remains blocked by missing
+EF10.0.14 runtime packs.
+Live command and result: not run; the supplied User Secrets probes still close before SQL during pre-authentication.
+Evidence boundary: local timeout assignment, pre-cancel short-circuiting, cancellation identity and EF-visible
+cleanup are proved; wire cancellation, server timeout enforcement and native pool release are not proved.
+Known gaps: native/live timeout and cancellation gates remain open; no Connector change is requested.
+Next module: continue the remaining local service/diagnostic or query/write gaps; do not repeat completed
+connection characterization without a reproduced defect.
+Commit: `16da9b7`.
+
 每个波次完成后，在对应 plan/progress 文档增加一段记录，字段必须完整：
 
 ```text

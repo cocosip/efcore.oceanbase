@@ -1055,6 +1055,15 @@ No production or Connector change was needed. Release Unit 2349, Functional 1873
 Consumer 2 pass with zero failures/skips. Package `10.0.0-connection-execution-20261115` passes content,
 both-patch consumers and both-patch tooling checks with `-SkipBundle`. The local commit is `42ff0e9`.
 
+### Active CON-05 characterization (2026-11-15)
+
+The registered provider's existing timeout/cancellation path passes the new pre-cancelled query/save cases
+and the prior in-flight/timeout cases in both modes. Pre-cancelled operations execute no commands, preserve
+tracked Added state for SaveChanges and leave the EF-visible connection closed. No production or Connector
+change was needed. Release Unit 2349, Functional 1877, Specification 868 and Consumer 2 pass with zero
+failures/skips. Package `10.0.0-timeout-cancellation-20261115` passes content, both-patch consumers and
+both-patch tooling checks with `-SkipBundle`. The local commit is `16da9b7`.
+
 1. Recheck branch/worktree and saved commit before editing. Batch3ai binary collection roots, Batch3ah
    temporal collection roots, Batch3af Boolean collection roots, Batch3ae text collection roots,
    Batch3ad text/temporal extrema, Batch3ac contextual numeric element projections, Batch3ab

@@ -222,6 +222,26 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
             }
         }
 
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle)]
+        public async Task Pre_cancelled_save_does_not_open_or_execute(OceanBaseCompatibilityMode mode)
+        {
+            var capture = new Commands();
+            await using var context = CreateContext(mode, capture);
+            var parent = new Parent { Name = "parent" };
+            context.Add(parent);
+            using var cancellation = new CancellationTokenSource();
+            cancellation.Cancel();
+
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(
+                () => context.SaveChangesAsync(cancellation.Token));
+
+            Assert.Empty(capture.Items);
+            Assert.Equal(EntityState.Added, context.Entry(parent).State);
+            Assert.Equal(ConnectionState.Closed, context.Database.GetDbConnection().State);
+        }
+
         private sealed class WriteContext(DbContextOptions<WriteContext> options) : DbContext(options)
         {
             protected override void OnModelCreating(ModelBuilder modelBuilder)
