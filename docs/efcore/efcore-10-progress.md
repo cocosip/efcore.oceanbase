@@ -1046,6 +1046,15 @@ EF10.0.0/10.0.14 in both modes; ToolingConsumer passes catalog, compiled-model a
 checks on both patches with `-SkipBundle`. Suppressed opening proves EF/provider ownership and lease behavior
 only, not physical connector cleanup or live state. The module was committed locally as `f116d6e` after review.
 
+### Active CON-04 characterization (2026-11-15)
+
+The registered provider's existing execution path passes the four-case success/reuse matrix in both modes
+and sync/async paths. Each query disposes its reader, leaves the EF-visible connection closed, reopens the
+same provider connection for the next query and retains `ExpectedMode` plus MySQL `UseAffectedRows=false`.
+No production or Connector change was needed. Release Unit 2349, Functional 1873, Specification 868 and
+Consumer 2 pass with zero failures/skips. Package `10.0.0-connection-execution-20261115` passes content,
+both-patch consumers and both-patch tooling checks with `-SkipBundle`. The local commit is `42ff0e9`.
+
 1. Recheck branch/worktree and saved commit before editing. Batch3ai binary collection roots, Batch3ah
    temporal collection roots, Batch3af Boolean collection roots, Batch3ae text collection roots,
    Batch3ad text/temporal extrema, Batch3ac contextual numeric element projections, Batch3ab

@@ -330,6 +330,28 @@ Known gaps: native/live ownership and cleanup remain open; no Connector change i
 Next module: after this checkpoint, continue `CON-04` sync/async execution and reuse boundaries.
 Commit: `f116d6e`.
 
+### 2026-11-15：CON-04 connection execution and reuse characterization
+
+Module: Sync/async open, execute, read, close and connection reuse
+Checklist IDs: `CON-04`
+Base commit: `051ea06`
+Implementation files: no production change; existing EF10 relational execution path is reused.
+Tests added/changed: `tests/OceanBase.EntityFrameworkCore.FunctionalTests/CommandExecutionBoundaryTests.cs`
+Focused command and result: `Successful_query_disposes_reader_closes_and_reuses_connection` — 4 passed across
+MySQL/Oracle and sync/async; no production RED/GREEN fix was required.
+Full local command and result: Release Unit 2349, Functional 1873, Specification 868 and Consumer 2 passed;
+zero failures/skips.
+Package/tooling command and result: package `10.0.0-connection-execution-20261115` passed `Verify-Package.ps1`
+and PackageConsumer on EF10.0.0/10.0.14 in both modes. ToolingConsumer passed catalog, compiled-model and
+migration/script/remove checks on both patches with `-SkipBundle`; bundle remains blocked by missing
+EF10.0.14 runtime packs.
+Live command and result: not run; the supplied User Secrets probes still close before SQL during pre-authentication.
+Evidence boundary: local command/reuse, reader disposal, mode settings and EF-visible close/reopen are proved;
+wire cancellation, server timeout, native pool reuse and live results are not proved.
+Known gaps: native/live connection gates remain open; no Connector change is requested.
+Next module: continue `CON-05` timeout/cancellation/resource-release boundaries.
+Commit: `42ff0e9`.
+
 每个波次完成后，在对应 plan/progress 文档增加一段记录，字段必须完整：
 
 ```text
