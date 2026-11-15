@@ -30,6 +30,11 @@
 
 因此，CFG-04 已完成本地 characterization；下一步固定为：进入 DIA-01/02 诊断边界，然后继续剩余映射、查询、更新和事务波次。不得重复已经完成的连接 characterization。
 
+2026-11-15 的最新本地代码提交为 `aa2cee8`，完成一个独立的 Boolean conversion 波次：支持数值
+`Convert.ToBoolean` 和已转换 Boolean 的查询翻译，保留字符串/动态对象拒绝。该波次的 focused
+Release 验收为 Unit 76/76、Functional 32/32；它只关闭本地代码和拦截式证据，不能关闭
+`QRY-01`、`QRY-11`、`MAP-01`，也不能替代真实 OceanBase、完整包矩阵或发布验收。
+
 ## 完成状态的定义
 
 一个功能只能在以下条件全部满足后标记为 `Done`：

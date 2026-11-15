@@ -29,6 +29,19 @@ the wider native matrix remains open. EF8/EF9 adaptation remains postponed. The
 [local development plan](efcore-10-local-development-plan.md) tracks the full remaining inventory, including
 an audit of locally feasible deferred families. Finishing one batch does not finish the overall goal.
 
+### Boolean conversion checkpoint (Batch3ba, 2026-11-15)
+
+`Convert.ToBoolean` numeric overloads now translate through `operand <> 0` for all supported
+numeric CLR carriers in both MySQL and Oracle modes. `Convert.ToBoolean(bool)` keeps canonical
+Boolean mappings unchanged and normalizes non-canonical converters through the existing internal
+Boolean marker. String and dynamic-object conversions remain rejected. Commit `aa2cee8` is local.
+
+Focused Release evidence passes 76 Boolean unit/XOR tests and 32 Boolean collection/conversion
+functional tests, including sync/async intercepted readers, nullable boxed values and Y/N
+conversion output. This is local translation, binding and materialization evidence only; native
+OceanBase coercion, NaN/Infinity behavior, live results, package gates and the wider QRY-01/QRY-11/
+MAP-01 matrices remain open.
+
 ### HasData schema bootstrap and pause (2026-11-13)
 
 At the user's request, finish this module, update evidence, commit locally and pause. Do not start another

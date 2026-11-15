@@ -1178,6 +1178,20 @@ modes/null settings, current captures, global defaults, supplied native readers 
 They do not prove native comparisons, collation/coercion, string lengths or volatile single evaluation.
 Parse/TryParse/Convert families remain separate local work. No new SQL function or dependency is added.
 
+## Boolean Convert local contract
+
+`QRY-01`, `QRY-11` and `MAP-01` include the exact numeric `Convert.ToBoolean` overloads for
+the provider's supported numeric carriers. The translator emits `operand <> 0`, preserving
+NULL propagation for nullable operands and the existing provider mapping. `Convert.ToBoolean(bool)`
+preserves canonical native/0-or-1 Boolean mappings and applies the existing Boolean value marker
+to non-canonical converters such as Y/N, so the result mapping is native while storage remains
+converter-owned.
+
+String and dynamic-object conversion remain unsupported in predicates and must retain EF's
+actionable translation error. Intercepted readers prove local SQL, binding and materialization
+only; native numeric coercion, NaN/Infinity behavior, live results and package release gates remain
+open. See [the execution plan](efcore-10-boolean-convert-plan.md).
+
 ## Integer shift local contract
 
 QRY-01 extends integer expressions with `<<` and `>>`. C# first promotes small integers to Int32;
