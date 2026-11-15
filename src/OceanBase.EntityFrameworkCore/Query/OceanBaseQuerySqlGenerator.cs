@@ -402,6 +402,26 @@ namespace OceanBase.EntityFrameworkCore.Query
                     else
                         throw new InvalidOperationException("Invalid MySQL duration extraction expression.");
                 }
+                else if (_mode == OceanBaseCompatibilityMode.MySql
+                    && (sqlFunctionExpression.Arguments[1].Type == typeof(DateTime)
+                        || sqlFunctionExpression.Arguments[1].Type == typeof(TimeOnly))
+                    && unit is "MILLISECOND" or "MICROSECOND" or "NANOSECOND")
+                {
+                    if (unit == "MILLISECOND")
+                    {
+                        Sql.Append("(MICROSECOND(");
+                        Visit(sqlFunctionExpression.Arguments[1]);
+                        Sql.Append(") DIV 1000)");
+                    }
+                    else
+                    {
+                        Sql.Append("MOD(MICROSECOND(");
+                        Visit(sqlFunctionExpression.Arguments[1]);
+                        Sql.Append("), 1000)");
+                        if (unit == "NANOSECOND")
+                            Sql.Append(" * 100");
+                    }
+                }
                 else if (_mode == OceanBaseCompatibilityMode.Oracle)
                 {
                     if (unit == "MILLISECOND")

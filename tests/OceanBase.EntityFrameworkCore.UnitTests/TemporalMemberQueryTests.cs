@@ -126,8 +126,51 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             }
             Assert.Null(members.Translate(factory.Constant(DateTime.UtcNow, source.FindMapping(typeof(DateTime))!),
                 typeof(DateTimeOffset).GetProperty(nameof(DateTimeOffset.Year))!, typeof(int), logger));
-            Assert.Null(members.Translate(factory.Constant(DateTime.UtcNow, source.FindMapping(typeof(DateTime))!),
-                typeof(DateTime).GetProperty(nameof(DateTime.Millisecond))!, typeof(int), logger));
+            var fractional = new[] { nameof(DateTime.Millisecond), nameof(DateTime.Microsecond), nameof(DateTime.Nanosecond) };
+            foreach (var name in fractional)
+            {
+                var result = Assert.IsType<SqlFunctionExpression>(members.Translate(
+                    factory.Constant(DateTime.UtcNow, source.FindMapping(typeof(DateTime))!),
+                    typeof(DateTime).GetProperty(name)!, typeof(int), logger));
+                Assert.Equal(OceanBaseTemporalMemberTranslator.ExtractMarker, result.Name);
+                Assert.Equal(typeof(int), result.Type);
+                Assert.Equal(typeof(int), result.TypeMapping!.ClrType);
+            }
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle)]
+        public void Fractional_temporal_members_translate_in_projection_and_predicate(OceanBaseCompatibilityMode mode)
+        {
+            using var context = CreateContext(mode);
+            var sql = context.Rows
+                .Where(row => row.Stamp.Millisecond >= 123 && row.Clock.Nanosecond == 700)
+                .Select(row => new
+                {
+                    StampMilliseconds = row.Stamp.Millisecond,
+                    StampMicroseconds = row.Stamp.Microsecond,
+                    StampNanoseconds = row.Stamp.Nanosecond,
+                    ClockMilliseconds = row.Clock.Millisecond,
+                    ClockMicroseconds = row.Clock.Microsecond,
+                    ClockNanoseconds = row.Clock.Nanosecond
+                }).ToQueryString();
+
+            Assert.DoesNotContain("__oceanbase_internal", sql);
+            Assert.Equal(sql.Count(c => c == '('), sql.Count(c => c == ')'));
+            if (mode == OceanBaseCompatibilityMode.MySql)
+            {
+                Assert.Contains("MICROSECOND", sql);
+                Assert.Contains("DIV 1000", sql);
+                Assert.Contains("MOD(MICROSECOND", sql);
+            }
+            else
+            {
+                Assert.Contains("EXTRACT(SECOND FROM", sql);
+                Assert.Contains("* 1000", sql);
+                Assert.Contains("* 1000000", sql);
+                Assert.Contains("* 1000000000", sql);
+            }
         }
 
         [Theory]
@@ -139,8 +182,10 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             IQueryable[] unsupported =
             [
                 context.Rows.Where(row => row.TextStamp.Year == 2024),
+                context.Rows.Where(row => row.TextStamp.Millisecond == 1),
                 context.Rows.Where(row => row.TextDate.Month == 2),
                 context.Rows.Where(row => row.TextClock.Second == 59),
+                context.Rows.Where(row => row.TextClock.Nanosecond == 100),
                 context.Rows.Where(row => row.Zoned.Year == 2024)
             ];
             foreach (var query in unsupported)

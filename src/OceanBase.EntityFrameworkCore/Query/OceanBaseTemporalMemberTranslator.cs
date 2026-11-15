@@ -26,12 +26,18 @@ namespace OceanBase.EntityFrameworkCore.Query
             [typeof(DateTime).GetProperty(nameof(DateTime.Hour))!] = (typeof(DateTime), "HOUR", "HOUR"),
             [typeof(DateTime).GetProperty(nameof(DateTime.Minute))!] = (typeof(DateTime), "MINUTE", "MINUTE"),
             [typeof(DateTime).GetProperty(nameof(DateTime.Second))!] = (typeof(DateTime), "SECOND", "SECOND"),
+            [typeof(DateTime).GetProperty(nameof(DateTime.Millisecond))!] = (typeof(DateTime), "MILLISECOND", "MICROSECOND"),
+            [typeof(DateTime).GetProperty(nameof(DateTime.Microsecond))!] = (typeof(DateTime), "MICROSECOND", "MICROSECOND"),
+            [typeof(DateTime).GetProperty(nameof(DateTime.Nanosecond))!] = (typeof(DateTime), "NANOSECOND", "MICROSECOND"),
             [typeof(DateOnly).GetProperty(nameof(DateOnly.Year))!] = (typeof(DateOnly), "YEAR", "YEAR"),
             [typeof(DateOnly).GetProperty(nameof(DateOnly.Month))!] = (typeof(DateOnly), "MONTH", "MONTH"),
             [typeof(DateOnly).GetProperty(nameof(DateOnly.Day))!] = (typeof(DateOnly), "DAY", "DAYOFMONTH"),
             [typeof(TimeOnly).GetProperty(nameof(TimeOnly.Hour))!] = (typeof(TimeOnly), "HOUR", "HOUR"),
             [typeof(TimeOnly).GetProperty(nameof(TimeOnly.Minute))!] = (typeof(TimeOnly), "MINUTE", "MINUTE"),
             [typeof(TimeOnly).GetProperty(nameof(TimeOnly.Second))!] = (typeof(TimeOnly), "SECOND", "SECOND"),
+            [typeof(TimeOnly).GetProperty(nameof(TimeOnly.Millisecond))!] = (typeof(TimeOnly), "MILLISECOND", "MICROSECOND"),
+            [typeof(TimeOnly).GetProperty(nameof(TimeOnly.Microsecond))!] = (typeof(TimeOnly), "MICROSECOND", "MICROSECOND"),
+            [typeof(TimeOnly).GetProperty(nameof(TimeOnly.Nanosecond))!] = (typeof(TimeOnly), "NANOSECOND", "MICROSECOND"),
             [typeof(TimeSpan).GetProperty(nameof(TimeSpan.Days))!] = (typeof(TimeSpan), "DAY", "DAY"),
             [typeof(TimeSpan).GetProperty(nameof(TimeSpan.Hours))!] = (typeof(TimeSpan), "HOUR", "HOUR"),
             [typeof(TimeSpan).GetProperty(nameof(TimeSpan.Minutes))!] = (typeof(TimeSpan), "MINUTE", "MINUTE"),
@@ -117,7 +123,7 @@ namespace OceanBase.EntityFrameworkCore.Query
                     argumentsPropagateNullability: [false, false], typeof(int), intMapping);
             }
 
-            if (mode == OceanBaseCompatibilityMode.MySql)
+            if (mode == OceanBaseCompatibilityMode.MySql && part.Unit is not ("MILLISECOND" or "MICROSECOND" or "NANOSECOND"))
                 return factory.Function(part.MySqlFunction, [instance], nullable: true,
                     argumentsPropagateNullability: [false], typeof(int), intMapping);
 
