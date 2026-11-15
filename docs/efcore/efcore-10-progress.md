@@ -6,9 +6,9 @@ The ordered development and acceptance rules are in
 [efcore-10-development-acceptance-plan.md](efcore-10-development-acceptance-plan.md). This file keeps the
 historical handoff and module evidence; it does not authorize jumping between unfinished feature families.
 
-The committed checkpoint is Batch3ba commit `df67ff8` (explicit Binary/Guid `EF.Parameter` collection roots
-plus cache/CI corrections), following HasData commit `1f6046f`. The current worktree Release test baseline is
-5036 passed, zero failed/skipped; the 5028 count below belongs to the HasData checkpoint before Batch3ba.
+The latest committed local module is `27509aa` (TimeSpan total-member translation), with evidence recorded in
+`537eede`, following Batch3ba commit `df67ff8`. The current worktree Release test baseline is 5,052 passed,
+zero failed/skipped; the older 5,036 count below belongs to the pre-TimeSpan-total checkpoint.
 
 ## Paused checkpoint: 2026-11-13
 

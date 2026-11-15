@@ -20,9 +20,10 @@
 
 创建本文档时的仓库状态：
 
-- `HEAD` 是 Batch3ba 提交 `df67ff8`，内容为显式 Binary/Guid `EF.Parameter` 集合根，以及相关缓存/CI 测试修正。
+- `HEAD` 的最新功能提交是 `27509aa`，内容为 TimeSpan total-member translation；验收记录在 `537eede`。
+- Batch3ba 提交 `df67ff8` 是前一个显式 Binary/Guid `EF.Parameter` 集合根检查点。
 - HasData schema bootstrap 是前一个已提交检查点 `1f6046f`。
-- 当前工作树的 Release 本地测试为：Unit 2321、Functional 1845、Specification 868、Consumer 2，共 5036 个测试，0 失败、0 跳过。
+- 当前工作树的 Release 本地测试为：Unit 2325、Functional 1857、Specification 868、Consumer 2，共 5052 个测试，0 失败、0 跳过。
 - 文档中原有的 5028 测试数字是 HasData 已提交检查点的基线；Batch3ba 已在 `df67ff8` 中新增 8 个单元测试。
 - 当前没有真实 OceanBase SQL/DDL 验收。已有 live 探针在握手阶段报 `Connection closed while reading the packet`，没有执行 SQL 或 DDL。
 
