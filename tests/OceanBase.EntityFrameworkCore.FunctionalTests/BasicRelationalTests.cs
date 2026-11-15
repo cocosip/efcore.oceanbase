@@ -10,6 +10,7 @@ using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage;
 using OceanBaseConnector;
 using Xunit;
@@ -112,6 +113,32 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
             commands.ScalarValue = 0;
             Assert.False(async ? await creator.HasTablesAsync() : creator.HasTables());
             Assert.Equal(ConnectionState.Closed, context.Database.GetDbConnection().State);
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle)]
+        public void Database_facade_resolves_the_complete_relational_service_graph(OceanBaseCompatibilityMode mode)
+        {
+            using var context = CreateFacadeContext(mode);
+            var database = context.Database;
+            var dependencies = database.GetService<IRelationalDatabaseFacadeDependencies>();
+
+            Assert.Same(context.GetService<IRelationalConnection>(), dependencies.RelationalConnection);
+            Assert.NotNull(dependencies.RawSqlCommandBuilder);
+            Assert.NotNull(dependencies.CommandLogger);
+            Assert.Same(database.GetService<IRelationalDatabaseCreator>(), database.GetService<IDatabaseCreator>());
+            Assert.NotNull(database.GetService<IHistoryRepository>());
+            Assert.NotNull(database.GetService<IMigrator>());
+            Assert.NotNull(database.GetService<IMigrationsAssembly>());
+            Assert.NotNull(database.GetService<IMigrationsModelDiffer>());
+            Assert.NotNull(database.GetService<IExecutionStrategyFactory>());
+            Assert.NotNull(database.GetService<IExecutionStrategy>());
+
+            var script = database.GenerateCreateScript();
+            Assert.Contains("CREATE TABLE", script, StringComparison.Ordinal);
+            Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? "`Customers`" : "\"Customers\"", script,
+                StringComparison.Ordinal);
         }
 
         [Theory]
@@ -3706,6 +3733,26 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
             // These tests exercise EF commands; transaction semantics are verified separately against OceanBase.
             context.Database.AutoTransactionBehavior = AutoTransactionBehavior.Never;
             return context;
+        }
+
+        private static FacadeContext CreateFacadeContext(OceanBaseCompatibilityMode mode)
+        {
+            var builder = new DbContextOptionsBuilder<FacadeContext>()
+                .UseOceanBase("Server=localhost;Database=test", mode)
+                .AddInterceptors(new NoNetworkConnection(), new CommandCapture());
+            return new FacadeContext(builder.Options);
+        }
+
+        private sealed class FacadeContext(DbContextOptions<FacadeContext> options)
+            : DbContext(options)
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+                => modelBuilder.Entity<FacadeRow>().ToTable("Customers");
+        }
+
+        private sealed class FacadeRow
+        {
+            public int Id { get; set; }
         }
 
         private sealed class TestContext(DbContextOptions<TestContext> options, OceanBaseCompatibilityMode mode) : DbContext(options)
