@@ -20,7 +20,7 @@
 
 创建本文档时的仓库状态：
 
-- `HEAD` 的最新功能提交是 `d4fc4df`，内容为 CFG-04 DatabaseFacade service graph characterization；此前
+- `HEAD` 的最新功能提交是 `e3119f5`，内容为 DateTime/TimeOnly fractional-member translation；此前
   CON-03/04/05 连接边界提交分别为 `051ea06`、`34f84f4`、`fe71f2a`。
 - Batch3ba 提交 `df67ff8` 是前一个显式 Binary/Guid `EF.Parameter` 集合根检查点。
 - HasData schema bootstrap 是前一个已提交检查点 `1f6046f`。
@@ -29,6 +29,9 @@
 - 当前没有真实 OceanBase SQL/DDL 验收。已有 live 探针在握手阶段报 `Connection closed while reading the packet`，没有执行 SQL 或 DDL。
 
 因此，CFG-04 已完成本地 characterization；下一步固定为：进入 DIA-01/02 诊断边界，然后继续剩余映射、查询、更新和事务波次。不得重复已经完成的连接 characterization。
+
+Boolean conversion、temporal fractional members 和 `REL-01` 支持记录已在后续检查点补充；`REL-01`
+仍因端点握手和 direct/proxy 分类未完成而保持 `In progress`。
 
 2026-11-15 的最新本地代码提交为 `aa2cee8`，完成一个独立的 Boolean conversion 波次：支持数值
 `Convert.ToBoolean` 和已转换 Boolean 的查询翻译，保留字符串/动态对象拒绝。该波次的 focused

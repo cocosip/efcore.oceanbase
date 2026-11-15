@@ -2,8 +2,12 @@
 
 **Updated:** 2026-11-15
 **Branch:** `efcore/10.0`  
-**State:** Active local development; CFG-04 DatabaseFacade service graph characterization is the latest local commit.
+**State:** Active local development; DateTime/TimeOnly fractional members are the latest local feature module.
 **Acceptance authority:** [efcore-10-feature-checklist.md](efcore-10-feature-checklist.md)
+
+The `REL-01` support record now exists at [efcore-10-release-support.md](efcore-10-release-support.md),
+but remains `In progress` while the supplied endpoint's direct/proxy routing, transport options and
+pre-authentication failure are unresolved.
 
 **Execution control:** Follow [efcore-10-development-acceptance-plan.md](efcore-10-development-acceptance-plan.md)
 for the ordered waves, evidence levels and handoff format. The current Release source baseline is Unit 2349,

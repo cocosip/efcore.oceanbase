@@ -11,7 +11,7 @@ the CON-03/04/05 connection boundary commits `051ea06`, `34f84f4` and `fe71f2a`.
 test baseline is 5,098 passed,
 zero failed/skipped; the older 5,036 count below belongs to the pre-TimeSpan-total checkpoint.
 
-## Current checkpoint: 2026-11-15
+## Current checkpoint: 2026-11-16
 
 Development is active on efcore/10.0 following the HasData, connection-boundary, CFG-04, Boolean conversion and
 temporal fractional checkpoints.
@@ -51,6 +51,14 @@ translation in both modes. MySQL derives components from `MICROSECOND`; Oracle u
 functional cases pass 4/4, and the selected temporal regression cases pass 32/32. This is local
 SQL, binding and materialization evidence only; native precision/range, timezone and live results
 remain open under `MAP-05`, `QRY-07` and `TST-02`. See [the execution plan](efcore-10-temporal-fractional-plan.md).
+
+### REL-01 release support record checkpoint (2026-11-16)
+
+Added [the release support record](efcore-10-release-support.md) with the EF/Connector/runtime versions,
+both mode-specific User Secret keys, expected tenant identities and the observed `172.16.2.45:2881`
+endpoint. Direct-versus-proxy routing and effective transport options are still unclassified; both live
+probes close during the pre-authentication handshake, so `REL-01` is now `In progress` rather than
+`Planned`, and `TST-02` remains open. No credentials or Connector changes were added.
 
 ### HasData schema bootstrap and pause (2026-11-13)
 
