@@ -82,6 +82,23 @@ Reflection also classified `Types.RelationalTypeTestBase<T,TFixture>` as six JSO
 That family remains under deferred `DEF-04` and is deliberately not counted as Required `TST-01` coverage.
 The new model metadata evidence does not close `MOD-01/02`, native schema/CRUD behavior, `TST-02` or release gates.
 
+### QRY-07/MAP-05 `DateTime.TimeOfDay` checkpoint (2026-11-16)
+
+The provider now translates `DateTime.TimeOfDay` through the existing temporal result carriers. MySQL emits
+`TIME(input)` for `DATETIME`; Oracle emits `NUMTODSINTERVAL((input - TRUNC(input)), 'DAY')` for `DATE` and
+`input - CAST(TRUNC(input) AS TIMESTAMP)` for `TIMESTAMP`. The translator rejects unrelated carriers,
+null-converting mappings and `DateTimeOffset.TimeOfDay` before SQL generation. No Connector change was needed.
+
+The RED query failed in both modes before implementation. Focused Release evidence is 4 Unit cases and 4
+functional sync/async cases, all passing; the temporal Unit selection is 174/174 and the temporal Functional
+selection is 36/36. The full Release Unit and Functional suites pass 2357 and 1891 cases respectively, with zero
+failures/skips. The functional reader test covers MySQL `TimeSpan`, Oracle `OceanBaseIntervalDayToSecond`, and
+NULL propagation. This is local SQL/mapping/materialization evidence only; native interval precision, server
+coercion, timezone behavior and live results remain open under `MAP-05`, `QRY-07` and `TST-02`.
+The unique package `10.0.0-time-of-day-20261116-r2` passed `Verify-Package.ps1` and the packed PackageConsumer in
+both modes on EF10.0.0 and EF10.0.14. Final release-revision review and native server evidence remain open.
+Implementation commit: `6ecca4f` (local only).
+
 ### HasData schema bootstrap and pause (2026-11-13)
 
 At the user's request, finish this module, update evidence, commit locally and pause. Do not start another

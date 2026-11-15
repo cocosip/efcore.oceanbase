@@ -17,6 +17,7 @@ namespace OceanBase.EntityFrameworkCore.Query
     {
         internal const string ExtractMarker = "__oceanbase_internal_extract";
         internal const string TotalMarker = "__oceanbase_internal_total";
+        internal const string TimeOfDayMarker = "__oceanbase_internal_time_of_day";
 
         private static readonly Dictionary<MemberInfo, (Type Receiver, string Unit, string MySqlFunction)> Parts = new()
         {
@@ -65,6 +66,7 @@ namespace OceanBase.EntityFrameworkCore.Query
             [typeof(TimeSpan).GetProperty(nameof(TimeSpan.TotalNanoseconds))!] = "NANOSECOND"
         };
         private static readonly MemberInfo DateTimeDate = typeof(DateTime).GetProperty(nameof(DateTime.Date))!;
+        private static readonly MemberInfo DateTimeTimeOfDay = typeof(DateTime).GetProperty(nameof(DateTime.TimeOfDay))!;
 
         public SqlExpression? Translate(SqlExpression? instance, MemberInfo member, Type returnType,
             IDiagnosticsLogger<DbLoggerCategory.Query> logger)
@@ -82,6 +84,18 @@ namespace OceanBase.EntityFrameworkCore.Query
                     resultMapping = (RelationalTypeMapping)resultMapping.WithComposedConverter(converter);
                 return factory.Function(mode == OceanBaseCompatibilityMode.MySql ? "DATE" : "TRUNC", [instance],
                     nullable: true, argumentsPropagateNullability: [false], typeof(DateTime), resultMapping);
+            }
+
+            if (instance is not null && member == DateTimeTimeOfDay && returnType == typeof(TimeSpan))
+            {
+                instance = factory.ApplyDefaultTypeMapping(instance);
+                var dateMapping = instance.TypeMapping;
+                if (dateMapping is null || !SupportsCarrier(typeof(DateTime), dateMapping)
+                    || dateMapping.Converter?.ConvertsNulls == true)
+                    return null;
+
+                return factory.Function(TimeOfDayMarker, [instance], nullable: true,
+                    argumentsPropagateNullability: [false], typeof(TimeSpan), mappingSource.FindMapping(typeof(TimeSpan)));
             }
 
             if (instance is not null && CalendarParts.TryGetValue(member, out var weekday)

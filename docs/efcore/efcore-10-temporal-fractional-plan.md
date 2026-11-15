@@ -9,8 +9,8 @@ carriers:
 - `TimeOnly.Millisecond`, `TimeOnly.Microsecond`, `TimeOnly.Nanosecond`;
 - MySQL `DATETIME`/`TIME` and Oracle unzoned `DATE`/`TIMESTAMP`/`INTERVAL DAY TO SECOND`.
 
-`DateTimeOffset`, timezone conversion, `Ticks`, `Date`, `TimeOfDay`, `Add` methods and native
-precision/range behavior remain separate contracts.
+`DateTimeOffset`, timezone conversion, `Ticks`, `Date`, `Add` methods and native precision/range behavior remain
+separate contracts. `DateTime.TimeOfDay` is covered by the separate [TimeOfDay plan](efcore-10-time-of-day-plan.md).
 
 ## Implementation
 

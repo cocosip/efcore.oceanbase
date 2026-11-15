@@ -14,17 +14,18 @@ public APIs and per-mode mappings/SQL. Separate local implementation evidence fr
 The compact execution board is [efcore-10-roadmap.md](efcore-10-roadmap.md); this file remains the detailed
 batch ledger and acceptance notes.
 
-**Updated:** 2026-11-16, TST-01 model-building 101 coverage and JSON-family audit following non-relationship coverage.
+**Updated:** 2026-11-16, QRY-07/MAP-05 DateTime.TimeOfDay following TST-01 model-building 101 coverage.
 Keep one complete module active and review it before committing. EF8/EF9 remains postponed; live execution is opt-in and
 currently blocked before authentication by the supplied endpoint/transport behavior.
 The full goal remains incomplete.
 
-The current local module is the TST-01 model-building 101 specification family. It runs the official
-`ModelBuilding101RelationalTestBase` in both modes with 248 unchanged metadata passes and a connection-opening
-guard. The preceding `RelationalNonRelationshipTestBase` remains at 330 unchanged passes and 16 explicit,
-checklist-mapped profile exclusions; see [the specification exclusion record](efcore-10-specification-exclusions.md).
-Reflection classified the next `RelationalTypeTestBase<T,TFixture>` candidate as JSON-only and therefore deferred
-under `DEF-04`. The earlier
+The current local module is the QRY-07/MAP-05 `DateTime.TimeOfDay` slice. It uses the existing TIME/INTERVAL
+result mappings, has both-mode SQL-shape and unsupported-carrier unit tests, and intercepted sync/async reader
+coverage; see [the TimeOfDay plan](efcore-10-time-of-day-plan.md). The preceding TST-01
+`ModelBuilding101RelationalTestBase` family has 248 unchanged metadata passes and a connection-opening guard;
+the preceding `RelationalNonRelationshipTestBase` remains at 330 unchanged passes and 16 explicit, checklist-
+mapped profile exclusions. Reflection classified the next `RelationalTypeTestBase<T,TFixture>` candidate as
+JSON-only and therefore deferred under `DEF-04`. The earlier
 `e3119f5` temporal fractional module remains locally complete. Its code, focused
 tests, full source Release suites and documentation are complete locally; native temporal precision,
 timezone/range behavior and final package/release evidence remain open. The detailed acceptance record

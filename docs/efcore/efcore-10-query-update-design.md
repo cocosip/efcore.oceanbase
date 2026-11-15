@@ -614,9 +614,17 @@ before execution. Unit SQL-shape tests cover both modes; intercepted sync/async 
 fractional values and positive/negative pure-subsecond values. These tests prove translation, binding and
 materialization only; interval precision, range, native arithmetic and live OceanBase results remain open.
 
-DateTimeOffset, clocks/Now/UtcNow/Today, fractional parts/Ticks, Date/TimeOfDay/DayNumber, duration
+DateTimeOffset, clocks/Now/UtcNow/Today, fractional parts/Ticks, Date/DayNumber, duration
 parts and Add operations need their own timezone/range/precision/calendar/wrapping contracts. This slice makes
 no server extraction, DATE cast, calendar/zero-date, interval-clock or result-metadata claim without live evidence.
+
+`DateTime.TimeOfDay` is now a separate local contract. MySQL uses `TIME(input)`; Oracle uses
+`NUMTODSINTERVAL((input - TRUNC(input)), 'DAY')` for DATE and
+`input - CAST(TRUNC(input) AS TIMESTAMP)` for TIMESTAMP, returning the existing `TimeSpan`/`TIME` or
+`TimeSpan`/`INTERVAL DAY TO SECOND` mapping. Only unzoned DateTime provider carriers are accepted; the
+DateTimeOffset member, null-converting and unrelated carriers remain unsupported. See the
+[TimeOfDay execution plan](efcore-10-time-of-day-plan.md). Native interval precision and live server behavior
+remain open.
 
 ### TimeSpan component-member local contract (QRY-07/11, MAP-05/06)
 

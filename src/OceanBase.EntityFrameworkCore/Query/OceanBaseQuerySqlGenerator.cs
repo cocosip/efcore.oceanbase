@@ -449,6 +449,44 @@ namespace OceanBase.EntityFrameworkCore.Query
                 return sqlFunctionExpression;
             }
 
+            if (sqlFunctionExpression.Name == OceanBaseTemporalMemberTranslator.TimeOfDayMarker)
+            {
+                if (sqlFunctionExpression is not { IsBuiltIn: true, Schema: null, Instance: null, Arguments.Count: 1,
+                        IsNullable: true, ArgumentsPropagateNullability: [false], Type: var timeOfDayType,
+                        TypeMapping: { } resultMapping }
+                    || timeOfDayType != typeof(TimeSpan)
+                    || !IsTimeSpanMapping(resultMapping)
+                    || sqlFunctionExpression.Arguments[0] is not { Type: var inputType, TypeMapping: { } inputMapping }
+                    || inputType != typeof(DateTime)
+                    || !IsDateTimeMapping(inputMapping))
+                    throw new InvalidOperationException("Invalid internal TimeOfDay expression.");
+
+                if (_mode == OceanBaseCompatibilityMode.MySql)
+                {
+                    Sql.Append("TIME(");
+                    Visit(sqlFunctionExpression.Arguments[0]);
+                    Sql.Append(")");
+                }
+                else if (inputMapping.StoreTypeNameBase.Equals("DATE", StringComparison.OrdinalIgnoreCase))
+                {
+                    Sql.Append("NUMTODSINTERVAL((");
+                    Visit(sqlFunctionExpression.Arguments[0]);
+                    Sql.Append(" - TRUNC(");
+                    Visit(sqlFunctionExpression.Arguments[0]);
+                    Sql.Append(")), 'DAY')");
+                }
+                else
+                {
+                    Sql.Append("(");
+                    Visit(sqlFunctionExpression.Arguments[0]);
+                    Sql.Append(" - CAST(TRUNC(");
+                    Visit(sqlFunctionExpression.Arguments[0]);
+                    Sql.Append(") AS TIMESTAMP))");
+                }
+
+                return sqlFunctionExpression;
+            }
+
             if (sqlFunctionExpression.Name == OceanBaseTemporalMemberTranslator.TotalMarker)
             {
                 if (sqlFunctionExpression is not { IsBuiltIn: true, Schema: null, Instance: null, Arguments.Count: 2,
@@ -537,6 +575,15 @@ namespace OceanBase.EntityFrameworkCore.Query
             return _mode == OceanBaseCompatibilityMode.MySql
                 ? providerType == typeof(TimeSpan) && store == "TIME"
                 : providerType == typeof(OceanBaseIntervalDayToSecond) && store.StartsWith("INTERVAL DAY", StringComparison.Ordinal);
+        }
+
+        private bool IsDateTimeMapping(RelationalTypeMapping mapping)
+        {
+            if (mapping.Converter?.ConvertsNulls == true) return false;
+            var providerType = mapping.Converter?.ProviderClrType ?? mapping.ClrType;
+            var store = mapping.StoreTypeNameBase.Trim().ToUpperInvariant();
+            return providerType == typeof(DateTime)
+                && (_mode == OceanBaseCompatibilityMode.MySql ? store == "DATETIME" : store is "DATE" or "TIMESTAMP");
         }
 
         private void AppendMySqlTimeSpanSign(SqlExpression input)

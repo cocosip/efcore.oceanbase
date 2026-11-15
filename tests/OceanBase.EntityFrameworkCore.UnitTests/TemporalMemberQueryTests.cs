@@ -376,6 +376,53 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
         [Theory]
         [InlineData(OceanBaseCompatibilityMode.MySql)]
         [InlineData(OceanBaseCompatibilityMode.Oracle)]
+        public void DateTime_TimeOfDay_uses_the_existing_time_carrier(OceanBaseCompatibilityMode mode)
+        {
+            using var context = CreateContext(mode);
+            var sql = context.Rows
+                .Where(row => row.Stamp.TimeOfDay >= TimeSpan.FromHours(12))
+                .Select(row => new { Stamp = row.Stamp.TimeOfDay, Date = row.DateStamp.TimeOfDay })
+                .ToQueryString();
+
+            Assert.DoesNotContain("__oceanbase_internal", sql);
+            if (mode == OceanBaseCompatibilityMode.MySql)
+            {
+                Assert.Contains("TIME(`r`.`Stamp`)", sql);
+                Assert.Contains("TIME(`r`.`DateStamp`)", sql);
+            }
+            else
+            {
+                Assert.Contains("(\"r\".\"Stamp\" - CAST(TRUNC(\"r\".\"Stamp\") AS TIMESTAMP))", sql);
+                Assert.Contains("NUMTODSINTERVAL((\"r\".\"DateStamp\" - TRUNC(\"r\".\"DateStamp\")), 'DAY')", sql);
+            }
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle)]
+        public void DateTime_TimeOfDay_rejects_unowned_and_null_converting_carriers(OceanBaseCompatibilityMode mode)
+        {
+            using var context = CreateContext(mode);
+            var source = context.GetService<IRelationalTypeMappingSource>();
+            var factory = context.GetService<ISqlExpressionFactory>();
+            var members = context.GetService<IMemberTranslatorProvider>();
+            var logger = context.GetService<IDiagnosticsLogger<DbLoggerCategory.Query>>();
+            var timeOfDay = typeof(DateTime).GetProperty(nameof(DateTime.TimeOfDay))!;
+            var binary = (RelationalTypeMapping)source.FindMapping(typeof(byte[]))!.WithComposedConverter(
+                new ValueConverter<DateTime, byte[]>(value => BitConverter.GetBytes(value.Ticks),
+                    value => new DateTime(BitConverter.ToInt64(value))));
+            var nullConverter = (RelationalTypeMapping)source.FindMapping(typeof(DateTime))!.WithComposedConverter(
+                new ValueConverter<DateTime, DateTime>(value => value, value => value, convertsNulls: true));
+
+            Assert.Null(members.Translate(factory.Constant(DateTime.UtcNow, binary), timeOfDay, typeof(TimeSpan), logger));
+            Assert.Null(members.Translate(factory.Constant(DateTime.UtcNow, nullConverter), timeOfDay, typeof(TimeSpan), logger));
+            Assert.Null(members.Translate(factory.Constant(DateTimeOffset.UtcNow, source.FindMapping(typeof(DateTimeOffset))!),
+                typeof(DateTimeOffset).GetProperty(nameof(DateTimeOffset.TimeOfDay))!, typeof(TimeSpan), logger));
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle)]
         public void TimeSpan_total_members_translate_in_projection_and_predicate(OceanBaseCompatibilityMode mode)
         {
             using var context = CreateContext(mode);

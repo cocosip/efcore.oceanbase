@@ -2,7 +2,7 @@
 
 **Updated:** 2026-11-16
 **Branch:** `efcore/10.0`  
-**State:** Active local development; TST-01 ModelBuilding101 relational metadata coverage is the latest local module.
+**State:** Active local development; QRY-07/MAP-05 `DateTime.TimeOfDay` is the latest local module.
 **Acceptance authority:** [efcore-10-feature-checklist.md](efcore-10-feature-checklist.md)
 
 The `REL-01` support record now exists at [efcore-10-release-support.md](efcore-10-release-support.md),
@@ -98,6 +98,9 @@ The following required rows have complete local/package evidence for both modes:
   precision/range and live results remain open.
 - `DateTime.Date` now has both-mode SQL-shape, mapping and intercepted reader coverage; native date semantics remain
   a live gate.
+- `DateTime.TimeOfDay` now uses the existing MySQL `TIME` and Oracle `INTERVAL DAY TO SECOND` carriers, with
+  both-mode SQL-shape and intercepted sync/async NULL/materialization coverage. Native interval semantics remain
+  a live gate; see the [TimeOfDay plan](efcore-10-time-of-day-plan.md).
 - `CON-02` now rechecks the compatibility mode after sync/async open callbacks and restores EF's connection lease
   accounting when the post-open check rejects a conflict. Native handshake detection and live cleanup remain open.
 

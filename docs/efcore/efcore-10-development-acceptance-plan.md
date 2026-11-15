@@ -28,7 +28,7 @@
 - 文档中原有的 5028 测试数字是 HasData 已提交检查点的基线；Batch3ba 已在 `df67ff8` 中新增 8 个单元测试。
 - 当前没有真实 OceanBase SQL/DDL 验收。已有 live 探针在握手阶段报 `Connection closed while reading the packet`，没有执行 SQL 或 DDL。
 
-因此，CFG-04 已完成本地 characterization；下一步固定为：进入 DIA-01/02 诊断边界，然后继续剩余映射、查询、更新和事务波次。不得重复已经完成的连接 characterization。
+因此，CFG-04 已完成本地 characterization；连接波次已转入剩余映射、查询、更新和事务边界。不得重复已经完成的连接 characterization。
 
 Boolean conversion、temporal fractional members 和 `REL-01` 支持记录已在后续检查点补充；`REL-01`
 仍因端点握手和 direct/proxy 分类未完成而保持 `In progress`。
@@ -52,6 +52,19 @@ native precision/range and release gates stay open.
 0 失败、0 跳过；连接开启被测试拦截器明确禁止。完整 SpecificationTests 当前为 1,446 通过、16 个
 已解释跳过（1,462 总计）。反射确认 `Types.RelationalTypeTestBase<T,TFixture>` 只包含 JSON 查询/更新
 场景，因此保留在 `DEF-04`，不把它伪装成 Required `TST-01` 覆盖。
+
+2026-11-16 的当前模块为 `QRY-07/MAP-05` 的 `DateTime.TimeOfDay`。MySQL 使用 `TIME(input)`；Oracle
+对 DATE 使用 `NUMTODSINTERVAL((input - TRUNC(input)), 'DAY')`，对 TIMESTAMP 使用
+`input - CAST(TRUNC(input) AS TIMESTAMP)`，返回现有 `TimeSpan`/TIME 或 Oracle interval
+映射。Unit focused 4/4、Functional sync/async 4/4；时间相关 Unit 174/174、Functional 36/36，完整
+Release Unit 2357、Functional 1891 均通过。模块记录见 [TimeOfDay plan](efcore-10-time-of-day-plan.md)。
+这些证据仍不关闭 native temporal 或 `TST-02`。
+
+唯一临时包 `10.0.0-time-of-day-20261116-r2` 已通过 `Verify-Package.ps1`，并在 EF10.0.0 与 EF10.0.14
+上通过两种模式的 packed PackageConsumer；该结果仍是离线/拦截式证据，不是 live OceanBase 验收。
+
+下一模块：继续一个尚未完成的 Required 映射/查询边界；优先处理仍缺少完整同步/异步和负面覆盖的
+时间或数值 overload。不得把 `DEF-04` JSON-only 规范族提前提升为 Required。
 
 ## 完成状态的定义
 
