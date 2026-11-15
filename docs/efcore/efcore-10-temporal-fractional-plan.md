@@ -31,6 +31,7 @@ No public API, dependency or Connector change is required.
 | Unit | Both modes, projection/predicate SQL shape, balanced SQL, exact int result mapping and unsupported carriers | Passed: `TemporalMemberQueryTests` 39/39 |
 | Functional | Both modes, sync/async, six component results and supplied reader materialization | Passed: `TemporalFractionalMemberFunctionalTests` 4/4 |
 | Regression | Existing temporal members and signed TimeSpan paths | Passed: temporal functional selection 32/32 |
+| Full Release source | Unit, Functional, Specification and Consumer projects | Passed: 2353 + 1887 + 868 + 2, zero failures/skips |
 | Live OceanBase | Native fractional extraction, precision and range | Open: supplied endpoints close during pre-authentication |
 | Package/release | Full package and final release matrix | Open: local feature checkpoint only |
 
