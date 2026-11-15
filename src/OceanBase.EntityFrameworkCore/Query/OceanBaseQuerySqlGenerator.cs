@@ -4,6 +4,7 @@ using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore.Query;
 using Microsoft.EntityFrameworkCore.Query.SqlExpressions;
 using Microsoft.EntityFrameworkCore.Storage;
+using OceanBaseConnector;
 
 namespace OceanBase.EntityFrameworkCore.Query
 {
@@ -360,6 +361,65 @@ namespace OceanBase.EntityFrameworkCore.Query
                 return sqlFunctionExpression;
             }
 
+            if (sqlFunctionExpression.Name == OceanBaseTemporalMemberTranslator.TotalMarker)
+            {
+                if (sqlFunctionExpression is not { IsBuiltIn: true, Schema: null, Instance: null, Arguments.Count: 2,
+                        IsNullable: true, ArgumentsPropagateNullability: [false, false], TypeMapping: { } resultMapping }
+                    || sqlFunctionExpression.Arguments[0] is not SqlFragmentExpression { Sql: var unit }
+                    || unit is not ("DAY" or "HOUR" or "MINUTE" or "SECOND" or "MILLISECOND" or "MICROSECOND" or "NANOSECOND")
+                    || sqlFunctionExpression.Type != typeof(double)
+                    || resultMapping.Converter?.ConvertsNulls == true
+                    || (resultMapping.Converter?.ProviderClrType ?? resultMapping.ClrType) != typeof(double)
+                    || sqlFunctionExpression.Arguments[1].Type != typeof(TimeSpan)
+                    || sqlFunctionExpression.Arguments[1].TypeMapping is not { } inputMapping
+                    || !IsTimeSpanMapping(inputMapping))
+                    throw new InvalidOperationException("Invalid internal TimeSpan total expression.");
+
+                if (_mode == OceanBaseCompatibilityMode.MySql)
+                {
+                    Sql.Append("((TIME_TO_SEC(");
+                    Visit(sqlFunctionExpression.Arguments[1]);
+                    Sql.Append(") + ");
+                    AppendMySqlTimeSpanSign(sqlFunctionExpression.Arguments[1]);
+                    Sql.Append(" * (ABS(MICROSECOND(");
+                    Visit(sqlFunctionExpression.Arguments[1]);
+                    Sql.Append(") / 1000000.0))");
+                    switch (unit)
+                    {
+                        case "DAY": Sql.Append(" / 86400.0"); break;
+                        case "HOUR": Sql.Append(" / 3600.0"); break;
+                        case "MINUTE": Sql.Append(" / 60.0"); break;
+                        case "MILLISECOND": Sql.Append(" * 1000.0"); break;
+                        case "MICROSECOND": Sql.Append(" * 1000000.0"); break;
+                        case "NANOSECOND": Sql.Append(" * 1000000000.0"); break;
+                    }
+                    Sql.Append("))");
+                }
+                else
+                {
+                    Sql.Append("((EXTRACT(DAY FROM ");
+                    Visit(sqlFunctionExpression.Arguments[1]);
+                    Sql.Append(") * 86400.0 + EXTRACT(HOUR FROM ");
+                    Visit(sqlFunctionExpression.Arguments[1]);
+                    Sql.Append(") * 3600.0 + EXTRACT(MINUTE FROM ");
+                    Visit(sqlFunctionExpression.Arguments[1]);
+                    Sql.Append(") * 60.0 + EXTRACT(SECOND FROM ");
+                    Visit(sqlFunctionExpression.Arguments[1]);
+                    Sql.Append(")");
+                    switch (unit)
+                    {
+                        case "DAY": Sql.Append(" / 86400.0"); break;
+                        case "HOUR": Sql.Append(" / 3600.0"); break;
+                        case "MINUTE": Sql.Append(" / 60.0"); break;
+                        case "MILLISECOND": Sql.Append(" * 1000.0"); break;
+                        case "MICROSECOND": Sql.Append(" * 1000000.0"); break;
+                        case "NANOSECOND": Sql.Append(" * 1000000000.0"); break;
+                    }
+                    Sql.Append("))");
+                }
+                return sqlFunctionExpression;
+            }
+
             if (_mode == OceanBaseCompatibilityMode.Oracle
                 && sqlFunctionExpression is { IsBuiltIn: true, Name: "CONCAT", Arguments.Count: 2, Type: var type }
                 && type == typeof(string))
@@ -380,6 +440,23 @@ namespace OceanBase.EntityFrameworkCore.Query
                     [SqlFunctionExpression { IsBuiltIn: true, Name: "SUM" } sum, SqlConstantExpression { Value: 0 } zero] }
                 && sum.Type == modelType && ReferenceEquals(sum.TypeMapping, mapping)
                 && ReferenceEquals(body.TypeMapping, mapping) && ReferenceEquals(zero.TypeMapping, mapping);
+
+        private bool IsTimeSpanMapping(RelationalTypeMapping mapping)
+        {
+            if (mapping.Converter?.ConvertsNulls == true) return false;
+            var providerType = mapping.Converter?.ProviderClrType ?? mapping.ClrType;
+            var store = mapping.StoreTypeNameBase.Trim().ToUpperInvariant();
+            return _mode == OceanBaseCompatibilityMode.MySql
+                ? providerType == typeof(TimeSpan) && store == "TIME"
+                : providerType == typeof(OceanBaseIntervalDayToSecond) && store.StartsWith("INTERVAL DAY", StringComparison.Ordinal);
+        }
+
+        private void AppendMySqlTimeSpanSign(SqlExpression input)
+        {
+            Sql.Append("(CASE WHEN CAST(");
+            Visit(input);
+            Sql.Append(" AS CHAR) LIKE '-%' THEN -1 ELSE 1 END)");
+        }
 
         protected override void GeneratePseudoFromClause()
         {

@@ -255,6 +255,24 @@
 
 ## 每个模块必须留下的执行记录
 
+### 2026-11-15：TimeSpan total-member translation
+
+Module: TimeSpan total-member translation
+Checklist IDs: QRY-07, QRY-11, MAP-05, MAP-06
+Base commit: `5b58dfe`
+Implementation files: `OceanBaseTemporalMemberTranslator.cs`, `OceanBaseQuerySqlGenerator.cs`
+Tests added/changed: `TemporalMemberQueryTests.cs`, `TimeSpanTotalFunctionalTests.cs`
+Focused command and result: Unit 4 passed; Functional 12 passed.
+Full local command and result: Release Unit 2,325 passed; Release Functional 1,857 passed; zero failures/skips.
+Package/tooling command and result: package consumer passed on EF10.0.0/10.0.14 in both modes; tooling consumer
+passed catalog/compiled-model/migration checks on both patches with `-SkipBundle`.
+Live command and result: not run; existing User Secrets probes still close before SQL during pre-authentication.
+Evidence boundary: local translation, carrier validation, intercepted sync/async materialization and package/tooling
+compatibility are proved; native interval precision/range/arithmetic and live results are not proved.
+Known gaps: bundle verification requires unavailable 10.0.14 runtime packs; native and live gates remain open.
+Next module: choose the next complete local query/mapping module after this commit.
+Commit: `be876cd`.
+
 每个波次完成后，在对应 plan/progress 文档增加一段记录，字段必须完整：
 
 ```text

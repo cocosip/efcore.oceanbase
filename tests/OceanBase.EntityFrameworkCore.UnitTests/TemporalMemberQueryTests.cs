@@ -10,6 +10,7 @@ using Microsoft.EntityFrameworkCore.Query.SqlExpressions;
 using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using OceanBase.EntityFrameworkCore.Query;
+using OceanBaseConnector;
 using Xunit;
 
 namespace OceanBase.EntityFrameworkCore.UnitTests
@@ -326,6 +327,68 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
                 typeof(DateTime).GetProperty(nameof(DateTime.Date))!, typeof(DateTime), logger));
             Assert.Null(members.Translate(factory.Constant(DateTimeOffset.UtcNow, source.FindMapping(typeof(DateTimeOffset))!),
                 typeof(DateTimeOffset).GetProperty(nameof(DateTimeOffset.Date))!, typeof(DateTime), logger));
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle)]
+        public void TimeSpan_total_members_translate_in_projection_and_predicate(OceanBaseCompatibilityMode mode)
+        {
+            using var context = CreateContext(mode);
+            var query = context.Rows
+                .Where(row => row.Duration.TotalDays > 1)
+                .OrderBy(row => row.Duration.TotalNanoseconds)
+                .Select(row => new
+                {
+                    row.Duration.TotalDays,
+                    row.Duration.TotalHours,
+                    row.Duration.TotalMinutes,
+                    row.Duration.TotalSeconds,
+                    row.Duration.TotalMilliseconds,
+                    row.Duration.TotalMicroseconds,
+                    row.Duration.TotalNanoseconds
+                });
+
+            var sql = query.ToQueryString();
+            Assert.DoesNotContain("__oceanbase_internal", sql);
+            Assert.Equal(sql.Count(c => c == '('), sql.Count(c => c == ')'));
+            if (mode == OceanBaseCompatibilityMode.MySql)
+            {
+                Assert.Contains("TIME_TO_SEC", sql);
+                Assert.Contains("MICROSECOND", sql);
+            }
+            else
+            {
+                Assert.Contains("EXTRACT(DAY FROM", sql);
+                Assert.Contains("EXTRACT(SECOND FROM", sql);
+            }
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle)]
+        public void TimeSpan_total_members_reject_null_converting_carriers(OceanBaseCompatibilityMode mode)
+        {
+            using var context = CreateContext(mode);
+            var source = context.GetService<IRelationalTypeMappingSource>();
+            var factory = context.GetService<ISqlExpressionFactory>();
+            var members = context.GetService<IMemberTranslatorProvider>();
+            var logger = context.GetService<IDiagnosticsLogger<DbLoggerCategory.Query>>();
+            var mapping = mode == OceanBaseCompatibilityMode.MySql
+                ? (RelationalTypeMapping)source.FindMapping(typeof(TimeSpan))!.WithComposedConverter(
+                    new ValueConverter<TimeSpan, TimeSpan>(value => value, value => value, convertsNulls: true))
+                : (RelationalTypeMapping)source.FindMapping(typeof(OceanBaseIntervalDayToSecond))!.WithComposedConverter(
+                    new ValueConverter<TimeSpan, OceanBaseIntervalDayToSecond>(
+                        value => new OceanBaseIntervalDayToSecond(false, 0, 0, 0, 0),
+                        value => value.ToTimeSpan(), convertsNulls: true));
+
+            Assert.Null(members.Translate(factory.Constant(TimeSpan.FromSeconds(1), mapping),
+                typeof(TimeSpan).GetProperty(nameof(TimeSpan.TotalSeconds))!, typeof(double), logger));
+
+            var text = (RelationalTypeMapping)source.FindMapping(typeof(string))!.WithComposedConverter(
+                new ValueConverter<TimeSpan, string>(value => value.ToString(), value => TimeSpan.Parse(value)));
+            Assert.Null(members.Translate(factory.Constant(TimeSpan.FromSeconds(1), text),
+                typeof(TimeSpan).GetProperty(nameof(TimeSpan.TotalSeconds))!, typeof(double), logger));
         }
 
         private static TestContext CreateContext(OceanBaseCompatibilityMode mode, bool relationalNulls = false)

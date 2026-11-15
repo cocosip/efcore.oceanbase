@@ -16,6 +16,7 @@ namespace OceanBase.EntityFrameworkCore.Query
         OceanBaseCompatibilityMode mode) : IMemberTranslator
     {
         internal const string ExtractMarker = "__oceanbase_internal_extract";
+        internal const string TotalMarker = "__oceanbase_internal_total";
 
         private static readonly Dictionary<MemberInfo, (Type Receiver, string Unit, string MySqlFunction)> Parts = new()
         {
@@ -39,6 +40,16 @@ namespace OceanBase.EntityFrameworkCore.Query
             [typeof(DateOnly).GetProperty(nameof(DateOnly.DayOfYear))!] = false,
             [typeof(DateTime).GetProperty(nameof(DateTime.DayOfWeek))!] = true,
             [typeof(DateOnly).GetProperty(nameof(DateOnly.DayOfWeek))!] = true
+        };
+        private static readonly Dictionary<MemberInfo, string> TotalMembers = new()
+        {
+            [typeof(TimeSpan).GetProperty(nameof(TimeSpan.TotalDays))!] = "DAY",
+            [typeof(TimeSpan).GetProperty(nameof(TimeSpan.TotalHours))!] = "HOUR",
+            [typeof(TimeSpan).GetProperty(nameof(TimeSpan.TotalMinutes))!] = "MINUTE",
+            [typeof(TimeSpan).GetProperty(nameof(TimeSpan.TotalSeconds))!] = "SECOND",
+            [typeof(TimeSpan).GetProperty(nameof(TimeSpan.TotalMilliseconds))!] = "MILLISECOND",
+            [typeof(TimeSpan).GetProperty(nameof(TimeSpan.TotalMicroseconds))!] = "MICROSECOND",
+            [typeof(TimeSpan).GetProperty(nameof(TimeSpan.TotalNanoseconds))!] = "NANOSECOND"
         };
         private static readonly MemberInfo DateTimeDate = typeof(DateTime).GetProperty(nameof(DateTime.Date))!;
 
@@ -67,6 +78,19 @@ namespace OceanBase.EntityFrameworkCore.Query
                 return instance.TypeMapping is { } calendarMapping && SupportsCarrier(member.DeclaringType!, calendarMapping)
                     ? TranslateCalendarPart(instance, weekday)
                     : null;
+            }
+
+            if (instance is not null && returnType == typeof(double)
+                && member.DeclaringType == typeof(TimeSpan) && TotalMembers.TryGetValue(member, out var totalUnit))
+            {
+                instance = factory.ApplyDefaultTypeMapping(instance);
+                var totalMapping = instance.TypeMapping;
+                if (totalMapping is null || totalMapping.Converter?.ConvertsNulls == true
+                    || !SupportsCarrier(typeof(TimeSpan), totalMapping))
+                    return null;
+
+                return factory.Function(TotalMarker, [factory.Fragment(totalUnit), instance], nullable: true,
+                    argumentsPropagateNullability: [false, false], typeof(double), mappingSource.FindMapping(typeof(double)));
             }
 
             if (instance is null || returnType != typeof(int) || member is not PropertyInfo { PropertyType: var propertyType }

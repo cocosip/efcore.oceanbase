@@ -85,6 +85,9 @@ The following required rows have complete local/package evidence for both modes:
 - Numeric and nonnumeric query slices, collection roots for integer/numeric/text/Boolean/temporal/binary/Guid
   carriers, and selected model/materialization, write, transaction, schema and diagnostics paths have local
   coverage, but their required rows remain open until their remaining boundaries and native evidence are closed.
+- `TimeSpan.TotalDays`, `TotalHours`, `TotalMinutes`, `TotalSeconds`, `TotalMilliseconds`, `TotalMicroseconds`
+  and `TotalNanoseconds` now have both-mode translation and intercepted sync/async materialization coverage.
+  Native interval precision/range and live results remain open.
 - `DateTime.Date` now has both-mode SQL-shape, mapping and intercepted reader coverage; native date semantics remain
   a live gate.
 

@@ -588,6 +588,21 @@ DateTime-to-DateTime converter when one is present, and propagates NULL from the
 numeric and binary carriers, null-converting converters, and timezone/date-time-of-day members remain unsupported.
 This is SQL-shape and mapping evidence only until native server execution is available.
 
+### TimeSpan total-member local contract (QRY-07/11, MAP-05/06)
+
+The provider translates the exact `TimeSpan.TotalDays`, `TotalHours`, `TotalMinutes`, `TotalSeconds`,
+`TotalMilliseconds`, `TotalMicroseconds` and `TotalNanoseconds` members to a nullable `double` result in
+both modes. MySQL derives the signed duration from `TIME_TO_SEC` plus the fractional `MICROSECOND` component;
+the sign is read from the full TIME value so pure subsecond negative values remain negative. Oracle sums
+`EXTRACT(DAY/HOUR/MINUTE/SECOND)` and applies the requested unit scale. The internal marker is allowlisted and
+never emitted into SQL.
+
+Only the existing MySQL `TIME` and Oracle `INTERVAL DAY TO SECOND` provider carriers are accepted. Nulls
+propagate through the expression, and null-converting or unrelated string/binary/numeric carriers are rejected
+before execution. Unit SQL-shape tests cover both modes; intercepted sync/async tests cover all seven members,
+fractional values and positive/negative pure-subsecond values. These tests prove translation, binding and
+materialization only; interval precision, range, native arithmetic and live OceanBase results remain open.
+
 DateTimeOffset, clocks/Now/UtcNow/Today, fractional parts/Ticks, Date/TimeOfDay/DayNumber, duration
 parts and Add operations need their own timezone/range/precision/calendar/wrapping contracts. This slice makes
 no server extraction, DATE cast, calendar/zero-date, interval-clock or result-metadata claim without live evidence.

@@ -928,6 +928,63 @@ CI, catches errors and exits normally. No intentional crash or old-package negat
 Evidence: `artifacts/management-profile-{red,debug,release,patch,package}.log`, focused/options/functional
 logs and `artifacts/verify-management-profile-package.ps1`. Baseline assets remain EF10.0.0.
 
+### TimeSpan total-member checkpoint (QRY-07/11, MAP-05/06; 2026-11-15)
+
+The current branch now translates the seven exact `TimeSpan.Total*` members (`Days`, `Hours`, `Minutes`,
+`Seconds`, `Milliseconds`, `Microseconds`, `Nanoseconds`) to nullable `double` SQL in MySQL and Oracle modes.
+MySQL combines `TIME_TO_SEC` with the signed `MICROSECOND` fraction and detects the sign from the full TIME
+value, including negative pure-subsecond durations. Oracle combines `EXTRACT(DAY/HOUR/MINUTE/SECOND)` and
+scales the result. The translator accepts only the existing TIME/INTERVAL DAY TO SECOND carriers and rejects
+null-converting mappings before execution; no Connector change was required.
+
+Tests added:
+
+- `TemporalMemberQueryTests`: both-mode SQL shape, balanced generated SQL and null-converting rejection.
+- `TimeSpanTotalFunctionalTests`: both-mode intercepted sync/async materialization for all seven members and
+  positive/negative pure-subsecond values.
+
+Focused evidence: Unit 4 passed; Functional 12 passed; `git diff --check` passed. The full Release Unit suite
+passed 2,325 tests and the full Release Functional suite passed 1,857 tests, with zero failures/skips. Package
+content verification and the standalone package consumer passed on EF10.0.0 and EF10.0.14 in both modes. The
+package-only tooling consumer passed catalog, compiled-model and migration checks on both EF patches with
+`-SkipBundle`; the bundle substep remains blocked by the machine's missing `Microsoft.NETCore.App.Runtime.win-x64`
+and related 10.0.14 runtime packs. This evidence covers local translation, parameter/mapping selection, reader
+shaping, intercepted SQL and package/tooling compatibility only. Native interval precision, range, server
+arithmetic and live OceanBase results remain open under `MAP-05`, `QRY-07` and `TST-02`.
+
+Module:
+TimeSpan total-member translation
+Checklist IDs:
+QRY-07, QRY-11, MAP-05, MAP-06
+Base commit:
+5b58dfe
+Implementation files:
+`src/OceanBase.EntityFrameworkCore/Query/OceanBaseTemporalMemberTranslator.cs`,
+`src/OceanBase.EntityFrameworkCore/Query/OceanBaseQuerySqlGenerator.cs`
+Tests added/changed:
+`tests/OceanBase.EntityFrameworkCore.UnitTests/TemporalMemberQueryTests.cs`,
+`tests/OceanBase.EntityFrameworkCore.FunctionalTests/TimeSpanTotalFunctionalTests.cs`
+Focused command and result:
+Unit filtered `TemporalMemberQueryTests.TimeSpan_total`: 4 passed, 0 failed; Functional filtered
+`TimeSpanTotalFunctionalTests`: 12 passed, 0 failed.
+Full local command and result:
+Unit Release: 2,325 passed, 0 failed/skipped. Functional Release: 1,857 passed, 0 failed/skipped.
+Package/tooling command and result:
+Package `10.0.0-timespan-total-20261115`: content and package consumer passed on EF10.0.0/10.0.14 in both
+modes. Tooling consumer passed on EF10.0.0/10.0.14 with catalog, compiled-model and migration checks;
+bundle checks were retried and remain environment-blocked by missing 10.0.14 runtime packs.
+Live command and result:
+Not run; the existing User Secrets probes still fail before SQL during the pre-auth handshake.
+Evidence boundary:
+Local SQL generation, carrier validation, intercepted sync/async reader shaping and negative boundaries are
+proved. Real OceanBase interval coercion, precision/range and native results are not proved.
+Known gaps:
+Oracle/MySQL native interval semantics and the wider temporal/math matrix remain open.
+Next module:
+After this commit, continue the next complete local query/mapping module from the execution plan.
+Commit:
+`be876cd`
+
 ### Resume here: remaining EF10 local inventory
 
 1. Recheck branch/worktree and saved commit before editing. Batch3ai binary collection roots, Batch3ah
