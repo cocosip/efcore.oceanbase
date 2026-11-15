@@ -20,10 +20,10 @@
 
 创建本文档时的仓库状态：
 
-- `HEAD` 的最新功能提交是 `27509aa`，内容为 TimeSpan total-member translation；验收记录在 `537eede`。
+- `HEAD` 的最新功能提交是 `747c61a`，内容为 TimeSpan component-member translation；TimeSpan total-member 验收记录在 `537eede`。
 - Batch3ba 提交 `df67ff8` 是前一个显式 Binary/Guid `EF.Parameter` 集合根检查点。
 - HasData schema bootstrap 是前一个已提交检查点 `1f6046f`。
-- 当前工作树的 Release 本地测试为：Unit 2325、Functional 1857、Specification 868、Consumer 2，共 5052 个测试，0 失败、0 跳过。
+- 当前工作树的 Release 本地测试为：Unit 2329、Functional 1869、Specification 868、Consumer 2，共 5068 个测试，0 失败、0 跳过。
 - 文档中原有的 5028 测试数字是 HasData 已提交检查点的基线；Batch3ba 已在 `df67ff8` 中新增 8 个单元测试。
 - 当前没有真实 OceanBase SQL/DDL 验收。已有 live 探针在握手阶段报 `Connection closed while reading the packet`，没有执行 SQL 或 DDL。
 
@@ -287,8 +287,8 @@ Package/tooling command and result: Verify-Package and PackageConsumer passed on
 Live command and result: not run; the existing User Secrets probes still close before SQL during the pre-authentication handshake.
 Evidence boundary: local SQL generation, signed component semantics, carrier validation and intercepted sync/async reader shaping are covered; native interval precision/range/arithmetic and live OceanBase results are not proved.
 Known gaps: bundle/runtime-pack verification and native/live gates remain open.
-Next module: after this commit, continue the next complete local query/mapping module from the execution plan.
-Commit: pending.
+Next module: begin the execution plan's connection/service/diagnostic boundary wave (`CFG-04`, `CON-02..05`, `DIA-01..02`, `SQL-01`).
+Commit: `747c61a`.
 
 每个波次完成后，在对应 plan/progress 文档增加一段记录，字段必须完整：
 

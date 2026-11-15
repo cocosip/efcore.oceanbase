@@ -6,8 +6,9 @@ The ordered development and acceptance rules are in
 [efcore-10-development-acceptance-plan.md](efcore-10-development-acceptance-plan.md). This file keeps the
 historical handoff and module evidence; it does not authorize jumping between unfinished feature families.
 
-The latest committed local module is `27509aa` (TimeSpan total-member translation), with evidence recorded in
-`537eede`, following Batch3ba commit `df67ff8`. The current worktree Release test baseline is 5,052 passed,
+The latest committed local module is `747c61a` (TimeSpan component-member translation), following the TimeSpan
+total-member commit `27509aa` and its evidence record `537eede`, and Batch3ba commit `df67ff8`. The current
+worktree Release test baseline is 5,068 passed,
 zero failed/skipped; the older 5,036 count below belongs to the pre-TimeSpan-total checkpoint.
 
 ## Paused checkpoint: 2026-11-13
@@ -981,7 +982,7 @@ proved. Real OceanBase interval coercion, precision/range and native results are
 Known gaps:
 Oracle/MySQL native interval semantics and the wider temporal/math matrix remain open.
 Next module:
-After this commit, continue the next complete local query/mapping module from the execution plan.
+Begin the execution plan's connection/service/diagnostic boundary wave (`CFG-04`, `CON-02..05`, `DIA-01..02`, `SQL-01`).
 Commit:
 `27509aa`
 
@@ -1009,6 +1010,8 @@ blocked by missing 10.0.14 runtime packs. This local evidence proves SQL generat
 component semantics, intercepted reader shaping, package compatibility and non-bundle tooling checks only; native
 interval precision/range, server arithmetic and live OceanBase results remain open under `MAP-05`, `QRY-07` and
 `TST-02`.
+
+Commit: `747c61a`.
 
 ### Resume here: remaining EF10 local inventory
 
