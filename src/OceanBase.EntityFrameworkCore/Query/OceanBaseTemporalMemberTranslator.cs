@@ -25,6 +25,7 @@ namespace OceanBase.EntityFrameworkCore.Query
         internal const string DateTimeUtcNowMarker = "__oceanbase_internal_datetime_utc_now";
         internal const string DateTimeTodayMarker = "__oceanbase_internal_datetime_today";
         internal const string DateTimeOffsetUtcDateTimeMarker = "__oceanbase_internal_datetimeoffset_utc_datetime";
+        internal const string DateTimeOffsetUtcNowMarker = "__oceanbase_internal_datetimeoffset_utc_now";
 
         private static readonly Dictionary<MemberInfo, (Type Receiver, string Unit, string MySqlFunction)> Parts = new()
         {
@@ -95,6 +96,7 @@ namespace OceanBase.EntityFrameworkCore.Query
         private static readonly MemberInfo DateTimeUtcNow = typeof(DateTime).GetProperty(nameof(DateTime.UtcNow))!;
         private static readonly MemberInfo DateTimeToday = typeof(DateTime).GetProperty(nameof(DateTime.Today))!;
         private static readonly MemberInfo DateTimeOffsetUtcDateTime = typeof(DateTimeOffset).GetProperty(nameof(DateTimeOffset.UtcDateTime))!;
+        private static readonly MemberInfo DateTimeOffsetUtcNow = typeof(DateTimeOffset).GetProperty(nameof(DateTimeOffset.UtcNow))!;
 
         public SqlExpression? Translate(SqlExpression? instance, MemberInfo member, Type returnType,
             IDiagnosticsLogger<DbLoggerCategory.Query> logger)
@@ -141,6 +143,14 @@ namespace OceanBase.EntityFrameworkCore.Query
                 var storeType = mode == OceanBaseCompatibilityMode.MySql ? "DATETIME(6)" : "TIMESTAMP(7)";
                 return factory.Function(DateTimeOffsetUtcDateTimeMarker, [instance], nullable: true,
                     argumentsPropagateNullability: [false], typeof(DateTime), mappingSource.FindMapping(typeof(DateTime), storeType));
+            }
+
+            if (instance is null && member == DateTimeOffsetUtcNow && returnType == typeof(DateTimeOffset))
+            {
+                var storeType = mode == OceanBaseCompatibilityMode.MySql ? "DATETIME(6)" : "TIMESTAMP(7) WITH TIME ZONE";
+                return factory.Function(DateTimeOffsetUtcNowMarker, [], nullable: false,
+                    argumentsPropagateNullability: [], typeof(DateTimeOffset),
+                    mappingSource.FindMapping(typeof(DateTimeOffset), storeType));
             }
 
             if (instance is not null && member == DateOnlyDayNumber && instance.Type == typeof(DateOnly)

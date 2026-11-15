@@ -6,7 +6,7 @@ The ordered development and acceptance rules are in
 [efcore-10-development-acceptance-plan.md](efcore-10-development-acceptance-plan.md). This file keeps the
 historical handoff and module evidence; it does not authorize jumping between unfinished feature families.
 
-The latest local feature module is the 2026-11-16 server clock checkpoint recorded below. Earlier commit
+The latest local feature module is the 2026-11-16 `DateTimeOffset.UtcNow` checkpoint recorded below. Earlier commit
 identifiers and test totals remain historical evidence for their original modules; they are not the current branch
 baseline. The current feature evidence is recorded in the latest checkpoint sections and module plan.
 
@@ -179,6 +179,20 @@ server translation, sync/async reader materialization and NULL/carrier boundarie
 pass 2381/1915; the EF10.0.0 packed consumer passes in both modes with an isolated repository NuGet cache. The
 default global cache is contaminated with an `OceanBaseConnector 0.2.0.0` assembly under the 0.3.0 package path.
 Native timezone/precision and live OceanBase results remain open. See [the UtcDateTime plan](efcore-10-date-time-offset-utc-date-time-plan.md).
+
+### QRY-07/QRY-11/MAP-05 `DateTimeOffset.UtcNow` checkpoint (2026-11-16)
+
+`DateTimeOffset.UtcNow` is now translated as a server expression. MySQL emits `UTC_TIMESTAMP(6)` through the
+UTC-normalized `DATETIME` carrier; Oracle emits `CAST(SYS_EXTRACT_UTC(SYSTIMESTAMP) AS TIMESTAMP)` and restores
+zero offset through the existing DateTimeOffset reader path. `DateTimeOffset.Now` remains outside this slice because
+the MySQL carrier cannot preserve application-local offset semantics.
+
+Focused Release evidence is Unit 2/2 and Functional 4/4 across both modes and sync/async. Full Debug/Release Unit
+and Functional suites pass 2383/1919; Specification is 1446 passed with 16 mapped skips; ConsumerTests is 2/2.
+Package `10.0.0-date-time-offset-utc-now-20261116` passes content verification and packed consumers on EF10.0.0/
+10.0.14 in both modes with isolated NuGet caches. Native clock accuracy, session timezone and live OceanBase results
+remain open.
+See [the UtcNow plan](efcore-10-date-time-offset-utc-now-plan.md).
 
 ### QRY-07/QRY-11/MAP-05 server clock checkpoint (2026-11-16)
 

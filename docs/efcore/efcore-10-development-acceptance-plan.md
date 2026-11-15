@@ -521,6 +521,29 @@ Evidence boundary: MySQL reuses UTC-normalized `DATETIME`; Oracle emits `SYS_EXT
 Native timezone/precision, live results and release rows remain open.
 Next module: finish this module's full/package gates, then select one remaining mapping/query/write/transaction gap.
 
+### 2026-11-16：`DateTimeOffset.UtcNow` translation
+
+Module: server UTC clock projection as `DateTimeOffset`
+Checklist IDs: `MAP-05`, `QRY-07`, `QRY-11`
+Base commit: `ff071ff` (`DateTimeOffset.UtcDateTime`)
+Implementation files: `OceanBaseTemporalMemberTranslator.cs`, `OceanBaseQuerySqlGenerator.cs`
+Tests added/changed: `TemporalMemberQueryTests.cs`, `DateTimeMemberFunctionalTests.cs`, packed `Program.cs`
+Focused command and result: Unit 2/2 and Functional 4/4 in Release across MySQL/Oracle sync/async; RED was observed
+in both modes before the translator branch. The full temporal Unit group passed 69/69 and the DateTime functional
+class passed 16/16.
+Full local command and result: Debug/Release Unit 2383 and Functional 1919 passed; Release Specification 1446 passed
+with 16 mapped skips; ConsumerTests 2/2 passed.
+Package/tooling command and result: package `10.0.0-date-time-offset-utc-now-20261116` passed Verify-Package and
+the packed PackageConsumer on EF10.0.0/10.0.14 in both modes with isolated caches. No Connector change was needed.
+Live command and result: not run; the supplied endpoint still closes during the pre-authentication handshake.
+Evidence boundary: MySQL emits `UTC_TIMESTAMP(6)` through the UTC-normalized DATETIME carrier; Oracle emits
+`CAST(SYS_EXTRACT_UTC(SYSTIMESTAMP) AS TIMESTAMP)` and the existing reader restores zero offset. Native clock
+accuracy, session timezone, precision and live results are not proved.
+Known gaps: `DateTimeOffset.Now` remains outside this contract because MySQL cannot preserve application-local offset;
+EF10.0.14 packed compatibility and the live gate remain open.
+Next module: finish Debug full rerun, review this module, commit, then select one remaining mapping/query/write/transaction gap.
+Commit: pending.
+
 每个波次完成后，在对应 plan/progress 文档增加一段记录，字段必须完整：
 
 ```text

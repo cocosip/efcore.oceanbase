@@ -514,6 +514,20 @@ namespace OceanBase.EntityFrameworkCore.Query
                 return sqlFunctionExpression;
             }
 
+            if (sqlFunctionExpression.Name == OceanBaseTemporalMemberTranslator.DateTimeOffsetUtcNowMarker)
+            {
+                if (sqlFunctionExpression is not { IsBuiltIn: true, Schema: null, Instance: null, Arguments.Count: 0,
+                        IsNullable: false, Type: var resultType, TypeMapping: { } resultMapping }
+                    || resultType != typeof(DateTimeOffset)
+                    || !IsDateTimeOffsetMapping(resultMapping))
+                    throw new InvalidOperationException("Invalid internal DateTimeOffset.UtcNow expression.");
+
+                Sql.Append(_mode == OceanBaseCompatibilityMode.MySql
+                    ? "UTC_TIMESTAMP(6)"
+                    : "CAST(SYS_EXTRACT_UTC(SYSTIMESTAMP) AS TIMESTAMP)");
+                return sqlFunctionExpression;
+            }
+
             if (sqlFunctionExpression.Name == OceanBaseTemporalMemberTranslator.DayNumberMarker)
             {
                 if (sqlFunctionExpression is not { IsBuiltIn: true, Schema: null, Instance: null, Arguments.Count: 1,
@@ -771,6 +785,16 @@ namespace OceanBase.EntityFrameworkCore.Query
                 ? providerType == typeof(DateTime) && store == "DATETIME"
                 : (providerType == typeof(DateTime) || providerType == typeof(DateTimeOffset))
                 && (store is "DATE" or "TIMESTAMP");
+        }
+
+        private bool IsDateTimeOffsetMapping(RelationalTypeMapping mapping)
+        {
+            if (mapping.Converter?.ConvertsNulls == true || mapping.ClrType != typeof(DateTimeOffset)) return false;
+            var providerType = mapping.Converter?.ProviderClrType ?? mapping.ClrType;
+            var store = mapping.StoreTypeNameBase.Trim().ToUpperInvariant();
+            return _mode == OceanBaseCompatibilityMode.MySql
+                ? providerType == typeof(DateTime) && store == "DATETIME"
+                : providerType == typeof(DateTimeOffset) && store == "TIMESTAMP";
         }
 
         private bool IsDateOnlyMapping(RelationalTypeMapping mapping)

@@ -82,6 +82,21 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
         [Theory]
         [InlineData(OceanBaseCompatibilityMode.MySql)]
         [InlineData(OceanBaseCompatibilityMode.Oracle)]
+        public void DateTimeOffset_utc_now_translates_to_server_function(OceanBaseCompatibilityMode mode)
+        {
+            using var context = CreateContext(mode);
+            var sql = context.Rows.Where(row => DateTimeOffset.UtcNow > row.Zoned)
+                .Select(_ => DateTimeOffset.UtcNow).ToQueryString();
+
+            Assert.DoesNotContain("__oceanbase_internal", sql);
+            Assert.Contains(mode == OceanBaseCompatibilityMode.MySql
+                ? "UTC_TIMESTAMP(6)"
+                : "CAST(SYS_EXTRACT_UTC(SYSTIMESTAMP) AS TIMESTAMP)", sql);
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle)]
         public void DateTimeOffset_parts_translate_in_projection_and_predicate(OceanBaseCompatibilityMode mode)
         {
             using var context = CreateContext(mode);

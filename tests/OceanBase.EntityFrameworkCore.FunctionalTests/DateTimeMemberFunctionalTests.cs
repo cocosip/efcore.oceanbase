@@ -75,6 +75,30 @@ public sealed class DateTimeMemberFunctionalTests
     [InlineData(OceanBaseCompatibilityMode.MySql, true)]
     [InlineData(OceanBaseCompatibilityMode.Oracle, false)]
     [InlineData(OceanBaseCompatibilityMode.Oracle, true)]
+    public async Task DateTimeOffset_utc_now_materializes_server_value(OceanBaseCompatibilityMode mode, bool async)
+    {
+        using var table = new DataTable();
+        table.Columns.Add("Value", typeof(object));
+        table.Rows.Add(new DateTime(2026, 11, 16, 2, 20, 30));
+        var capture = new Capture(table);
+        await using var context = Create(mode, capture);
+        var query = context.Rows.Where(row => DateTimeOffset.UtcNow > row.Zoned)
+            .Select(_ => DateTimeOffset.UtcNow);
+
+        var result = Assert.Single(async ? await query.ToListAsync() : query.ToList());
+        Assert.Equal(new DateTimeOffset(2026, 11, 16, 2, 20, 30, TimeSpan.Zero), result);
+        var sql = Assert.Single(capture.Sql);
+        Assert.DoesNotContain("__oceanbase_internal", sql);
+        Assert.Contains(mode == OceanBaseCompatibilityMode.MySql
+            ? "UTC_TIMESTAMP(6)"
+            : "CAST(SYS_EXTRACT_UTC(SYSTIMESTAMP) AS TIMESTAMP)", sql);
+    }
+
+    [Theory]
+    [InlineData(OceanBaseCompatibilityMode.MySql, false)]
+    [InlineData(OceanBaseCompatibilityMode.MySql, true)]
+    [InlineData(OceanBaseCompatibilityMode.Oracle, false)]
+    [InlineData(OceanBaseCompatibilityMode.Oracle, true)]
     public async Task DateTimeOffset_parts_materialize_server_values(OceanBaseCompatibilityMode mode, bool async)
     {
         using var table = new DataTable();

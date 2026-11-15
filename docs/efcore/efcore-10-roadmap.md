@@ -2,7 +2,7 @@
 
 **Updated:** 2026-11-16
 **Branch:** `efcore/10.0`  
-**State:** Active local development; QRY-07/QRY-11/MAP-05 `DateTimeOffset.UtcDateTime` is the latest local module.
+**State:** Active local development; QRY-07/QRY-11/MAP-05 `DateTimeOffset.UtcNow` is the latest local module.
 **Acceptance authority:** [efcore-10-feature-checklist.md](efcore-10-feature-checklist.md)
 
 The `REL-01` support record now exists at [efcore-10-release-support.md](efcore-10-release-support.md),
