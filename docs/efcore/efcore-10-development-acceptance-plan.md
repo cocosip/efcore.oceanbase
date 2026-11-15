@@ -35,6 +35,11 @@
 Release 验收为 Unit 76/76、Functional 32/32；它只关闭本地代码和拦截式证据，不能关闭
 `QRY-01`、`QRY-11`、`MAP-01`，也不能替代真实 OceanBase、完整包矩阵或发布验收。
 
+The next local checkpoint is `e3119f5`: the DateTime/TimeOnly fractional temporal member
+module. Its focused Release evidence is TemporalMemberQueryTests 39/39, the new functional
+suite 4/4, and selected temporal regressions 32/32. The module remains local complete only;
+native precision/range and release gates stay open.
+
 ## 完成状态的定义
 
 一个功能只能在以下条件全部满足后标记为 `Done`：

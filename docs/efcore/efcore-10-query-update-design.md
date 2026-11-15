@@ -555,7 +555,8 @@ result null tests even for required sources. Existing plugin/DbFunction/mode and
 ## Ordinary temporal-member local contract
 
 The original QRY-07 slice covers DateTime.Year/Month/Day/Hour/Minute/Second, DateOnly.Year/Month/Day
-and TimeOnly.Hour/Minute/Second. Match exact members; use MySQL YEAR/MONTH/DAYOFMONTH/HOUR/MINUTE/SECOND
+and TimeOnly.Hour/Minute/Second. The fractional follow-up also covers DateTime and TimeOnly
+Millisecond/Microsecond/Nanosecond. Match exact members; use MySQL YEAR/MONTH/DAYOFMONTH/HOUR/MINUTE/SECOND
 and Oracle EXTRACT(unit FROM input), with fixed allowlisted units rendered through a narrow internal marker.
 Inputs remain visited expressions with their existing carriers/converters/precision; no user text becomes SQL syntax.
 
@@ -587,6 +588,16 @@ Oracle emits `TRUNC(input)`. The result uses the existing date-valued DateTime m
 DateTime-to-DateTime converter when one is present, and propagates NULL from the input. DateTimeOffset, string,
 numeric and binary carriers, null-converting converters, and timezone/date-time-of-day members remain unsupported.
 This is SQL-shape and mapping evidence only until native server execution is available.
+
+### DateTime and TimeOnly fractional-member contract
+
+`DateTime.Millisecond`, `DateTime.Microsecond`, `DateTime.Nanosecond` and the matching
+`TimeOnly` members return nullable `int` components from the existing supported temporal
+carriers. MySQL reads `MICROSECOND` and derives the millisecond, microsecond and 100-nanosecond
+components with integer division/remainder. Oracle reads `EXTRACT(SECOND)` and truncates/scales
+the fractional part before applying the component remainder. The allowlist is rendered through
+the existing internal marker; unrelated converters, `DateTimeOffset`, timezone conversion and
+native precision/range semantics remain unsupported by this slice. See the [execution plan](efcore-10-temporal-fractional-plan.md).
 
 ### TimeSpan total-member local contract (QRY-07/11, MAP-05/06)
 

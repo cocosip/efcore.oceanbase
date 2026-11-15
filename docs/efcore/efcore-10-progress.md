@@ -42,6 +42,15 @@ conversion output. This is local translation, binding and materialization eviden
 OceanBase coercion, NaN/Infinity behavior, live results, package gates and the wider QRY-01/QRY-11/
 MAP-01 matrices remain open.
 
+### Temporal fractional-member checkpoint (2026-11-15)
+
+Commit `e3119f5` adds `DateTime` and `TimeOnly` millisecond, microsecond and nanosecond
+translation in both modes. MySQL derives components from `MICROSECOND`; Oracle uses the existing
+`EXTRACT(SECOND)` path. Unit temporal coverage passes 39/39, the new sync/async intercepted
+functional cases pass 4/4, and the selected temporal regression cases pass 32/32. This is local
+SQL, binding and materialization evidence only; native precision/range, timezone and live results
+remain open under `MAP-05`, `QRY-07` and `TST-02`. See [the execution plan](efcore-10-temporal-fractional-plan.md).
+
 ### HasData schema bootstrap and pause (2026-11-13)
 
 At the user's request, finish this module, update evidence, commit locally and pause. Do not start another
