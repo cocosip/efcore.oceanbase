@@ -524,7 +524,7 @@ namespace OceanBase.EntityFrameworkCore.Query
                     || resultType != typeof(long)
                     || (resultMapping.Converter?.ProviderClrType ?? resultMapping.ClrType) != typeof(long)
                     || sqlFunctionExpression.Arguments[0] is not { Type: var inputType, TypeMapping: { } inputMapping }
-                    || inputType != typeof(TimeSpan)
+                    || (inputType != typeof(TimeSpan) && inputType != typeof(TimeOnly))
                     || !IsTimeSpanMapping(inputMapping))
                     throw new InvalidOperationException("Invalid internal TimeSpan.Ticks expression.");
 
@@ -533,7 +533,10 @@ namespace OceanBase.EntityFrameworkCore.Query
                     Sql.Append("((TIME_TO_SEC(");
                     Visit(sqlFunctionExpression.Arguments[0]);
                     Sql.Append(") * 10000000 + ");
-                    AppendMySqlTimeSpanSign(sqlFunctionExpression.Arguments[0]);
+                    if (inputType == typeof(TimeSpan))
+                        AppendMySqlTimeSpanSign(sqlFunctionExpression.Arguments[0]);
+                    else
+                        Sql.Append("1");
                     Sql.Append(" * ABS(MICROSECOND(");
                     Visit(sqlFunctionExpression.Arguments[0]);
                     Sql.Append(") * 10))");

@@ -577,6 +577,31 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
         [Theory]
         [InlineData(OceanBaseCompatibilityMode.MySql)]
         [InlineData(OceanBaseCompatibilityMode.Oracle)]
+        public void TimeOnly_Ticks_translate_from_midnight_in_both_modes(OceanBaseCompatibilityMode mode)
+        {
+            using var context = CreateContext(mode);
+            var sql = context.Rows
+                .Where(row => row.Clock.Ticks > TimeSpan.TicksPerHour)
+                .OrderBy(row => row.Clock.Ticks)
+                .Select(row => row.Clock.Ticks)
+                .ToQueryString();
+
+            Assert.DoesNotContain("__oceanbase_internal", sql);
+            if (mode == OceanBaseCompatibilityMode.MySql)
+            {
+                Assert.Contains("TIME_TO_SEC", sql);
+                Assert.Contains("MICROSECOND", sql);
+            }
+            else
+            {
+                Assert.Contains("EXTRACT(HOUR FROM", sql);
+                Assert.Contains("EXTRACT(SECOND FROM", sql);
+            }
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle)]
         public void TimeSpan_component_members_translate_with_signed_duration_semantics(OceanBaseCompatibilityMode mode)
         {
             using var context = CreateContext(mode);

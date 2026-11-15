@@ -14,15 +14,17 @@ public APIs and per-mode mappings/SQL. Separate local implementation evidence fr
 The compact execution board is [efcore-10-roadmap.md](efcore-10-roadmap.md); this file remains the detailed
 batch ledger and acceptance notes.
 
-**Updated:** 2026-11-16, QRY-07/MAP-05 TimeSpan.Ticks following the DateOnly.DayNumber, DateTime.TimeOfDay and TST-01
+**Updated:** 2026-11-16, QRY-07/MAP-05 TimeOnly.Ticks following the TimeSpan.Ticks, DateOnly.DayNumber, DateTime.TimeOfDay and TST-01
 model-building 101 checkpoints.
 Keep one complete module active and review it before committing. EF8/EF9 remains postponed; live execution is opt-in and
 currently blocked before authentication by the supplied endpoint/transport behavior.
 The full goal remains incomplete.
 
-The current local module is the QRY-07/MAP-05 `TimeSpan.Ticks` slice. It uses the existing TIME/INTERVAL mappings,
-translates signed 100ns ticks in both modes, and has both-mode SQL-shape, unsupported-carrier and intercepted
-sync/async reader coverage; see [the TimeSpan.Ticks plan](efcore-10-time-span-ticks-plan.md). The preceding
+The current local module is the QRY-07/MAP-05 `TimeOnly.Ticks` slice. It uses the existing TIME/INTERVAL mappings,
+translates non-negative midnight-based 100ns ticks in both modes, and has both-mode SQL-shape and intercepted
+sync/async reader coverage; see [the TimeOnly.Ticks plan](efcore-10-time-only-ticks-plan.md). The preceding
+`TimeSpan.Ticks` slice translates signed duration ticks; see [the TimeSpan.Ticks plan](efcore-10-time-span-ticks-plan.md).
+The preceding
 `DateOnly.DayNumber` slice uses the existing DATE mapping and zero-based Gregorian arithmetic; see
 [the DateOnly.DayNumber plan](efcore-10-date-only-day-number-plan.md). The earlier `DateTime.TimeOfDay` slice
 uses existing TIME/INTERVAL result mappings; see

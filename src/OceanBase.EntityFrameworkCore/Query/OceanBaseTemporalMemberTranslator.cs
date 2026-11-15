@@ -71,6 +71,7 @@ namespace OceanBase.EntityFrameworkCore.Query
         private static readonly MemberInfo DateTimeTimeOfDay = typeof(DateTime).GetProperty(nameof(DateTime.TimeOfDay))!;
         private static readonly MemberInfo DateOnlyDayNumber = typeof(DateOnly).GetProperty(nameof(DateOnly.DayNumber))!;
         private static readonly MemberInfo TimeSpanTicks = typeof(TimeSpan).GetProperty(nameof(TimeSpan.Ticks))!;
+        private static readonly MemberInfo TimeOnlyTicks = typeof(TimeOnly).GetProperty(nameof(TimeOnly.Ticks))!;
 
         public SqlExpression? Translate(SqlExpression? instance, MemberInfo member, Type returnType,
             IDiagnosticsLogger<DbLoggerCategory.Query> logger)
@@ -122,6 +123,19 @@ namespace OceanBase.EntityFrameworkCore.Query
                 var durationMapping = instance.TypeMapping;
                 if (durationMapping is null || durationMapping.Converter?.ConvertsNulls == true
                     || !SupportsCarrier(typeof(TimeSpan), durationMapping))
+                    return null;
+
+                return factory.Function(TicksMarker, [instance], nullable: true,
+                    argumentsPropagateNullability: [false], typeof(long), mappingSource.FindMapping(typeof(long)));
+            }
+
+            if (instance is not null && member == TimeOnlyTicks && instance.Type == typeof(TimeOnly)
+                && returnType == typeof(long))
+            {
+                instance = factory.ApplyDefaultTypeMapping(instance);
+                var clockMapping = instance.TypeMapping;
+                if (clockMapping is null || clockMapping.Converter?.ConvertsNulls == true
+                    || !SupportsCarrier(typeof(TimeOnly), clockMapping))
                     return null;
 
                 return factory.Function(TicksMarker, [instance], nullable: true,

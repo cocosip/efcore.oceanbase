@@ -80,6 +80,16 @@ Package consumers include explicit SQL assertions for this member. Native interv
 and live results remain open. Package `10.0.0-time-span-ticks-20261116` passed package content verification
 and the standalone consumer on EF10.0.0/10.0.14 in both modes; this remains offline/package evidence.
 
+### QRY-07/MAP-05 `TimeOnly.Ticks` checkpoint (2026-11-16)
+
+`TimeOnly.Ticks` now uses the existing `TIME`/`INTERVAL DAY TO SECOND` carriers with midnight-based,
+non-negative 100ns semantics. The RED query failed in both modes before implementation. Focused Release
+evidence is 2 Unit and 4 functional cases, with sync/async projection, predicate, exact tick values and NULL
+materialization. The detailed record is in [the TimeOnly.Ticks plan](efcore-10-time-only-ticks-plan.md).
+Package consumers include explicit SQL assertions for this member. Native interval precision and live results
+remain open. Package `10.0.0-time-only-ticks-20261116` passed package content verification and the standalone
+consumer on EF10.0.0/10.0.14 in both modes; this remains offline/package evidence.
+
 下一模块：继续一个尚未完成的 Required 映射/查询边界；优先处理仍缺少完整同步/异步和负面覆盖的
 时间或数值 overload。不得把 `DEF-04` JSON-only 规范族提前提升为 Required。
 

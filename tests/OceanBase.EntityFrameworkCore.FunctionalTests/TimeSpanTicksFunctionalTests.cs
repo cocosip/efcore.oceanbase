@@ -40,6 +40,33 @@ public sealed class TimeSpanTicksFunctionalTests
         Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? "MICROSECOND" : "EXTRACT(SECOND FROM", sql);
     }
 
+    [Theory]
+    [InlineData(OceanBaseCompatibilityMode.MySql, false)]
+    [InlineData(OceanBaseCompatibilityMode.MySql, true)]
+    [InlineData(OceanBaseCompatibilityMode.Oracle, false)]
+    [InlineData(OceanBaseCompatibilityMode.Oracle, true)]
+    public async Task TimeOnly_Ticks_materialize_from_midnight(OceanBaseCompatibilityMode mode, bool async)
+    {
+        var expected = new TimeOnly(12, 34, 56).Add(TimeSpan.FromTicks(1234567)).Ticks;
+        using var table = new DataTable();
+        table.Columns.Add("Value", typeof(object));
+        table.Rows.Add(expected);
+        table.Rows.Add(DBNull.Value);
+
+        var capture = new Capture(table);
+        await using var context = Create(mode, capture);
+        var query = context.Rows
+            .Where(row => row.Clock.Ticks > TimeSpan.TicksPerHour)
+            .Select(row => (long?)row.Clock.Ticks);
+        var result = async ? await query.ToListAsync() : query.ToList();
+
+        Assert.Equal([expected, null], result);
+        var sql = Assert.Single(capture.Sql);
+        Assert.DoesNotContain("__oceanbase_internal", sql);
+        Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? "TIME_TO_SEC" : "EXTRACT(HOUR FROM", sql);
+        Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? "MICROSECOND" : "EXTRACT(SECOND FROM", sql);
+    }
+
     private static TestContext Create(OceanBaseCompatibilityMode mode, Capture capture)
         => new(new DbContextOptionsBuilder<TestContext>()
             .UseOceanBase("Server=offline;Database=timespan_ticks", mode)
@@ -55,6 +82,7 @@ public sealed class TimeSpanTicksFunctionalTests
     {
         public int Id { get; set; }
         public TimeSpan Duration { get; set; }
+        public TimeOnly Clock { get; set; }
     }
 
     private sealed class NoNetwork : DbConnectionInterceptor

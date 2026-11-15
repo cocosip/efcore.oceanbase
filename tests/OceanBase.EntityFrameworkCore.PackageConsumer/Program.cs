@@ -389,6 +389,14 @@ namespace PackageConsumer
                         StringComparison.Ordinal)
                     || ticksSql.Contains("__oceanbase_internal_", StringComparison.Ordinal))
                     throw new Exception("Packed provider did not translate TimeSpan.Ticks.");
+                var clockTicksSql = context.Set<Row>().Where(row => row.Clock.Ticks > TimeSpan.TicksPerHour)
+                    .Select(row => row.Clock.Ticks).ToQueryString();
+                if (!clockTicksSql.Contains(mode == OceanBaseCompatibilityMode.MySql ? "TIME_TO_SEC" : "EXTRACT(HOUR FROM",
+                        StringComparison.Ordinal)
+                    || !clockTicksSql.Contains(mode == OceanBaseCompatibilityMode.MySql ? "MICROSECOND" : "EXTRACT(SECOND FROM",
+                        StringComparison.Ordinal)
+                    || clockTicksSql.Contains("__oceanbase_internal_", StringComparison.Ordinal))
+                    throw new Exception("Packed provider did not translate TimeOnly.Ticks.");
 
                 var calendarSql = context.Set<Row>().Where(row => row.OccurredAt.DayOfWeek == DayOfWeek.Sunday
                     && row.Day.DayOfYear == 60).ToQueryString();

@@ -6,7 +6,7 @@ The ordered development and acceptance rules are in
 [efcore-10-development-acceptance-plan.md](efcore-10-development-acceptance-plan.md). This file keeps the
 historical handoff and module evidence; it does not authorize jumping between unfinished feature families.
 
-The latest local feature module is the 2026-11-16 `TimeSpan.Ticks` checkpoint recorded below. Earlier commit
+The latest local feature module is the 2026-11-16 `TimeOnly.Ticks` checkpoint recorded below. Earlier commit
 identifiers and test totals remain historical evidence for their original modules; they are not the current branch
 baseline. The current feature evidence is recorded in the latest checkpoint sections and module plan.
 
@@ -125,6 +125,20 @@ and NULL materialization. Package consumers include an explicit SQL assertion fo
 precision, sign behavior and live results remain open under `MAP-05`, `QRY-07` and `TST-02`. The detailed record
 is in [the TimeSpan.Ticks plan](efcore-10-time-span-ticks-plan.md). Package
 `10.0.0-time-span-ticks-20261116` passed content verification and the standalone consumer on EF10.0.0/10.0.14
+in both modes; this remains offline/package evidence and does not close the live gate.
+
+### QRY-07/MAP-05 `TimeOnly.Ticks` checkpoint (2026-11-16)
+
+The provider now translates `TimeOnly.Ticks` through the existing MySQL `TIME` and Oracle `INTERVAL DAY TO
+SECOND` carriers. The result is the non-negative number of 100ns ticks since midnight; the shared SQL marker
+does not apply a duration sign branch for TimeOnly. No Connector change was needed.
+
+The RED query failed in both modes before implementation. Focused Release evidence is 2 Unit and 4 functional
+sync/async cases, all passing; functional coverage includes projection, predicate, exact tick values and NULL
+materialization. Package consumers include an explicit SQL assertion for this member. Native interval precision
+and live results remain open under `MAP-05`, `QRY-07` and `TST-02`. The detailed record is in
+[the TimeOnly.Ticks plan](efcore-10-time-only-ticks-plan.md). Package
+`10.0.0-time-only-ticks-20261116` passed content verification and the standalone consumer on EF10.0.0/10.0.14
 in both modes; this remains offline/package evidence and does not close the live gate.
 
 ### HasData schema bootstrap and pause (2026-11-13)

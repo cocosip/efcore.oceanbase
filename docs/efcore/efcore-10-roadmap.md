@@ -2,7 +2,7 @@
 
 **Updated:** 2026-11-16
 **Branch:** `efcore/10.0`  
-**State:** Active local development; QRY-07/MAP-05 `TimeSpan.Ticks` is the latest local module.
+**State:** Active local development; QRY-07/MAP-05 `TimeOnly.Ticks` is the latest local module.
 **Acceptance authority:** [efcore-10-feature-checklist.md](efcore-10-feature-checklist.md)
 
 The `REL-01` support record now exists at [efcore-10-release-support.md](efcore-10-release-support.md),
@@ -109,6 +109,9 @@ The following required rows have complete local/package evidence for both modes:
   carriers. Both-mode projection/predicate/order and intercepted sync/async NULL/materialization coverage pass;
   native interval precision and sign behavior remain a live gate. See the
   [TimeSpan.Ticks plan](efcore-10-time-span-ticks-plan.md).
+- `TimeOnly.Ticks` now translates non-negative midnight-based 100ns values through the same carriers. Both-mode
+  projection/predicate and intercepted sync/async NULL/materialization coverage pass; native interval precision
+  remains a live gate. See the [TimeOnly.Ticks plan](efcore-10-time-only-ticks-plan.md).
 - `CON-02` now rechecks the compatibility mode after sync/async open callbacks and restores EF's connection lease
   accounting when the post-open check rejects a conflict. Native handshake detection and live cleanup remain open.
 
