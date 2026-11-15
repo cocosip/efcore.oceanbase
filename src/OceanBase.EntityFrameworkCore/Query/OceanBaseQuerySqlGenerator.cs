@@ -600,6 +600,42 @@ namespace OceanBase.EntityFrameworkCore.Query
                 return sqlFunctionExpression;
             }
 
+            if (sqlFunctionExpression.Name == OceanBaseTemporalMethodTranslator.DateOnlyAddYearsMarker)
+            {
+                if (sqlFunctionExpression is not { IsBuiltIn: true, Schema: null, Instance: null, Arguments.Count: 2,
+                        IsNullable: true, ArgumentsPropagateNullability: [false, false], Type: var resultType,
+                        TypeMapping: { } resultMapping }
+                    || resultType != typeof(DateOnly)
+                    || !IsDateOnlyMapping(resultMapping)
+                    || sqlFunctionExpression.Arguments[0] is not { Type: var inputType, TypeMapping: { } inputMapping }
+                    || inputType != typeof(DateOnly)
+                    || !IsDateOnlyMapping(inputMapping)
+                    || sqlFunctionExpression.Arguments[1] is not { Type: var yearsType, TypeMapping: { } yearsMapping }
+                    || yearsType != typeof(int)
+                    || yearsMapping.Converter?.ConvertsNulls == true
+                    || (yearsMapping.Converter?.ProviderClrType ?? yearsMapping.ClrType) != typeof(int))
+                    throw new InvalidOperationException("Invalid internal DateOnly.AddYears expression.");
+
+                if (_mode == OceanBaseCompatibilityMode.MySql)
+                {
+                    Sql.Append("DATE_ADD(");
+                    Visit(sqlFunctionExpression.Arguments[0]);
+                    Sql.Append(", INTERVAL ");
+                    Visit(sqlFunctionExpression.Arguments[1]);
+                    Sql.Append(" YEAR)");
+                }
+                else
+                {
+                    Sql.Append("ADD_MONTHS(");
+                    Visit(sqlFunctionExpression.Arguments[0]);
+                    Sql.Append(", ");
+                    Visit(sqlFunctionExpression.Arguments[1]);
+                    Sql.Append(" * 12)");
+                }
+
+                return sqlFunctionExpression;
+            }
+
             if (sqlFunctionExpression.Name == OceanBaseTemporalMemberTranslator.DayNumberMarker)
             {
                 if (sqlFunctionExpression is not { IsBuiltIn: true, Schema: null, Instance: null, Arguments.Count: 1,

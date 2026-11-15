@@ -13,13 +13,16 @@ namespace OceanBase.EntityFrameworkCore.Query
     {
         internal const string DateOnlyAddDaysMarker = "__oceanbase_internal_dateonly_add_days";
         internal const string DateOnlyAddMonthsMarker = "__oceanbase_internal_dateonly_add_months";
+        internal const string DateOnlyAddYearsMarker = "__oceanbase_internal_dateonly_add_years";
         private static readonly MethodInfo DateOnlyAddDays = typeof(DateOnly).GetMethod(nameof(DateOnly.AddDays), [typeof(int)])!;
         private static readonly MethodInfo DateOnlyAddMonths = typeof(DateOnly).GetMethod(nameof(DateOnly.AddMonths), [typeof(int)])!;
+        private static readonly MethodInfo DateOnlyAddYears = typeof(DateOnly).GetMethod(nameof(DateOnly.AddYears), [typeof(int)])!;
 
         public SqlExpression? Translate(SqlExpression? instance, MethodInfo method, IReadOnlyList<SqlExpression> arguments,
             IDiagnosticsLogger<DbLoggerCategory.Query> logger)
         {
-            if (instance is null || (method != DateOnlyAddDays && method != DateOnlyAddMonths) || arguments.Count != 1)
+            if (instance is null || (method != DateOnlyAddDays && method != DateOnlyAddMonths && method != DateOnlyAddYears)
+                || arguments.Count != 1)
                 return null;
 
             instance = sqlExpressionFactory.ApplyDefaultTypeMapping(instance);
@@ -32,7 +35,10 @@ namespace OceanBase.EntityFrameworkCore.Query
                 || (daysMapping.Converter?.ProviderClrType ?? daysMapping.ClrType) != typeof(int))
                 return null;
 
-            return sqlExpressionFactory.Function(method == DateOnlyAddDays ? DateOnlyAddDaysMarker : DateOnlyAddMonthsMarker,
+            var marker = method == DateOnlyAddDays
+                ? DateOnlyAddDaysMarker
+                : method == DateOnlyAddMonths ? DateOnlyAddMonthsMarker : DateOnlyAddYearsMarker;
+            return sqlExpressionFactory.Function(marker,
                 [instance, days], nullable: true,
                 argumentsPropagateNullability: [false, false], typeof(DateOnly), dateMapping);
         }
