@@ -13,7 +13,7 @@
 - 模式：MySQL、Oracle
 - Required 行：53 行；两种模式均为 9 行 `Done`、44 行 `In progress`
 - 已完成 Required 行：`CFG-01..03`、`CON-01`、`SQL-02`、`PKG-01..04`
-- 当前提交：`84f11d0`（DateTimeOffset 成员模块）
+- 当前提交：`9b28c2d`（DateTimeOffset 成员模块）
 
 最近一次完整本地证据：
 
