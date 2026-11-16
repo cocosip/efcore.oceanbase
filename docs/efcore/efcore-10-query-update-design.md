@@ -1820,6 +1820,27 @@ rows, output parameters and readers establish provider behavior only; they do no
 classification, actual network cancellation, matched-row behavior, rollback or transaction attachment.
 Wider generation/readback shapes, unsupported graphs, transaction and diagnostic/logging gates remain open.
 
+### Relationship-change write profile (MOD-02, UPD-05)
+
+RelationshipWriteTests extends graph creation/deletion with optional severing through a shadow FK,
+ClientSetNull principal deletion, required reparenting, orphan timing and required one-to-one replacement.
+Both modes and sync/async pin physical FK/key/token columns, inputs in SQL order, client dependency
+ordering, acceptance, later-command conflict/cancellation recovery and caller savepoint ownership.
+ClientSetNull writes tracked dependent NULLs before principal deletion; unique-FK replacement deletes
+the old dependent before inserting the new one, inside an automatic transaction.
+
+EF owns cascade/orphan state transitions. Direct reparenting and delayed orphan handling modify only
+the FK; removing from an old collection with immediate orphan deletion and then adding to a new
+collection revives the deleted dependent as Modified, including its scalar fields. The existing original
+concurrency predicate still applies. Never orphan timing rejects before opening; explicit CascadeChanges
+allows the dependent DELETE. SaveChanges(false) retains replacement states until explicit acceptance.
+
+This profile reuses EF/provider services without a new scheduler or production fix. Transaction doubles
+prove client command attachment/recovery only. The packed public smoke disables automatic transactions
+and checks replacement/severing DML and acceptance. Native constraints, referential actions, rollback,
+persistence, untracked dependents and broader official runtime specifications remain open. See the
+[module plan](efcore-10-relationship-writes-plan.md) for reviewed evidence.
+
 ### Command execution boundary local contract
 
 Batch5b's CommandExecutionBoundaryTests uses the real EF query pipeline with network-suppressing connection

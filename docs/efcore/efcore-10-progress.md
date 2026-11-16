@@ -6,7 +6,7 @@ The ordered development and acceptance rules are in
 [efcore-10-development-acceptance-plan.md](efcore-10-development-acceptance-plan.md). This file keeps the
 historical handoff and module evidence; it does not authorize jumping between unfinished feature families.
 
-The latest local module is the 2026-11-16 TPH runtime checkpoint recorded below. Earlier commit
+The latest local module is the 2026-11-16 relationship-write checkpoint recorded below. Earlier commit
 identifiers and test totals remain historical evidence for their original modules; they are not the current branch
 baseline. The current feature evidence is recorded in the latest checkpoint sections and module plan.
 
@@ -19,6 +19,19 @@ TPC, many-to-many and Connector 0.3.0 reverse engineering.
 Test each module and review completed major modules before committing. EF8/EF9 remain postponed.
 The provider is not release-ready. The [feature checklist](efcore-10-feature-checklist.md) remains the
 acceptance authority; this document records the handoff rather than defining a different completion target.
+
+### MOD-02/UPD-05 relationship-write checkpoint (2026-11-16)
+
+On base `12b44e7`, 36 both-mode sync/async cases verify optional shadow-FK severing, ClientSetNull
+principal deletion, required reparenting, immediate/delayed/explicit orphan handling and unique-FK
+one-to-one replacement. Exact DML/bindings, automatic transaction ordering, SaveChanges(false), later
+conflict/cancellation recovery and caller savepoint ownership have independent assertions.
+Connected regressions pass 460 cases. Existing EF/provider services handle the profile; no production
+fix is claimed. Initial four failures were fixture expectations about EF's immediate orphan revival,
+not production RED. Independent review's pre-open assertion gap is corrected. Full source/patch/package
+gates and unchanged-package provenance are recorded in
+[the module plan](efcore-10-relationship-writes-plan.md). Native referential actions/constraints,
+persistence/rollback and broader official runtime acceptance remain open; no Required row promotion.
 
 ### MOD-02/DEF-07 TPH runtime checkpoint (2026-11-16)
 

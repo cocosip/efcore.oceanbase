@@ -13,20 +13,21 @@
 - 模式：MySQL、Oracle
 - Required 行：53 行；两种模式均为 9 行 `Done`、44 行 `In progress`
 - 已完成 Required 行：`CFG-01..03`、`CON-01`、`SQL-02`、`PKG-01..04`
-- 当前本地模块：TPH runtime verification（base `8b7fa79`，提交见 `git log`），未推送
+- 当前本地模块：relationship-change writes（base `12b44e7`，提交见 `git log`），未推送
 
 最近一次完整本地证据：
 
 | 检查 | 结果 | 证据边界 |
 | --- | --- | --- |
 | Release Unit | 2421 通过 | Provider 单元和本地 doubles |
-| Release Functional | 2085 通过 | 拦截式同步/异步命令管线 |
+| Release Functional | 2121 通过 | 拦截式同步/异步命令管线 |
 | Release Specification | 1538 通过，16 个明确跳过 | 跳过已映射到 `MAP-01/03/05/06`；本轮无新增跳过 |
-| Debug Unit / Functional | 2421 / 2085 通过 | 本地源代码；Specification 1538 + 16 mapped skips，ConsumerTests 2；合计 6046 通过 |
-| EF10.0.14 isolated Release | Unit 2421、Functional 2085、Specification 1538、ConsumerTests 2 通过 | 16 mapped skips；Connector 0.3.0；最终走查断言后重跑 Functional 2085/2085 |
+| Debug Unit / Functional | 2421 / 2121 通过 | 本地源代码；Specification 1538 + 16 mapped skips，ConsumerTests 2；合计 6082 通过 |
+| EF10.0.14 isolated Release | Unit 2421、Functional 2121、Specification 1538、ConsumerTests 2 通过 | 16 mapped skips；Connector 0.3.0；最终走查断言后，三个 Functional 组合均重跑 2121/2121 |
+| Relationship-change writes | 聚焦 36/36、关联 460/460 | 可选 shadow FK 断开、ClientSetNull、必需关系重挂接/孤儿时机、一对一替换顺序、接受和后续失败/取消/savepoint 恢复；仅测试和文档变更；走查的开连接前拒绝断言已补强；[模块记录](efcore-10-relationship-writes-plan.md) |
 | TPH runtime verification | 聚焦 78/78、关联 362/362；最终断言纳入全量门禁 | 现有单表继承查询/物化/CRUD/图保存/恢复链路；仅测试和文档变更；SQL/绑定断言经独立走查补强；[模块记录](efcore-10-tph-runtime-plan.md) |
 | SaveChanges concurrency interception | 聚焦 52/52、关联 186/186；初始 RED 28 失败/8 通过 | 标准诊断、同步/异步 hook 和显式抑制；保留异常/entries/token，跳过旧输出并继续后续 batch；独立走查无待修问题；[模块记录](efcore-10-save-concurrency-interception-plan.md) |
-| Current package/runtime | 复用 `10.0.0-save-concurrency-interception-20261116` 通过 | 新 TPH smoke、包内容和两补丁/两模式 consumer 通过；graph 和 archive/consumer DLL hash 匹配。当前源代码重编译因提交版本戳不同而 hash 不同；复用来源见 TPH 记录。无新 CLI/bundle/hosted/Linux/native evidence |
+| Current package/runtime | 复用 `10.0.0-save-concurrency-interception-20261116` 通过 | 新关系替换/断开 smoke、包内容和两补丁/两模式 consumer 通过；graph 和 archive/consumer DLL hash 匹配。当前源代码重编译因提交版本戳不同而 hash 不同；复用来源见 relationship-write 记录。无新 CLI/bundle/hosted/Linux/native evidence |
 | Concurrency-protection specifications | 56/56；临时关闭检查时 20/20 敏感性用例失败，恢复后通过 | 真实 Provider 服务，开连接前拒绝；两处本地适配已记录；走查修正显式 true 掩盖默认值问题；仅测试变更，无新包或 native evidence |
 | Write SQL specifications/package | Specification 30/30、关联 runtime 134/134；`10.0.0-update-sql-specification-20261116` 通过 | 官方写入 SQL 家族，两模式三处明确适配；sequence 入口一致拒绝；独立走查、包内容和两补丁/两模式 consumer、graph/hash 校验通过 |
 | DateOnly calendar correction/package | Unit 7、Functional 8 通过；`10.0.0-date-only-calendar-fix-20261116` 通过 | 修复 Oracle 月末规则和年数优先级；独立走查无阻塞；包内容、两补丁/两模式 consumer、graph/hash 校验通过；native acceptance 未完成 |
@@ -54,7 +55,7 @@
 | Connector 连接边界 | `CON-01` 完成；`CON-02..05` 有清理、所有权、取消和重用回归 | 真实 wire、池化、超时和物理连接行为 |
 | 标量映射 | 整数、Boolean、Decimal、浮点、文本、Binary/Guid、五类 temporal 已有大量本地覆盖 | 完整范围、BYTE/字符容量、LOB、时区/精度、真实 round-trip |
 | 查询翻译 | 字符串、集合根、聚合、分页、Include、split、布尔、数学、时间成员已有多个切片 | 完整 overload、转换器组合、原生排序/UNION/结果语义 |
-| 写入和事务 | 图写入、生成值、并发、Savepoint、取消、retry 有本地 doubles | 真实提交/回滚/生成值/并发和 failover |
+| 写入和事务 | 图写入、关系断开/重挂接/孤儿/一对一替换、生成值、并发、Savepoint、取消、retry 有本地 doubles | 真实提交/回滚/生成值/并发、约束、引用动作和 failover |
 | Schema 和继承 | 迁移核心/tooling、TPH/TPT/TPC、拆分、HasData 有本地及 packed 证据 | 真实 DDL、权限、锁、删除、继承运行结果和部分失败恢复 |
 | Lazy loading/compiled model/split query | 普通 EF/Proxies/ILazyLoader/compiled model/split query 已覆盖 | 原生 session/isolation、组合场景、AOT、上游 runtime fixtures |
 | Specification | 非关系模型 330、ModelBuilding101 248、服务注册 6、write SQL 30、并发保护 profile/controls 56 通过，16 个排除已解释 | 更广 store-backed 关系查询/写入/事务/runtime 家族；写入 SQL 三处、并发保护两处适配见 exclusions |
@@ -103,8 +104,8 @@ retry 禁止条件、错误分类、拥有边界、EnsureCreated/EnsureDeleted/M
 
 ## 固定开发顺序
 
-本轮补齐 TPH 单表继承的本地查询/物化/写入/恢复证据，参见
-[module plan](efcore-10-tph-runtime-plan.md)。现有 Provider/EF 实现通过完整 profile，无生产代码变更。
+本轮补齐关系变更的本地写入/顺序/接受/恢复证据，参见
+[module plan](efcore-10-relationship-writes-plan.md)。现有 Provider/EF 实现通过完整 profile，无生产代码变更。
 剩余 store-backed runtime 家族仍需正确的存储夹具；后续按完整模块推进 Required 查询/写入/runtime 缺口，
 避免重复已接入家族和零散新增 temporal API。真实环境和发布门槛保持开放。
 

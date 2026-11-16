@@ -14,13 +14,23 @@ public APIs and per-mode mappings/SQL. Separate local implementation evidence fr
 The compact execution board is [efcore-10-roadmap.md](efcore-10-roadmap.md); this file remains the detailed
 batch ledger and acceptance notes.
 
-**Updated:** 2026-11-16, TPH runtime verification following SaveChanges concurrency interception, concurrency-protection specifications, write SQL specifications, DateOnly calendar correction, DateTime calendar addition, DateTimeOffset.UtcTicks, CFG-04/TST-01 service-registration lifetime, DateOnly.AddYears, DateOnly.AddMonths,
+**Updated:** 2026-11-16, relationship writes following TPH runtime verification, SaveChanges concurrency interception, concurrency-protection specifications, write SQL specifications, DateOnly calendar correction, DateTime calendar addition, DateTimeOffset.UtcTicks, CFG-04/TST-01 service-registration lifetime, DateOnly.AddYears, DateOnly.AddMonths,
 DateOnly.AddDays, DateTimeOffset.UtcNow, DateTimeOffset.UtcDateTime, DateTimeOffset members, the server clock,
 DateTime.Ticks, TimeOnly.Ticks, TimeSpan.Ticks, DateOnly.DayNumber, DateTime.TimeOfDay and TST-01 model-building 101
 checkpoints.
 Keep one complete module active and review it before committing. EF8/EF9 remains postponed; live execution is opt-in and
 currently blocked before authentication by the supplied endpoint/transport behavior.
 The full goal remains incomplete.
+
+### Relationship-write module (2026-11-16)
+
+Thirty-six both-mode local cases verify relationship severing/reparenting, orphan timing, ClientSetNull
+and unique-FK replacement through existing EF/provider services. Four initial fixture failures about
+immediate orphan revival were corrected without production changes. Connected regressions pass 460;
+independent review strengthened the pre-open rejection assertion. Full gates, package-only replacement/
+severing smoke and unchanged reviewed package provenance are in
+[the module plan](efcore-10-relationship-writes-plan.md). Native constraints/cascade/persistence/rollback,
+untracked dependents and official store-backed relationship specifications remain open.
 
 ### TPH runtime module (2026-11-16)
 

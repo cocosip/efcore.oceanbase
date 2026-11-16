@@ -2,7 +2,7 @@
 
 **Updated:** 2026-11-16
 **Branch:** `efcore/10.0`  
-**State:** Active local development; TPH runtime verification is the latest local module, following
+**State:** Active local development; relationship-change writes is the latest local module, following TPH,
 SaveChanges concurrency interception, concurrency-protection and write SQL specifications,
 DateOnly/DateTime calendar arithmetic, `DateTimeOffset.UtcTicks`, scalar extrema and service lifetimes.
 **Acceptance authority:** [efcore-10-feature-checklist.md](efcore-10-feature-checklist.md)
@@ -13,14 +13,15 @@ pre-authentication failure are unresolved.
 
 **Execution control:** Follow [efcore-10-development-acceptance-plan.md](efcore-10-development-acceptance-plan.md)
 for the ordered waves, evidence levels and handoff format. The latest SpecificationTests result is 1,538
-passed and 16 explicitly mapped skips (1,554 total); Release/Debug Unit/Functional are 2,421/2,085 and
-ConsumerTests 2 (6,046 passed). Isolated EF10.0.14 Release has the same totals, with final review assertions
-rechecked by a complete 2,085-case Functional run. TPH adds 78 custom local cases and 362 connected
-regression passes. Independent review's SQL/binding evidence gaps are fixed and re-reviewed. No production
-change was needed. The unchanged `10.0.0-save-concurrency-interception-20261116` package passes content
-and fresh both-patch/both-mode runtime consumers, including TPH. Archive/consumer hashes match the
-recorded prior build; the current rebuilt source DLL has a different revision stamp and hash. See
-[the TPH module plan](efcore-10-tph-runtime-plan.md) for reuse provenance and exact gates. Broader official
+passed and 16 explicitly mapped skips (1,554 total); Release/Debug Unit/Functional are 2,421/2,121 and
+ConsumerTests 2 (6,082 passed). Isolated EF10.0.14 Release has the same totals; final review assertions
+pass in complete 2,121-case Functional reruns on all three combinations. Relationship mutations add 36
+custom local cases and 460 connected regression passes. Independent review's pre-open assertion gap is
+fixed. Existing EF/provider services handle the profile without a production change. The unchanged
+`10.0.0-save-concurrency-interception-20261116` package passes content and fresh both-patch/both-mode
+runtime consumers, including replacement/severing/acceptance. Archive/consumer hashes match the recorded
+prior build; the current rebuilt source DLL has a different revision stamp and hash. See
+[the relationship-write module plan](efcore-10-relationship-writes-plan.md) for reuse provenance and exact gates. Broader official
 store-backed/runtime and native acceptance remain open. No new CLI/bundle/live claim or row promotion.
 
 This is the execution board for the first OceanBase EF Core 10 provider. It separates provider work from
@@ -208,7 +209,7 @@ features stay visible and must not be advertised as supported.
 
 ## Execution order from this checkpoint
 
-Development continues after the TPH runtime verification checkpoint. Keep one feature module active
+Development continues after the relationship-change write checkpoint. Keep one feature module active
 at a time; do not repeat verified local profiles without a reproduced defect or a specific evidence gap.
 
 1. **Completed locally:** migrations core, tooling, TPH/TPT/TPC inheritance, entity/table splitting and Connector
@@ -217,6 +218,8 @@ at a time; do not repeat verified local profiles without a reproduced defect or 
 2. CFG-04 service-graph wiring and the DIA-01/02 diagnostics boundaries are locally characterized without a redundant
    provider implementation. Continue with the exposed graph materialization, tracked graph writes and
    transaction/connection recovery gaps together.
+   Relationship mutation now has a complete custom local profile for severing/reparenting/orphan timing,
+   unique-FK replacement and failure/acceptance/savepoint recovery; do not repeat that verified profile.
    Official runtime fixtures require an initialized store; intercepted canned results cannot replace them.
    Record positive/null/empty/failure boundaries by feature ID; avoid a new sequence of one-overload commits.
 3. Resolve the pre-auth live transport blocker and run the two-mode native matrix.

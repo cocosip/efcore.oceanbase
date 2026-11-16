@@ -19,10 +19,21 @@
 ## 当前检查点
 
 创建本文档时记录的历史提交和测试总数属于此前的模块检查点；当前最新模块、测试结果和包版本分别记录在下面的
-TPH runtime checkpoint 中。不要使用旧 handoff 行推断当前 HEAD 或当前测试总数。
+relationship-write checkpoint 中。不要使用旧 handoff 行推断当前 HEAD 或当前测试总数。
 - 当前没有真实 OceanBase SQL/DDL 验收。已有 live 探针在握手阶段报 `Connection closed while reading the packet`，没有执行 SQL 或 DDL。
 
 因此，CFG-04 的服务注册生命周期已有官方本地规格证据，但整体 CFG-04 仍为 In progress；连接波次已转入剩余映射、查询、更新和事务边界。不得重复已经完成的连接 characterization。
+
+### 2026-11-16：MOD-02/UPD-05 relationship writes
+
+Relationship mutation now has 36 both-mode sync/async local cases: optional shadow-FK severing,
+ClientSetNull principal deletion, required reparenting/orphan timing and required one-to-one replacement.
+SQL/bindings/order/acceptance and later failure/cancellation/savepoint recovery are independently pinned.
+The existing EF/provider implementation passes; initial failures corrected fixture expectations about
+immediate orphan revival, without a production fix. Connected regressions: 460. Independent review's
+pre-open assertion gap is fixed; full source/patch/package evidence and reused-package provenance are
+in [the module record](efcore-10-relationship-writes-plan.md). Native relationship results and broader
+official runtime/release gates remain open; no row promotion.
 
 ### 2026-11-16：MOD-02/DEF-07 TPH runtime verification
 
