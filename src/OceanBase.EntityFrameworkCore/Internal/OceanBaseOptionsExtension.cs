@@ -166,6 +166,7 @@ namespace OceanBase.EntityFrameworkCore.Internal
                 .TryAdd<ICompiledQueryCacheKeyGenerator, OceanBaseCompiledQueryCacheKeyGenerator>()
                 .TryAdd<IQueryCompilationContextFactory, OceanBaseQueryCompilationContextFactory>()
                 .TryAdd<IQueryableMethodTranslatingExpressionVisitorFactory, OceanBaseQueryableMethodTranslatingExpressionVisitorFactory>()
+                .TryAdd<IQueryTranslationPreprocessorFactory, OceanBaseQueryTranslationPreprocessorFactory>()
                 .TryAdd<IRelationalSqlTranslatingExpressionVisitorFactory, OceanBaseSqlTranslatingExpressionVisitorFactory>()
                 .TryAdd<IQueryTranslationPostprocessorFactory, OceanBaseQueryTranslationPostprocessorFactory>()
                 .TryAdd<IRelationalConnection, OceanBaseRelationalConnection>()

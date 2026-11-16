@@ -24,6 +24,16 @@ DefaultIfEmpty checkpoint 中。不要使用旧 handoff 行推断当前 HEAD 或
 
 因此，CFG-04 的服务注册生命周期已有官方本地规格证据，但整体 CFG-04 仍为 In progress；连接波次已转入剩余映射、查询、更新和事务边界。不得重复已经完成的连接 characterization。
 
+### 2026-11-16：QRY-01/03/05 DefaultIfEmpty references
+
+On base `b0bdae0`, close the tested reference/boxing/present-NULL gaps of the preceding scalar
+module. Only EF translation/shaping, no Connector change. Thirty SQL/72 runtime cases and full
+Debug/Release/isolated EF10.0.14 pass (6376 each, 16 old skips); ten excluded offline fixture cases
+pass per patch. Source/package/public consumer graphs and hashes match on both patches/modes.
+Independent review's computed-nullable finding is fixed; explicit post-default construction and
+mixed entity tracking controls pass. [Module record](efcore-10-default-if-empty-reference-plan.md)
+records commands, provenance and limits. No native result or Required promotion; the goal stays open.
+
 ### 2026-11-16：QRY-01/03/05 DefaultIfEmpty scalars
 
 On base `1df3779`, the current module fixes nullable default compensation, per-parent scalar default

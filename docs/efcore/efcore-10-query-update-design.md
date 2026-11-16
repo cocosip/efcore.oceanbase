@@ -21,13 +21,22 @@ the lateral source's one-row dummy LEFT JOIN supplies a row before scalar compen
 a DTO of a mapped CLR type is still a projection; ordinary entity shapers keep their existing path.
 Use existing public Connector command/parameter/reader APIs; this is exclusively EF Provider work.
 
-Anonymous/DTO member policy remains patch-specific EF behavior: 10.0.0 compensates required value
-members; 10.0.14 omits that compensation for a reference shaper, and reading a supplied NULL required
-member throws. This module does not promise whole-reference default(NULL) shaping, arbitrary boxing,
-or nullable-to-required `.Value` exception preservation. Those shapes may inherit EF behavior without
-an early rejection; their semantics remain unresolved, rather than a supported profile. Explicit-default
-overloads/local predicates reject before opening. Native default-row/coercion/version execution remains
-open. See [contract, source evidence and tests](efcore-10-default-if-empty-plan.md).
+The [reference continuation](efcore-10-default-if-empty-reference-plan.md) projects a constant presence
+marker inside the original source. Missing anonymous/DTO/constructed-object and boxed scalar results
+return null; present all-NULL members still construct an object. Required nullable scalar reads,
+including nullable arithmetic, default only for missing rows and still fail on present NULL. Do not
+use a nullable value as a presence marker. Preserve converter encoding and explicit user COALESCE.
+
+Before navigation expansion, box constructed reference projections for DefaultIfEmpty and cast back:
+EF's navigation snapshots otherwise reconstruct mixed entity objects after defaulting. Fold only the
+exact original reference cast into the conditional shaper. Predicates and member access distribute
+over default-reference conditionals; repair stale client projections only when SELECT returns entirely
+member-based bindings. Constructor/index projections retain explicit nullable metadata. Real entity
+shapers/identity remain EF-owned, and explicit post-default user object construction is retained.
+
+Explicit-default overloads/local predicates reject before opening. Arbitrary CLR client projections
+are outside this tested profile. Native default-row/coercion/version execution remains open. See the
+[scalar module](efcore-10-default-if-empty-plan.md) for preceding historical evidence.
 
 ## Correlated lateral query translation (QRY-03/05/08/11)
 

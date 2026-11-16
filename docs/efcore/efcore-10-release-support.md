@@ -64,6 +64,12 @@ to that read-only profile and brings independent offline checks to eight per EF 
 expectations have not executed: no repeat connection attempt or new server/version/result evidence.
 Whole-reference/boxing/default exception semantics remain outside the tested scalar profile.
 
+The [reference continuation](efcore-10-default-if-empty-reference-plan.md) adds reference/boxed/required
+nullable assertions and brings offline checks to ten per EF patch. Its local shaper profile closes
+those preceding scalar-profile gaps; native assertions are still unexecuted. No repeat connection
+attempt or new server/version/result evidence is claimed. Driver capabilities and public API boundary
+remain unchanged.
+
 ## Reproduction
 
 Restore from an available package source first. Run offline fixture checks without the live opt-in:

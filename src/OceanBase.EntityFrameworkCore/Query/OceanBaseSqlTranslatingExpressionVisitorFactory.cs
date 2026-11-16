@@ -155,6 +155,14 @@ namespace OceanBase.EntityFrameworkCore.Query
 
             protected override Expression VisitMember(MemberExpression expression)
             {
+                if (OceanBaseDefaultIfEmptyProjection.TryDefaultReference(expression.Expression, out var presence))
+                {
+                    var member = ReplacingExpressionVisitor.Replace(expression.Expression!, presence.IfFalse, expression);
+                    var nullableType = expression.Type.IsValueType && Nullable.GetUnderlyingType(expression.Type) is null
+                        ? typeof(Nullable<>).MakeGenericType(expression.Type) : expression.Type;
+                    var lifted = member.Type == nullableType ? member : Expression.Convert(member, nullableType);
+                    return Visit(Expression.Condition(presence.Test, Expression.Constant(null, nullableType), lifted))!;
+                }
                 if (expression.Member == typeof(bool?).GetProperty(nameof(Nullable<bool>.HasValue)))
                 {
                     if (Visit(expression.Expression) is not SqlExpression operand)
@@ -191,6 +199,14 @@ namespace OceanBase.EntityFrameworkCore.Query
 
             protected override Expression VisitBinary(BinaryExpression expression)
             {
+                if (expression.NodeType is ExpressionType.Equal or ExpressionType.NotEqual)
+                {
+                    var candidate = expression.Right is ConstantExpression { Value: null } ? expression.Left
+                        : expression.Left is ConstantExpression { Value: null } ? expression.Right : null;
+                    if (OceanBaseDefaultIfEmptyProjection.TryDefaultReference(candidate, out var presence)
+                        && presence.IfFalse is NewExpression or MemberInitExpression)
+                        return Visit(expression.NodeType == ExpressionType.Equal ? presence.Test : Expression.Not(presence.Test))!;
+                }
                 if (expression.Method is null && Unwrap(expression.Left.Type) == typeof(bool)
                     && Unwrap(expression.Right.Type) == typeof(bool)
                     && expression.NodeType is ExpressionType.Equal or ExpressionType.NotEqual or ExpressionType.And

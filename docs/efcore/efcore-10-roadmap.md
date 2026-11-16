@@ -2,7 +2,7 @@
 
 **Updated:** 2026-11-16
 **Branch:** `efcore/10.0`  
-**State:** Active local development; DefaultIfEmpty scalar semantics is the latest local module, following correlated lateral queries, the read-only EF fixture, raw queries, set operations, relationship writes, TPH,
+**State:** Active local development; DefaultIfEmpty reference/presence semantics is the latest local module, following scalar defaults, correlated lateral queries, the read-only EF fixture, raw queries, set operations, relationship writes, TPH,
 SaveChanges concurrency interception, concurrency-protection and write SQL specifications,
 DateOnly/DateTime calendar arithmetic, `DateTimeOffset.UtcTicks`, scalar extrema and service lifetimes.
 **Acceptance authority:** [efcore-10-feature-checklist.md](efcore-10-feature-checklist.md)
@@ -12,21 +12,20 @@ but remains `In progress` while the supplied endpoint's direct/proxy routing, tr
 pre-authentication failure are unresolved.
 
 The [read-only query fixture](efcore-10-read-only-live-query-plan.md) supplies native sync/async EF
-assertions without test objects or writes. Its latest scalar-default extension brings offline checks to eight
+assertions without test objects or writes. Its latest reference-default extension brings offline checks to ten
 per EF patch. Prior native attempts in both modes fail at opening (OceanBaseException/code 0/zero EF
 readers); SQL/authentication/server version remain unestablished. No new native result is claimed.
 
 **Execution control:** Follow [efcore-10-development-acceptance-plan.md](efcore-10-development-acceptance-plan.md)
 for the ordered waves, evidence levels and handoff format. The latest full Debug/Release/isolated
-EF10.0.14 gates each pass Unit 2503, Functional 2295, Specification 1538, ConsumerTests 2 (6338 total),
-with 16 existing mapped skips. The current module adds 24 unit/40 runtime cases for nullable/scalar
-defaults, computed-source placement, converters, tracking and recovery. Independent review's two
-material findings have RED regressions and fixes. This is EF Provider translation/shaping using
+EF10.0.14 gates each pass Unit 2509, Functional 2327, Specification 1538, ConsumerTests 2 (6376 total),
+with 16 existing mapped skips. The current default profile has 30 SQL/72 runtime cases for whole
+reference defaults, boxing, required nullable expressions, converter defaults, tracking and recovery.
+Independent review's computed-nullable finding is fixed. This is EF Provider translation/shaping using
 existing Connector 0.3.0 public command/reader APIs; no driver feature is added. Package provenance,
-commands and review are in [the module record](efcore-10-default-if-empty-plan.md). Anonymous/DTO
-policy remains patch-specific, and whole-reference/boxing/default exceptions, native results and
-broader store-backed/runtime acceptance remain open. No new CLI/bundle/hosted/Linux/native claim or
-Required row promotion.
+commands and review are in [the module record](efcore-10-default-if-empty-reference-plan.md).
+Arbitrary CLR projections, native results and broader store-backed/runtime acceptance remain open.
+No new CLI/bundle/hosted/Linux/native claim or Required row promotion.
 
 This is the execution board for the first OceanBase EF Core 10 provider. It separates provider work from
 evidence work so an intercepted test cannot be mistaken for native OceanBase acceptance.

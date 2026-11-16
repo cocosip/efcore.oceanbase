@@ -38,6 +38,16 @@ namespace OceanBase.EntityFrameworkCore.LiveTests
 
         internal sealed record Pair(int Parent, int? Child);
 
+        internal sealed class DefaultReference
+        {
+            public int Id { get; set; }
+            public int? Value { get; set; }
+        }
+
+        internal static IQueryable<DefaultReference?> ReferenceDefaults(IQueryable<Row> rows, bool empty)
+            => (empty ? rows.Where(r => r.Id < 0) : rows.Where(r => r.Id == 3))
+                .Select(r => new DefaultReference { Id = r.Id, Value = r.Value }).DefaultIfEmpty();
+
         internal static IQueryable<Pair> DefaultPairs(IQueryable<Row> rows, bool nullable)
             => nullable
                 ? rows.SelectMany(parent => rows.Where(child => child.Id > parent.Id).OrderBy(child => child.Id).Take(1)
@@ -119,6 +129,14 @@ namespace OceanBase.EntityFrameworkCore.LiveTests
             Assert.Equal(new[] { 0 }, await List(rows.Where(r => r.Id < 0).Select(r => r.Id).DefaultIfEmpty(), async, token));
             Assert.Equal(new int?[] { null }, await List(rows.Where(r => r.Id < 0).Select(r => r.Value).DefaultIfEmpty(), async, token));
             Assert.Equal(new int?[] { null }, await List(rows.Where(r => r.Id == 3).Select(r => r.Value).DefaultIfEmpty(), async, token));
+            Assert.Null(Assert.Single(await List(ReferenceDefaults(rows, true), async, token)));
+            var present = Assert.Single(await List(ReferenceDefaults(rows, false), async, token));
+            Assert.NotNull(present);
+            Assert.Equal(3, present.Id);
+            Assert.Null(present.Value);
+            Assert.Null(Assert.Single(await List(rows.Where(r => r.Id < 0).Select(r => (object)r.Id).DefaultIfEmpty(), async, token)));
+            Assert.Equal(new[] { 0 }, await List(rows.Where(r => r.Id < 0).Select(r => r.Value!.Value).DefaultIfEmpty(), async, token));
+            await Assert.ThrowsAsync<InvalidOperationException>(() => List(rows.Where(r => r.Id == 3).Select(r => r.Value!.Value).DefaultIfEmpty(), async, token));
         }
 
         private static Task<List<T>> List<T>(IQueryable<T> query, bool async, CancellationToken token)

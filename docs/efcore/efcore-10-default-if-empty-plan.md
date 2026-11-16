@@ -9,6 +9,11 @@ Change Provider production code only for a reproduced defect, with a RED regress
 **Stack:** net10.0, EF `[10.0.0,11.0.0)`, OceanBaseConnector 0.3.0.
 **Status:** Local scalar profile implemented/tested/reviewed; native and broader reference semantics remain open.
 
+This is the historical scalar checkpoint. The later
+[reference continuation](efcore-10-default-if-empty-reference-plan.md) closes its tested reference,
+boxing and nullable-required projection gaps; the patch-specific expectations below describe this
+earlier revision rather than the current implementation.
+
 ## Reproduced defects and implementation
 
 EF10's SQL expressions erase CLR Nullable<T>. SelectExpression.MakeProjectionNullable therefore adds

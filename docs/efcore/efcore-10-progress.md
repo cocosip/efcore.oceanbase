@@ -6,7 +6,7 @@ The ordered development and acceptance rules are in
 [efcore-10-development-acceptance-plan.md](efcore-10-development-acceptance-plan.md). This file keeps the
 historical handoff and module evidence; it does not authorize jumping between unfinished feature families.
 
-The latest local module is the 2026-11-16 DefaultIfEmpty checkpoint recorded below. Earlier commit
+The latest local module is the 2026-11-16 DefaultIfEmpty reference checkpoint recorded below. Earlier commit
 identifiers and test totals remain historical evidence for their original modules; they are not the current branch
 baseline. The current feature evidence is recorded in the latest checkpoint sections and module plan.
 
@@ -19,6 +19,23 @@ TPC, many-to-many and Connector 0.3.0 reverse engineering.
 Test each module and review completed major modules before committing. EF8/EF9 remain postponed.
 The provider is not release-ready. The [feature checklist](efcore-10-feature-checklist.md) remains the
 acceptance authority; this document records the handoff rather than defining a different completion target.
+
+### QRY-01/03/05 DefaultIfEmpty reference checkpoint (2026-11-16)
+
+On base `b0bdae0`, explicit source presence separates missing rows from present NULL values. Missing
+anonymous/DTO/constructed mapped objects and boxed scalar projections return null; present nullable
+members still produce an object. Direct/computed required nullable reads default only for a missing
+row and still throw for present NULL. Preserve navigation snapshot semantics, index/member projection
+binding and EF entity tracking. An explicit user SELECT after defaulting still constructs its object.
+
+This is EF-only translation/shaping using existing Connector 0.3.0 public APIs. Thirty default SQL
+and 72 runtime cases pass; Debug/Release/isolated EF10.0.14 each pass 6376 tests with 16 old skips.
+Ten excluded offline LiveTests pass per patch. New package `10.0.0-default-reference-20261116.1` passes
+content and both-patch/mode public consumers with matching source/archive/consumer hashes. Independent
+review's computed-nullable finding is fixed and final review has no remaining material issue.
+See [module record](efcore-10-default-if-empty-reference-plan.md) for exact evidence/provenance.
+Arbitrary CLR projections, native SQL evaluation and wider required runtime/release gates remain open;
+Required status stays 9 Done / 44 In progress per mode. No live attempt, DDL/writes, push or publication.
 
 ### QRY-01/03/05 DefaultIfEmpty scalar checkpoint (2026-11-16)
 

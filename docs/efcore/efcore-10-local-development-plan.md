@@ -14,13 +14,22 @@ public APIs and per-mode mappings/SQL. Separate local implementation evidence fr
 The compact execution board is [efcore-10-roadmap.md](efcore-10-roadmap.md); this file remains the detailed
 batch ledger and acceptance notes.
 
-**Updated:** 2026-11-16, DefaultIfEmpty scalar semantics following correlated lateral queries, the read-only native EF query fixture, raw query materialization/recovery, relational set operations, relationship writes, TPH runtime verification, SaveChanges concurrency interception, concurrency-protection specifications, write SQL specifications, DateOnly calendar correction, DateTime calendar addition, DateTimeOffset.UtcTicks, CFG-04/TST-01 service-registration lifetime, DateOnly.AddYears, DateOnly.AddMonths,
+**Updated:** 2026-11-16, DefaultIfEmpty reference/presence semantics following scalar defaults and correlated lateral queries, the read-only native EF query fixture, raw query materialization/recovery, relational set operations, relationship writes, TPH runtime verification, SaveChanges concurrency interception, concurrency-protection specifications, write SQL specifications, DateOnly calendar correction, DateTime calendar addition, DateTimeOffset.UtcTicks, CFG-04/TST-01 service-registration lifetime, DateOnly.AddYears, DateOnly.AddMonths,
 DateOnly.AddDays, DateTimeOffset.UtcNow, DateTimeOffset.UtcDateTime, DateTimeOffset members, the server clock,
 DateTime.Ticks, TimeOnly.Ticks, TimeSpan.Ticks, DateOnly.DayNumber, DateTime.TimeOfDay and TST-01 model-building 101
 checkpoints.
 Keep one complete module active and review it before committing. EF8/EF9 remains postponed; live execution is opt-in and
 currently blocked before authentication by the supplied endpoint/transport behavior.
 The full goal remains incomplete.
+
+### DefaultIfEmpty reference continuation (2026-11-16)
+
+On base `b0bdae0`, the [reference module](efcore-10-default-if-empty-reference-plan.md) closes the
+tested anonymous/DTO/boxing and present-NULL gaps. EF translation/shaping only, existing Connector
+0.3.0 APIs. Thirty SQL/72 runtime cases; all three full gates pass 6376 with 16 old skips; ten
+excluded offline fixture cases per patch; new package and both-patch/mode consumers pass with
+matching graphs/hashes. Independent review's computed-nullable issue is fixed. Native results,
+arbitrary CLR projections, wider runtime/release gates and the overall goal remain open.
 
 ### DefaultIfEmpty scalar module (2026-11-16)
 

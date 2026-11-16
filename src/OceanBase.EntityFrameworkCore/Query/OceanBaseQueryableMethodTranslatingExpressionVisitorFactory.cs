@@ -39,18 +39,45 @@ namespace OceanBase.EntityFrameworkCore.Query
 
             protected override ShapedQueryExpression? TranslateDefaultIfEmpty(ShapedQueryExpression source, Expression? defaultValue)
             {
+                if (defaultValue is not null) return null;
                 var projection = new OceanBaseDefaultIfEmptyProjection(source);
                 projection.Capture();
+                projection.AddPresence(RelationalDependencies.SqlExpressionFactory);
                 if (projection.RequiresPushdown) ((SelectExpression)source.QueryExpression).PushdownIntoSubquery();
                 var translated = base.TranslateDefaultIfEmpty(source, defaultValue);
-                if (translated is not null) projection.Restore();
-                return translated;
+                if (translated is null) return null;
+                projection.Restore();
+                return translated.UpdateShaperExpression(projection.Shape(translated.ShaperExpression));
             }
 
             protected override ShapedQueryExpression? TranslateSelectMany(ShapedQueryExpression source,
                 LambdaExpression collectionSelector, LambdaExpression resultSelector)
                 => base.TranslateSelectMany(source,
                     OceanBaseDefaultIfEmptyProjection.PreserveDefaultRows(collectionSelector, RelationalDependencies.Model), resultSelector);
+
+            protected override ShapedQueryExpression TranslateSelect(ShapedQueryExpression source, LambdaExpression selector)
+            {
+                var input = new OceanBaseDefaultIfEmptyProjection(source);
+                input.Capture();
+                var translated = base.TranslateSelect(source, selector);
+                if (input.HasDefaultReference)
+                {
+                    var output = new OceanBaseDefaultIfEmptyProjection(translated);
+                    output.Capture();
+                    output.ResetProjectionMapping();
+                }
+                return translated;
+            }
+
+            protected override ShapedQueryExpression TranslateCast(ShapedQueryExpression source, Type resultType)
+            {
+                if (!resultType.IsValueType && OceanBaseDefaultIfEmptyProjection.TryDefaultReference(source.ShaperExpression, out var conditional)
+                    && conditional.IfFalse is UnaryExpression { NodeType: ExpressionType.Convert, Type: var boxedType } conversion
+                    && boxedType == typeof(object) && conversion.Operand.Type == resultType)
+                    return source.UpdateShaperExpression(Expression.Condition(conditional.Test,
+                        Expression.Constant(null, resultType), conversion.Operand));
+                return base.TranslateCast(source, resultType);
+            }
 
             protected override ShapedQueryExpression TranslateDistinct(ShapedQueryExpression source)
                 // EF10 needs the element mapping's KeyComparer before its final type-mapping pass.

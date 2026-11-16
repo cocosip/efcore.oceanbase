@@ -97,6 +97,27 @@ namespace OceanBase.EntityFrameworkCore.LiveTests
             Assert.DoesNotContain("COALESCE", empty);
         }
 
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle)]
+        public void Offline_profile_preserves_reference_presence_and_required_nullable_reads(OceanBaseCompatibilityMode mode)
+        {
+            using var context = Create(mode);
+            var rows = ReadOnlyQueryProfile.Rows(context, mode);
+            foreach (var empty in new[] { true, false })
+            {
+                var reference = ReadOnlyQueryProfile.ReferenceDefaults(rows, empty).ToQueryString();
+                Assert.Contains("LEFT JOIN (", reference);
+                Assert.DoesNotContain("COALESCE", reference);
+            }
+            var boxed = rows.Select(r => (object)r.Id).DefaultIfEmpty().ToQueryString();
+            Assert.Contains("LEFT JOIN (", boxed);
+            Assert.DoesNotContain("COALESCE", boxed);
+            var required = rows.Select(r => r.Value!.Value).DefaultIfEmpty().Where(value => value > 0).ToQueryString();
+            Assert.Contains("CASE", required);
+            Assert.DoesNotContain("COALESCE", required);
+        }
+
         private static ReadOnlyQueryProfile.Context Create(OceanBaseCompatibilityMode mode)
             => new(new DbContextOptionsBuilder<ReadOnlyQueryProfile.Context>().UseOceanBase("Server=offline;Database=offline", mode).Options);
     }

@@ -9,6 +9,57 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
 {
     public sealed class DefaultIfEmptyQueryTests
     {
+        [Theory]
+        [MemberData(nameof(Modes))]
+        public void Reference_defaults_project_presence_inside_the_original_source(OceanBaseCompatibilityMode mode)
+        {
+            using var context = Create(mode);
+            var sql = Flat(context.Set<Row>().Select(r => new { r.Id, r.Value }).DefaultIfEmpty().ToQueryString());
+            Assert.Matches(@"LEFT JOIN \( SELECT .*1", sql);
+            Assert.DoesNotContain("COALESCE", sql);
+            var dto = Flat(context.Set<Row>().Select(r => new Box { Required = r.Id, Optional = r.Value }).DefaultIfEmpty().ToQueryString());
+            Assert.Matches(@"LEFT JOIN \( SELECT .*1", dto);
+            Assert.DoesNotContain("COALESCE", dto);
+            var nested = context.Set<Row>().Select(r => new
+            {
+                r.Id,
+                Children = context.Set<Row>().Where(child => child.Id > r.Id).Select(child => child.Id).ToList()
+            }).DefaultIfEmpty().ToQueryString();
+            Assert.Contains("DefaultRows", nested);
+            Assert.Equal(2, Regex.Matches(nested, "DefaultRows").Count);
+            Assert.Matches(@" [<>] ", Flat(nested));
+        }
+
+        [Theory]
+        [MemberData(nameof(Modes))]
+        public void Reference_null_and_member_composition_use_presence_and_current_values(OceanBaseCompatibilityMode mode)
+        {
+            using var context = Create(mode);
+            var floor = 3;
+            var query = context.Set<Row>().Select(r => new { r.Id, r.Value }).DefaultIfEmpty();
+            var sql = Flat(query.Where(r => r != null && r.Id > floor).OrderBy(r => r!.Value)
+                .Select(r => r!.Id).ToQueryString());
+            Assert.Contains("IS NOT NULL", sql);
+            Assert.Contains("ORDER BY", sql);
+            Assert.DoesNotContain("COALESCE", sql);
+            var missing = Flat(query.Where(r => r == null).ToQueryString());
+            Assert.Contains("IS NULL", missing);
+        }
+
+        [Theory]
+        [MemberData(nameof(Modes))]
+        public void Boxing_and_nullable_required_reads_do_not_coalesce_present_NULL(OceanBaseCompatibilityMode mode)
+        {
+            using var context = Create(mode);
+            var rows = context.Set<Row>();
+            var boxed = Flat(rows.Select(r => (object)r.Id).DefaultIfEmpty().ToQueryString());
+            Assert.Matches(@"LEFT JOIN \( SELECT .*1", boxed);
+            Assert.DoesNotContain("COALESCE", boxed);
+            var required = Flat(rows.Select(r => r.Value!.Value).DefaultIfEmpty().ToQueryString());
+            Assert.Matches(@"LEFT JOIN \( SELECT .*1", required);
+            Assert.DoesNotContain("COALESCE", required);
+        }
+
         public static IEnumerable<object[]> Modes()
         {
             foreach (var mode in Enum.GetValues<OceanBaseCompatibilityMode>()) yield return [mode];
@@ -78,7 +129,7 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             var anonymous = Flat(rows.SelectMany(parent => rows.Where(child => child.Id > parent.Id)
                 .OrderBy(child => child.Id).Take(1).Select(child => new { child.Id, child.Value }).DefaultIfEmpty(),
                 (parent, child) => new { Parent = parent.Id, Child = child!.Id, child.Value }).ToQueryString());
-            Assert.Equal(MinimumPatch, anonymous.Contains("COALESCE(", StringComparison.Ordinal));
+            Assert.DoesNotContain("COALESCE", anonymous);
             Assert.Contains(".Value", anonymous);
             Assert.DoesNotContain("APPLY", anonymous);
         }
@@ -125,7 +176,7 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             Assert.DoesNotContain("COALESCE", scalar);
             var anonymous = Flat(rows.SelectMany(parent => rows.Where(child => child.Id > parent.Id).Take(1)
                 .Select(child => new { child.Id, child.Value }).DefaultIfEmpty()).ToQueryString());
-            Assert.Equal(MinimumPatch, anonymous.Contains(".Id, 0)", StringComparison.Ordinal));
+            Assert.DoesNotContain("COALESCE", anonymous);
             Assert.DoesNotContain(".Value, 0)", anonymous);
         }
 
@@ -150,7 +201,7 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             using var context = Create(mode);
             var sql = Flat(context.Set<Row>().Select(r => new Box { Required = r.Id, Optional = r.Value, Entity = r })
                 .DefaultIfEmpty().ToQueryString());
-            Assert.Equal(MinimumPatch, sql.Contains(".Id, 0)", StringComparison.Ordinal));
+            Assert.DoesNotContain("COALESCE", sql);
             Assert.DoesNotContain(".Value, 0)", sql);
             Assert.Contains(".Active", sql);
             Assert.Contains(".Offset", sql);
@@ -180,13 +231,12 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             var rows = context.Set<Row>();
             var numeric = Flat(rows.Select(r => r.Value ?? 7).DefaultIfEmpty().ToQueryString());
             Assert.Contains("LEFT JOIN ( SELECT COALESCE(d.Value, 7)", numeric);
-            Assert.Matches(@"^SELECT COALESCE\(\w+\.\w+, 0\)", numeric);
+            Assert.Matches(@"^SELECT \w+\.\w+, \w+\.Present FROM", numeric);
+            Assert.Contains("1 Present", numeric);
             var text = Flat(rows.Select(r => r.Name ?? "fallback").DefaultIfEmpty().ToQueryString());
             Assert.Matches(@"LEFT JOIN \( SELECT COALESCE\(d.Name, N?'fallback'\)", text);
             Assert.DoesNotContain("SELECT COALESCE", text[..text.IndexOf("FROM", StringComparison.Ordinal)]);
         }
-
-        private static bool MinimumPatch => typeof(DbContext).Assembly.GetName().Version == new Version(10, 0, 0, 0);
 
         private static string Flat(string sql) => Regex.Replace(sql.Replace("`", "", StringComparison.Ordinal)
             .Replace("\"", "", StringComparison.Ordinal).Replace(" AS ", " ", StringComparison.Ordinal), @"\s+", " ").Trim();

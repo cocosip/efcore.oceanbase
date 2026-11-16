@@ -22,6 +22,7 @@ namespace PackageConsumer
             var rows = context.Set<Row>();
             foreach (var async in new[] { false, true })
             {
+                commands.Rows = null;
                 commands.Values = [null, 8];
                 var nullable = Read(rows.Select(r => r.Value).DefaultIfEmpty(), async);
                 if (!nullable.SequenceEqual(new int?[] { null, 8 }) || commands.Sql.Contains("COALESCE", StringComparison.Ordinal))
@@ -40,6 +41,23 @@ namespace PackageConsumer
                     || !commands.Sql.Contains("COALESCE(", StringComparison.Ordinal)
                     || commands.Readers.Any(reader => !reader.IsClosed))
                     throw new Exception("Packed lateral scalar default rows or cleanup changed.");
+                commands.Rows = [[null, null, null], [7, null, 1]];
+                var reference = Read(rows.Select(r => new { r.Id, r.Value }).DefaultIfEmpty(), async);
+                if (reference[0] is not null || reference[1]?.Id != 7 || reference[1]!.Value is not null)
+                    throw new Exception("Packed reference defaults or nullable members changed.");
+                commands.Rows = [[null, null], [100, 1], [107, 1]];
+                if (!Read(rows.Select(r => (object)r.Offset).DefaultIfEmpty(), async).SequenceEqual(new object?[] { null, 0, 7 }))
+                    throw new Exception("Packed boxed converter-owned values changed.");
+                commands.Rows = [[null, null], [7, 1]];
+                var required = rows.Select(r => r.Value!.Value).DefaultIfEmpty();
+                if (!Read(required, async).SequenceEqual(new[] { 0, 7 }))
+                    throw new Exception("Packed required scalar row presence changed.");
+                commands.Rows = [[null, 1]];
+                var rejected = false;
+                try { Read(required, async); }
+                catch (InvalidOperationException) { rejected = true; }
+                if (!rejected || commands.Readers.Any(reader => !reader.IsClosed))
+                    throw new Exception("Packed present-NULL required read or cleanup changed.");
             }
             Console.WriteLine($"{mode}: packed DefaultIfEmpty NULL/default/converter/lateral profile passed (offline).");
         }
@@ -57,14 +75,16 @@ namespace PackageConsumer
         private sealed class Commands : DbCommandInterceptor
         {
             public object?[] Values { get; set; } = [];
+            public object?[][]? Rows { get; set; }
             public string Sql { get; private set; } = "";
             public List<DbDataReader> Readers { get; } = [];
             public override InterceptionResult<DbDataReader> ReaderExecuting(DbCommand command, CommandEventData e, InterceptionResult<DbDataReader> result)
             {
                 Sql = Regex.Replace(command.CommandText.Replace("`", "", StringComparison.Ordinal).Replace("\"", "", StringComparison.Ordinal), @"\s+", " ").Trim();
                 var table = new DataTable();
-                table.Columns.Add("Value", typeof(int));
-                foreach (var value in Values) table.Rows.Add(value ?? DBNull.Value);
+                var rows = Rows ?? Values.Select(value => new[] { value }).ToArray();
+                for (var i = 0; i < (Rows is null ? 1 : rows[0].Length); i++) table.Columns.Add("C" + i, typeof(int));
+                foreach (var row in rows) table.Rows.Add(row.Select(value => value ?? DBNull.Value).ToArray());
                 var reader = table.CreateDataReader();
                 Readers.Add(reader);
                 return InterceptionResult<DbDataReader>.SuppressWithResult(reader);
