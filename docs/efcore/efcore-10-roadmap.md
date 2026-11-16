@@ -2,10 +2,18 @@
 
 **Updated:** 2026-11-16
 **Branch:** `efcore/10.0`  
-**State:** `DateTimeOffset.Ticks` is locally complete at the Provider/pack boundary; native/live acceptance remains blocked by the Connector handshake endpoint. It follows `DateTimeOffset.Offset`, `TotalOffsetMinutes`, grouped aggregate result composition, query enumeration, DefaultIfEmpty reference/collection semantics, scalar defaults, correlated lateral queries, the read-only EF fixture, raw queries, set operations, relationship writes, TPH,
+**State:** `DateTimeOffset.DateTime` is locally complete at the Provider/pack boundary; native/live acceptance remains blocked by the Connector handshake endpoint. It follows `DateTimeOffset.Ticks`, `DateTimeOffset.Offset`, `TotalOffsetMinutes`, grouped aggregate result composition, query enumeration, DefaultIfEmpty reference/collection semantics, scalar defaults, correlated lateral queries, the read-only EF fixture, raw queries, set operations, relationship writes, TPH,
 SaveChanges concurrency interception, concurrency-protection and write SQL specifications,
 DateOnly/DateTime calendar arithmetic, `DateTimeOffset.UtcTicks`, scalar extrema and service lifetimes.
 **Acceptance authority:** [efcore-10-feature-checklist.md](efcore-10-feature-checklist.md)
+
+Latest module on base `a7aec5d`: Oracle `DateTimeOffset.DateTime` converts the validated timestamp-with-time-zone
+carrier to the existing unzoned `DateTime` mapping; MySQL rejects the member before SQL generation because its
+carrier is UTC-normalized. Unit 3/3 and Functional 3/3 pass in Release; full Release passes Unit 2546, Functional
+2469 and Specification 1538 with 16 existing mapped skips, ConsumerTests 2/2, package content checks, and
+EF10.0.0/10.0.14 both-mode packed consumers. Connector source/dependencies remain unchanged. Live MySQL/Oracle
+probes remain blocked in pre-authentication at `172.16.2.45:2881` with packet closure; no SQL/DDL ran and EF
+readers stayed at 0. See [module record](efcore-10-date-time-offset-date-time-plan.md).
 
 Latest module on base `a2c8e2c`: Oracle `DateTimeOffset.Ticks` converts the validated timestamp-with-time-zone
 carrier to the existing local `DateTime` Gregorian tick arithmetic; MySQL rejects the member before SQL generation

@@ -10,7 +10,7 @@ Translate `DateTimeOffset.UtcTicks` as the signed `Int64` number of 100ns ticks 
 epoch `0001-01-01T00:00:00` in UTC. The module uses the provider's existing UTC-normalized
 `DateTimeOffset` storage contract: MySQL stores the UTC `DATETIME` carrier and Oracle extracts UTC
 from the `TIMESTAMP WITH TIME ZONE` carrier. It does not claim support for `DateTimeOffset.Ticks`,
-`DateTimeOffset.Offset`, `DateTimeOffset.DateTime` or `DateTimeOffset.LocalDateTime`, whose local-offset
+`DateTimeOffset.Offset` or `DateTimeOffset.LocalDateTime`, whose local-offset
 semantics require a separate contract.
 
 ## Provider implementation

@@ -104,6 +104,7 @@ namespace OceanBase.EntityFrameworkCore.Query
             typeof(DateTimeOffset).GetProperty(nameof(DateTimeOffset.TotalOffsetMinutes))!;
         private static readonly MemberInfo DateTimeOffsetOffset = typeof(DateTimeOffset).GetProperty(nameof(DateTimeOffset.Offset))!;
         private static readonly MemberInfo DateTimeOffsetTicks = typeof(DateTimeOffset).GetProperty(nameof(DateTimeOffset.Ticks))!;
+        private static readonly MemberInfo DateTimeOffsetDateTime = typeof(DateTimeOffset).GetProperty(nameof(DateTimeOffset.DateTime))!;
 
         public SqlExpression? Translate(SqlExpression? instance, MemberInfo member, Type returnType,
             IDiagnosticsLogger<DbLoggerCategory.Query> logger)
@@ -198,6 +199,18 @@ namespace OceanBase.EntityFrameworkCore.Query
                 var localDateTime = factory.Convert(instance, typeof(DateTime), mappingSource.FindMapping(typeof(DateTime)));
                 return factory.Function(DateTimeTicksMarker, [localDateTime], nullable: true,
                     argumentsPropagateNullability: [false], typeof(long), mappingSource.FindMapping(typeof(long)));
+            }
+
+            if (instance is not null && member == DateTimeOffsetDateTime
+                && returnType == typeof(DateTime) && mode == OceanBaseCompatibilityMode.Oracle)
+            {
+                instance = factory.ApplyDefaultTypeMapping(instance);
+                if (instance.TypeMapping is not { } offsetMapping
+                    || offsetMapping.Converter?.ConvertsNulls == true
+                    || !SupportsDate(typeof(DateTimeOffset), offsetMapping))
+                    return null;
+
+                return factory.Convert(instance, typeof(DateTime), mappingSource.FindMapping(typeof(DateTime)));
             }
 
             if (instance is not null && member == DateOnlyDayNumber && instance.Type == typeof(DateOnly)

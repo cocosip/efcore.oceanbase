@@ -14,7 +14,7 @@ carrier 翻译 `DateTimeOffset.TotalOffsetMinutes`；MySQL 模式因 UTC 归一�
   `EXTRACT(TIMEZONE_HOUR FROM value) * 60 + EXTRACT(TIMEZONE_MINUTE FROM value)`。
 - MySQL 不生成 marker；要求服务器端翻译的谓词/组合查询在打开连接前由 EF 抛出标准翻译错误。EF
   允许的顶层客户端投影仍遵循 EF 自身的客户端求值边界。
-- 不实现 `Offset`、`DateTime`、`LocalDateTime`、`Now`，不改 Connector，不声称 OceanBase 服务器语法/时区
+- 不实现 `Offset`、`LocalDateTime`、`Now`，不改 Connector，不声称 OceanBase 服务器语法/时区
   行为或 wire cancellation。
 
 ## 测试与证据

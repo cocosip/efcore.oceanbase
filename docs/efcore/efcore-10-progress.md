@@ -6,20 +6,36 @@ The ordered development and acceptance rules are in
 [efcore-10-development-acceptance-plan.md](efcore-10-development-acceptance-plan.md). This file keeps the
 historical handoff and module evidence; it does not authorize jumping between unfinished feature families.
 
-The latest local module is the 2026-11-16 `DateTimeOffset.Ticks` query checkpoint recorded below. Earlier commit
+The latest local module is the 2026-11-16 `DateTimeOffset.DateTime` query checkpoint recorded below. Earlier commit
 identifiers and test totals remain historical evidence for their original modules; they are not the current branch
 baseline. The current feature evidence is recorded in the latest checkpoint sections and module plan.
 
 ## Current checkpoint: 2026-11-16
 
-Local `DateTimeOffset.Ticks` development is complete on efcore/10.0; the `DateTimeOffset.Offset`, `TotalOffsetMinutes`
-and grouped-result checkpoints remain the preceding handoffs. This follows the HasData, connection-boundary, CFG-04, Boolean conversion,
+Local `DateTimeOffset.DateTime` development is complete on efcore/10.0; the `DateTimeOffset.Ticks`, `DateTimeOffset.Offset`,
+`TotalOffsetMinutes` and grouped-result checkpoints remain the preceding handoffs. This follows the HasData, connection-boundary, CFG-04, Boolean conversion,
 temporal fractional and service-registration-lifetime checkpoints.
 The current local checkpoint includes lazy-loading integration, ordinary compiled models, split queries, retries,
 TPC, many-to-many and Connector 0.3.0 reverse engineering.
 Test each module and review completed major modules before committing. EF8/EF9 remain postponed.
 The provider is not release-ready. The [feature checklist](efcore-10-feature-checklist.md) remains the
 acceptance authority; this document records the handoff rather than defining a different completion target.
+
+### MAP-05/QRY-07/QRY-11 `DateTimeOffset.DateTime` (2026-11-16)
+
+On base `a7aec5d`, Oracle mode translates `DateTimeOffset.DateTime` by converting the validated
+`TIMESTAMP WITH TIME ZONE` carrier to the existing unzoned `DateTime` mapping. MySQL rejects the member before
+SQL generation because its `DateTimeOffset` carrier is UTC-normalized `DATETIME`. Unit 3/3 and Functional 3/3
+pass in Release, covering positive/negative local wall-clock values, NULL, `DateTimeKind.Unspecified`, sync/async
+materialization, unsupported carriers and the MySQL pre-open rejection. Full Release passes Unit 2546, Functional
+2469 and Specification 1538 with 16 existing mapped skips; ConsumerTests pass 2/2.
+
+Package `10.0.0-date-time-offset-date-time-20261116` passes content verification and PackageConsumer on
+EF10.0.0/10.0.14 in both modes. The packed assertions require an Oracle timestamp cast without
+`SYS_EXTRACT_UTC` and reject the MySQL member before opening a connection. Connector source/dependencies remain
+unchanged. Live status is still pre-auth packet closure at `172.16.2.45:2881` with no SQL/DDL or EF readers;
+native timezone/session semantics and Required rows remain open. See
+[module record](efcore-10-date-time-offset-date-time-plan.md).
 
 ### MAP-05/QRY-07/QRY-11 `DateTimeOffset.Ticks` (2026-11-16)
 

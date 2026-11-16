@@ -1343,6 +1343,48 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
         [Theory]
         [InlineData(OceanBaseCompatibilityMode.MySql)]
         [InlineData(OceanBaseCompatibilityMode.Oracle)]
+        public void DateTimeOffset_DateTime_has_local_wall_clock_boundary(OceanBaseCompatibilityMode mode)
+        {
+            using var context = CreateContext(mode);
+            var query = context.Rows
+                .Where(row => row.Zoned.DateTime > new DateTime(2024, 1, 1))
+                .OrderBy(row => row.Zoned.DateTime)
+                .Select(row => (DateTime?)row.Zoned.DateTime);
+
+            if (mode == OceanBaseCompatibilityMode.MySql)
+            {
+                Assert.Throws<InvalidOperationException>(() => query.ToQueryString());
+                return;
+            }
+
+            var sql = query.ToQueryString();
+            Assert.DoesNotContain("SYS_EXTRACT_UTC", sql);
+            Assert.DoesNotContain("__oceanbase_internal", sql);
+            Assert.Contains("CAST(\"r\".\"Zoned\" AS TIMESTAMP", sql);
+        }
+
+        [Fact]
+        public void DateTimeOffset_DateTime_rejects_unowned_and_null_converting_carriers()
+        {
+            using var context = CreateContext(OceanBaseCompatibilityMode.Oracle);
+            var source = context.GetService<IRelationalTypeMappingSource>();
+            var factory = context.GetService<ISqlExpressionFactory>();
+            var members = context.GetService<IMemberTranslatorProvider>();
+            var logger = context.GetService<IDiagnosticsLogger<DbLoggerCategory.Query>>();
+            var dateTime = typeof(DateTimeOffset).GetProperty(nameof(DateTimeOffset.DateTime))!;
+            var binary = (RelationalTypeMapping)source.FindMapping(typeof(byte[]))!.WithComposedConverter(
+                new ValueConverter<DateTimeOffset, byte[]>(value => BitConverter.GetBytes(value.Ticks), value =>
+                    new DateTimeOffset(new DateTime(BitConverter.ToInt64(value)), TimeSpan.Zero)));
+            var nullConverter = (RelationalTypeMapping)source.FindMapping(typeof(DateTimeOffset))!.WithComposedConverter(
+                new ValueConverter<DateTimeOffset, DateTimeOffset>(value => value, value => value, convertsNulls: true));
+
+            Assert.Null(members.Translate(factory.Constant(DateTimeOffset.UtcNow, binary), dateTime, typeof(DateTime), logger));
+            Assert.Null(members.Translate(factory.Constant(DateTimeOffset.UtcNow, nullConverter), dateTime, typeof(DateTime), logger));
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle)]
         public void TimeSpan_component_members_translate_with_signed_duration_semantics(OceanBaseCompatibilityMode mode)
         {
             using var context = CreateContext(mode);

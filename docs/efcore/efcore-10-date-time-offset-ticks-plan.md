@@ -47,6 +47,6 @@ native OceanBase timezone/session semantics, timestamp precision or server execu
 
 ## 不在范围内
 
-- `DateTimeOffset.LocalDateTime`、`DateTimeOffset.DateTime`、`Now` 或其他时区转换 API。
+- `DateTimeOffset.LocalDateTime`、`Now` 或其他时区转换 API。
 - Connector 协议、认证、TLS、reader、依赖和连接池代码。
 - EF Core 8/9、真实 DDL/写入、推送和发布。

@@ -8,7 +8,7 @@
 
 Translate `DateTime.Ticks` as the signed `Int64` number of 100ns ticks since the Gregorian epoch
 `0001-01-01T00:00:00`. The module covers MySQL `DATETIME` and Oracle `DATE`/`TIMESTAMP` mappings. It does not
-extend the behavior to `DateTimeOffset.Ticks`, whose offset semantics require a separate acceptance boundary.
+extend the behavior to `DateTimeOffset.Ticks`, which has its own local-wall-clock acceptance boundary.
 
 ## Provider implementation
 

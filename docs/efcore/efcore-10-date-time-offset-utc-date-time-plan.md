@@ -12,7 +12,7 @@
 - Oracle stores the value as `TIMESTAMP WITH TIME ZONE`; SQL must call `SYS_EXTRACT_UTC` and cast the result to
   the existing unzoned `TIMESTAMP` mapping.
 - The provider rejects unrelated carriers and null-converting mappings before SQL generation.
-- `DateTimeOffset.Ticks`, `DateTimeOffset.Offset`, `DateTime`, and `LocalDateTime` remain separate contracts because
+- `DateTimeOffset.Ticks`, `DateTimeOffset.Offset`, and `LocalDateTime` remain separate contracts because
   MySQL does not retain the original offset and cannot reconstruct those local-clock semantics.
 
 ## Implementation

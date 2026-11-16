@@ -275,6 +275,54 @@ public sealed class TimeSpanTicksFunctionalTests
         Assert.Empty(capture.Sql);
     }
 
+    [Theory]
+    [InlineData(OceanBaseCompatibilityMode.Oracle, false)]
+    [InlineData(OceanBaseCompatibilityMode.Oracle, true)]
+    public async Task Oracle_DateTimeOffset_DateTime_materializes_local_wall_clock_values_and_null(
+        OceanBaseCompatibilityMode mode, bool async)
+    {
+        var positive = new DateTimeOffset(2024, 2, 29, 12, 34, 56, TimeSpan.FromHours(8)).DateTime;
+        var negative = new DateTimeOffset(2024, 2, 29, 12, 34, 56, TimeSpan.FromHours(-5.5)).DateTime;
+        using var table = new DataTable();
+        table.Columns.Add("Value", typeof(object));
+        table.Rows.Add(positive);
+        table.Rows.Add(negative);
+        table.Rows.Add(DBNull.Value);
+
+        var capture = new Capture(table);
+        await using var context = Create(mode, capture);
+        var query = context.Rows
+            .Where(row => row.Zoned.DateTime > new DateTime(2024, 1, 1))
+            .OrderBy(row => row.Zoned.DateTime)
+            .Select(row => (DateTime?)row.Zoned.DateTime);
+        var result = async ? await query.ToListAsync() : query.ToList();
+
+        Assert.Equal([positive, negative, null], result);
+        Assert.Equal(DateTimeKind.Unspecified, result[0]!.Value.Kind);
+        Assert.Equal(DateTimeKind.Unspecified, result[1]!.Value.Kind);
+        var sql = Assert.Single(capture.Sql);
+        Assert.DoesNotContain("SYS_EXTRACT_UTC", sql);
+        Assert.DoesNotContain("__oceanbase_internal", sql);
+        Assert.Contains("CAST", sql);
+        Assert.Contains("AS TIMESTAMP", sql);
+    }
+
+    [Fact]
+    public void MySql_DateTimeOffset_DateTime_is_rejected_before_command_execution()
+    {
+        using var table = new DataTable();
+        table.Columns.Add("Value", typeof(object));
+        table.Rows.Add(DateTime.UtcNow);
+
+        var capture = new Capture(table);
+        using var context = Create(OceanBaseCompatibilityMode.MySql, capture);
+        Assert.Throws<InvalidOperationException>(() => context.Rows
+            .Where(row => row.Zoned.DateTime > DateTime.UnixEpoch)
+            .Select(row => row.Id)
+            .ToQueryString());
+        Assert.Empty(capture.Sql);
+    }
+
     private static TestContext Create(OceanBaseCompatibilityMode mode, Capture capture)
         => new(new DbContextOptionsBuilder<TestContext>()
             .UseOceanBase("Server=offline;Database=timespan_ticks", mode)

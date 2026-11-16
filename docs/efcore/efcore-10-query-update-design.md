@@ -825,7 +825,7 @@ existing timestamp tick expression. Only the provider-owned non-null-converting 
 accepted. Unowned and null-converting carriers reject before SQL generation.
 
 This local slice covers SQL shape, binding, nullable reader materialization and sync/async tests in both modes.
-`DateTimeOffset.Ticks`, `Offset`, `DateTime` and `LocalDateTime` remain separate contracts because MySQL's
+`DateTimeOffset.Ticks`, `Offset` and `LocalDateTime` remain separate contracts because MySQL's
 UTC-normalized carrier cannot recover the original application-local offset. Native timezone/session behavior,
 timestamp precision and live OceanBase results remain acceptance gates. See the
 [DateTimeOffset.UtcTicks plan](efcore-10-date-time-offset-utc-ticks-plan.md).
