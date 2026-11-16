@@ -6,7 +6,7 @@ The ordered development and acceptance rules are in
 [efcore-10-development-acceptance-plan.md](efcore-10-development-acceptance-plan.md). This file keeps the
 historical handoff and module evidence; it does not authorize jumping between unfinished feature families.
 
-The latest local module is the 2026-11-16 SaveChanges concurrency-interception checkpoint recorded below. Earlier commit
+The latest local module is the 2026-11-16 TPH runtime checkpoint recorded below. Earlier commit
 identifiers and test totals remain historical evidence for their original modules; they are not the current branch
 baseline. The current feature evidence is recorded in the latest checkpoint sections and module plan.
 
@@ -19,6 +19,22 @@ TPC, many-to-many and Connector 0.3.0 reverse engineering.
 Test each module and review completed major modules before committing. EF8/EF9 remain postponed.
 The provider is not release-ready. The [feature checklist](efcore-10-feature-checklist.md) remains the
 acceptance authority; this document records the handoff rather than defining a different completion target.
+
+### MOD-02/DEF-07 TPH runtime checkpoint (2026-11-16)
+
+On base `8b7fa79`, the missing local single-table inheritance workflow now has 78 both-mode cases:
+converted shadow discriminator, concrete/intermediate/leaf/sibling materialization, all tracking modes,
+self-join identity, type/filter/paging composition, leaf collection fixup, generated graph keys,
+single-table CRUD/original concurrency, conflict retry and failure/cancellation/resource cleanup.
+No production defect or new hierarchy implementation was found. Initial failures were fixture
+assumptions; they are not production RED evidence. Independent review's SQL/binding assertion gaps
+are corrected, and re-review found no further actionable issues.
+
+The connected regression passes 362 cases. Current full source and package evidence, including the
+final review checks, is recorded in [the module plan](efcore-10-tph-runtime-plan.md). The public TPH
+smoke reuses the unchanged reviewed concurrency-interception nupkg on both patches/modes; no new
+package, CLI/bundle or live result is claimed. Native TPH behavior, broader official store-backed
+inheritance families and release acceptance remain open. No status promotion or push/publication.
 
 ### UPD-02/04 SaveChanges concurrency-interception checkpoint (2026-11-16)
 

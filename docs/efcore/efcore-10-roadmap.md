@@ -2,8 +2,8 @@
 
 **Updated:** 2026-11-16
 **Branch:** `efcore/10.0`  
-**State:** Active local development; SaveChanges concurrency interception is the latest local module, following
-concurrency-protection and write SQL specifications,
+**State:** Active local development; TPH runtime verification is the latest local module, following
+SaveChanges concurrency interception, concurrency-protection and write SQL specifications,
 DateOnly/DateTime calendar arithmetic, `DateTimeOffset.UtcTicks`, scalar extrema and service lifetimes.
 **Acceptance authority:** [efcore-10-feature-checklist.md](efcore-10-feature-checklist.md)
 
@@ -13,14 +13,15 @@ pre-authentication failure are unresolved.
 
 **Execution control:** Follow [efcore-10-development-acceptance-plan.md](efcore-10-development-acceptance-plan.md)
 for the ordered waves, evidence levels and handoff format. The latest SpecificationTests result is 1,538
-passed and 16 explicitly mapped skips (1,554 total); Release/Debug Unit/Functional are 2,421/2,007 and
-ConsumerTests 2 (5,968 passed). Isolated EF10.0.14 Release has the same totals. SaveChanges conflict
-diagnostics/interception adds 52 both-mode cases after observed RED; connected regressions pass 186/186.
-Independent review found no actionable issues. The baseline-built
-`10.0.0-save-concurrency-interception-20261116` package passes content and both-patch/both-mode runtime
-consumers with exact graphs and matching DLL hashes. Core payload and EF acceptance/identity/suppression
-boundaries are explicit. Broader store-backed/runtime and native acceptance remain open; see
-[the module plan](efcore-10-save-concurrency-interception-plan.md). No new CLI/bundle/live claim.
+passed and 16 explicitly mapped skips (1,554 total); Release/Debug Unit/Functional are 2,421/2,085 and
+ConsumerTests 2 (6,046 passed). Isolated EF10.0.14 Release has the same totals, with final review assertions
+rechecked by a complete 2,085-case Functional run. TPH adds 78 custom local cases and 362 connected
+regression passes. Independent review's SQL/binding evidence gaps are fixed and re-reviewed. No production
+change was needed. The unchanged `10.0.0-save-concurrency-interception-20261116` package passes content
+and fresh both-patch/both-mode runtime consumers, including TPH. Archive/consumer hashes match the
+recorded prior build; the current rebuilt source DLL has a different revision stamp and hash. See
+[the TPH module plan](efcore-10-tph-runtime-plan.md) for reuse provenance and exact gates. Broader official
+store-backed/runtime and native acceptance remain open. No new CLI/bundle/live claim or row promotion.
 
 This is the execution board for the first OceanBase EF Core 10 provider. It separates provider work from
 evidence work so an intercepted test cannot be mistaken for native OceanBase acceptance.
@@ -198,7 +199,7 @@ the exact release revision has not been reviewed. EF8/EF9 adaptation is outside 
 
 ## Explicitly deferred after the first release
 
-`DEF-04/05/06/10` remain deferred. `DEF-01/02/03/07/08/09` are partial: migrations core/tooling, local TPT/TPC,
+`DEF-04/05/06/10` remain deferred. `DEF-01/02/03/07/08/09` are partial: migrations core/tooling, local TPH/TPT/TPC,
 ordinary bulk operations, split-query graphs, ordinary compiled models, lazy loading, EnsureCreated/Migrate callbacks, execution retries and runtime
 migration locking have local evidence. Native migrations/locks/bundle application, reverse-engineering
 catalogs, graph/retry behavior, wider JSON/converter/model variants, advanced proxy combinations, NativeAOT/precompiled optimization and
@@ -207,10 +208,10 @@ features stay visible and must not be advertised as supported.
 
 ## Execution order from this checkpoint
 
-Development continues after the CFG-04/TST-01 service-lifetime local commit. Keep one feature module active at a time and do not
-repeat completed connection characterization without a reproduced defect.
+Development continues after the TPH runtime verification checkpoint. Keep one feature module active
+at a time; do not repeat verified local profiles without a reproduced defect or a specific evidence gap.
 
-1. **Completed locally:** migrations core, tooling, TPT/TPC inheritance, entity/table splitting and Connector
+1. **Completed locally:** migrations core, tooling, TPH/TPT/TPC inheritance, entity/table splitting and Connector
    0.3.0 reverse engineering form complete local modules; see each plan for reviewed source/package evidence.
    Unknown metadata remains visible through warnings. Native acceptance remains distinct from local results.
 2. CFG-04 service-graph wiring and the DIA-01/02 diagnostics boundaries are locally characterized without a redundant

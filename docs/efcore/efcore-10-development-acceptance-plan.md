@@ -19,10 +19,20 @@
 ## 当前检查点
 
 创建本文档时记录的历史提交和测试总数属于此前的模块检查点；当前最新模块、测试结果和包版本分别记录在下面的
-SaveChanges concurrency-interception checkpoint 中。不要使用旧 handoff 行推断当前 HEAD 或当前测试总数。
+TPH runtime checkpoint 中。不要使用旧 handoff 行推断当前 HEAD 或当前测试总数。
 - 当前没有真实 OceanBase SQL/DDL 验收。已有 live 探针在握手阶段报 `Connection closed while reading the packet`，没有执行 SQL 或 DDL。
 
 因此，CFG-04 的服务注册生命周期已有官方本地规格证据，但整体 CFG-04 仍为 In progress；连接波次已转入剩余映射、查询、更新和事务边界。不得重复已经完成的连接 characterization。
+
+### 2026-11-16：MOD-02/DEF-07 TPH runtime verification
+
+The full local TPH profile now has 78 both-mode cases and 362 connected regression passes. It verifies
+the existing provider/EF single-table discriminator, shaper, tracked-write and transaction integration;
+there is no production fix or fabricated native result. Independent review identified SQL/predicate/
+join/paging and INSERT binding assertion gaps; these are corrected and re-reviewed. The package smoke
+uses the unchanged reviewed nupkg on both EF patches/modes. See
+[the module record](efcore-10-tph-runtime-plan.md) for full source/patch/package evidence and reuse
+provenance. Native results and broader official runtime/release gates remain open; no row promotion.
 
 ### 2026-11-16：UPD-02/04、DIA-01/02 SaveChanges concurrency interception
 

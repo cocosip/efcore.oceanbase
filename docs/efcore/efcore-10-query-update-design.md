@@ -1347,6 +1347,26 @@ C# expression trees cannot represent `>>>`: a .NET10 compiler probe fails with C
 invoked. This is a language-expression-tree boundary, not a connector/server defect; no fictitious
 LINQ translation or new public function is advertised for that operator.
 
+## TPH inheritance local runtime profile (MOD-02, DEF-07)
+
+TphRuntimeTests exercises the existing EF discriminator/shaper/update pipeline in both modes without
+adding a provider hierarchy service. The profile includes a concrete root, intermediate, leaf and
+sibling in one table, an enum-to-string converted shadow discriminator, a renamed identity key,
+nullable inherited concurrency, tenant filtering and a leaf collection.
+
+Seventy-eight cases cover all tracking modes, self-join identity resolution, OfType/type predicates,
+paging, complete/incomplete discriminator mappings, Include/fixup, every concrete INSERT, graph key
+propagation, update/delete originals, conflict retry, unknown discriminator rejection and failure/
+cancellation cleanup. Fixed ADO rows prove materialization only; separate literal SQL assertions pin
+tenant equality, join/order/paging keys and full INSERT/update/delete column/value relationships.
+The test connection reuses existing transaction doubles, so native mode detection, identity,
+discriminator/collation, filtering, constraints and rollback remain unverified.
+
+The package-only TPH smoke exercises converted discriminator materialization, a derived query and
+assigned-key single-table CRUD through the unchanged reviewed provider package on both EF patches.
+This is custom local workflow coverage, not admission of the official store-backed inheritance
+specifications. See [the module record](efcore-10-tph-runtime-plan.md) for scope, review and full gates.
+
 ## Tracked writes
 
 A modification batch contains one row operation. This permits command-level affected-row checks and keeps the
