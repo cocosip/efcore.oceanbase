@@ -490,6 +490,28 @@ namespace PackageConsumer
                         || totalOffsetSql.Contains("__oceanbase_internal_", StringComparison.Ordinal))
                         throw new Exception("Packed Oracle provider did not translate DateTimeOffset.TotalOffsetMinutes.");
                 }
+                if (mode == OceanBaseCompatibilityMode.MySql)
+                {
+                    try
+                    {
+                        context.Set<Row>().Where(row => row.OffsetAt.Offset < TimeSpan.Zero)
+                            .Select(row => row.Id).ToQueryString();
+                        throw new Exception("Packed MySQL provider translated unsupported DateTimeOffset.Offset.");
+                    }
+                    catch (InvalidOperationException)
+                    {
+                    }
+                }
+                else
+                {
+                    var offsetSql = context.Set<Row>().Where(row => row.OffsetAt.Offset != TimeSpan.Zero)
+                        .OrderBy(row => row.OffsetAt.Offset).Select(row => row.OffsetAt.Offset).ToQueryString();
+                    if (!offsetSql.Contains("NUMTODSINTERVAL", StringComparison.Ordinal)
+                        || !offsetSql.Contains("EXTRACT(TIMEZONE_HOUR FROM", StringComparison.Ordinal)
+                        || !offsetSql.Contains("EXTRACT(TIMEZONE_MINUTE FROM", StringComparison.Ordinal)
+                        || offsetSql.Contains("__oceanbase_internal_", StringComparison.Ordinal))
+                        throw new Exception("Packed Oracle provider did not translate DateTimeOffset.Offset.");
+                }
                 var dateAddSql = context.Set<Row>().Where(row => row.Day.AddDays(3) > new DateOnly(2024, 1, 1))
                     .Select(row => row.Day.AddDays(3)).ToQueryString();
                 if ((mode == OceanBaseCompatibilityMode.MySql

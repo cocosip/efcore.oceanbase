@@ -2,12 +2,19 @@
 
 **Updated:** 2026-11-16
 **Branch:** `efcore/10.0`  
-**State:** `DateTimeOffset.TotalOffsetMinutes` is locally complete at the Provider/pack boundary; native/live acceptance remains blocked by the Connector handshake endpoint. It follows grouped aggregate result composition, query enumeration, DefaultIfEmpty reference/collection semantics, scalar defaults, correlated lateral queries, the read-only EF fixture, raw queries, set operations, relationship writes, TPH,
+**State:** `DateTimeOffset.Offset` is locally complete at the Provider/pack boundary; native/live acceptance remains blocked by the Connector handshake endpoint. It follows `TotalOffsetMinutes`, grouped aggregate result composition, query enumeration, DefaultIfEmpty reference/collection semantics, scalar defaults, correlated lateral queries, the read-only EF fixture, raw queries, set operations, relationship writes, TPH,
 SaveChanges concurrency interception, concurrency-protection and write SQL specifications,
 DateOnly/DateTime calendar arithmetic, `DateTimeOffset.UtcTicks`, scalar extrema and service lifetimes.
 **Acceptance authority:** [efcore-10-feature-checklist.md](efcore-10-feature-checklist.md)
 
-Latest module on base `4815261`: Oracle `DateTimeOffset.TotalOffsetMinutes` uses validated `EXTRACT(TIMEZONE_HOUR/MINUTE)`;
+Latest module on base `1b0b295`: Oracle `DateTimeOffset.Offset` uses validated `NUMTODSINTERVAL` plus
+`EXTRACT(TIMEZONE_HOUR/MINUTE)` and the existing `TimeSpan` carrier; MySQL rejects the member before SQL
+generation because its carrier is UTC-normalized. Unit 3/3 and Functional 3/3 pass in Release; package assertions
+are included in the final verification. Connector source/dependencies remain unchanged. Live MySQL/Oracle probes
+remain blocked in pre-authentication at `172.16.2.45:2881` with packet closure; no SQL/DDL ran and EF readers stayed
+at 0. See [module record](efcore-10-date-time-offset-offset-plan.md).
+
+The preceding module on base `4815261`: Oracle `DateTimeOffset.TotalOffsetMinutes` uses validated `EXTRACT(TIMEZONE_HOUR/MINUTE)`;
 MySQL rejects the member before SQL generation because its carrier is UTC-normalized. Unit 4/4 and Functional 3/3
 pass, full Release passes Unit 2537, Functional 2460 and Specification 1538 with 16 existing mapped skips, and
 package `10.0.0-total-offset-minutes-20261116` passes EF10.0.0/10.0.14 both-mode consumers. No Connector change

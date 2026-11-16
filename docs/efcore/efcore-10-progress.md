@@ -6,13 +6,13 @@ The ordered development and acceptance rules are in
 [efcore-10-development-acceptance-plan.md](efcore-10-development-acceptance-plan.md). This file keeps the
 historical handoff and module evidence; it does not authorize jumping between unfinished feature families.
 
-The latest local module is the 2026-11-16 `DateTimeOffset.TotalOffsetMinutes` query checkpoint recorded below. Earlier commit
+The latest local module is the 2026-11-16 `DateTimeOffset.Offset` query checkpoint recorded below. Earlier commit
 identifiers and test totals remain historical evidence for their original modules; they are not the current branch
 baseline. The current feature evidence is recorded in the latest checkpoint sections and module plan.
 
 ## Current checkpoint: 2026-11-16
 
-Local `DateTimeOffset.TotalOffsetMinutes` development is complete on efcore/10.0; the grouped-result checkpoint
+Local `DateTimeOffset.Offset` development is complete on efcore/10.0; the `TotalOffsetMinutes` and grouped-result checkpoints
 remains the preceding handoff. This follows the HasData, connection-boundary, CFG-04, Boolean conversion,
 temporal fractional and service-registration-lifetime checkpoints.
 The current local checkpoint includes lazy-loading integration, ordinary compiled models, split queries, retries,
@@ -20,6 +20,18 @@ TPC, many-to-many and Connector 0.3.0 reverse engineering.
 Test each module and review completed major modules before committing. EF8/EF9 remain postponed.
 The provider is not release-ready. The [feature checklist](efcore-10-feature-checklist.md) remains the
 acceptance authority; this document records the handoff rather than defining a different completion target.
+
+### MAP-05/QRY-07/QRY-11 `DateTimeOffset.Offset` (2026-11-16)
+
+On base `1b0b295`, Oracle mode translates `DateTimeOffset.Offset` through a validated private marker to the
+existing `TimeSpan`/`INTERVAL DAY TO SECOND` carrier using `NUMTODSINTERVAL` and signed timezone extraction.
+MySQL rejects the member before SQL generation because its `DateTimeOffset` carrier is UTC-normalized `DATETIME`.
+Unit 3/3 and Functional 3/3 pass in Release, including positive/negative/NULL reader values, predicate/order-by,
+unsupported carriers and sync/async paths. Full Release passes Unit 2540, Functional 2463 and Specification 1538
+with 16 existing mapped skips; ConsumerTests pass 2/2. Package `10.0.0-date-time-offset-offset-20261116` passes
+content verification and PackageConsumer on EF10.0.0/10.0.14 in both modes. Connector source/dependencies remain
+unchanged and live status is still pre-auth packet closure at `172.16.2.45:2881` with no SQL/DDL or EF readers.
+See [module record](efcore-10-date-time-offset-offset-plan.md).
 
 ### MAP-05/QRY-07/QRY-11 `DateTimeOffset.TotalOffsetMinutes` (2026-11-16)
 

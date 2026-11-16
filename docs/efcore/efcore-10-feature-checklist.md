@@ -52,6 +52,12 @@ so that an undocumented feature is not accidentally advertised.
 
 ## Current evidence and blockers
 
+Latest local slice: Oracle `DateTimeOffset.Offset` now reuses the existing `TimeSpan`/`INTERVAL DAY TO SECOND`
+carrier and renders `NUMTODSINTERVAL` from timezone hour/minute extraction. MySQL rejects the member before SQL
+generation because its `DateTimeOffset` carrier is UTC-normalized. Unit/functional/package evidence is recorded in
+[the module record](efcore-10-date-time-offset-offset-plan.md); live status remains `Blocked-live` after the known
+Connector pre-authentication packet closure.
+
 Latest module on base `4815261`: Oracle `DateTimeOffset.TotalOffsetMinutes` under MAP-05, QRY-07 and QRY-11.
 Oracle emits validated `EXTRACT(TIMEZONE_HOUR/MINUTE)` from the existing timestamp-with-time-zone carrier;
 MySQL rejects the member before SQL generation because its DateTimeOffset carrier is UTC-normalized. Unit 4/4,

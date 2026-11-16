@@ -887,6 +887,28 @@ namespace OceanBase.EntityFrameworkCore.Query
                 return sqlFunctionExpression;
             }
 
+            if (sqlFunctionExpression.Name == OceanBaseTemporalMemberTranslator.DateTimeOffsetOffsetMarker)
+            {
+                if (sqlFunctionExpression is not { IsBuiltIn: true, Schema: null, Instance: null, Arguments.Count: 1,
+                        IsNullable: true, ArgumentsPropagateNullability: [false], Type: var resultType,
+                        TypeMapping: { } resultMapping }
+                    || _mode != OceanBaseCompatibilityMode.Oracle
+                    || resultType != typeof(TimeSpan)
+                    || !IsTimeSpanMapping(resultMapping)
+                    || sqlFunctionExpression.Arguments[0] is not { Type: var inputType, TypeMapping: { } inputMapping }
+                    || inputType != typeof(DateTimeOffset)
+                    || inputMapping.Converter?.ConvertsNulls == true
+                    || !IsDateTimeOffsetMapping(inputMapping))
+                    throw new InvalidOperationException("Invalid internal DateTimeOffset offset expression.");
+
+                Sql.Append("NUMTODSINTERVAL(EXTRACT(TIMEZONE_HOUR FROM ");
+                Visit(sqlFunctionExpression.Arguments[0]);
+                Sql.Append(") * 60 + EXTRACT(TIMEZONE_MINUTE FROM ");
+                Visit(sqlFunctionExpression.Arguments[0]);
+                Sql.Append("), 'MINUTE')");
+                return sqlFunctionExpression;
+            }
+
             return base.VisitSqlFunction(sqlFunctionExpression);
         }
 

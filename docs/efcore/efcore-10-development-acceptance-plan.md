@@ -24,6 +24,23 @@ grouped-result checkpoint 中。不要使用旧 handoff 行推断当前 HEAD 或
 
 因此，CFG-04 的服务注册生命周期已有官方本地规格证据，但整体 CFG-04 仍为 In progress；连接波次已转入剩余映射、查询、更新和事务边界。不得重复已经完成的连接 characterization。
 
+### 2026-11-16：`DateTimeOffset.Offset` 查询模块
+
+Module: Oracle-only `DateTimeOffset.Offset` translation and MySQL rejection
+Checklist IDs: `MAP-05`, `QRY-07`, `QRY-11`
+Base commit: `1b0b295`
+Implementation files: `OceanBaseTemporalMemberTranslator.cs`, `OceanBaseQuerySqlGenerator.cs`
+Tests added/changed: `TemporalMemberQueryTests.cs`, `TimeSpanTicksFunctionalTests.cs`, packed `Program.cs`
+Focused command and result: Unit 3/3 and Functional 3/3 passed in Release after the Oracle RED case.
+Full local command and result: Unit 2540, Functional 2463 and Specification 1538 passed; Specification retained 16 existing mapped skips; ConsumerTests 2/2 passed.
+Package/tooling command and result: package `10.0.0-date-time-offset-offset-20261116` passed content verification; PackageConsumer passed on EF10.0.0/10.0.14 in both modes.
+Evidence boundary: Oracle emits `NUMTODSINTERVAL(EXTRACT(TIMEZONE_HOUR/MINUTE), 'MINUTE')` into the existing
+`TimeSpan` mapping; negative/positive/NULL reader values, predicate/order-by, unsupported carriers and MySQL
+pre-open rejection are covered locally. Connector 0.3.0 source/dependencies were unchanged.
+Live status: unchanged `Blocked-live` at `172.16.2.45:2881`; packet closure occurs before authentication, with
+zero SQL/DDL and zero EF readers. Required rows remain `In progress` until native evidence exists.
+Plan: [DateTimeOffset.Offset module](efcore-10-date-time-offset-offset-plan.md).
+
 ### 2026-11-16：`DateTimeOffset.TotalOffsetMinutes` 查询模块
 
 Module: Oracle `DateTimeOffset.TotalOffsetMinutes` translation and MySQL rejection

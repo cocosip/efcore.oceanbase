@@ -7,6 +7,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
+using OceanBaseConnector;
 using Xunit;
 
 namespace OceanBase.EntityFrameworkCore.FunctionalTests;
@@ -177,6 +178,52 @@ public sealed class TimeSpanTicksFunctionalTests
         using var context = Create(OceanBaseCompatibilityMode.MySql, capture);
         Assert.Throws<InvalidOperationException>(() => context.Rows
             .Where(row => row.Zoned.TotalOffsetMinutes < 0)
+            .Select(row => row.Id)
+            .ToQueryString());
+        Assert.Empty(capture.Sql);
+    }
+
+    [Theory]
+    [InlineData(OceanBaseCompatibilityMode.Oracle, false)]
+    [InlineData(OceanBaseCompatibilityMode.Oracle, true)]
+    public async Task Oracle_DateTimeOffset_Offset_materializes_and_preserves_null(
+        OceanBaseCompatibilityMode mode, bool async)
+    {
+        var positive = TimeSpan.FromHours(8);
+        var negative = -TimeSpan.FromHours(5.5);
+        using var table = new DataTable();
+        table.Columns.Add("Value", typeof(object));
+        table.Rows.Add(new OceanBaseIntervalDayToSecond(false, 0, 8, 0, 0, leadingPrecision: 2, scale: 6));
+        table.Rows.Add(new OceanBaseIntervalDayToSecond(true, 0, 5, 30, 0, leadingPrecision: 2, scale: 6));
+        table.Rows.Add(DBNull.Value);
+
+        var capture = new Capture(table);
+        await using var context = Create(mode, capture);
+        var query = context.Rows
+            .Where(row => row.Zoned.Offset != TimeSpan.Zero)
+            .OrderBy(row => row.Zoned.Offset)
+            .Select(row => (TimeSpan?)row.Zoned.Offset);
+        var result = async ? await query.ToListAsync() : query.ToList();
+
+        Assert.Equal([positive, negative, null], result);
+        var sql = Assert.Single(capture.Sql);
+        Assert.DoesNotContain("__oceanbase_internal", sql);
+        Assert.Contains("NUMTODSINTERVAL", sql);
+        Assert.Contains("EXTRACT(TIMEZONE_HOUR FROM", sql);
+        Assert.Contains("EXTRACT(TIMEZONE_MINUTE FROM", sql);
+    }
+
+    [Fact]
+    public void MySql_DateTimeOffset_Offset_is_rejected_before_command_execution()
+    {
+        using var table = new DataTable();
+        table.Columns.Add("Value", typeof(object));
+        table.Rows.Add(TimeSpan.Zero);
+
+        var capture = new Capture(table);
+        using var context = Create(OceanBaseCompatibilityMode.MySql, capture);
+        Assert.Throws<InvalidOperationException>(() => context.Rows
+            .Where(row => row.Zoned.Offset < TimeSpan.Zero)
             .Select(row => row.Id)
             .ToQueryString());
         Assert.Empty(capture.Sql);
