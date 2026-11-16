@@ -6,6 +6,14 @@ This repository contains the Entity Framework Core provider for the managed Ocea
 driver. Provider code must consume the ADO.NET driver through its public APIs. Protocol, pooling, TLS,
 authentication and wire-format work belongs in the connector repository.
 
+Each module must identify the owning layer and the existing Connector public APIs it consumes. EF owns
+LINQ translation, model/mapping metadata, shaping/tracking, migration SQL and operation orchestration;
+the driver owns transport, authentication/TLS, pooling, parameter/reader transport and native transaction
+operations. OceanBase owns SQL/type/constraint semantics. Testing a lower-layer boundary does not mean
+implementing that lower-layer feature in this provider. A public driver API gap is a separately recorded
+dependency/proposal, not permission to add a driver implementation or bypass its API inside EF. Do not
+claim provider retry orchestration implements driver routing or failover.
+
 Both compatibility modes are OceanBase Database modes, not Oracle Database or MySQL Server. Base
 feature support, SQL syntax and restrictions on the targeted OceanBase version's own documentation
 and source, and verify execution against OceanBase. Upstream Oracle/MySQL references may explain a

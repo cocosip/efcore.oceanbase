@@ -7,11 +7,33 @@ execution, transactions, complete scalar mappings and package validation remain 
 [feature checklist](efcore-10-feature-checklist.md). SQL-generation tests and intercepted commands do not prove
 that a server accepts the SQL, generates identity values or commits and rolls back correctly.
 
+## Correlated lateral query translation (QRY-03/05/08/11)
+
+This is EF Provider work: SQL generation and shaping over existing Connector 0.3.0 public command/
+parameter/reader APIs. It implements no driver protocol, routing, pooling, authentication or native
+reader feature. OceanBase's SQL and cluster-version requirements are server prerequisites.
+
+EF CrossApply/OuterApply nodes use `JOIN LATERAL (<query>) alias ON 1 = 1` and
+`LEFT JOIN LATERAL (<query>) alias ON 1 = 1` in both modes. If EF has lifted the correlated projection
+and left a plain TableExpression, use CROSS JOIN or LEFT JOIN ON 1 = 1; LATERAL cannot precede a bare
+table name. EF retains correlation, nested alias scopes, per-parent pagination, projection mapping,
+NULL extension and entity/collection shaping. Ordinary decorrelated joins/scalar subqueries stay on
+the existing EF path. This module does not change EF's scalar/anonymous DefaultIfEmpty default/
+COALESCE decisions or promise every LINQ correlation shape. Public TVF mappings remain deferred.
+
+The reference profile is OceanBase V4.3.5. Its MySQL parser accepts lateral table factors; the common
+resolver and Oracle lateral documentation provide the owning contracts. The source cluster-version
+guard requires >=4.3.1, or >=4.2.2 and <4.3.0. There is no new runtime version detector/configuration
+switch or earlier-version support claim. See [sources and evidence](efcore-10-correlated-queries-plan.md).
+Local SQL and supplied-reader results do not establish native syntax/NULL/correlation/paging evaluation.
+
 ## Read-only native query acceptance fixture (TST-02)
 
 The excluded LiveTests project now has a real EF sync/async profile over four literal SELECT/UNION ALL
 rows, requiring no schema objects or data writes. It asserts mapped reads, current numeric/text/NULL
 parameters, Boolean operations, deterministic paging, aggregates/GroupBy/HAVING, Any/All and sets.
+The lateral module adds per-parent first-row inner/outer pair assertions and two offline SQL cases;
+the complete offline profile now has six cases per EF patch. Native lateral results remain unverified.
 Offline shape tests do not load secrets, connect or fabricate native results. The profile is controlled
 by the existing opt-in/User Secrets contract and sanitizes connector failures. See
 [the module record](efcore-10-read-only-live-query-plan.md) and

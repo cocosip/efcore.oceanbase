@@ -6,7 +6,7 @@ The ordered development and acceptance rules are in
 [efcore-10-development-acceptance-plan.md](efcore-10-development-acceptance-plan.md). This file keeps the
 historical handoff and module evidence; it does not authorize jumping between unfinished feature families.
 
-The latest local module is the 2026-11-16 read-only-live-query checkpoint recorded below. Earlier commit
+The latest local module is the 2026-11-16 correlated-queries checkpoint recorded below. Earlier commit
 identifiers and test totals remain historical evidence for their original modules; they are not the current branch
 baseline. The current feature evidence is recorded in the latest checkpoint sections and module plan.
 
@@ -19,6 +19,21 @@ TPC, many-to-many and Connector 0.3.0 reverse engineering.
 Test each module and review completed major modules before committing. EF8/EF9 remain postponed.
 The provider is not release-ready. The [feature checklist](efcore-10-feature-checklist.md) remains the
 acceptance authority; this document records the handoff rather than defining a different completion target.
+
+### QRY-03 correlated lateral-query checkpoint (2026-11-16)
+
+On base `8f810ec`, EF APPLY nodes now emit OceanBase lateral joins; EF-lifted bare-table operands use
+ordinary CROSS/LEFT JOIN. This is only EF SQL translation over existing Connector 0.3.0 public APIs.
+Both-mode unit SQL tests cover projected/paged/nested sources and decorrelation controls. Supplied-reader
+runtime tests cover current binds, NULL extension, collection grouping, identity modes and error/cancel
+cleanup/recovery. Removing the generator with final fixtures gives 14 unit and 32 functional failures;
+restoration passes 16/36. The read-only native profile adds literal pair assertions; its six offline
+checks pass separately from the solution. No new native attempt or result is claimed.
+
+Independent review finds no actionable issue. Full gates/new package provenance and the OceanBase
+cluster-version requirement are in [the module record](efcore-10-correlated-queries-plan.md).
+Scalar/anonymous DefaultIfEmpty default semantics, native evaluation and wider official runtime
+families remain open. Required status stays 9 Done / 44 In progress per mode; no push/publication.
 
 ### TST-02 read-only native query fixture checkpoint (2026-11-16)
 

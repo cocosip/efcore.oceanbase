@@ -58,6 +58,24 @@ namespace OceanBase.EntityFrameworkCore.LiveTests
             Assert.Contains(difference + " ( SELECT", nested);
         }
 
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle)]
+        public void Offline_profile_translates_native_lateral_pair_queries(OceanBaseCompatibilityMode mode)
+        {
+            using var context = Create(mode);
+            var rows = ReadOnlyQueryProfile.Rows(context, mode);
+            foreach (var outer in new[] { false, true })
+            {
+                var sql = ReadOnlyQueryProfile.LateralPairs(rows, outer).ToQueryString();
+                Assert.Contains(outer ? "LEFT JOIN LATERAL (" : "JOIN LATERAL (", sql);
+                Assert.Contains("ON 1 = 1", sql);
+                Assert.DoesNotContain("APPLY", sql);
+                Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? "LIMIT 1" : "FETCH FIRST 1 ROWS ONLY", sql);
+                Assert.Contains("ORDER BY", sql);
+            }
+        }
+
         private static ReadOnlyQueryProfile.Context Create(OceanBaseCompatibilityMode mode)
             => new(new DbContextOptionsBuilder<ReadOnlyQueryProfile.Context>().UseOceanBase("Server=offline;Database=offline", mode).Options);
     }

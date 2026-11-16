@@ -2,7 +2,7 @@
 
 **Updated:** 2026-11-16
 **Branch:** `efcore/10.0`  
-**State:** Active local development; the read-only native EF query fixture is the latest local module, following raw queries, set operations, relationship writes, TPH,
+**State:** Active local development; correlated lateral-query translation is the latest local module, following the read-only EF fixture, raw queries, set operations, relationship writes, TPH,
 SaveChanges concurrency interception, concurrency-protection and write SQL specifications,
 DateOnly/DateTime calendar arithmetic, `DateTimeOffset.UtcTicks`, scalar extrema and service lifetimes.
 **Acceptance authority:** [efcore-10-feature-checklist.md](efcore-10-feature-checklist.md)
@@ -11,25 +11,23 @@ The `REL-01` support record now exists at [efcore-10-release-support.md](efcore-
 but remains `In progress` while the supplied endpoint's direct/proxy routing, transport options and
 pre-authentication failure are unresolved.
 
-The [read-only query fixture](efcore-10-read-only-live-query-plan.md) now supplies native sync/async EF
-assertions without test objects or writes. Its four offline checks pass at both EF patches. Explicit
-native attempts in both modes fail at opening (OceanBaseException/code 0/zero EF readers), so no SQL,
-authentication or server version is established. Independent review finds no actionable issue; TST-02
-and Required statuses stay open. The full source and unchanged package gates are recorded in that plan.
+The [read-only query fixture](efcore-10-read-only-live-query-plan.md) supplies native sync/async EF
+assertions without test objects or writes. Its latest lateral extension brings offline checks to six
+per EF patch. Prior native attempts in both modes fail at opening (OceanBaseException/code 0/zero EF
+readers); SQL/authentication/server version remain unestablished. No new native result is claimed.
 
 **Execution control:** Follow [efcore-10-development-acceptance-plan.md](efcore-10-development-acceptance-plan.md)
-for the ordered waves, evidence levels and handoff format. The latest SpecificationTests result is 1,538
-passed and 16 explicitly mapped skips (1,554 total); Release/Debug Unit/Functional are 2,463/2,219 and
-ConsumerTests 2 (6,222 passed). Isolated EF10.0.14 Release has the same totals. Raw queries add 36
-local cases for column names/order/case, identity, converted/null materialization, composition/binds and
-schema/value/command failure recovery. Existing production services pass without changes. Fixture cache
-isolation fixes global provider-count warnings; review's scalar projection/order assertion gap is strengthened.
-The unchanged `10.0.0-set-operations-20261116` package passes content and fresh both-patch/mode public
-runtime consumers, including raw query schema-error recovery. Archive/consumer hashes match its recorded
-build; the current source rebuild has a different informational stamp/hash. See
-[the module record](efcore-10-raw-query-runtime-plan.md) for exact gates and reuse provenance. Broader
-official store-backed/runtime and native SQL/metadata acceptance remain open. No fresh CLI/bundle/live/
-hosted/Linux claim or row promotion.
+for the ordered waves, evidence levels and handoff format. The latest full Debug/Release/isolated
+EF10.0.14 gates each pass Unit 2479, Functional 2255, Specification 1538, ConsumerTests 2 (6274 total),
+with 16 existing mapped skips. The lateral module adds 16 unit/36 functional cases; removing its
+generator causes 14/32 failures. EF owns the query tree and shapers; only SQL generation changes,
+using existing Connector 0.3.0 public command/reader APIs. No driver feature is added.
+The new `10.0.0-correlated-queries-20261116` package passes content and both-patch/mode public consumers,
+with matching source/archive/consumer hashes. Independent review finds no actionable issue. Exact
+OceanBase sources, cluster-version prerequisites, commands and limits are in
+[the module record](efcore-10-correlated-queries-plan.md). Native lateral/default semantics and broader
+official store-backed/runtime acceptance remain open. No new CLI/bundle/hosted/Linux/native claim or
+Required row promotion.
 
 This is the execution board for the first OceanBase EF Core 10 provider. It separates provider work from
 evidence work so an intercepted test cannot be mistaken for native OceanBase acceptance.

@@ -6,6 +6,11 @@
 
 ## 当前基线
 
+归属边界：本仓库开发 EF Provider 的翻译、模型/映射、物化/跟踪及操作编排；Connector 负责协议、
+认证/TLS、连接池、参数/reader 传输和原生事务操作；OceanBase 服务端负责 SQL、类型及约束。
+下文的连接池、传输、故障切换等验收缺口不代表要在 Provider 中实现这些驱动功能。
+每个模块应列明归属和使用的现有驱动公共 API；缺失 API 单独记录依赖，不在 EF 内绕过驱动。
+
 - 分支：`efcore/10.0`
 - Target Framework：`net10.0`
 - EF Core：`[10.0.0,11.0.0)`
@@ -13,24 +18,25 @@
 - 模式：MySQL、Oracle
 - Required 行：53 行；两种模式均为 9 行 `Done`、44 行 `In progress`
 - 已完成 Required 行：`CFG-01..03`、`CON-01`、`SQL-02`、`PKG-01..04`
-- 当前本地模块：只读原生 EF 查询验收夹具（base `53f2c4b`，提交见 `git log`），本轮未推送
+- 当前本地模块：相关查询 lateral 翻译（base `8f810ec`，提交见 `git log`），仅 EF Provider，本轮未推送
 
 最近一次完整本地证据：
 
 | 检查 | 结果 | 证据边界 |
 | --- | --- | --- |
-| Release Unit | 2463 通过 | Provider 单元和本地 doubles |
-| Release Functional | 2219 通过 | 拦截式同步/异步命令管线 |
+| Release Unit | 2479 通过 | Provider 单元和本地 doubles |
+| Release Functional | 2255 通过 | 拦截式同步/异步命令管线 |
 | Release Specification | 1538 通过，16 个明确跳过 | 跳过已映射到 `MAP-01/03/05/06`；本轮无新增跳过 |
-| Debug Unit / Functional | 2463 / 2219 通过 | 本地源代码；Specification 1538 + 16 mapped skips，ConsumerTests 2；合计 6222 通过 |
-| EF10.0.14 isolated Release | Unit 2463、Functional 2219、Specification 1538、ConsumerTests 2 通过 | 合计 6222 通过，16 mapped skips；Connector 0.3.0；最终夹具隔离/断言均纳入全量门禁 |
+| Debug Unit / Functional | 2479 / 2255 通过 | 本地源代码；Specification 1538 + 16 mapped skips，ConsumerTests 2；合计 6274 通过 |
+| EF10.0.14 isolated Release | Unit 2479、Functional 2255、Specification 1538、ConsumerTests 2 通过 | 合计 6274 通过，16 mapped skips；Connector 0.3.0 |
+| Correlated lateral queries | Unit 16/16、Functional 36/36；移除修复时 14/32 失败 | 两模式的 lateral/普通表分支、关联/嵌套/分页、NULL/集合/identity 物化、绑定刷新及恢复；独立走查无待修问题；只读夹具增加 pair 断言，离线总计每补丁 6/6；仅 EF 翻译，原生/版本验收仍开放；[模块记录](efcore-10-correlated-queries-plan.md) |
 | Read-only native EF query fixture | 离线 4/4，EF10.0.0 / 10.0.14 各通过；原生 0/2 通过 | 内联四行，无建表或写入；真实 EF 同步/异步查询断言；两模式开连接失败，OceanBaseException/code 0/EF readers 0；未取得认证、服务端版本或 SQL 结果；独立走查无待修问题；[模块记录](efcore-10-read-only-live-query-plan.md) |
 | Raw query materialization/recovery | 聚焦 36/36，完整 Functional 2219/2219 | 按列名/大小写/顺序物化、converter/NULL/identity、组合/绑定、缺列/错误值、失败/取消/恢复；现有生产代码通过；修正夹具全局缓存污染及走查的投影/排序断言；[模块记录](efcore-10-raw-query-runtime-plan.md) |
 | Relational set operations | Unit 42/42、Functional 62/62；16 syntax/LOB + 2 ALL RED | 四种集合运算、嵌套/组合/绑定/物化/恢复；OceanBase Oracle MINUS、LOB/非 distinct 差集交集拒绝；基于 OceanBase 4.3.5 文档；NCLOB 是保守 Provider 边界；独立走查无代码问题，证据措辞已修正；[模块记录](efcore-10-set-operations-plan.md) |
 | Relationship-change writes | 聚焦 36/36、关联 460/460 | 可选 shadow FK 断开、ClientSetNull、必需关系重挂接/孤儿时机、一对一替换顺序、接受和后续失败/取消/savepoint 恢复；仅测试和文档变更；走查的开连接前拒绝断言已补强；[模块记录](efcore-10-relationship-writes-plan.md) |
 | TPH runtime verification | 聚焦 78/78、关联 362/362；最终断言纳入全量门禁 | 现有单表继承查询/物化/CRUD/图保存/恢复链路；仅测试和文档变更；SQL/绑定断言经独立走查补强；[模块记录](efcore-10-tph-runtime-plan.md) |
 | SaveChanges concurrency interception | 聚焦 52/52、关联 186/186；初始 RED 28 失败/8 通过 | 标准诊断、同步/异步 hook 和显式抑制；保留异常/entries/token，跳过旧输出并继续后续 batch；独立走查无待修问题；[模块记录](efcore-10-save-concurrency-interception-plan.md) |
-| Current package/runtime | 复用 `10.0.0-set-operations-20261116` 通过 | 包内容和两补丁/两模式公开 consumer 通过，包括新 raw-query smoke；package-only graph 和 archive/consumer DLL hash 匹配；当前 source 重编译版本戳/hash 不同，复用来源见 raw-query 记录。无新 CLI/bundle/hosted/Linux/native evidence |
+| Current package/runtime | 新包 `10.0.0-correlated-queries-20261116` 通过 | 包内容及两补丁/两模式公开 consumer 通过，含 lateral smoke；package-only graph、source/archive/consumer DLL hash 一致；无新 CLI/bundle/hosted/Linux/native evidence，来源见 lateral 模块记录 |
 | Concurrency-protection specifications | 56/56；临时关闭检查时 20/20 敏感性用例失败，恢复后通过 | 真实 Provider 服务，开连接前拒绝；两处本地适配已记录；走查修正显式 true 掩盖默认值问题；仅测试变更，无新包或 native evidence |
 | Write SQL specifications/package | Specification 30/30、关联 runtime 134/134；`10.0.0-update-sql-specification-20261116` 通过 | 官方写入 SQL 家族，两模式三处明确适配；sequence 入口一致拒绝；独立走查、包内容和两补丁/两模式 consumer、graph/hash 校验通过 |
 | DateOnly calendar correction/package | Unit 7、Functional 8 通过；`10.0.0-date-only-calendar-fix-20261116` 通过 | 修复 Oracle 月末规则和年数优先级；独立走查无阻塞；包内容、两补丁/两模式 consumer、graph/hash 校验通过；native acceptance 未完成 |
@@ -108,9 +114,10 @@ retry 禁止条件、错误分类、拥有边界、EnsureCreated/EnsureDeleted/M
 
 ## 固定开发顺序
 
-本轮补齐不建表、不写入的原生 EF 查询验收夹具，参见
-[module plan](efcore-10-read-only-live-query-plan.md)。离线 4 项在两补丁通过，但两模式原生尝试均在开连接阶段失败，
-未执行 EF reader。需要分类端点/传输/认证路径，之后重跑现有夹具；本轮无生产代码变更。
+本轮补齐 EF 相关查询的 lateral SQL 翻译，参见
+[module plan](efcore-10-correlated-queries-plan.md)。已有驱动公共命令/reader API 足够，无 Connector 改动。
+两模式本地 SQL/物化/恢复、包与全量门禁通过；只读验收夹具增加 pair 断言，离线每补丁 6 项通过。
+原生 lateral 结果及部署版本仍未验证；本轮未重复此前失败的开连接尝试。
 剩余 store-backed runtime 家族仍需正确的存储夹具；后续按完整模块推进 Required 查询/写入/runtime 缺口，
 避免重复已接入家族和零散新增 temporal API。真实环境和发布门槛保持开放。
 

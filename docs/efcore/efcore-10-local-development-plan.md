@@ -14,13 +14,23 @@ public APIs and per-mode mappings/SQL. Separate local implementation evidence fr
 The compact execution board is [efcore-10-roadmap.md](efcore-10-roadmap.md); this file remains the detailed
 batch ledger and acceptance notes.
 
-**Updated:** 2026-11-16, read-only native EF query fixture following raw query materialization/recovery, relational set operations, relationship writes, TPH runtime verification, SaveChanges concurrency interception, concurrency-protection specifications, write SQL specifications, DateOnly calendar correction, DateTime calendar addition, DateTimeOffset.UtcTicks, CFG-04/TST-01 service-registration lifetime, DateOnly.AddYears, DateOnly.AddMonths,
+**Updated:** 2026-11-16, correlated lateral queries following the read-only native EF query fixture, raw query materialization/recovery, relational set operations, relationship writes, TPH runtime verification, SaveChanges concurrency interception, concurrency-protection specifications, write SQL specifications, DateOnly calendar correction, DateTime calendar addition, DateTimeOffset.UtcTicks, CFG-04/TST-01 service-registration lifetime, DateOnly.AddYears, DateOnly.AddMonths,
 DateOnly.AddDays, DateTimeOffset.UtcNow, DateTimeOffset.UtcDateTime, DateTimeOffset members, the server clock,
 DateTime.Ticks, TimeOnly.Ticks, TimeSpan.Ticks, DateOnly.DayNumber, DateTime.TimeOfDay and TST-01 model-building 101
 checkpoints.
 Keep one complete module active and review it before committing. EF8/EF9 remains postponed; live execution is opt-in and
 currently blocked before authentication by the supplied endpoint/transport behavior.
 The full goal remains incomplete.
+
+### Correlated lateral-query module (2026-11-16)
+
+**IDs:** QRY-03/05/08/11 and associated connection/test/package rows in
+[the module plan](efcore-10-correlated-queries-plan.md). Only EF SQL generation changes; the driver
+retains transport/command/reader ownership. Both-mode lateral and EF-lifted plain-table joins pass
+16 unit/36 supplied-reader functional cases, with 14/32 sensitivity failures without the fix. The
+native fixture gains literal pair expectations and two offline cases (six total); no new native
+result. Independent review finds no actionable issue; full source/new package gates and OceanBase
+version requirements are in the plan. No Required promotion or driver capability added.
 
 ### Read-only native EF query fixture module (2026-11-16)
 

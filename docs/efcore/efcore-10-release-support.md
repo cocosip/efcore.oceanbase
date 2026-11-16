@@ -52,6 +52,13 @@ at EF10.0.0 and EF10.0.14; they verify fixture construction, not native results.
 [the module record](efcore-10-read-only-live-query-plan.md). Both modes remain OceanBase targets;
 OceanBase V4.3.5 references define the fixture's syntax, not the unidentified deployed server version.
 
+The subsequent [correlated-query module](efcore-10-correlated-queries-plan.md) extends the same profile
+with inner/outer per-parent first-row pair assertions and two offline SQL checks (six total per patch).
+Lateral joins target the documented OceanBase V4.3.5 profile, subject to its cluster-version guard;
+the prior opening failures cannot establish that this endpoint meets that prerequisite. No new native
+connection attempt or lateral result is claimed for that extension. It uses existing public Connector
+commands/readers and adds no driver capability.
+
 ## Reproduction
 
 Restore from an available package source first. Run offline fixture checks without the live opt-in:

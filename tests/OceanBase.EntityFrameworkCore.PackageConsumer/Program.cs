@@ -48,6 +48,7 @@ namespace PackageConsumer
                 RelationshipWriteSmoke.Run(mode);
                 SetOperationSmoke.Run(mode);
                 RawQuerySmoke.Run(mode);
+                CorrelatedQuerySmoke.Run(mode);
                 TransactionSmoke.Run(mode);
                 RetrySmoke.Run(mode);
                 SplitQuerySmoke.Run(mode);

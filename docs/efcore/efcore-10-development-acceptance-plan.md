@@ -19,10 +19,21 @@
 ## 当前检查点
 
 创建本文档时记录的历史提交和测试总数属于此前的模块检查点；当前最新模块、测试结果和包版本分别记录在下面的
-read-only-live-query checkpoint 中。不要使用旧 handoff 行推断当前 HEAD 或当前测试总数。
+correlated-queries checkpoint 中。不要使用旧 handoff 行推断当前 HEAD 或当前测试总数。
 - 当前没有真实 OceanBase SQL/DDL 验收。已有 live 探针在握手阶段报 `Connection closed while reading the packet`，没有执行 SQL 或 DDL。
 
 因此，CFG-04 的服务注册生命周期已有官方本地规格证据，但整体 CFG-04 仍为 In progress；连接波次已转入剩余映射、查询、更新和事务边界。不得重复已经完成的连接 characterization。
+
+### 2026-11-16：QRY-03 correlated lateral queries
+
+On base `8f810ec`, both OceanBase modes translate EF APPLY nodes into lateral joins, with ordinary
+join fallback for EF-lifted base-table operands. Only EF translation changes; Connector 0.3.0 public
+command/reader APIs are sufficient. Final sensitivity: 14 unit/32 functional failures without the
+generator; green: 16/36. Six excluded offline live-fixture checks include the new per-parent pair
+queries; no native result is invented or repeated failed handshake claimed as progress. Independent
+review finds no actionable issue. Full source/new package evidence, exact OceanBase sources/version
+prerequisites and remaining semantics are in [the module plan](efcore-10-correlated-queries-plan.md).
+Required statuses and the overall active goal remain unchanged.
 
 ### 2026-11-16：TST-02 read-only native query fixture
 

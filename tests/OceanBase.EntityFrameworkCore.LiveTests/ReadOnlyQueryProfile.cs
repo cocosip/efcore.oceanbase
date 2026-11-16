@@ -29,6 +29,15 @@ namespace OceanBase.EntityFrameworkCore.LiveTests
         internal static IQueryable<Row> Rows(Context context, OceanBaseCompatibilityMode mode)
             => context.Set<Row>().FromSqlRaw(Seed(mode)).AsNoTracking();
 
+        internal static IQueryable<Pair> LateralPairs(IQueryable<Row> rows, bool outer)
+            => rows.SelectMany(parent => outer
+                ? rows.Where(child => child.Id > parent.Id).OrderBy(child => child.Id).Take(1).DefaultIfEmpty()
+                : rows.Where(child => child.Id > parent.Id).OrderBy(child => child.Id).Take(1),
+                (parent, child) => new { Parent = parent.Id, Child = (int?)child!.Id })
+                .OrderBy(pair => pair.Parent).Select(pair => new Pair(pair.Parent, pair.Child));
+
+        internal sealed record Pair(int Parent, int? Child);
+
         internal static IQueryable<int?> Set(IQueryable<int?> left, IQueryable<int?> right, string operation)
             => operation switch { "Union" => left.Union(right), "Concat" => left.Concat(right),
                 "Intersect" => left.Intersect(right), _ => left.Except(right) };
@@ -89,6 +98,11 @@ namespace OceanBase.EntityFrameworkCore.LiveTests
             }
             var nested = left.Except(right.Except(rows.Where(r => r.Id == 4).Select(r => r.Value))).OrderBy(v => v ?? -1);
             Assert.Equal(new int?[] { 10, 20 }, await List(nested, async, token));
+
+            Assert.Equal(new[] { new Pair(1, 2), new Pair(2, 3), new Pair(3, 4) },
+                await List(LateralPairs(rows, false), async, token));
+            Assert.Equal(new[] { new Pair(1, 2), new Pair(2, 3), new Pair(3, 4), new Pair(4, null) },
+                await List(LateralPairs(rows, true), async, token));
         }
 
         private static Task<List<T>> List<T>(IQueryable<T> query, bool async, CancellationToken token)
