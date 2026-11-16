@@ -14,13 +14,18 @@ public APIs and per-mode mappings/SQL. Separate local implementation evidence fr
 The compact execution board is [efcore-10-roadmap.md](efcore-10-roadmap.md); this file remains the detailed
 batch ledger and acceptance notes.
 
-**Updated:** 2026-11-16, DateOnly.AddYears following DateOnly.AddMonths, DateOnly.AddDays, DateTimeOffset.UtcNow, DateTimeOffset.UtcDateTime, DateTimeOffset members, the server clock, DateTime.Ticks, TimeOnly.Ticks, TimeSpan.Ticks, DateOnly.DayNumber, DateTime.TimeOfDay and TST-01
-model-building 101 checkpoints.
+**Updated:** 2026-11-16, CFG-04/TST-01 service-registration lifetime following DateOnly.AddYears, DateOnly.AddMonths,
+DateOnly.AddDays, DateTimeOffset.UtcNow, DateTimeOffset.UtcDateTime, DateTimeOffset members, the server clock,
+DateTime.Ticks, TimeOnly.Ticks, TimeSpan.Ticks, DateOnly.DayNumber, DateTime.TimeOfDay and TST-01 model-building 101
+checkpoints.
 Keep one complete module active and review it before committing. EF8/EF9 remains postponed; live execution is opt-in and
 currently blocked before authentication by the supplied endpoint/transport behavior.
 The full goal remains incomplete.
 
-The current local module is the QRY-07/QRY-11/MAP-05 `DateOnly.AddYears` slice. It translates DateOnly year
+The current local module is CFG-04/TST-01 service-registration lifetime. The provider's retry reader interceptor is
+registered with EF's scoped lifetime in both modes, and the official relational service-collection specification has
+6/6 passing assertions; see the service-lifetime checkpoint in [the development progress](efcore-10-progress.md).
+The preceding local module is the QRY-07/QRY-11/MAP-05 `DateOnly.AddYears` slice. It translates DateOnly year
 arithmetic through MySQL `DATE_ADD` and Oracle `ADD_MONTHS` with both-mode SQL-shape, negative-carrier and
 intercepted sync/async reader coverage; see [the DateOnly.AddYears plan](efcore-10-date-only-add-years-plan.md).
 The preceding `DateOnly.AddMonths` slice uses the same DATE carrier; see [the DateOnly.AddMonths plan](efcore-10-date-only-add-months-plan.md).

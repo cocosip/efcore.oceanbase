@@ -6,19 +6,43 @@ The ordered development and acceptance rules are in
 [efcore-10-development-acceptance-plan.md](efcore-10-development-acceptance-plan.md). This file keeps the
 historical handoff and module evidence; it does not authorize jumping between unfinished feature families.
 
-The latest local feature module is the 2026-11-16 `DateOnly.AddYears` checkpoint recorded below. Earlier commit
+The latest local feature module is the 2026-11-16 CFG-04/TST-01 service-registration-lifetime checkpoint recorded below. Earlier commit
 identifiers and test totals remain historical evidence for their original modules; they are not the current branch
 baseline. The current feature evidence is recorded in the latest checkpoint sections and module plan.
 
 ## Current checkpoint: 2026-11-16
 
-Development is active on efcore/10.0 following the HasData, connection-boundary, CFG-04, Boolean conversion and
-temporal fractional checkpoints.
+Development is active on efcore/10.0 following the HasData, connection-boundary, CFG-04, Boolean conversion,
+temporal fractional and service-registration-lifetime checkpoints.
 The current local checkpoint includes lazy-loading integration, ordinary compiled models, split queries, retries,
 TPC, many-to-many and Connector 0.3.0 reverse engineering.
 Test each module and review completed major modules before committing. EF8/EF9 remain postponed.
 The provider is not release-ready. The [feature checklist](efcore-10-feature-checklist.md) remains the
 acceptance authority; this document records the handoff rather than defining a different completion target.
+
+### CFG-04/TST-01 service registration lifetime checkpoint (2026-11-16)
+
+Module: EF10 relational service collection lifetimes for the provider's registered services.
+Checklist IDs: `CFG-04`, `TST-01`.
+Base commit: `bd47c5c`.
+Implementation files: `src/OceanBase.EntityFrameworkCore/Internal/OceanBaseOptionsExtension.cs`.
+Tests added/changed: `tests/OceanBase.EntityFrameworkCore.SpecificationTests/ServiceCollectionTests.cs`,
+derived from the official `RelationalServiceCollectionExtensionsTestBase` for MySQL and Oracle.
+Focused command and result: 6/6 official lifetime assertions passed; the RED run caught
+`OceanBaseRetryReaderInterceptor` registered as Singleton, and the fix changes it to Scoped.
+Full local command and result: Release and Debug Unit 2,395/2,395, Functional 1,931/1,931, and Release
+Specification 1,452 passed with 16 mapped skips; `ExecutionStrategy` Unit 79 and runtime 64 passed; ConsumerTests 2/2 passed.
+Package/tooling command and result: `10.0.0-service-lifetime-20261116` passed package-content verification and
+the isolated packed PackageConsumer on EF10.0.0 and EF10.0.14 in both modes using the Connector 0.3.0 feed;
+ToolingConsumer passed EF10.0.0 and EF10.0.14 checks with `-SkipBundle`.
+Live command and result: not run; supplied endpoints still close during the pre-authentication handshake before SQL.
+Evidence boundary: local service-registration lifetime, official specification coverage and offline package
+consumption are proved. Native service cleanup, schema/lifecycle behavior and live OceanBase results remain open.
+Known gaps: `CFG-04` and `TST-01` remain `In progress`; the 16 mapped skips and remaining query/write/runtime
+specification families are unchanged. No Connector change was needed.
+Next module: continue one remaining coherent local mapping/query/write/transaction or specification module after
+this commit; do not repeat completed service characterization.
+Commit: local only; see `git log` for the final revision (not pushed).
 
 ### QRY-07/QRY-11/MAP-05 `DateOnly.AddYears` checkpoint (2026-11-16)
 

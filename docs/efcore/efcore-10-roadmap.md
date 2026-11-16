@@ -2,7 +2,7 @@
 
 **Updated:** 2026-11-16
 **Branch:** `efcore/10.0`  
-**State:** Active local development; QRY-07/QRY-11/MAP-05 `DateOnly.AddYears` is the latest local module.
+**State:** Active local development; CFG-04/TST-01 service-registration lifetime is the latest local module.
 **Acceptance authority:** [efcore-10-feature-checklist.md](efcore-10-feature-checklist.md)
 
 The `REL-01` support record now exists at [efcore-10-release-support.md](efcore-10-release-support.md),
@@ -10,8 +10,9 @@ but remains `In progress` while the supplied endpoint's direct/proxy routing, tr
 pre-authentication failure are unresolved.
 
 **Execution control:** Follow [efcore-10-development-acceptance-plan.md](efcore-10-development-acceptance-plan.md)
-for the ordered waves, evidence levels and handoff format. The latest focused SpecificationTests result is 1,446
-passed and 16 explicitly mapped skips (1,462 total); the new module's 248 tests have zero failures/skips.
+for the ordered waves, evidence levels and handoff format. The latest focused SpecificationTests result is 1,452
+passed and 16 explicitly mapped skips (1,468 total); the service-lifetime module adds 6 official lifetime assertions
+with zero failures/skips.
 
 This is the execution board for the first OceanBase EF Core 10 provider. It separates provider work from
 evidence work so an intercepted test cannot be mistaken for native OceanBase acceptance.
@@ -21,7 +22,8 @@ evidence work so an intercepted test cannot be mistaken for native OceanBase acc
 The following required rows have complete local/package evidence for both modes:
 
 - `CFG-01..03`, `CON-01`, `SQL-02`
-- `CFG-04` local service-graph/facade characterization (native schema and lifecycle gates remain open)
+- `CFG-04` local service-graph/facade characterization and service-registration lifetime now have both-mode local
+  evidence; native schema and lifecycle acceptance remain open.
 - `PKG-01..04`
 - HasData now participates in GenerateCreateScript, CreateTables and EnsureCreated for both modes. EF
   orders/converts seed operations; excluded tables are filtered. DDL precedes an owned model-data transaction,
@@ -190,7 +192,7 @@ features stay visible and must not be advertised as supported.
 
 ## Execution order from this checkpoint
 
-Development continues after the CFG-04 local commit. Keep one feature module active at a time and do not
+Development continues after the CFG-04/TST-01 service-lifetime local commit. Keep one feature module active at a time and do not
 repeat completed connection characterization without a reproduced defect.
 
 1. **Completed locally:** migrations core, tooling, TPT/TPC inheritance, entity/table splitting and Connector

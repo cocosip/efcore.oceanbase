@@ -19,10 +19,32 @@
 ## 当前检查点
 
 创建本文档时记录的历史提交和测试总数属于此前的模块检查点；当前最新模块、测试结果和包版本分别记录在下面的
-`DateOnly.AddYears` checkpoint 和对应 plan 中。不要使用旧 handoff 行推断当前 HEAD 或当前测试总数。
+CFG-04/TST-01 service-registration-lifetime checkpoint 中。不要使用旧 handoff 行推断当前 HEAD 或当前测试总数。
 - 当前没有真实 OceanBase SQL/DDL 验收。已有 live 探针在握手阶段报 `Connection closed while reading the packet`，没有执行 SQL 或 DDL。
 
-因此，CFG-04 已完成本地 characterization；连接波次已转入剩余映射、查询、更新和事务边界。不得重复已经完成的连接 characterization。
+因此，CFG-04 的服务注册生命周期已有官方本地规格证据，但整体 CFG-04 仍为 In progress；连接波次已转入剩余映射、查询、更新和事务边界。不得重复已经完成的连接 characterization。
+
+### 2026-11-16：CFG-04/TST-01 service registration lifetime
+
+Module: EF10 relational service collection lifetime contract for the provider.
+Checklist IDs: `CFG-04`, `TST-01`.
+Base commit: `bd47c5c`.
+Implementation files: `src/OceanBase.EntityFrameworkCore/Internal/OceanBaseOptionsExtension.cs`.
+Tests added/changed: `ServiceCollectionTests.cs`, using the official `RelationalServiceCollectionExtensionsTestBase`
+for MySQL and Oracle.
+Focused command and result: 6/6 lifetime assertions passed. The RED run showed the retry reader interceptor was
+Singleton; production registration is now Scoped.
+Full local command and result: Release/Debug Unit 2,395 and Functional 1,931 pass; Release Specification 1,452 pass
+with 16 mapped skips; ExecutionStrategy Unit 79 and runtime 64 pass; ConsumerTests 2/2 pass.
+Package/tooling command and result: package `10.0.0-service-lifetime-20261116` passes content verification and the
+isolated packed PackageConsumer on EF10.0.0/10.0.14 in both modes with Connector 0.3.0; ToolingConsumer passes both
+patches with `-SkipBundle`.
+Live command and result: not run; both supplied endpoints still close during the pre-authentication handshake.
+Evidence boundary: local service lifetime and offline package/tooling behavior only; native cleanup, schema/lifecycle
+behavior and live OceanBase results are not proved.
+Known gaps: CFG-04/TST-01 remain In progress, with native lifecycle and remaining runtime specification families open.
+Next module: choose one remaining coherent local module after this commit; do not repeat completed service characterization.
+Commit: local only; see `git log` for the final revision (not pushed).
 
 Boolean conversion、temporal fractional members 和 `REL-01` 支持记录已在后续检查点补充；`REL-01`
 仍因端点握手和 direct/proxy 分类未完成而保持 `In progress`。

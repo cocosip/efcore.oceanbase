@@ -148,7 +148,7 @@ namespace OceanBase.EntityFrameworkCore.Internal
 
         public override void ApplyServices(IServiceCollection services)
         {
-            services.TryAddEnumerable(ServiceDescriptor.Singleton<IInterceptor, OceanBaseRetryReaderInterceptor>());
+            services.TryAddEnumerable(ServiceDescriptor.Scoped<IInterceptor, OceanBaseRetryReaderInterceptor>());
             var builder = new EntityFrameworkRelationalServicesBuilder(services)
                 .TryAdd<LoggingDefinitions, OceanBaseLoggingDefinitions>()
                 .TryAdd<IDatabaseProvider, DatabaseProvider<OceanBaseOptionsExtension>>()
