@@ -19,10 +19,22 @@
 ## 当前检查点
 
 创建本文档时记录的历史提交和测试总数属于此前的模块检查点；当前最新模块、测试结果和包版本分别记录在下面的
-DateOnly calendar-correction checkpoint 中。不要使用旧 handoff 行推断当前 HEAD 或当前测试总数。
+write SQL specification checkpoint 中。不要使用旧 handoff 行推断当前 HEAD 或当前测试总数。
 - 当前没有真实 OceanBase SQL/DDL 验收。已有 live 探针在握手阶段报 `Connection closed while reading the packet`，没有执行 SQL 或 DDL。
 
 因此，CFG-04 的服务注册生命周期已有官方本地规格证据，但整体 CFG-04 仍为 In progress；连接波次已转入剩余映射、查询、更新和事务边界。不得重复已经完成的连接 characterization。
+
+### 2026-11-16：TST-01/UPD-01..04 write SQL specification
+
+The complete official UpdateSqlGeneratorTestBase family now runs for both modes, with eleven inherited
+DML bodies unchanged, one fixed-@ insert assertion adapted for Oracle and two explicit Deferred sequence
+rejection adaptations. Thirty cases pass; the initial four failures exposed generic sequence SQL emitted
+through inherited services. Both append entrypoints now reject before altering a caller buffer. Connected
+generated-value/graph/transaction regressions pass 134/134. Independent review found no actionable issues.
+Full Debug/Release and isolated EF10.0.14 Release: Unit 2,421, Functional 1,955, Specification 1,482,
+ConsumerTests 2 pass with 16 existing mapped skips. Package content and both-patch/both-mode consumers
+pass with matching graphs/hashes. Native DML, readback and transaction acceptance remain open; no new
+skip, live SQL, CLI/bundle rerun, push or publication. See [the module plan](efcore-10-update-sql-specification-plan.md).
 
 ### 2026-11-16：QRY-07/QRY-11/MAP-05 DateOnly calendar-correction
 

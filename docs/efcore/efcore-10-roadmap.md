@@ -2,8 +2,8 @@
 
 **Updated:** 2026-11-16
 **Branch:** `efcore/10.0`  
-**State:** Active local development; DateOnly calendar correction is the latest local module, following
-DateTime calendar addition, `DateTimeOffset.UtcTicks`, finite `MinNumber`/`MaxNumber` and service lifetimes.
+**State:** Active local development; write SQL specifications are the latest local module, following
+DateOnly/DateTime calendar arithmetic, `DateTimeOffset.UtcTicks`, scalar extrema and service lifetimes.
 **Acceptance authority:** [efcore-10-feature-checklist.md](efcore-10-feature-checklist.md)
 
 The `REL-01` support record now exists at [efcore-10-release-support.md](efcore-10-release-support.md),
@@ -11,12 +11,13 @@ but remains `In progress` while the supplied endpoint's direct/proxy routing, tr
 pre-authentication failure are unresolved.
 
 **Execution control:** Follow [efcore-10-development-acceptance-plan.md](efcore-10-development-acceptance-plan.md)
-for the ordered waves, evidence levels and handoff format. The latest Release SpecificationTests result is 1,452
-passed and 16 explicitly mapped skips (1,468 total); Release/Debug Unit/Functional are 2,421/1,955 and
-ConsumerTests 2. Isolated EF10.0.14 Release has the same totals. The DateOnly correction adds seven unit
-and eight intercepted functional cases, passes independent review, package content and both-patch/both-mode
-consumers. Native calendar/session, precision, range/error and SQL acceptance remain open; Oracle requires
-NLS_CALENDAR=GREGORIAN. See [the correction plan](efcore-10-date-only-calendar-fix-plan.md).
+for the ordered waves, evidence levels and handoff format. The latest Release SpecificationTests result is 1,482
+passed and 16 explicitly mapped skips (1,498 total); Release/Debug Unit/Functional are 2,421/1,955 and
+ConsumerTests 2. Isolated EF10.0.14 Release has the same totals. The write SQL family adds thirty passing
+cases with three explicit profile adaptations per mode and no new skips. Sequence SQL entrypoints now
+reject consistently while DEF-06 stays Deferred. Independent review, package content and both-patch/both-mode
+consumers pass. Native DML/readback/transaction and broader runtime acceptance remain open; see
+[the module plan](efcore-10-update-sql-specification-plan.md).
 
 This is the execution board for the first OceanBase EF Core 10 provider. It separates provider work from
 evidence work so an intercepted test cannot be mistaken for native OceanBase acceptance.

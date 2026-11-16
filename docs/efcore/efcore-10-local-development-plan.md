@@ -14,13 +14,23 @@ public APIs and per-mode mappings/SQL. Separate local implementation evidence fr
 The compact execution board is [efcore-10-roadmap.md](efcore-10-roadmap.md); this file remains the detailed
 batch ledger and acceptance notes.
 
-**Updated:** 2026-11-16, DateOnly calendar correction following DateTime calendar addition, DateTimeOffset.UtcTicks, CFG-04/TST-01 service-registration lifetime, DateOnly.AddYears, DateOnly.AddMonths,
+**Updated:** 2026-11-16, write SQL specifications following DateOnly calendar correction, DateTime calendar addition, DateTimeOffset.UtcTicks, CFG-04/TST-01 service-registration lifetime, DateOnly.AddYears, DateOnly.AddMonths,
 DateOnly.AddDays, DateTimeOffset.UtcNow, DateTimeOffset.UtcDateTime, DateTimeOffset members, the server clock,
 DateTime.Ticks, TimeOnly.Ticks, TimeSpan.Ticks, DateOnly.DayNumber, DateTime.TimeOfDay and TST-01 model-building 101
 checkpoints.
 Keep one complete module active and review it before committing. EF8/EF9 remains postponed; live execution is opt-in and
 currently blocked before authentication by the supplied endpoint/transport behavior.
 The full goal remains incomplete.
+
+### Write SQL specification module (2026-11-16)
+
+The complete EF10 UpdateSqlGeneratorTestBase family adds 30 passing cases across both modes, including
+three explicitly documented profile adaptations per mode and one extra batch-flag fact. Four initial
+sequence rejection failures are fixed at the two append entrypoints; sequence/HiLo remains Deferred.
+Independent review found no actionable issues. Full Debug/Release and isolated EF10.0.14 Release pass
+Unit 2,421, Functional 1,955, Specification 1,482 and ConsumerTests 2, with 16 existing mapped skips.
+Package `10.0.0-update-sql-specification-20261116` passes content and both-patch/both-mode consumers.
+Native DML/readback/transaction gates remain open; see [the module plan](efcore-10-update-sql-specification-plan.md).
 
 ### DateOnly calendar-correction module (2026-11-16)
 

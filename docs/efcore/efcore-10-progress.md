@@ -6,7 +6,7 @@ The ordered development and acceptance rules are in
 [efcore-10-development-acceptance-plan.md](efcore-10-development-acceptance-plan.md). This file keeps the
 historical handoff and module evidence; it does not authorize jumping between unfinished feature families.
 
-The latest local feature module is the 2026-11-16 DateOnly calendar-correction checkpoint recorded below. Earlier commit
+The latest local module is the 2026-11-16 write SQL specification checkpoint recorded below. Earlier commit
 identifiers and test totals remain historical evidence for their original modules; they are not the current branch
 baseline. The current feature evidence is recorded in the latest checkpoint sections and module plan.
 
@@ -19,6 +19,28 @@ TPC, many-to-many and Connector 0.3.0 reverse engineering.
 Test each module and review completed major modules before committing. EF8/EF9 remain postponed.
 The provider is not release-ready. The [feature checklist](efcore-10-feature-checklist.md) remains the
 acceptance authority; this document records the handoff rather than defining a different completion target.
+
+### TST-01/UPD-01..04 write SQL specification checkpoint (2026-11-16)
+
+| Field | Evidence |
+| --- | --- |
+| Module | Complete EF10 UpdateSqlGeneratorTestBase family for both modes; sequence boundary correction |
+| Checklist IDs | TST-01, UPD-01..04, SQL-01/02, DEF-06 |
+| Base commit | `52e00a4` |
+| Implementation files | OceanBaseUpdateSqlGenerator.cs: both sequence append entrypoints reject before modifying SQL |
+| Tests | UpdateSqlGeneratorTests.cs; packed Program.cs checks all four sequence Generate/Append entrypoints |
+| Focused command/result | UpdateSqlGeneratorTests: initial 26 pass/4 fail, then 30/30 pass; GeneratedValuesTests/GraphUpdateTests/TransactionTests 134/134 pass |
+| Full local command/result | Debug/Release and isolated EF10.0.14 Release: Unit 2,421, Functional 1,955, Specification 1,482, ConsumerTests 2 pass; 16 existing mapped skips |
+| Package/tooling | `10.0.0-update-sql-specification-20261116` passes content and both-patch/both-mode consumers with exact graphs/matching DLL hashes; no CLI/bundle rerun |
+| Live | Not run; no SQL/DDL executed in this module |
+| Evidence boundary | Local DML text, original/NULL predicates, RETURNING placeholders and batch flags; native affected rows, readback and transactions unverified |
+| Known gaps | Three explicit inherited-method profile adaptations per mode; sequence/HiLo remains Deferred, broader TST-01/runtime and live gates remain open |
+| Next module | Audit remaining TST-01 runtime fixtures for a complete locally runnable family; do not repeat admitted metadata/service/SQL families |
+| Commit | Local only; see git log for the revision; no push/publication |
+
+Independent read-only review found no actionable issues. See [the module plan](efcore-10-update-sql-specification-plan.md)
+and [profile adaptation record](efcore-10-specification-exclusions.md#write-sql-generator-family).
+The overall development goal remains incomplete.
 
 ### QRY-07/QRY-11/MAP-05 DateOnly calendar-correction checkpoint (2026-11-16)
 

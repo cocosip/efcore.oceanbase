@@ -1,7 +1,7 @@
 # EF10 Specification Exclusions
 
-This record owns the explicit exclusions added while extending `TST-01` with the official
-`RelationalNonRelationshipTestBase` family. It records unsupported profile combinations; it does not
+This record owns the explicit exclusions and profile adaptations added while extending `TST-01` with
+official relational specification families. It records unsupported profile combinations; it does not
 turn a provider mapping failure into a pass.
 
 ## Non-relationship model family
@@ -59,3 +59,27 @@ The next reflected candidate, `Types.RelationalTypeTestBase<T,TFixture>`, contai
 `SaveChanges` and `ExecuteUpdate` cases. It is therefore an explicit `DEF-04` candidate and is not admitted to
 the Required `TST-01` suite until JSON/complex/primitive-collection support is scheduled. This audit prevents
 the deferred JSON family from being counted as ordinary relational type coverage.
+
+## Write SQL generator family
+
+`UpdateSqlGeneratorTests.cs` adds the complete fourteen-method EF10 `UpdateSqlGeneratorTestBase` family
+for MySQL and Oracle. Eleven inherited DML test bodies execute unchanged with literal provider SQL
+assertions in the required verification hooks. The remaining three method adaptations are explicit:
+
+| Inherited method | Adaptation | Checklist IDs |
+| --- | --- | --- |
+| `AppendInsertOperation_appends_insert_and_select_rowcount_if_no_store_generated_columns_exist_or_conditions_exist` | Preserve the fixture/command, adapt the hardcoded @ placeholders to Oracle colons. The expected insert still has no extra result set. | `SQL-02`, `UPD-01` |
+| `GenerateNextSequenceValueOperation_returns_statement_with_sanitized_sequence` | Require NotSupportedException for delimiter-bearing names through both sequence Generate/Append pairs; append rejection preserves the caller buffer. | `DEF-06` |
+| `GenerateNextSequenceValueOperation_correctly_handles_schemas` | Apply the same explicit rejection to a schema-qualified name. No sequence/HiLo support is claimed. | `DEF-06` |
+
+Each mode also has one provider-specific fact checking NoResults and generated-read transaction flags
+for insert/update/delete operations. Focused result: 30 passed, 0 failed, 0 skipped. The initial run had
+26 passes and four failures because the inherited generator emitted unsupported sequence SQL. The
+two append overrides now reject before writing SQL, including through inherited Generate wrappers.
+No new skip was introduced and no failed native query was reclassified as a test pass.
+
+This family proves local command construction, NULL concurrency predicates, default-only inserts,
+RETURNING placeholders and batch flags through registered provider services. The helper blocks connection
+opening. It does not prove native affected rows, key allocation, generated-value readback, transactions or
+server SQL acceptance. TST-01 and the parent UPD/SQL rows retain their wider acceptance boundary.
+See [the module plan](efcore-10-update-sql-specification-plan.md) for current full/patch/package evidence.

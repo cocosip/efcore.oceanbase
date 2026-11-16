@@ -13,7 +13,7 @@
 - 模式：MySQL、Oracle
 - Required 行：53 行；两种模式均为 9 行 `Done`、44 行 `In progress`
 - 已完成 Required 行：`CFG-01..03`、`CON-01`、`SQL-02`、`PKG-01..04`
-- 当前实现基线：DateOnly calendar-correction 模块提交（见 `git log`）；本地完成，未推送
+- 当前实现基线：write SQL specification 模块提交（见 `git log`）；本地完成，未推送
 
 最近一次完整本地证据：
 
@@ -21,9 +21,10 @@
 | --- | --- | --- |
 | Release Unit | 2421 通过 | Provider 单元和本地 doubles |
 | Release Functional | 1955 通过 | 拦截式同步/异步命令管线 |
-| Release Specification | 1452 通过，16 个明确跳过 | 跳过已映射到 `MAP-01/03/05/06` |
-| Debug Unit / Functional | 2421 / 1955 通过 | 本地源代码；Specification 1452 + 16 mapped skips，ConsumerTests 2 |
-| EF10.0.14 isolated Release | Unit 2421、Functional 1955、Specification 1452、ConsumerTests 2 通过 | 16 mapped skips；Connector 0.3.0 |
+| Release Specification | 1482 通过，16 个明确跳过 | 跳过已映射到 `MAP-01/03/05/06`；本轮无新增跳过 |
+| Debug Unit / Functional | 2421 / 1955 通过 | 本地源代码；Specification 1482 + 16 mapped skips，ConsumerTests 2 |
+| EF10.0.14 isolated Release | Unit 2421、Functional 1955、Specification 1482、ConsumerTests 2 通过 | 16 mapped skips；Connector 0.3.0 |
+| Write SQL specifications/package | Specification 30/30、关联 runtime 134/134；`10.0.0-update-sql-specification-20261116` 通过 | 官方写入 SQL 家族，两模式三处明确适配；sequence 入口一致拒绝；独立走查、包内容和两补丁/两模式 consumer、graph/hash 校验通过 |
 | DateOnly calendar correction/package | Unit 7、Functional 8 通过；`10.0.0-date-only-calendar-fix-20261116` 通过 | 修复 Oracle 月末规则和年数优先级；独立走查无阻塞；包内容、两补丁/两模式 consumer、graph/hash 校验通过；native acceptance 未完成 |
 | DateTime calendar-add module/package | Unit 11、Functional 8 通过；`10.0.0-date-time-calendar-add-20261116` 通过 | 走查修复年数优先级和 Oracle DATE 结果类型；包内容、两 EF 补丁/两模式 consumer、graph/hash 校验通过；Oracle 需要 Gregorian session；native acceptance 未完成 |
 | server clock package | `10.0.0-date-time-clocks-20261116` 通过 | 包内容、EF10.0.0/10.0.14、两模式 consumer |
@@ -52,7 +53,7 @@
 | 写入和事务 | 图写入、生成值、并发、Savepoint、取消、retry 有本地 doubles | 真实提交/回滚/生成值/并发和 failover |
 | Schema 和迁移 | 迁移核心/tooling、TPT/TPC、拆分、HasData 有本地及 packed 证据 | 真实 DDL、权限、锁、删除、部分失败恢复 |
 | Lazy loading/compiled model/split query | 普通 EF/Proxies/ILazyLoader/compiled model/split query 已覆盖 | 原生 session/isolation、组合场景、AOT、上游 runtime fixtures |
-| Specification | 非关系模型 330 通过、ModelBuilding101 248 通过、16 个排除已解释 | 关系查询/写入/事务/runtime 家族 |
+| Specification | 非关系模型 330、ModelBuilding101 248、服务注册 6、write SQL 30 通过，16 个排除已解释 | 更广关系查询/写入/事务/runtime 家族；写入 SQL 三处适配见 exclusions |
 
 ## Required 缺口清单
 
@@ -98,9 +99,9 @@ retry 禁止条件、错误分类、拥有边界、EnsureCreated/EnsureDeleted/M
 
 ## 固定开发顺序
 
-DateOnly Oracle 日历修正已完成本地闭环：两种方法复用目标月首与日号 clamp，AddYears 复合年数先分组
-再乘以 12；参见 [correction plan](efcore-10-date-only-calendar-fix-plan.md)。后续从 Required 缺口中
-选择一个完整功能族，先定义验收用例，避免继续散落增加 temporal API。真实环境和发布门槛保持开放。
+本轮完成官方 write SQL 家族和 sequence 拒绝边界，参见
+[module plan](efcore-10-update-sql-specification-plan.md)。后续审查 TST-01 剩余 runtime 家族，选择一个
+可完整本地运行的模块，避免重复已接入的模型/服务/SQL 家族和零散新增 temporal API。真实环境和发布门槛保持开放。
 
 1. **一个本地模块**：先写该模块的行为表、RED 测试和负面边界，再改 Provider 代码。
 2. **本地闭环**：两种模式、同步/异步、正常/NULL/空值/边界/失败路径全部通过；需要时补 packed consumer。

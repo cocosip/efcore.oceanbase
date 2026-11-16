@@ -5,12 +5,14 @@ using System.Linq;
 using System.Linq.Expressions;
 using System.Numerics;
 using System.Reflection;
+using System.Text;
 using System.Transactions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
+using Microsoft.EntityFrameworkCore.Update;
 using OceanBase.EntityFrameworkCore;
 using OceanBaseCommand = OceanBaseConnector.OceanBaseCommand;
 using OceanBaseDecimal = OceanBaseConnector.OceanBaseDecimal;
@@ -58,6 +60,23 @@ namespace PackageConsumer
                     .UseOceanBase("Server=localhost;Database=package_smoke", mode).Options;
                 using var context = new ConsumerContext(options, mode);
                 if (!context.Database.IsOceanBase()) throw new Exception("Provider registration failed.");
+                var updateGenerator = context.GetService<IUpdateSqlGenerator>();
+                var sequenceBuilder = new StringBuilder("existing command");
+                Action[] sequenceOperations =
+                [
+                    () => updateGenerator.GenerateNextSequenceValueOperation("sequence\"; --", null),
+                    () => updateGenerator.GenerateObtainNextSequenceValueOperation("sequence", "dbo"),
+                    () => updateGenerator.AppendNextSequenceValueOperation(sequenceBuilder, "sequence", "dbo"),
+                    () => updateGenerator.AppendObtainNextSequenceValueOperation(sequenceBuilder, "sequence", null)
+                ];
+                foreach (var operation in sequenceOperations)
+                {
+                    try { operation(); }
+                    catch (NotSupportedException) { continue; }
+                    throw new Exception("Packed provider emitted unsupported sequence SQL.");
+                }
+                if (sequenceBuilder.ToString() != "existing command")
+                    throw new Exception("Rejected sequence generation modified the command buffer.");
                 if (context.Database.GetDbConnection() is not OceanBaseConnector.OceanBaseConnection)
                     throw new Exception("Database facade did not resolve the packed provider connection.");
                 var explicitName = mode == OceanBaseCompatibilityMode.MySql ? "@named" : ":named";

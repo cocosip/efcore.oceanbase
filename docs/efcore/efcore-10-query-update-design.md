@@ -552,6 +552,26 @@ text. NCLOB translation is an explicitly unverified extension because the pinned
 String-to-binary converter predicates remain unsupported. Conservative nullable function metadata preserves
 result null tests even for required sources. Existing plugin/DbFunction/mode and Oracle parameter rules remain.
 
+## Write SQL generator specification contract (TST-01, UPD-01..04, DEF-06)
+
+The official EF10 UpdateSqlGeneratorTestBase now runs for both modes through the registered provider
+services. Its DML fixtures cover assigned/generated/default-only inserts, computed outputs and updates/
+deletes with original keys and NULL concurrency tokens. Expected dialect SQL is literal; the assertion
+helper only substitutes the declared delimiters/parameter prefix and normalizes line endings.
+MySQL uses a separate batch-owned generated-value SELECT and requests a transaction when reads exist;
+Oracle emits RETURNING INTO :ob_out_N. DML returns NoResults because the custom batch consumes affected
+rows and readback/output parameters rather than EF's result-set path.
+
+Three inherited test methods have documented profile adaptations: one fixed-@ insert assertion uses
+Oracle colons, and two sequence cases assert the Deferred rejection boundary. Both sequence append
+entrypoints throw before modifying the builder; inherited Generate wrappers reject too. Sequence/HiLo
+is not enabled. Stored-procedure modification mappings remain rejected by the existing custom batch.
+
+These tests establish SQL/metadata/flag behavior only. Native DML, concurrency counts, generated-value
+readback, permissions and transaction semantics remain separate gates. See
+[the specification adaptation record](efcore-10-specification-exclusions.md#write-sql-generator-family)
+and [the module plan](efcore-10-update-sql-specification-plan.md).
+
 ## Ordinary temporal-member local contract
 
 The original QRY-07 slice covers DateTime.Year/Month/Day/Hour/Minute/Second, DateOnly.Year/Month/Day
