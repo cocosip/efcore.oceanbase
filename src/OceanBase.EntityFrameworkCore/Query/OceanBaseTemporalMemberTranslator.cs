@@ -92,6 +92,7 @@ namespace OceanBase.EntityFrameworkCore.Query
         private static readonly MemberInfo TimeSpanTicks = typeof(TimeSpan).GetProperty(nameof(TimeSpan.Ticks))!;
         private static readonly MemberInfo TimeOnlyTicks = typeof(TimeOnly).GetProperty(nameof(TimeOnly.Ticks))!;
         private static readonly MemberInfo DateTimeTicks = typeof(DateTime).GetProperty(nameof(DateTime.Ticks))!;
+        private static readonly MemberInfo DateTimeOffsetUtcTicks = typeof(DateTimeOffset).GetProperty(nameof(DateTimeOffset.UtcTicks))!;
         private static readonly MemberInfo DateTimeNow = typeof(DateTime).GetProperty(nameof(DateTime.Now))!;
         private static readonly MemberInfo DateTimeUtcNow = typeof(DateTime).GetProperty(nameof(DateTime.UtcNow))!;
         private static readonly MemberInfo DateTimeToday = typeof(DateTime).GetProperty(nameof(DateTime.Today))!;
@@ -202,6 +203,22 @@ namespace OceanBase.EntityFrameworkCore.Query
                     return null;
 
                 return factory.Function(DateTimeTicksMarker, [instance], nullable: true,
+                    argumentsPropagateNullability: [false], typeof(long), mappingSource.FindMapping(typeof(long)));
+            }
+
+            if (instance is not null && member == DateTimeOffsetUtcTicks && instance.Type == typeof(DateTimeOffset)
+                && returnType == typeof(long))
+            {
+                instance = factory.ApplyDefaultTypeMapping(instance);
+                var offsetMapping = instance.TypeMapping;
+                if (offsetMapping is null || offsetMapping.Converter?.ConvertsNulls == true
+                    || !SupportsDate(typeof(DateTimeOffset), offsetMapping))
+                    return null;
+
+                var storeType = mode == OceanBaseCompatibilityMode.MySql ? "DATETIME(6)" : "TIMESTAMP(7)";
+                var utcDateTime = factory.Function(DateTimeOffsetUtcDateTimeMarker, [instance], nullable: true,
+                    argumentsPropagateNullability: [false], typeof(DateTime), mappingSource.FindMapping(typeof(DateTime), storeType));
+                return factory.Function(DateTimeTicksMarker, [utcDateTime], nullable: true,
                     argumentsPropagateNullability: [false], typeof(long), mappingSource.FindMapping(typeof(long)));
             }
 

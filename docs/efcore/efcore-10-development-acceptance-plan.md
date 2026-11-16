@@ -19,7 +19,7 @@
 ## 当前检查点
 
 创建本文档时记录的历史提交和测试总数属于此前的模块检查点；当前最新模块、测试结果和包版本分别记录在下面的
-CFG-04/TST-01 service-registration-lifetime checkpoint 中。不要使用旧 handoff 行推断当前 HEAD 或当前测试总数。
+DateTimeOffset.UtcTicks checkpoint 中。不要使用旧 handoff 行推断当前 HEAD 或当前测试总数。
 - 当前没有真实 OceanBase SQL/DDL 验收。已有 live 探针在握手阶段报 `Connection closed while reading the packet`，没有执行 SQL 或 DDL。
 
 因此，CFG-04 的服务注册生命周期已有官方本地规格证据，但整体 CFG-04 仍为 In progress；连接波次已转入剩余映射、查询、更新和事务边界。不得重复已经完成的连接 characterization。
@@ -63,7 +63,24 @@ both modes using the isolated Connector 0.3.0 feed. Package consumer SQL asserti
 Evidence boundary: finite local translation, binding and reader behavior only. Existing non-finite
 floating rejection remains; NaN, signed-zero, native coercion and live server results remain open.
 Plan: [MinNumber/MaxNumber plan](efcore-10-min-number-plan.md).
-Commit: pending full verification and local commit; no push or publication.
+Commit: `b4ef959` (local only; no push or publication).
+
+### 2026-11-16：QRY-07/QRY-11/MAP-05 `DateTimeOffset.UtcTicks`
+
+Module: UTC-normalized `DateTimeOffset.UtcTicks` through the existing `UtcDateTime` and `DateTime.Ticks`
+translation contracts.
+Checklist IDs: `QRY-07`, `QRY-11`, `MAP-05`.
+Implementation files: `OceanBaseTemporalMemberTranslator.cs`, `TemporalMemberQueryTests.cs`,
+`TimeSpanTicksFunctionalTests.cs`, packed `Program.cs`.
+The RED query failed in both modes with EF's translation error. The minimal GREEN change composes the
+existing UTC extraction marker with Gregorian 100ns tick arithmetic; MySQL evaluates its UTC-normalized
+`DATETIME` carrier and Oracle applies `SYS_EXTRACT_UTC` first.
+Focused result: Unit 4/4 and intercepted Functional 4/4 passed across both modes and sync/async,
+including nullable readers and unsupported carrier/null-converter boundaries. The packed consumer contains
+SQL assertions for both modes. `DateTimeOffset.Ticks` remains outside this module because MySQL storage
+cannot recover the original local offset.
+Evidence boundary: local SQL, mapping, binding and intercepted-reader behavior only; native timezone,
+precision and live server results remain open. Plan: [DateTimeOffset.UtcTicks plan](efcore-10-date-time-offset-utc-ticks-plan.md).
 
 Boolean conversion、temporal fractional members 和 `REL-01` 支持记录已在后续检查点补充；`REL-01`
 仍因端点握手和 direct/proxy 分类未完成而保持 `In progress`。

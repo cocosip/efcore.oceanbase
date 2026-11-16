@@ -6,7 +6,7 @@ The ordered development and acceptance rules are in
 [efcore-10-development-acceptance-plan.md](efcore-10-development-acceptance-plan.md). This file keeps the
 historical handoff and module evidence; it does not authorize jumping between unfinished feature families.
 
-The latest local feature module is the 2026-11-16 CFG-04/TST-01 service-registration-lifetime checkpoint recorded below. Earlier commit
+The latest local feature module is the 2026-11-16 DateTimeOffset.UtcTicks checkpoint recorded below. Earlier commit
 identifiers and test totals remain historical evidence for their original modules; they are not the current branch
 baseline. The current feature evidence is recorded in the latest checkpoint sections and module plan.
 
@@ -33,6 +33,24 @@ materialization. Full Release Unit/Functional/Specification results are 2,399/1,
 content verification and packed consumers on EF10.0.0/10.0.14 in both modes using the isolated Connector
 0.3.0 feed. This is local translation, binding, reader and package evidence only; native
 NaN/signed-zero/coercion and live results remain open. See [the MinNumber/MaxNumber plan](efcore-10-min-number-plan.md).
+
+### QRY-07/QRY-11/MAP-05 `DateTimeOffset.UtcTicks` checkpoint (2026-11-16)
+
+`DateTimeOffset.UtcTicks` now composes the existing UTC extraction and `DateTime.Ticks` translation
+contracts. MySQL evaluates the UTC-normalized `DATETIME` carrier directly; Oracle applies
+`SYS_EXTRACT_UTC` before the Gregorian 100ns tick arithmetic. Unowned and null-converting carriers
+reject before SQL generation, while `DateTimeOffset.Ticks` remains outside this module because its
+local-offset semantics cannot be recovered from MySQL's UTC-normalized storage.
+
+The RED query failed in both modes with EF's translation error before the translator change. Focused
+Release evidence is Unit 4/4 and Functional 4/4 across both modes and sync/async, including nullable
+reader materialization, exact UTC tick values and unsupported carrier boundaries. The packed consumer
+now asserts the generated SQL in both modes. This is local SQL, mapping, binding and intercepted-reader
+evidence only; native timezone/session behavior, timestamp precision and live OceanBase results remain
+open. See [the DateTimeOffset.UtcTicks plan](efcore-10-date-time-offset-utc-ticks-plan.md).
+The resulting full source regression is Release/Debug Unit 2,403, Functional 1,939 and Release/Debug
+Specification 1,452 passed with 16 mapped skips. The package content gate and packed PackageConsumer pass
+on EF10.0.0 and EF10.0.14 in both modes using the Connector 0.3.0 feed.
 
 ### CFG-04/TST-01 service registration lifetime checkpoint (2026-11-16)
 

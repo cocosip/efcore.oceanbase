@@ -102,6 +102,44 @@ public sealed class TimeSpanTicksFunctionalTests
         }
     }
 
+    [Theory]
+    [InlineData(OceanBaseCompatibilityMode.MySql, false)]
+    [InlineData(OceanBaseCompatibilityMode.MySql, true)]
+    [InlineData(OceanBaseCompatibilityMode.Oracle, false)]
+    [InlineData(OceanBaseCompatibilityMode.Oracle, true)]
+    public async Task DateTimeOffset_UtcTicks_materialize_from_the_utc_gregorian_epoch(OceanBaseCompatibilityMode mode, bool async)
+    {
+        var expected = new DateTimeOffset(2024, 2, 29, 12, 34, 56, TimeSpan.FromHours(8)).AddTicks(1234567).UtcTicks;
+        using var table = new DataTable();
+        table.Columns.Add("Value", typeof(object));
+        table.Rows.Add(expected);
+        table.Rows.Add(DBNull.Value);
+
+        var capture = new Capture(table);
+        await using var context = Create(mode, capture);
+        var query = context.Rows
+            .Where(row => row.Zoned.UtcTicks > TimeSpan.TicksPerDay)
+            .OrderBy(row => row.Zoned.UtcTicks)
+            .Select(row => (long?)row.Zoned.UtcTicks);
+        var result = async ? await query.ToListAsync() : query.ToList();
+
+        Assert.Equal([expected, null], result);
+        var sql = Assert.Single(capture.Sql);
+        Assert.DoesNotContain("__oceanbase_internal", sql);
+        if (mode == OceanBaseCompatibilityMode.MySql)
+        {
+            Assert.Contains("DATEDIFF(`r`.`Zoned`, '0001-01-01')", sql);
+            Assert.Contains("TIME_TO_SEC(TIME(`r`.`Zoned`))", sql);
+            Assert.Contains("MICROSECOND(TIME(`r`.`Zoned`))", sql);
+        }
+        else
+        {
+            Assert.Contains("SYS_EXTRACT_UTC", sql);
+            Assert.Contains("TRUNC(CAST(SYS_EXTRACT_UTC", sql);
+            Assert.Contains("EXTRACT(SECOND FROM", sql);
+        }
+    }
+
     private static TestContext Create(OceanBaseCompatibilityMode mode, Capture capture)
         => new(new DbContextOptionsBuilder<TestContext>()
             .UseOceanBase("Server=offline;Database=timespan_ticks", mode)
@@ -117,6 +155,7 @@ public sealed class TimeSpanTicksFunctionalTests
     {
         public int Id { get; set; }
         public DateTime Stamp { get; set; }
+        public DateTimeOffset Zoned { get; set; }
         public TimeSpan Duration { get; set; }
         public TimeOnly Clock { get; set; }
     }

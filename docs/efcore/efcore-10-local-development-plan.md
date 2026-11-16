@@ -14,13 +14,22 @@ public APIs and per-mode mappings/SQL. Separate local implementation evidence fr
 The compact execution board is [efcore-10-roadmap.md](efcore-10-roadmap.md); this file remains the detailed
 batch ledger and acceptance notes.
 
-**Updated:** 2026-11-16, CFG-04/TST-01 service-registration lifetime following DateOnly.AddYears, DateOnly.AddMonths,
+**Updated:** 2026-11-16, DateTimeOffset.UtcTicks following CFG-04/TST-01 service-registration lifetime, DateOnly.AddYears, DateOnly.AddMonths,
 DateOnly.AddDays, DateTimeOffset.UtcNow, DateTimeOffset.UtcDateTime, DateTimeOffset members, the server clock,
 DateTime.Ticks, TimeOnly.Ticks, TimeSpan.Ticks, DateOnly.DayNumber, DateTime.TimeOfDay and TST-01 model-building 101
 checkpoints.
 Keep one complete module active and review it before committing. EF8/EF9 remains postponed; live execution is opt-in and
 currently blocked before authentication by the supplied endpoint/transport behavior.
 The full goal remains incomplete.
+
+### `DateTimeOffset.UtcTicks` temporal member module (2026-11-16)
+
+`DateTimeOffset.UtcTicks` composes the existing `UtcDateTime` and `DateTime.Ticks` translators. MySQL uses
+the UTC-normalized `DATETIME` carrier and Oracle applies `SYS_EXTRACT_UTC` before Gregorian 100ns tick
+arithmetic. The RED query failed in both modes; focused Unit 4/4 and intercepted Functional 4/4 now pass
+across both modes and sync/async, including NULL and unsupported carrier boundaries. The packed consumer
+contains both-mode SQL assertions. Native timezone/session behavior and live results remain open. See
+[the module plan](efcore-10-date-time-offset-utc-ticks-plan.md).
 
 ### `MinNumber`/`MaxNumber` scalar extrema module (2026-11-16)
 
@@ -30,7 +39,7 @@ dispatch; 47 unit and 4 intercepted sync/async functional cases now pass. Finite
 reader behavior is covered; non-finite, native and live semantics remain open. See
 [the module plan](efcore-10-min-number-plan.md).
 
-The current local module is QRY-07/QRY-11/MAP-02/MAP-07 `MinNumber`/`MaxNumber` translation. The exact finite
+The preceding local module is QRY-07/QRY-11/MAP-02/MAP-07 `MinNumber`/`MaxNumber` translation. The exact finite
 float/double overloads now reuse scalar `LEAST`/`GREATEST` translation; focused unit and intercepted tests cover
 both modes and sync/async materialization. See [the MinNumber/MaxNumber plan](efcore-10-min-number-plan.md).
 The preceding local module is CFG-04/TST-01 service-registration lifetime. The provider's retry reader interceptor is

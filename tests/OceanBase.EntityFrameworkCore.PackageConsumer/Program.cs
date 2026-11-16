@@ -428,6 +428,13 @@ namespace PackageConsumer
                         : !offsetUtcSql.Contains("SYS_EXTRACT_UTC", StringComparison.Ordinal))
                     || offsetUtcSql.Contains("__oceanbase_internal_", StringComparison.Ordinal))
                     throw new Exception("Packed provider did not translate DateTimeOffset.UtcDateTime.");
+                var offsetUtcTicksSql = context.Set<Row>().Where(row => row.OffsetAt.UtcTicks > TimeSpan.TicksPerDay)
+                    .Select(row => row.OffsetAt.UtcTicks).ToQueryString();
+                if ((mode == OceanBaseCompatibilityMode.MySql
+                        ? !offsetUtcTicksSql.Contains("DATEDIFF(`r`.`OffsetAt`, '0001-01-01')", StringComparison.Ordinal)
+                        : !offsetUtcTicksSql.Contains("TRUNC(CAST(SYS_EXTRACT_UTC", StringComparison.Ordinal))
+                    || offsetUtcTicksSql.Contains("__oceanbase_internal_", StringComparison.Ordinal))
+                    throw new Exception("Packed provider did not translate DateTimeOffset.UtcTicks.");
                 var offsetClockSql = context.Set<Row>().Where(row => DateTimeOffset.UtcNow > row.OffsetAt)
                     .Select(_ => DateTimeOffset.UtcNow).ToQueryString();
                 if ((mode == OceanBaseCompatibilityMode.MySql

@@ -618,6 +618,21 @@ DateTimeOffset, clocks/Now/UtcNow/Today, fractional parts/Ticks, Date/DayNumber,
 parts and Add operations need their own timezone/range/precision/calendar/wrapping contracts. This slice makes
 no server extraction, DATE cast, calendar/zero-date, interval-clock or result-metadata claim without live evidence.
 
+### DateTimeOffset.UtcTicks local contract (QRY-07/11, MAP-05)
+
+`DateTimeOffset.UtcTicks` returns the UTC Gregorian epoch tick count and therefore matches the provider's
+existing UTC-normalized storage contract. The temporal member translator composes the existing
+`DateTimeOffset.UtcDateTime` marker with the `DateTime.Ticks` marker instead of duplicating epoch arithmetic.
+MySQL evaluates its normalized `DATETIME` carrier directly; Oracle applies `SYS_EXTRACT_UTC` before the
+existing timestamp tick expression. Only the provider-owned non-null-converting DateTimeOffset carriers are
+accepted. Unowned and null-converting carriers reject before SQL generation.
+
+This local slice covers SQL shape, binding, nullable reader materialization and sync/async tests in both modes.
+`DateTimeOffset.Ticks`, `Offset`, `DateTime` and `LocalDateTime` remain separate contracts because MySQL's
+UTC-normalized carrier cannot recover the original application-local offset. Native timezone/session behavior,
+timestamp precision and live OceanBase results remain acceptance gates. See the
+[DateTimeOffset.UtcTicks plan](efcore-10-date-time-offset-utc-ticks-plan.md).
+
 `DateTime.TimeOfDay` is now a separate local contract. MySQL uses `TIME(input)`; Oracle uses
 `NUMTODSINTERVAL((input - TRUNC(input)), 'DAY')` for DATE and
 `input - CAST(TRUNC(input) AS TIMESTAMP)` for TIMESTAMP, returning the existing `TimeSpan`/`TIME` or

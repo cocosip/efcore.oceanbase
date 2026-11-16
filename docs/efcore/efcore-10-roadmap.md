@@ -2,8 +2,8 @@
 
 **Updated:** 2026-11-16
 **Branch:** `efcore/10.0`  
-**State:** Active local development; finite `MinNumber`/`MaxNumber` scalar-extrema translation is the latest
-local module, following CFG-04/TST-01 service-registration lifetime.
+**State:** Active local development; `DateTimeOffset.UtcTicks` is the latest local module, following finite
+`MinNumber`/`MaxNumber` scalar-extrema translation and CFG-04/TST-01 service-registration lifetime.
 **Acceptance authority:** [efcore-10-feature-checklist.md](efcore-10-feature-checklist.md)
 
 The `REL-01` support record now exists at [efcore-10-release-support.md](efcore-10-release-support.md),
@@ -13,7 +13,8 @@ pre-authentication failure are unresolved.
 **Execution control:** Follow [efcore-10-development-acceptance-plan.md](efcore-10-development-acceptance-plan.md)
 for the ordered waves, evidence levels and handoff format. The latest Release SpecificationTests result is 1,452
 passed and 16 explicitly mapped skips (1,468 total); Release Unit/Functional are 2,399/1,935 and Debug
-Unit/Functional are 2,399/1,935. The current module adds 47 unit and 4 intercepted cases.
+Unit/Functional are 2,399/1,935. The preceding MinNumber module added 47 unit and 4 intercepted cases; the
+current UtcTicks module adds 4 unit and 4 intercepted functional cases.
 
 This is the execution board for the first OceanBase EF Core 10 provider. It separates provider work from
 evidence work so an intercepted test cannot be mistaken for native OceanBase acceptance.
@@ -96,6 +97,10 @@ The following required rows have complete local/package evidence for both modes:
 - Exact `float`/`double` `MinNumber`/`MaxNumber` overloads now reuse the scalar `LEAST`/`GREATEST` path;
   47 unit and 4 intercepted sync/async cases cover both modes. Non-finite, native and live result semantics
   remain open; see the [MinNumber/MaxNumber plan](efcore-10-min-number-plan.md).
+- `DateTimeOffset.UtcTicks` now composes UTC extraction with the existing Gregorian `DateTime.Ticks`
+  arithmetic. Both modes have SQL-shape, unsupported-carrier and intercepted sync/async materialization
+  coverage; native timezone/session behavior and live results remain open. See the
+  [DateTimeOffset.UtcTicks plan](efcore-10-date-time-offset-utc-ticks-plan.md).
 - `TimeSpan.TotalDays`, `TotalHours`, `TotalMinutes`, `TotalSeconds`, `TotalMilliseconds`, `TotalMicroseconds`
   and `TotalNanoseconds` now have both-mode translation and intercepted sync/async materialization coverage.
   Native interval precision/range and live results remain open.
