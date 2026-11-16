@@ -46,6 +46,25 @@ Known gaps: CFG-04/TST-01 remain In progress, with native lifecycle and remainin
 Next module: choose one remaining coherent local module after this commit; do not repeat completed service characterization.
 Commit: local only; see `git log` for the final revision (not pushed).
 
+### 2026-11-16：QRY-07/QRY-11/MAP-02/MAP-07 `MinNumber`/`MaxNumber`
+
+Module: exact `float`/`double` `MinNumber` and `MaxNumber` scalar extrema overloads.
+Checklist IDs: `QRY-07`, `QRY-11`, `MAP-02`, `MAP-07`.
+Implementation files: `OceanBaseSqlTranslatingExpressionVisitorFactory.cs`,
+`ScalarExtremaQueryTests.cs`, `ScalarExtremaNumberFunctionalTests.cs`, packed `Program.cs`.
+The RED unit queries failed because EF could not translate the four numeric-type methods. The minimal
+GREEN change registers those methods beside the existing `Math.Min`/`Math.Max` identities and reuses
+`LEAST`/`GREATEST` result mapping.
+Focused result: 47 scalar-extrema unit cases and 4 intercepted functional cases passed; functional cases
+cover both modes and sync/async materialization. Full Release Unit/Functional/Specification results are
+2,399/1,935/1,452 passed with 16 mapped skips; Debug Unit/Functional are 2,399/1,935. Package
+`10.0.0-min-number-20261116` passed content verification and packed consumers on EF10.0.0/10.0.14 in
+both modes using the isolated Connector 0.3.0 feed. Package consumer SQL assertions were updated.
+Evidence boundary: finite local translation, binding and reader behavior only. Existing non-finite
+floating rejection remains; NaN, signed-zero, native coercion and live server results remain open.
+Plan: [MinNumber/MaxNumber plan](efcore-10-min-number-plan.md).
+Commit: pending full verification and local commit; no push or publication.
+
 Boolean conversion、temporal fractional members 和 `REL-01` 支持记录已在后续检查点补充；`REL-01`
 仍因端点握手和 direct/proxy 分类未完成而保持 `In progress`。
 

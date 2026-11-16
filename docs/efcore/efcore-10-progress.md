@@ -20,6 +20,20 @@ Test each module and review completed major modules before committing. EF8/EF9 r
 The provider is not release-ready. The [feature checklist](efcore-10-feature-checklist.md) remains the
 acceptance authority; this document records the handoff rather than defining a different completion target.
 
+### QRY-07/QRY-11/MAP-02/MAP-07 `MinNumber`/`MaxNumber` checkpoint (2026-11-16)
+
+The exact `float.MinNumber`, `float.MaxNumber`, `double.MinNumber` and `double.MaxNumber` overloads now
+reuse the scalar extrema translator. Both modes emit `LEAST`/`GREATEST` and retain the first operand's
+mapping; the existing finite floating-point parameter validation still rejects NaN and infinities.
+
+The RED unit queries failed for all four methods with EF translation errors. Focused Release evidence is
+47 scalar-extrema unit cases and 4 intercepted functional cases, covering MySQL/Oracle sync and async
+materialization. Full Release Unit/Functional/Specification results are 2,399/1,935/1,452 passed with
+16 mapped skips; Debug Unit/Functional are 2,399/1,935. Package `10.0.0-min-number-20261116` passes
+content verification and packed consumers on EF10.0.0/10.0.14 in both modes using the isolated Connector
+0.3.0 feed. This is local translation, binding, reader and package evidence only; native
+NaN/signed-zero/coercion and live results remain open. See [the MinNumber/MaxNumber plan](efcore-10-min-number-plan.md).
+
 ### CFG-04/TST-01 service registration lifetime checkpoint (2026-11-16)
 
 Module: EF10 relational service collection lifetimes for the provider's registered services.

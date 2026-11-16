@@ -685,6 +685,19 @@ also checks the `ABS`/`CASE` shape on EF 10.0.0 and selected EF 10.0.14. These c
 translation, binding, reader and package compatibility only; native CopySign results remain part of
 TST-02.
 
+## Numeric MinNumber and MaxNumber local contract (QRY-07/11, MAP-02/07)
+
+The provider translates the exact `float.MinNumber`, `float.MaxNumber`, `double.MinNumber` and
+`double.MaxNumber` overloads through the existing scalar extrema path. MySQL and Oracle emit
+`LEAST` or `GREATEST`; the first operand owns the result mapping and converter just as it does for
+`Math.Min` and `Math.Max`. The local parameter contract already rejects non-finite floating values,
+so NaN selection and signed-zero behavior are outside this intercepted slice. Other numeric types,
+custom methods and unsupported carriers remain translation errors.
+
+Focused unit and intercepted sync/async tests cover all four exact identities in both modes, current
+reader mappings and SQL shape. Native floating-point results and deployed server coercion remain part
+of `TST-02`.
+
 ## Numeric Clamp local contract (Batch3al, QRY-07/11, MAP-02/07)
 
 Translate the exact `Math.Clamp` overloads for `sbyte`, `byte`, `short`, `ushort`, `int`, `uint`, `long`,

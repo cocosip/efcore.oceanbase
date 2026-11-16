@@ -22,7 +22,18 @@ Keep one complete module active and review it before committing. EF8/EF9 remains
 currently blocked before authentication by the supplied endpoint/transport behavior.
 The full goal remains incomplete.
 
-The current local module is CFG-04/TST-01 service-registration lifetime. The provider's retry reader interceptor is
+### `MinNumber`/`MaxNumber` scalar extrema module (2026-11-16)
+
+`float.MinNumber`/`MaxNumber` and `double.MinNumber`/`MaxNumber` reuse the existing scalar extrema
+translator and emit `LEAST`/`GREATEST` in both modes. The RED unit queries failed on missing method
+dispatch; 47 unit and 4 intercepted sync/async functional cases now pass. Finite local mapping and
+reader behavior is covered; non-finite, native and live semantics remain open. See
+[the module plan](efcore-10-min-number-plan.md).
+
+The current local module is QRY-07/QRY-11/MAP-02/MAP-07 `MinNumber`/`MaxNumber` translation. The exact finite
+float/double overloads now reuse scalar `LEAST`/`GREATEST` translation; focused unit and intercepted tests cover
+both modes and sync/async materialization. See [the MinNumber/MaxNumber plan](efcore-10-min-number-plan.md).
+The preceding local module is CFG-04/TST-01 service-registration lifetime. The provider's retry reader interceptor is
 registered with EF's scoped lifetime in both modes, and the official relational service-collection specification has
 6/6 passing assertions; see the service-lifetime checkpoint in [the development progress](efcore-10-progress.md).
 The preceding local module is the QRY-07/QRY-11/MAP-05 `DateOnly.AddYears` slice. It translates DateOnly year

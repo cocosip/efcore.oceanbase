@@ -2,7 +2,8 @@
 
 **Updated:** 2026-11-16
 **Branch:** `efcore/10.0`  
-**State:** Active local development; CFG-04/TST-01 service-registration lifetime is the latest local module.
+**State:** Active local development; finite `MinNumber`/`MaxNumber` scalar-extrema translation is the latest
+local module, following CFG-04/TST-01 service-registration lifetime.
 **Acceptance authority:** [efcore-10-feature-checklist.md](efcore-10-feature-checklist.md)
 
 The `REL-01` support record now exists at [efcore-10-release-support.md](efcore-10-release-support.md),
@@ -10,9 +11,9 @@ but remains `In progress` while the supplied endpoint's direct/proxy routing, tr
 pre-authentication failure are unresolved.
 
 **Execution control:** Follow [efcore-10-development-acceptance-plan.md](efcore-10-development-acceptance-plan.md)
-for the ordered waves, evidence levels and handoff format. The latest focused SpecificationTests result is 1,452
-passed and 16 explicitly mapped skips (1,468 total); the service-lifetime module adds 6 official lifetime assertions
-with zero failures/skips.
+for the ordered waves, evidence levels and handoff format. The latest Release SpecificationTests result is 1,452
+passed and 16 explicitly mapped skips (1,468 total); Release Unit/Functional are 2,399/1,935 and Debug
+Unit/Functional are 2,399/1,935. The current module adds 47 unit and 4 intercepted cases.
 
 This is the execution board for the first OceanBase EF Core 10 provider. It separates provider work from
 evidence work so an intercepted test cannot be mistaken for native OceanBase acceptance.
@@ -92,6 +93,9 @@ The following required rows have complete local/package evidence for both modes:
 - Numeric and nonnumeric query slices, collection roots for integer/numeric/text/Boolean/temporal/binary/Guid
   carriers, and selected model/materialization, write, transaction, schema and diagnostics paths have local
   coverage, but their required rows remain open until their remaining boundaries and native evidence are closed.
+- Exact `float`/`double` `MinNumber`/`MaxNumber` overloads now reuse the scalar `LEAST`/`GREATEST` path;
+  47 unit and 4 intercepted sync/async cases cover both modes. Non-finite, native and live result semantics
+  remain open; see the [MinNumber/MaxNumber plan](efcore-10-min-number-plan.md).
 - `TimeSpan.TotalDays`, `TotalHours`, `TotalMinutes`, `TotalSeconds`, `TotalMilliseconds`, `TotalMicroseconds`
   and `TotalNanoseconds` now have both-mode translation and intercepted sync/async materialization coverage.
   Native interval precision/range and live results remain open.

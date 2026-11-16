@@ -13,14 +13,14 @@
 - 模式：MySQL、Oracle
 - Required 行：53 行；两种模式均为 9 行 `Done`、44 行 `In progress`
 - 已完成 Required 行：`CFG-01..03`、`CON-01`、`SQL-02`、`PKG-01..04`
-- 当前实现提交：`cd72111`（`DateOnly.AddYears`）
+- 当前实现基线：`58bc26d`；工作树包含待提交的 `MinNumber`/`MaxNumber` 本地模块
 
 最近一次完整本地证据：
 
 | 检查 | 结果 | 证据边界 |
 | --- | --- | --- |
-| Release Unit | 2395 通过 | Provider 单元和本地 doubles |
-| Release Functional | 1931 通过 | 拦截式同步/异步命令管线 |
+| Release Unit | 2399 通过 | Provider 单元和本地 doubles |
+| Release Functional | 1935 通过 | 拦截式同步/异步命令管线 |
 | Release Specification | 1446 通过，16 个明确跳过 | 跳过已映射到 `MAP-01/03/05/06` |
 | Debug Unit / Functional | 2395 / 1931 通过 | 本地源代码 |
 | server clock package | `10.0.0-date-time-clocks-20261116` 通过 | 包内容、EF10.0.0/10.0.14、两模式 consumer |
@@ -30,6 +30,7 @@
 | DateOnly.AddDays focused tests | Unit 4/4、Functional 4/4 通过 | 两模式同步/异步、MySQL/Oracle SQL、负向 carrier 边界；包内容和 EF10.0.0/10.0.14 packed consumer 通过 |
 | DateOnly.AddMonths focused tests | Unit 4/4、Functional 4/4 通过 | 两模式同步/异步、MySQL/Oracle SQL、负向 carrier 边界；包内容和 EF10.0.0/10.0.14 packed consumer 通过 |
 | DateOnly.AddYears focused tests | Unit 4/4、Functional 4/4 通过 | 两模式同步/异步、MySQL/Oracle SQL、负向 carrier 边界；包内容和 EF10.0.0/10.0.14 packed consumer 通过 |
+| `MinNumber`/`MaxNumber` focused tests | Unit 47/47、Functional 4/4 通过 | `float`/`double` exact overloads, both modes, sync/async intercepted SQL/materialization; native non-finite semantics remain open |
 
 这些结果不能关闭真实 OceanBase 验收。当前提供的端点在认证前报
 `Connection closed while reading the packet`，没有执行 SQL 或 DDL。

@@ -35,6 +35,31 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             }
         }
 
+        public static IEnumerable<object[]> ExactNumberMethods()
+        {
+            yield return [typeof(float), nameof(float.MinNumber), typeof(float), "Single", "LEAST"];
+            yield return [typeof(float), nameof(float.MaxNumber), typeof(float), "Single", "GREATEST"];
+            yield return [typeof(double), nameof(double.MinNumber), typeof(double), "Double", "LEAST"];
+            yield return [typeof(double), nameof(double.MaxNumber), typeof(double), "Double", "GREATEST"];
+        }
+
+        [Theory]
+        [MemberData(nameof(ExactNumberMethods))]
+        public void Exact_number_methods_translate_in_server_predicates(
+            Type owner, string name, Type type, string property, string function)
+        {
+            foreach (var mode in Enum.GetValues<OceanBaseCompatibilityMode>())
+            {
+                using var context = CreateContext(mode);
+                var method = owner.GetMethod(name, [type, type])!;
+                var row = Expression.Parameter(typeof(Row), "row");
+                var call = Expression.Call(method, Expression.Property(row, property), Expression.Default(type));
+                var sql = context.Rows.Where(Expression.Lambda<Func<Row, bool>>(
+                    Expression.Equal(call, Expression.Default(type)), row)).ToQueryString();
+                Assert.Contains(function + "(", sql);
+            }
+        }
+
         [Theory]
         [MemberData(nameof(ExactMethods))]
         public void Exact_scalar_methods_translate_in_server_predicates(Type owner, string name, Type type)
@@ -264,7 +289,6 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             Assert.Throws<InvalidOperationException>(() => context.Rows.Where(r => EF.Functions.Least(new int[r.Id]) == r.Id).ToQueryString());
             Assert.Throws<InvalidOperationException>(() => context.Rows.Where(r => EF.Functions.Greatest(r.Text, "abc") == "xyz").ToQueryString());
             Assert.Throws<InvalidOperationException>(() => context.Rows.Where(r => EF.Functions.Least(r.Id > 0, false)).ToQueryString());
-            Assert.Throws<InvalidOperationException>(() => context.Rows.Where(r => float.MinNumber(r.Single, 1f) > 0).ToQueryString());
             Assert.Throws<InvalidOperationException>(() => context.Rows.Where(r => Math.Min((nint)r.Id, 0) == 0).ToQueryString());
             Assert.Throws<InvalidOperationException>(() => context.Rows.Where(r => Min(r.Id, 0) == 0).ToQueryString());
             Assert.Null(CreateVisitor(context).Translate(Variadic("Least", typeof(int),

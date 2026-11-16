@@ -805,6 +805,8 @@ namespace PackageConsumer
 
                 var extrema = context.Set<Row>().Where(row => Math.Min(row.Count, 5L) > 0
                     && Math.Max(row.DoubleValue, 3d) > 1d
+                    && double.MaxNumber(row.DoubleValue, 2d) > 1d
+                    && float.MinNumber(row.Wide, 1f) > 0f
                     && MathF.Max(row.Wide, 2f) > 1f
                     && decimal.Min(row.Amount, 5m) > 0m
                     && EF.Functions.Greatest(row.Id, 2, 3) > 1).ToQueryString();
@@ -812,8 +814,8 @@ namespace PackageConsumer
                 var singleStoreType = mode == OceanBaseCompatibilityMode.MySql ? "FLOAT" : "BINARY_FLOAT";
                 var wideExtremumPattern = System.Text.RegularExpressions.Regex.Escape($"CAST(GREATEST({wideColumn}, ")
                     + @"[^(),]+" + System.Text.RegularExpressions.Regex.Escape($") AS {singleStoreType})");
-                if (extrema.Split("LEAST(", StringSplitOptions.None).Length != 3
-                    || extrema.Split("GREATEST(", StringSplitOptions.None).Length != 4
+                if (extrema.Split("LEAST(", StringSplitOptions.None).Length != 4
+                    || extrema.Split("GREATEST(", StringSplitOptions.None).Length != 5
                     || !System.Text.RegularExpressions.Regex.IsMatch(extrema, wideExtremumPattern))
                     throw new Exception("Packed scalar extrema lost native translation or Single normalization: " + extrema);
 

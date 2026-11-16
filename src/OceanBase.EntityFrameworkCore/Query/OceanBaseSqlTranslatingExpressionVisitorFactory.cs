@@ -91,12 +91,21 @@ namespace OceanBase.EntityFrameworkCore.Query
                 Add(typeof(Math), type);
             Add(typeof(MathF), typeof(float));
             Add(typeof(decimal), typeof(decimal));
+            AddNumber(typeof(float), typeof(float));
+            AddNumber(typeof(double), typeof(double));
             return methods;
 
             void Add(Type owner, Type type)
             {
                 methods.Add(owner.GetMethod(nameof(Math.Min), [type, type])!, "LEAST");
                 methods.Add(owner.GetMethod(nameof(Math.Max), [type, type])!, "GREATEST");
+            }
+
+            void AddNumber(Type owner, Type type)
+            {
+                // shortcut: finite mapped values only; add dialect-specific NaN handling when native semantics are verified.
+                methods.Add(owner.GetMethod("MinNumber", [type, type])!, "LEAST");
+                methods.Add(owner.GetMethod("MaxNumber", [type, type])!, "GREATEST");
             }
         }
 
