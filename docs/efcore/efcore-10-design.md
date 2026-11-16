@@ -41,6 +41,16 @@ implemented in both OceanBase modes and covered by provider tests.
 
 ## Verification gates
 
+The 2026-11-16 [grouped-result module](efcore-10-grouped-results-plan.md) explicitly compensates nullable
+grouping-key correlation before projecting aggregate/ordered group results. GROUP BY retains a NULL
+group with either null configuration; ordinary LINQ Join keeps its existing SQL equality behavior.
+Only the grouping enumerable's key correlation is rewritten, using standard SQL OR/IS NULL and existing
+OceanBase lateral translation. EF still owns aggregation/projection/shaping; Connector0.3.0 transports
+commands/readers through its existing public APIs. Nullable correlations may retain LATERAL rather than
+ROW_NUMBER decorrelation and require the previously documented OceanBase lateral-capable cluster profile;
+native evaluation and plan/performance are not established. Both GroupBy result forms, computed/composite/
+converted keys and local runtime/package checks are recorded in the module, with no Required-row promotion.
+
 Release requires the efcore/10.0 revision to pass the shared behavioral suite, EF10-specific provider
 tests, selected EF relational specification tests, packed-package consumer tests and the available MySQL/Oracle
 live matrix. Unsupported server features and missing infrastructure remain recorded as verification limits rather

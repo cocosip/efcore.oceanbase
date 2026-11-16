@@ -2,10 +2,21 @@
 
 **Updated:** 2026-11-16
 **Branch:** `efcore/10.0`  
-**State:** Active local development; query enumeration lifecycle is the latest local module, following DefaultIfEmpty reference/collection semantics, scalar defaults, correlated lateral queries, the read-only EF fixture, raw queries, set operations, relationship writes, TPH,
+**State:** Grouped aggregate result composition is locally complete; stop at the user's wrap-up/local-commit checkpoint. It follows query enumeration, DefaultIfEmpty reference/collection semantics, scalar defaults, correlated lateral queries, the read-only EF fixture, raw queries, set operations, relationship writes, TPH,
 SaveChanges concurrency interception, concurrency-protection and write SQL specifications,
 DateOnly/DateTime calendar arithmetic, `DateTimeOffset.UtcTicks`, scalar extrema and service lifetimes.
 **Acceptance authority:** [efcore-10-feature-checklist.md](efcore-10-feature-checklist.md)
+
+Latest module on base `0aa2601`: explicit NULL grouping-key correlation fixes aggregate/ordered first
+composition while preserving ordinary Join equality. Final grouped SQL24 + correlated16 and runtime64
+pass; initial SQL RED was 8 failures/8 controls pass. Both result forms, null configurations, tracking,
+converted/composite keys, paging/binding and recovery are covered locally. NULL correlation may retain
+LATERAL and inherits the existing OceanBase cluster-version prerequisite. Independent review's consumer
+namespace finding is corrected; source Debug/Release/isolated EF10.0.14 each pass 6530 tests/16 existing
+skips. New `10.0.0-grouped-results-20261116.1` package contents and public both-patch/mode consumers pass,
+with matching tested baseline source/archive/consumer DLL hashes. See
+[module record](efcore-10-grouped-results-plan.md). Native results/performance and wider runtime/release
+acceptance remain open; Required stays 9 Done / 44 In progress per mode. No next module, push/publication.
 
 The `REL-01` support record now exists at [efcore-10-release-support.md](efcore-10-release-support.md),
 but remains `In progress` while the supplied endpoint's direct/proxy routing, transport options and
@@ -17,7 +28,7 @@ per EF patch. Prior native attempts in both modes fail at opening (OceanBaseExce
 readers); SQL/authentication/server version remain unestablished. No new native result is claimed.
 
 **Execution control:** Follow [efcore-10-development-acceptance-plan.md](efcore-10-development-acceptance-plan.md)
-for the ordered waves, evidence levels and handoff format. The latest enumeration module adds 34
+for the ordered waves, evidence levels and handoff format. The preceding enumeration module adds 34
 post-reader cases (48 command-boundary and 112 connected cases pass), with no production change.
 Streaming/buffering, read-stage cancellation, explicit caller EF leases and partial identity scopes
 are locally verified. Removing base buffering temporarily makes eight cases fail; independent review

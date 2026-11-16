@@ -49,6 +49,7 @@ namespace PackageConsumer
                 SetOperationSmoke.Run(mode);
                 RawQuerySmoke.Run(mode);
                 CorrelatedQuerySmoke.Run(mode);
+                GroupingSmoke.Run(mode);
                 DefaultIfEmptySmoke.Run(mode);
                 TransactionSmoke.Run(mode);
                 RetrySmoke.Run(mode);

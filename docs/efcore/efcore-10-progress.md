@@ -6,19 +6,38 @@ The ordered development and acceptance rules are in
 [efcore-10-development-acceptance-plan.md](efcore-10-development-acceptance-plan.md). This file keeps the
 historical handoff and module evidence; it does not authorize jumping between unfinished feature families.
 
-The latest local module is the 2026-11-16 query enumeration lifecycle checkpoint recorded below. Earlier commit
+The latest local module is the 2026-11-16 grouped aggregate result composition checkpoint recorded below. Earlier commit
 identifiers and test totals remain historical evidence for their original modules; they are not the current branch
 baseline. The current feature evidence is recorded in the latest checkpoint sections and module plan.
 
 ## Current checkpoint: 2026-11-16
 
-Development is active on efcore/10.0 following the HasData, connection-boundary, CFG-04, Boolean conversion,
+Local grouped-result development is complete on efcore/10.0; stop at this checkpoint as requested.
+This follows the HasData, connection-boundary, CFG-04, Boolean conversion,
 temporal fractional and service-registration-lifetime checkpoints.
 The current local checkpoint includes lazy-loading integration, ordinary compiled models, split queries, retries,
 TPC, many-to-many and Connector 0.3.0 reverse engineering.
 Test each module and review completed major modules before committing. EF8/EF9 remain postponed.
 The provider is not release-ready. The [feature checklist](efcore-10-feature-checklist.md) remains the
 acceptance authority; this document records the handoff rather than defining a different completion target.
+
+### QRY-03/04/05/11 and MAP-07 grouped aggregate result composition (2026-11-16)
+
+On base `0aa2601`, explicitly match NULL grouping keys in the grouping enumerable correlation before
+EF projects ordered elements/first entity with aggregates. Both GroupBy result forms and relational-null
+settings retain NULL groups; ordinary Join/nonnullable keys keep their existing equality behavior.
+The nullable correlation can retain LATERAL and inherits the documented OceanBase version requirement;
+it introduces no Connector API or upstream Oracle/MySQL assumption. SQL RED: 8 failures/8 controls pass;
+final grouping SQL24 + correlated16 and runtime64 pass. Independent review finds no material provider
+issue; its packed-smoke namespace finding is corrected and verified. See
+[module record](efcore-10-grouped-results-plan.md) for source tracing, SQL/server boundary and commands.
+
+Debug/Release and isolated EF10.0.14 each pass 6530 tests (Unit2533, Functional2457, Specification1538,
+ConsumerTests2), with 16 existing mapped skips. New `10.0.0-grouped-results-20261116.1` package contents
+and both-patch/mode public consumers pass; tested baseline source/archive/consumer DLL hashes match.
+Supplied rows establish shaping, not native grouping evaluation; native results/performance remain open.
+Required remains 9 Done / 44 In progress per mode. No live SQL/DDL/writes, push or publication.
+The user requested this module's wrap-up/documentation/local commit; do not begin another module.
 
 ### CON-03/04/05 and QRY-05 query enumeration lifecycle (2026-11-16)
 

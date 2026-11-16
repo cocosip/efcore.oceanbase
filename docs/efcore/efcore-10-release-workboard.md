@@ -18,17 +18,20 @@
 - 模式：MySQL、Oracle
 - Required 行：53 行；两种模式均为 9 行 `Done`、44 行 `In progress`
 - 已完成 Required 行：`CFG-01..03`、`CON-01`、`SQL-02`、`PKG-01..04`
-- 当前本地模块：查询枚举生命周期（base `b3b1c4f`，提交见 `git log`）；仅补 EF 测试/文档，生产代码不变，本轮未推送
+- 当前本地模块：GroupBy 聚合结果组合（base `0aa2601`，提交见 `git log`）；NULL 分组关联修复、测试、包和文档已收尾，本轮未推送
+- 用户要求下班前收尾并本地提交；本轮停在此处，不启动下一个模块
 
 最近一次完整本地证据：
 
 | 检查 | 结果 | 证据边界 |
 | --- | --- | --- |
-| Release Unit | 2509 通过 | Provider 单元和本地 doubles |
-| Release Functional | 2393 通过 | 拦截式同步/异步命令管线 |
+| Release Unit | 2533 通过 | Provider 单元和本地 doubles |
+| Release Functional | 2457 通过 | 拦截式同步/异步命令管线 |
 | Release Specification | 1538 通过，16 个明确跳过 | 跳过已映射到 `MAP-01/03/05/06`；本轮无新增跳过 |
-| Debug Unit / Functional | 2509 / 2393 通过 | 本地源代码；Specification 1538 + 16 mapped skips，ConsumerTests 2；合计 6442 通过 |
-| EF10.0.14 isolated Release | Unit 2509、Functional 2393、Specification 1538、ConsumerTests 2 通过 | 合计 6442 通过，16 mapped skips；Connector 0.3.0 |
+| Debug Unit / Functional | 2533 / 2457 通过 | 本地源代码；Specification 1538 + 16 mapped skips，ConsumerTests 2；合计 6530 通过 |
+| EF10.0.14 isolated Release | Unit 2533、Functional 2457、Specification 1538、ConsumerTests 2 通过 | 合计 6530 通过，16 mapped skips；Connector 0.3.0 |
+| Grouped aggregate results | SQL24 + correlated16、runtime64 通过；初始 NULL 关联 SQL 8 失败/8 对照通过 | NULL/composite/converted key、组内集合/首实体、两种 result/null 配置、跟踪、分页绑定及恢复；普通 Join 不变；可能保留 LATERAL，继承 OceanBase 版本要求；native/performance 未验证；[模块记录](efcore-10-grouped-results-plan.md) |
+| Grouped-result new package | `10.0.0-grouped-results-20261116.1` 通过 | 包内容、两补丁/两模式公开 consumer、package-only graph 和 tested baseline source/archive/consumer hash 一致；走查的 consumer namespace 问题已修复验证；无新 CLI/bundle/native 结果 |
 | DefaultIfEmpty reference/presence | Unit 30/30、Functional 72/72；初始新增 SQL 6 失败、runtime 12 失败/4 通过 | 整体 null、装箱、真实 NULL 异常、混合实体、显式用户投影、绑定及恢复；走查补齐 nullable 算术；每补丁 10 项离线检查；[模块记录](efcore-10-default-if-empty-reference-plan.md) |
 | DefaultIfEmpty projected collections | 新增 32/32、完整 default runtime 104/104；移除集合绑定遍历时新增 32 项全部失败 | 仅测试/文档；缺失父行、空/多子项、NULL/converter、身份范围、分页绑定、显式构造、失败恢复；独立走查无实质问题；取消仅命令阶段，物化错误另证 reader 清理；[同模块记录](efcore-10-default-if-empty-reference-plan.md) |
 | Query enumeration lifecycle | 新增 34 项，完整命令 profile 48/48、关联策略 112/112；关闭 base buffering 时 8/48 失败 | 原实现通过提前释放、二次读取失败/取消、缓冲、显式调用方租约、身份范围及复用；独立走查无实质问题；仅 EF 管线与本地连接/reader，非物理 wire/pool 证据；[模块记录](efcore-10-query-enumeration-plan.md) |
@@ -117,6 +120,10 @@ retry 禁止条件、错误分类、拥有边界、EnsureCreated/EnsureDeleted/M
 `git diff --check`。
 
 ## 固定开发顺序
+
+当前 GroupBy 聚合结果组合已完成本地闭环，见
+[模块记录](efcore-10-grouped-results-plan.md)。用户要求本轮收尾、更新文档并本地提交；停在此检查点，
+不继续开发下一模块。下列顺序供后续恢复使用，真实 OceanBase 与发布验收仍未关闭。
 
 此前沿着相关查询模块补齐 DefaultIfEmpty 引用投影及行存在语义，参见
 [module plan](efcore-10-default-if-empty-reference-plan.md)。只使用已有驱动公共命令/reader API，无 Connector 改动。

@@ -19,10 +19,22 @@
 ## 当前检查点
 
 创建本文档时记录的历史提交和测试总数属于此前的模块检查点；当前最新模块、测试结果和包版本分别记录在下面的
-DefaultIfEmpty checkpoint 中。不要使用旧 handoff 行推断当前 HEAD 或当前测试总数。
+grouped-result checkpoint 中。不要使用旧 handoff 行推断当前 HEAD 或当前测试总数。
 - 当前没有真实 OceanBase SQL/DDL 验收。已有 live 探针在握手阶段报 `Connection closed while reading the packet`，没有执行 SQL 或 DDL。
 
 因此，CFG-04 的服务注册生命周期已有官方本地规格证据，但整体 CFG-04 仍为 In progress；连接波次已转入剩余映射、查询、更新和事务边界。不得重复已经完成的连接 characterization。
+
+### 2026-11-16：QRY-03/04/05/11 grouped aggregate result composition
+
+On base `0aa2601`, close the local grouped-result module with explicit NULL grouping-key correlation,
+aggregate/ordered-element and first-entity composition. SQL RED 8 failures/8 controls; final SQL24 plus
+correlated16 and runtime64 pass. Debug/Release/isolated EF10.0.14 each pass 6530 tests/16 existing skips.
+New `10.0.0-grouped-results-20261116.1` package contents/public both-patch/mode consumers and matching
+tested baseline source/archive/consumer hashes pass. Independent review's smoke namespace mismatch is
+fixed and verified. See [module record](efcore-10-grouped-results-plan.md) for ownership, OceanBase
+LATERAL version requirements and supplied-reader/native evidence boundaries. Required rows remain
+9 Done / 44 In progress per mode. The user requested wrap-up and local commit; stop here without
+starting another module. Broader runtime/native/release acceptance remains unfinished.
 
 ### 2026-11-16：CON-03/04/05 and QRY-05 query enumeration lifecycle
 
