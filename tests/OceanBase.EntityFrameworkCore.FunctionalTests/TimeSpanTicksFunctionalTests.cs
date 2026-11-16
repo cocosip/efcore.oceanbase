@@ -229,6 +229,52 @@ public sealed class TimeSpanTicksFunctionalTests
         Assert.Empty(capture.Sql);
     }
 
+    [Theory]
+    [InlineData(OceanBaseCompatibilityMode.Oracle, false)]
+    [InlineData(OceanBaseCompatibilityMode.Oracle, true)]
+    public async Task Oracle_DateTimeOffset_Ticks_materialize_local_wall_clock_values_and_null(
+        OceanBaseCompatibilityMode mode, bool async)
+    {
+        var positive = new DateTimeOffset(2024, 2, 29, 12, 34, 56, TimeSpan.FromHours(8)).AddTicks(1234567).Ticks;
+        var negative = new DateTimeOffset(2024, 2, 29, 12, 34, 56, TimeSpan.FromHours(-5.5)).AddTicks(1234567).Ticks;
+        using var table = new DataTable();
+        table.Columns.Add("Value", typeof(object));
+        table.Rows.Add(positive);
+        table.Rows.Add(negative);
+        table.Rows.Add(DBNull.Value);
+
+        var capture = new Capture(table);
+        await using var context = Create(mode, capture);
+        var query = context.Rows
+            .Where(row => row.Zoned.Ticks != 0)
+            .OrderBy(row => row.Zoned.Ticks)
+            .Select(row => (long?)row.Zoned.Ticks);
+        var result = async ? await query.ToListAsync() : query.ToList();
+
+        Assert.Equal([positive, negative, null], result);
+        var sql = Assert.Single(capture.Sql);
+        Assert.DoesNotContain("SYS_EXTRACT_UTC", sql);
+        Assert.DoesNotContain("__oceanbase_internal", sql);
+        Assert.Contains("TRUNC(CAST", sql);
+        Assert.Contains("EXTRACT(SECOND FROM", sql);
+    }
+
+    [Fact]
+    public void MySql_DateTimeOffset_Ticks_is_rejected_before_command_execution()
+    {
+        using var table = new DataTable();
+        table.Columns.Add("Value", typeof(object));
+        table.Rows.Add(0L);
+
+        var capture = new Capture(table);
+        using var context = Create(OceanBaseCompatibilityMode.MySql, capture);
+        Assert.Throws<InvalidOperationException>(() => context.Rows
+            .Where(row => row.Zoned.Ticks < 0)
+            .Select(row => row.Id)
+            .ToQueryString());
+        Assert.Empty(capture.Sql);
+    }
+
     private static TestContext Create(OceanBaseCompatibilityMode mode, Capture capture)
         => new(new DbContextOptionsBuilder<TestContext>()
             .UseOceanBase("Server=offline;Database=timespan_ticks", mode)

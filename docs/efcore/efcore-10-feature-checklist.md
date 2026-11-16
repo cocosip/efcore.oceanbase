@@ -52,6 +52,14 @@ so that an undocumented feature is not accidentally advertised.
 
 ## Current evidence and blockers
 
+Latest local slice: Oracle `DateTimeOffset.Ticks` composes the existing `DateTime` Gregorian tick
+arithmetic after converting the validated `TIMESTAMP WITH TIME ZONE` carrier to local `TIMESTAMP`.
+MySQL rejects the member before SQL generation because its `DateTimeOffset` carrier is UTC-normalized.
+Unit 3/3, Functional 2/2, full Release Unit 2543/Functional 2466/Specification 1538 (16 existing skips),
+ConsumerTests 2/2, package content verification, and EF10.0.0/10.0.14 both-mode consumers pass. Live status
+remains `Blocked-live` after the known Connector pre-authentication packet closure; native timezone/session
+semantics remain unverified. Exact scope and evidence: [module record](efcore-10-date-time-offset-ticks-plan.md).
+
 Latest local slice: Oracle `DateTimeOffset.Offset` now reuses the existing `TimeSpan`/`INTERVAL DAY TO SECOND`
 carrier and renders `NUMTODSINTERVAL` from timezone hour/minute extraction. MySQL rejects the member before SQL
 generation because its `DateTimeOffset` carrier is UTC-normalized. Unit/functional/package evidence is recorded in

@@ -19,10 +19,29 @@
 ## 当前检查点
 
 创建本文档时记录的历史提交和测试总数属于此前的模块检查点；当前最新模块、测试结果和包版本分别记录在下面的
-grouped-result checkpoint 中。不要使用旧 handoff 行推断当前 HEAD 或当前测试总数。
+DateTimeOffset.Ticks checkpoint 中。不要使用旧 handoff 行推断当前 HEAD 或当前测试总数。
 - 当前没有真实 OceanBase SQL/DDL 验收。已有 live 探针在握手阶段报 `Connection closed while reading the packet`，没有执行 SQL 或 DDL。
 
 因此，CFG-04 的服务注册生命周期已有官方本地规格证据，但整体 CFG-04 仍为 In progress；连接波次已转入剩余映射、查询、更新和事务边界。不得重复已经完成的连接 characterization。
+
+### 2026-11-16：`DateTimeOffset.Ticks` 查询模块
+
+Module: Oracle-only local-wall-clock `DateTimeOffset.Ticks` translation and MySQL rejection
+Checklist IDs: `MAP-05`, `QRY-07`, `QRY-11`
+Base commit: `a2c8e2c`
+Implementation files: `OceanBaseTemporalMemberTranslator.cs`, `TemporalMemberQueryTests.cs`,
+`TimeSpanTicksFunctionalTests.cs`, packed `Program.cs`
+Focused command and result: Unit 3/3 and Functional 2/2 passed in Release after the Oracle RED case.
+Full local command and result: Unit 2543, Functional 2466 and Specification 1538 passed; Specification retained
+16 existing mapped skips; ConsumerTests 2/2 passed.
+Package/tooling command and result: package `10.0.0-date-time-offset-ticks-20261116` passed content verification;
+PackageConsumer passed on EF10.0.0/10.0.14 in both modes.
+Evidence boundary: Oracle converts the validated timestamp-with-time-zone carrier to the existing `DateTime`
+tick arithmetic; positive/negative local wall-clock values, NULL, sync/async reader materialization, unsupported
+carriers and MySQL pre-open rejection are covered locally. Connector 0.3.0 source/dependencies were unchanged.
+Live status: unchanged `Blocked-live` at `172.16.2.45:2881`; packet closure occurs before authentication, with
+zero SQL/DDL and zero EF readers. Required rows remain `In progress` until native evidence exists.
+Plan: [DateTimeOffset.Ticks module](efcore-10-date-time-offset-ticks-plan.md).
 
 ### 2026-11-16：`DateTimeOffset.Offset` 查询模块
 

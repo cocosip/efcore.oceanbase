@@ -18,19 +18,20 @@
 - 模式：MySQL、Oracle
 - Required 行：53 行；两种模式均为 9 行 `Done`、44 行 `In progress`
 - 已完成 Required 行：`CFG-01..03`、`CON-01`、`SQL-02`、`PKG-01..04`
-- 当前本地模块：`DateTimeOffset.TotalOffsetMinutes`（base `4815261`）；Oracle `EXTRACT(TIMEZONE_HOUR/MINUTE)`、MySQL 拒绝、测试、包和文档已完成，本轮未推送
+- 当前本地模块：`DateTimeOffset.Ticks`（base `a2c8e2c`）；Oracle 本地墙上时间 tick、MySQL 拒绝、测试、包和文档已完成，本轮未推送
 - 真实 MySQL/Oracle 探针均在 Connector 0.3.0 预认证阶段断 packet；未执行 SQL/DDL，live 仍为 `Blocked-live`
 
 最近一次完整本地证据：
 
 | 检查 | 结果 | 证据边界 |
 | --- | --- | --- |
-| Release Unit | 2533 通过 | Provider 单元和本地 doubles |
-| Release Functional | 2457 通过 | 拦截式同步/异步命令管线 |
+| Release Unit | 2543 通过 | Provider 单元和本地 doubles |
+| Release Functional | 2466 通过 | 拦截式同步/异步命令管线 |
 | Release Specification | 1538 通过，16 个明确跳过 | 跳过已映射到 `MAP-01/03/05/06`；本轮无新增跳过 |
-| Debug Unit / Functional | 2533 / 2457 通过 | 本地源代码；Specification 1538 + 16 mapped skips，ConsumerTests 2；合计 6530 通过 |
-| EF10.0.14 isolated Release | Unit 2533、Functional 2457、Specification 1538、ConsumerTests 2 通过 | 合计 6530 通过，16 mapped skips；Connector 0.3.0 |
+| Debug Unit / Functional | 历史基线 2533 / 2457 通过 | 本轮未重跑 Debug；Specification 1538 + 16 mapped skips，ConsumerTests 2 |
+| EF10.0.14 isolated Release | 本轮包消费者 EF10.0.14 通过；完整隔离套件未重跑 | 本轮完整 Release 使用当前源码，Connector 0.3.0 |
 | TotalOffsetMinutes module | Unit 4/4、Functional 3/3；Full Release Unit 2537、Functional 2460、Specification 1538 | Oracle timestamp-with-time-zone offset extraction; MySQL pre-open rejection; package `10.0.0-total-offset-minutes-20261116` and EF10.0.0/10.0.14 both-mode consumers pass; live handshake remains blocked; [module record](efcore-10-total-offset-minutes-plan.md) |
+| DateTimeOffset.Ticks module | Unit 3/3、Functional 2/2；Full Release Unit 2543、Functional 2466、Specification 1538、ConsumerTests 2 | Oracle local wall-clock Gregorian ticks; MySQL pre-open rejection; package `10.0.0-date-time-offset-ticks-20261116` and EF10.0.0/10.0.14 both-mode consumers pass; live handshake remains blocked; [module record](efcore-10-date-time-offset-ticks-plan.md) |
 | Grouped aggregate results | SQL24 + correlated16、runtime64 通过；初始 NULL 关联 SQL 8 失败/8 对照通过 | NULL/composite/converted key、组内集合/首实体、两种 result/null 配置、跟踪、分页绑定及恢复；普通 Join 不变；可能保留 LATERAL，继承 OceanBase 版本要求；native/performance 未验证；[模块记录](efcore-10-grouped-results-plan.md) |
 | Grouped-result new package | `10.0.0-grouped-results-20261116.1` 通过 | 包内容、两补丁/两模式公开 consumer、package-only graph 和 tested baseline source/archive/consumer hash 一致；走查的 consumer namespace 问题已修复验证；无新 CLI/bundle/native 结果 |
 | DefaultIfEmpty reference/presence | Unit 30/30、Functional 72/72；初始新增 SQL 6 失败、runtime 12 失败/4 通过 | 整体 null、装箱、真实 NULL 异常、混合实体、显式用户投影、绑定及恢复；走查补齐 nullable 算术；每补丁 10 项离线检查；[模块记录](efcore-10-default-if-empty-reference-plan.md) |
