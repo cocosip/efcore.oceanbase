@@ -18,18 +18,19 @@
 - 模式：MySQL、Oracle
 - Required 行：53 行；两种模式均为 9 行 `Done`、44 行 `In progress`
 - 已完成 Required 行：`CFG-01..03`、`CON-01`、`SQL-02`、`PKG-01..04`
-- 当前本地模块：DefaultIfEmpty 引用投影及行存在语义（base `b0bdae0`，提交见 `git log`），仅 EF Provider，本轮未推送
+- 当前本地模块：DefaultIfEmpty 投影集合运行验证（base `79006f3`，提交见 `git log`）；仅补 EF 测试/文档，生产代码不变，本轮未推送
 
 最近一次完整本地证据：
 
 | 检查 | 结果 | 证据边界 |
 | --- | --- | --- |
 | Release Unit | 2509 通过 | Provider 单元和本地 doubles |
-| Release Functional | 2327 通过 | 拦截式同步/异步命令管线 |
+| Release Functional | 2359 通过 | 拦截式同步/异步命令管线 |
 | Release Specification | 1538 通过，16 个明确跳过 | 跳过已映射到 `MAP-01/03/05/06`；本轮无新增跳过 |
-| Debug Unit / Functional | 2509 / 2327 通过 | 本地源代码；Specification 1538 + 16 mapped skips，ConsumerTests 2；合计 6376 通过 |
-| EF10.0.14 isolated Release | Unit 2509、Functional 2327、Specification 1538、ConsumerTests 2 通过 | 合计 6376 通过，16 mapped skips；Connector 0.3.0 |
+| Debug Unit / Functional | 2509 / 2359 通过 | 本地源代码；Specification 1538 + 16 mapped skips，ConsumerTests 2；合计 6408 通过 |
+| EF10.0.14 isolated Release | Unit 2509、Functional 2359、Specification 1538、ConsumerTests 2 通过 | 合计 6408 通过，16 mapped skips；Connector 0.3.0 |
 | DefaultIfEmpty reference/presence | Unit 30/30、Functional 72/72；初始新增 SQL 6 失败、runtime 12 失败/4 通过 | 整体 null、装箱、真实 NULL 异常、混合实体、显式用户投影、绑定及恢复；走查补齐 nullable 算术；每补丁 10 项离线检查；[模块记录](efcore-10-default-if-empty-reference-plan.md) |
+| DefaultIfEmpty projected collections | 新增 32/32、完整 default runtime 104/104；移除集合绑定遍历时新增 32 项全部失败 | 仅测试/文档；缺失父行、空/多子项、NULL/converter、身份范围、分页绑定、显式构造、失败恢复；独立走查无实质问题；取消仅命令阶段，物化错误另证 reader 清理；[同模块记录](efcore-10-default-if-empty-reference-plan.md) |
 | Historical DefaultIfEmpty scalar semantics | Unit 24/24、Functional 40/40；前期移除修复 12/20 失败，走查问题另有 4 项 RED | nullable/转换器/默认行/计算源、实体跟踪、参数刷新、失败恢复；8 项只读夹具离线检查；匿名成员按 EF 补丁分别记录，完整 reference/boxing 语义仍开放；[模块记录](efcore-10-default-if-empty-plan.md) |
 | Correlated lateral queries | Unit 16/16、Functional 36/36；移除修复时 14/32 失败 | 两模式的 lateral/普通表分支、关联/嵌套/分页、NULL/集合/identity 物化、绑定刷新及恢复；独立走查无待修问题；只读夹具增加 pair 断言，离线总计每补丁 6/6；仅 EF 翻译，原生/版本验收仍开放；[模块记录](efcore-10-correlated-queries-plan.md) |
 | Read-only native EF query fixture | 离线 4/4，EF10.0.0 / 10.0.14 各通过；原生 0/2 通过 | 内联四行，无建表或写入；真实 EF 同步/异步查询断言；两模式开连接失败，OceanBaseException/code 0/EF readers 0；未取得认证、服务端版本或 SQL 结果；独立走查无待修问题；[模块记录](efcore-10-read-only-live-query-plan.md) |
@@ -38,7 +39,7 @@
 | Relationship-change writes | 聚焦 36/36、关联 460/460 | 可选 shadow FK 断开、ClientSetNull、必需关系重挂接/孤儿时机、一对一替换顺序、接受和后续失败/取消/savepoint 恢复；仅测试和文档变更；走查的开连接前拒绝断言已补强；[模块记录](efcore-10-relationship-writes-plan.md) |
 | TPH runtime verification | 聚焦 78/78、关联 362/362；最终断言纳入全量门禁 | 现有单表继承查询/物化/CRUD/图保存/恢复链路；仅测试和文档变更；SQL/绑定断言经独立走查补强；[模块记录](efcore-10-tph-runtime-plan.md) |
 | SaveChanges concurrency interception | 聚焦 52/52、关联 186/186；初始 RED 28 失败/8 通过 | 标准诊断、同步/异步 hook 和显式抑制；保留异常/entries/token，跳过旧输出并继续后续 batch；独立走查无待修问题；[模块记录](efcore-10-save-concurrency-interception-plan.md) |
-| Current package/runtime | 新包 `10.0.0-default-reference-20261116.1` 通过 | 包内容及两补丁/两模式公开 consumer 通过，含 DefaultIfEmpty smoke；package-only graph、source/archive/consumer DLL hash 一致；无新 CLI/bundle/hosted/Linux/native evidence，来源见 DefaultIfEmpty 模块记录 |
+| Original package replay | 复用 `10.0.0-default-reference-20261116.1` 并重验通过 | 包内容及两补丁/两模式原有公开 consumer 通过；package-only graph、原 archive/consumer DLL hash 一致；新增集合测试运行于重编译源代码，不宣称当前 source DLL 与旧包 hash 一致；无新包/CLI/bundle/hosted/Linux/native evidence，来源见 DefaultIfEmpty 模块记录 |
 | Concurrency-protection specifications | 56/56；临时关闭检查时 20/20 敏感性用例失败，恢复后通过 | 真实 Provider 服务，开连接前拒绝；两处本地适配已记录；走查修正显式 true 掩盖默认值问题；仅测试变更，无新包或 native evidence |
 | Write SQL specifications/package | Specification 30/30、关联 runtime 134/134；`10.0.0-update-sql-specification-20261116` 通过 | 官方写入 SQL 家族，两模式三处明确适配；sequence 入口一致拒绝；独立走查、包内容和两补丁/两模式 consumer、graph/hash 校验通过 |
 | DateOnly calendar correction/package | Unit 7、Functional 8 通过；`10.0.0-date-only-calendar-fix-20261116` 通过 | 修复 Oracle 月末规则和年数优先级；独立走查无阻塞；包内容、两补丁/两模式 consumer、graph/hash 校验通过；native acceptance 未完成 |

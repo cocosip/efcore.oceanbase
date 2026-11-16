@@ -34,6 +34,13 @@ over default-reference conditionals; repair stale client projections only when S
 member-based bindings. Constructor/index projections retain explicit nullable metadata. Real entity
 shapers/identity remain EF-owned, and explicit post-default user object construction is retained.
 
+Ordinary single-query projected collections retain their collection bindings alongside the outer
+presence marker. The supplied-reader continuation covers missing parents versus empty collections,
+grouping, nullable/converted elements, entity identity scopes, paging/rebinding, explicit construction
+and failure/recovery. No new loader is introduced; existing EF collection shaping owns these results.
+Command cancellation is covered before reader creation; reader-iteration cancellation and native
+join/order evaluation are not established. See the same reference continuation for exact tests.
+
 Explicit-default overloads/local predicates reject before opening. Arbitrary CLR client projections
 are outside this tested profile. Native default-row/coercion/version execution remains open. See the
 [scalar module](efcore-10-default-if-empty-plan.md) for preceding historical evidence.

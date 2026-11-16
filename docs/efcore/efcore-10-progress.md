@@ -6,7 +6,7 @@ The ordered development and acceptance rules are in
 [efcore-10-development-acceptance-plan.md](efcore-10-development-acceptance-plan.md). This file keeps the
 historical handoff and module evidence; it does not authorize jumping between unfinished feature families.
 
-The latest local module is the 2026-11-16 DefaultIfEmpty reference checkpoint recorded below. Earlier commit
+The latest local module is the 2026-11-16 DefaultIfEmpty projected-collection continuation recorded below. Earlier commit
 identifiers and test totals remain historical evidence for their original modules; they are not the current branch
 baseline. The current feature evidence is recorded in the latest checkpoint sections and module plan.
 
@@ -19,6 +19,21 @@ TPC, many-to-many and Connector 0.3.0 reverse engineering.
 Test each module and review completed major modules before committing. EF8/EF9 remain postponed.
 The provider is not release-ready. The [feature checklist](efcore-10-feature-checklist.md) remains the
 acceptance authority; this document records the handoff rather than defining a different completion target.
+
+### QRY-01/03/05/08 DefaultIfEmpty projected collections (2026-11-16)
+
+On base `79006f3`, add 32 runtime cases to the existing module without changing production code or
+Connector APIs. The supplied-reader profile distinguishes missing outer references, empty collections,
+NULL child values, converter output and multiple parent groups. Entity identity scopes, child paging
+and captured parameters, explicit user construction, command failure/cancellation and materialization
+failure recovery pass in both modes sync/async. Complete default profile: 104/104. A temporary removal
+of collection-binding traversal makes all 32 new cases fail; the original code is restored.
+Full Debug/Release/isolated EF10.0.14 each pass 6408 tests with 16 old mapped skips. Original package
+content and public both-patch/mode consumers pass again; no new package, and the new collection
+cases run on rebuilt source rather than packed consumers.
+Independent review finds no material issue; final source/package gate evidence is in
+[the module record](efcore-10-default-if-empty-reference-plan.md). Command cancellation precedes reader
+creation; reader-iteration cancellation and native SQL evaluation remain unverified. No Required promotion.
 
 ### QRY-01/03/05 DefaultIfEmpty reference checkpoint (2026-11-16)
 

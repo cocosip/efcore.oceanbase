@@ -24,6 +24,19 @@ DefaultIfEmpty checkpoint 中。不要使用旧 handoff 行推断当前 HEAD 或
 
 因此，CFG-04 的服务注册生命周期已有官方本地规格证据，但整体 CFG-04 仍为 In progress；连接波次已转入剩余映射、查询、更新和事务边界。不得重复已经完成的连接 characterization。
 
+### 2026-11-16：QRY-01/03/05/08 DefaultIfEmpty projected collections
+
+On base `79006f3`, extend the same module with 32 supplied-reader cases, bringing default runtime
+coverage to 104/104. Existing production code passes grouping/default/NULL/converter, identity scope,
+paging/current parameters, explicit construction and failure/recovery checks in both modes sync/async.
+Removing collection-binding traversal temporarily makes all 32 fail; original code is restored.
+Independent read-only review has no material finding. Command cancellation precedes reader creation;
+reader disposal is separately exercised by materialization failure. No new driver/public capability,
+native result or Required promotion. [Module record](efcore-10-default-if-empty-reference-plan.md)
+records final source gates and unchanged original-package provenance.
+Full Debug/Release/isolated EF10.0.14 each pass 6408 tests with 16 old mapped skips. Replay the original
+package content and both-patch/mode consumers successfully; new collection cases run on rebuilt source.
+
 ### 2026-11-16：QRY-01/03/05 DefaultIfEmpty references
 
 On base `b0bdae0`, close the tested reference/boxing/present-NULL gaps of the preceding scalar

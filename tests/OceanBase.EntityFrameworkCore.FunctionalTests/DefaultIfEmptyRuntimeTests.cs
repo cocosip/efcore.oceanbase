@@ -17,6 +17,220 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
     {
         [Theory]
         [MemberData(nameof(TransactionTests.Modes), MemberType = typeof(TransactionTests))]
+        public async Task Nested_collections_preserve_outer_defaults_and_parent_groups(OceanBaseCompatibilityMode mode, bool async)
+        {
+            var commands = new Commands();
+            await using var context = Create(mode, commands);
+            var rows = context.Set<Row>();
+            var query = rows.OrderBy(r => r.Id).Select(r => new
+            {
+                r.Id,
+                Children = rows.Where(child => child.Id > r.Id).OrderBy(child => child.Id)
+                    .Select(child => child.Id).ToList()
+            }).DefaultIfEmpty();
+            commands.Results = Table([typeof(int), typeof(int), typeof(int)], new object?[] { null, null, null });
+            Assert.Null(Assert.Single(await Run(query, async)));
+            AssertClean(context, commands);
+            commands.Results = Table([typeof(int), typeof(int), typeof(int)], [0, 1, 1], [0, 2, 1], [1, 2, 1], [2, null, 1]);
+            var result = await Run(query, async);
+            Assert.Equal(new[] { 0, 1, 2 }, result.Select(r => r!.Id));
+            Assert.Equal(new[] { 1, 2 }, result[0]!.Children);
+            Assert.Equal(new[] { 2 }, result[1]!.Children);
+            Assert.Empty(result[2]!.Children);
+            Assert.Matches(@"^SELECT (\w+)\.Id, (\w+)\.Id, \1\.c FROM", commands.Items[^1].Sql);
+            Assert.Matches(@"LEFT JOIN DefaultRows (\w+) ON (\w+)\.Id < \1\.Id ORDER BY \2\.Id, \2\.Id, \1\.Id$", commands.Items[^1].Sql);
+            Assert.Empty(context.ChangeTracker.Entries());
+            AssertClean(context, commands);
+        }
+
+        [Theory]
+        [MemberData(nameof(TransactionTests.Modes), MemberType = typeof(TransactionTests))]
+        public async Task Nested_nullable_and_converted_collections_keep_present_NULL_elements(OceanBaseCompatibilityMode mode, bool async)
+        {
+            var commands = new Commands();
+            await using var context = Create(mode, commands);
+            var rows = context.Set<Row>();
+            var query = rows.OrderBy(r => r.Id).Select(r => new
+            {
+                r.Id,
+                Children = rows.Where(child => child.Id > r.Id).OrderBy(child => child.Id)
+                    .Select(child => new { child.Value, child.Offset }).ToList()
+            }).DefaultIfEmpty();
+            commands.Results = Table([typeof(int), typeof(int), typeof(int), typeof(int), typeof(int)],
+                new object?[] { null, null, null, null, null });
+            Assert.Null(Assert.Single(await Run(query, async)));
+            AssertClean(context, commands);
+            commands.Results = Table([typeof(int), typeof(int), typeof(int), typeof(int), typeof(int)],
+                [0, null, 107, 1, 1], [0, 4, 109, 2, 1], [1, 4, 109, 2, 1], [2, null, null, null, 1]);
+            var result = await Run(query, async);
+            Assert.Equal(new[] { 0, 1, 2 }, result.Select(r => r!.Id));
+            Assert.Equal(new int?[] { null, 4 }, result[0]!.Children.Select(c => c.Value));
+            Assert.Equal(new[] { 7, 9 }, result[0]!.Children.Select(c => c.Offset));
+            Assert.Equal(4, Assert.Single(result[1]!.Children).Value);
+            Assert.Equal(9, result[1]!.Children[0].Offset);
+            Assert.Empty(result[2]!.Children);
+            Assert.Matches(@"^SELECT (\w+)\.Id, (\w+)\.Value, \2\.Offset, \2\.Id, \1\.c FROM", commands.Items[^1].Sql);
+            Assert.Empty(context.ChangeTracker.Entries());
+            AssertClean(context, commands);
+        }
+
+        [Theory]
+        [MemberData(nameof(ModelMaterializationTests.TrackingCases), MemberType = typeof(ModelMaterializationTests))]
+        public async Task Nested_entity_collections_keep_default_and_identity_scopes_separate(OceanBaseCompatibilityMode mode, bool async, QueryTrackingBehavior tracking)
+        {
+            var commands = new Commands();
+            await using var context = Create(mode, commands);
+            context.ChangeTracker.QueryTrackingBehavior = tracking;
+            var rows = context.Set<Row>();
+            var query = rows.OrderBy(r => r.Id).Select(r => new
+            {
+                r.Id,
+                Children = rows.Where(child => child.Id > r.Id).OrderBy(child => child.Id).ToList()
+            }).DefaultIfEmpty();
+            commands.Results = Table([typeof(int), typeof(int), typeof(int), typeof(string), typeof(int), typeof(int), typeof(int)],
+                new object?[] { null, null, null, null, null, null, null });
+            Assert.Null(Assert.Single(await Run(query, async)));
+            Assert.Empty(context.ChangeTracker.Entries());
+            AssertClean(context, commands);
+            commands.Results = Table([typeof(int), typeof(int), typeof(int), typeof(string), typeof(int), typeof(int), typeof(int)],
+                [0, 1, 1, "one", 107, null, 1], [0, 2, 0, "two", 109, 4, 1],
+                [1, 2, 0, "two", 109, 4, 1], [2, null, null, null, null, null, 1]);
+            var result = await Run(query, async);
+            Assert.Equal(new[] { 0, 1, 2 }, result.Select(r => r!.Id));
+            Assert.Equal(new[] { 1, 2 }, result[0]!.Children.Select(c => c.Id));
+            Assert.Equal(new[] { "one", "two" }, result[0]!.Children.Select(c => c.Name));
+            Assert.Equal(new[] { 7, 9 }, result[0]!.Children.Select(c => c.Offset));
+            Assert.True(result[0]!.Children[0].Active);
+            Assert.False(result[0]!.Children[1].Active);
+            Assert.Null(result[0]!.Children[0].Value);
+            Assert.Equal(4, result[0]!.Children[1].Value);
+            Assert.Equal(2, Assert.Single(result[1]!.Children).Id);
+            Assert.Empty(result[2]!.Children);
+            Assert.Equal(tracking != QueryTrackingBehavior.NoTracking,
+                ReferenceEquals(result[0]!.Children[1], result[1]!.Children[0]));
+            Assert.Equal(tracking == QueryTrackingBehavior.TrackAll ? 2 : 0, context.ChangeTracker.Entries().Count());
+            Assert.Matches(@"^SELECT (\w+)\.Id, (\w+)\.Id, \2\.Active, \2\.Name, \2\.Offset, \2\.Value, \1\.c FROM", commands.Items[^1].Sql);
+            AssertClean(context, commands);
+        }
+
+        [Theory]
+        [MemberData(nameof(TransactionTests.Modes), MemberType = typeof(TransactionTests))]
+        public async Task Nested_collection_paging_keeps_current_parameters(OceanBaseCompatibilityMode mode, bool async)
+        {
+            var commands = new Commands();
+            await using var context = Create(mode, commands);
+            var rows = context.Set<Row>();
+            var floor = 0;
+            var take = 2;
+            var query = rows.Where(r => r.Id >= floor).OrderBy(r => r.Id).Take(2).Select(r => new
+            {
+                r.Id,
+                Children = rows.Where(child => child.Id > r.Id + floor).OrderBy(child => child.Id).Take(take)
+                    .Select(child => child.Id).ToList()
+            }).DefaultIfEmpty();
+            commands.Results = Table([typeof(int), typeof(int), typeof(int)], [0, 1, 1], [0, 2, 1], [1, 2, 1], [1, 3, 1]);
+            var result = await Run(query, async);
+            Assert.Equal(new[] { 0, 1 }, result.Select(r => r!.Id));
+            Assert.Equal(new[] { 1, 2 }, result[0]!.Children);
+            Assert.Equal(new[] { 2, 3 }, result[1]!.Children);
+            Assert.Equal(new object?[] { 0, 2, 0, 2 }, commands.Items[^1].Inputs);
+            AssertClean(context, commands);
+            floor = 1;
+            take = 1;
+            commands.Results = Table([typeof(int), typeof(int), typeof(int)], [1, 3, 1], [2, 4, 1]);
+            result = await Run(query, async);
+            Assert.Equal(new[] { 1, 2 }, result.Select(r => r!.Id));
+            Assert.Equal(new[] { 3 }, result[0]!.Children);
+            Assert.Equal(new[] { 4 }, result[1]!.Children);
+            var command = commands.Items[^1];
+            Assert.Equal(new object?[] { 1, 2, 1, 1 }, command.Inputs);
+            Assert.Contains("LEFT JOIN LATERAL (", command.Sql);
+            Assert.Matches(@"WHERE \w+\.Id >= \? ORDER BY \w+\.Id", command.Sql);
+            Assert.Matches(@"WHERE \w+\.Id > \(\w+\.Id \+ \?\) ORDER BY \w+\.Id", command.Sql);
+            Assert.Equal(2, Regex.Matches(command.Sql, mode == OceanBaseCompatibilityMode.MySql ? @"LIMIT \?" : @"FETCH FIRST \? ROWS ONLY").Count);
+            AssertClean(context, commands);
+        }
+
+        [Theory]
+        [MemberData(nameof(TransactionTests.Modes), MemberType = typeof(TransactionTests))]
+        public async Task Nested_collection_failures_dispose_readers_and_allow_recovery(OceanBaseCompatibilityMode mode, bool async)
+        {
+            var commands = new Commands();
+            await using var context = Create(mode, commands);
+            var rows = context.Set<Row>();
+            var query = rows.OrderBy(r => r.Id).Select(r => new
+            {
+                r.Id,
+                Children = rows.Where(child => child.Id > r.Id).OrderBy(child => child.Id)
+                    .Select(child => child.Offset).ToList()
+            }).DefaultIfEmpty();
+            commands.Results = Table([typeof(int), typeof(int), typeof(int), typeof(int)],
+                new object?[] { null, null, null, null });
+            foreach (var cancel in new[] { false, true })
+            {
+                using var source = new CancellationTokenSource();
+                commands.Failure = cancel ? new OperationCanceledException(source.Token) : new InvalidOperationException("collection query failed");
+                commands.BeforeFailure = cancel ? source.Cancel : null;
+                var error = await Record.ExceptionAsync(() => Run(query, async, source.Token));
+                Assert.Same(commands.Failure, error);
+                if (async) Assert.Equal(source.Token, commands.Items[^1].Token);
+                AssertClean(context, commands);
+                commands.Failure = null;
+                commands.BeforeFailure = null;
+                Assert.Null(Assert.Single(await Run(query, async)));
+                AssertClean(context, commands);
+            }
+            commands.Results = Table([typeof(int), typeof(string), typeof(int), typeof(int)], [0, "107", 1, 1], [0, "invalid", 2, 1]);
+            await Assert.ThrowsAsync<FormatException>(() => Run(query, async));
+            AssertClean(context, commands);
+            commands.Results = Table([typeof(int), typeof(int), typeof(int), typeof(int)], [0, 107, 1, 1], [1, null, null, 1]);
+            var recovered = await Run(query, async);
+            Assert.Equal(new[] { 0, 1 }, recovered.Select(r => r!.Id));
+            Assert.Equal(new[] { 7 }, recovered[0]!.Children);
+            Assert.Empty(recovered[1]!.Children);
+            Assert.Matches(@"^SELECT (\w+)\.Id, (\w+)\.Offset, \2\.Id, \1\.c FROM", commands.Items[^1].Sql);
+            AssertClean(context, commands);
+        }
+
+        [Theory]
+        [MemberData(nameof(TransactionTests.Modes), MemberType = typeof(TransactionTests))]
+        public async Task Nested_collection_user_projection_after_default_still_constructs_an_object(OceanBaseCompatibilityMode mode, bool async)
+        {
+            var commands = new Commands();
+            await using var context = Create(mode, commands);
+            var rows = context.Set<Row>();
+            var query = rows.Select(r => new
+            {
+                r.Id,
+                Children = rows.Where(child => child.Id > r.Id).OrderBy(child => child.Id)
+                    .Select(child => child.Id).ToList()
+            }).DefaultIfEmpty().Select(row => new
+            {
+                ParentId = row == null ? (int?)null : row.Id,
+                Children = row == null ? null : row.Children
+            });
+            commands.Results = Table([typeof(int), typeof(int), typeof(int), typeof(int)], [null, 1, null, null]);
+            var missing = Assert.Single(await Run(query, async));
+            Assert.NotNull(missing);
+            Assert.Null(missing.ParentId);
+            Assert.Null(missing.Children);
+            AssertClean(context, commands);
+            commands.Results = Table([typeof(int), typeof(int), typeof(int), typeof(int)],
+                [0, 0, 0, 1], [0, 0, 0, 2], [1, 0, 1, 2], [2, 0, 2, null]);
+            var result = await Run(query, async);
+            Assert.Equal(new int?[] { 0, 1, 2 }, result.Select(r => r.ParentId));
+            Assert.Equal(new[] { 1, 2 }, result[0].Children);
+            Assert.Equal(new[] { 2 }, result[1].Children);
+            Assert.Empty(result[2].Children!);
+            Assert.Matches(mode == OceanBaseCompatibilityMode.MySql
+                ? @"^SELECT CASE WHEN (\w+)\.c IS NULL THEN NULL ELSE \1\.Id END, \1\.c IS NULL, \1\.Id, \w+\.Id FROM"
+                : @"^SELECT CASE WHEN (\w+)\.c IS NULL THEN NULL ELSE \1\.Id END, CASE WHEN \1\.c IS NULL THEN 1 WHEN \1\.c IS NOT NULL THEN 0 END, \1\.Id, \w+\.Id FROM",
+                commands.Items[^1].Sql);
+            AssertClean(context, commands);
+        }
+
+        [Theory]
+        [MemberData(nameof(TransactionTests.Modes), MemberType = typeof(TransactionTests))]
         public async Task Reference_defaults_distinguish_missing_rows_from_present_all_NULL_members(OceanBaseCompatibilityMode mode, bool async)
         {
             var commands = new Commands { Results = Table([typeof(int), typeof(string), typeof(int)],

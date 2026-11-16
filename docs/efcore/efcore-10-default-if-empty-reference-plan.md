@@ -1,6 +1,6 @@
 # EF10 DefaultIfEmpty reference and row-presence semantics
 
-**Base:** `b0bdae0`. **IDs:** QRY-01/03/05/11, MAP-07, PKG-03/04.
+**Base:** `b0bdae0` (collection continuation: `79006f3`). **IDs:** QRY-01/03/05/08/11, MAP-07, PKG-03/04.
 **Status:** Local profile implemented/tested/reviewed; native and broader runtime acceptance remain open.
 This is the continuation of the scalar default module, not a new feature family.
 
@@ -36,6 +36,62 @@ Do not substitute a projected nullable value for row presence. Preserve user coa
 
 Native evaluation and exact deployment versions remain unverified. Do not repeat unchanged endpoint
 opening failures. No live DDL/writes, push/publication, EF8/9 or Deferred features.
+
+### Nested collection runtime continuation (base `79006f3`)
+
+Use the existing `DefaultIfEmptyRuntimeTests` supplied-reader fixture to verify the collection
+bindings preserved by this module. EF owns collection grouping, missing-parent defaults, identity
+resolution and reader cleanup; all transport remains with Connector 0.3.0 public APIs. This is the
+same single-query default-result profile, not a new collection loader or driver feature.
+
+- [x] Verify missing outer reference, present empty/populated collections and multiple parent groups.
+- [x] Verify nullable/converted scalar children, entity identity scope and current query parameters.
+- [x] Verify materialization/command failure, command cancellation, reader cleanup and later query recovery;
+  retain explicit user construction after defaulting.
+- [x] Fix only reproduced provider defects with RED/green regressions; existing behavior needs no
+  duplicate implementation. Review independently, run full local baseline/patch gates, document exact
+  package provenance (reuse only if production stays unchanged), and local-commit.
+
+Supplied rows must follow the generated projection ordinals, with explicit SQL-shape assertions.
+They prove EF shaping and grouping, not native join/CASE/order evaluation. Native SQL, split-query
+combinations, arbitrary CLR collection projections and real deployment versions remain unverified.
+
+`DefaultIfEmptyRuntimeTests.Nested_*` adds 32 both-mode sync/async cases; the complete default runtime
+profile now passes 104/104. Scalar parent key zero, present NULL child values and converted offsets
+are distinguished from missing parent/child keys. A repeated child is shared only with tracking or
+identity resolution; plain no-tracking creates separate instances. Parent page size is a query
+constant, while captured predicates and child limits rebind between executions. Explicit post-default
+construction retains a non-null outer object even when its parent ID and collection are null.
+
+No production change was necessary. A temporary mutation removing the existing
+`CollectionResultExpression` traversal made all 32 new cases fail; restoring it returned the full
+default profile to 104/104 (`collection-binding-mutation.log`, `collection-default-profile.log`).
+Earlier intentional layout-inspection failures, a fixed outer `Take` expectation and the
+Oracle-mode Boolean CASE assertion were test development, not new provider defects.
+Independent read-only review found no material issue. It did not run tests or native queries.
+Command cancellation occurs before a reader is created; the invalid second child value exercises
+partial-collection materialization failure and reader disposal. Cancellation during reader iteration
+is outside this evidence, as are physical driver cleanup and native SQL execution.
+
+Final continuation gates on `79006f3` production source plus these tests:
+
+| Gate | Result |
+| --- | --- |
+| EF10.0.0 Debug / Release; isolated EF10.0.14 Release | Each 6408 pass: Unit 2509, Functional 2359, Specification 1538, ConsumerTests 2; 16 old mapped skips |
+| Original package content replay | `10.0.0-default-reference-20261116.1` passes; no new package |
+| Original public packed consumers | Both modes at EF/Proxies10.0.0 and10.0.14 pass; package-only graphs and original archive/consumer DLL hashes match |
+
+Run `artifacts/default-if-empty/run-collection-gates.ps1` for the three full source gates. Logs are
+`collection-full-debug.log`, `collection-full-release.log`, `collection-full-compat.log`.
+The patch runtime deps explicitly resolve EF/Relational10.0.14 and Connector0.3.0.
+Run `tests/OceanBase.EntityFrameworkCore.PackageConsumer/Verify-Package.ps1` with the original
+archive and expected version, then `artifacts/default-if-empty/verify-collection-consumers.ps1`;
+logs are `collection-package-content.log` and `collection-consumers.log`.
+The replay pins original archive provider-DLL SHA256 `703D578BF6FB00AF88501FFE1F180A8CC6B382F68DAD61AC227AB2815C0F716C`.
+This remains the preceding precommit build; the current rebuilt source DLL is not claimed to match
+that archive's revision stamp/hash. The new collection cases run against rebuilt source, not the packed
+consumer; packed consumers repeat their existing public smokes. No production or dependency diff,
+new CLI/bundle/hosted/Linux/native evidence, native attempt, or Required-row promotion.
 
 ## Implementation and review
 
@@ -82,7 +138,7 @@ review confirms the fix and records no remaining material issue. This proves com
 preservation, not nested collection runtime/native acceptance. Full gates and a new unique package
 version are refreshed after this final source change; earlier archive hashes are superseded.
 
-## Verification record
+## Original reference checkpoint verification record
 
 Logs and scripts live under `artifacts/default-if-empty/`, with `reference-` filenames distinguishing
 this module from the preceding scalar checkpoint. Run `run-reference-gates.ps1` for Debug/Release,

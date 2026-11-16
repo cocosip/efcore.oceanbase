@@ -52,7 +52,23 @@ so that an undocumented feature is not accidentally advertised.
 
 ## Current evidence and blockers
 
-Latest local module on base `b0bdae0`: DefaultIfEmpty reference/presence continuation under
+Latest continuation on base `79006f3`: 32 nested projected-collection runtime cases extend the
+DefaultIfEmpty profile to 104/104 under QRY-01/03/05/08/11 and MAP-07. Existing production code
+passes missing-parent/default, empty/populated grouping, nullable/converter children, tracking/identity,
+paging/rebinding, explicit user construction and failure/recovery assertions in both modes sync/async.
+Temporarily removing collection-binding traversal makes all 32 fail. Independent read-only review
+finds no material issue. Supplied readers prove EF shaping, not native SQL; cancellation is at command
+interception, with disposal tested separately on materialization failure. Reader-iteration cancellation,
+arbitrary projections and native acceptance remain open. See the [module record](efcore-10-default-if-empty-reference-plan.md)
+for final gates and original-package provenance; Required rows remain unchanged.
+
+Fresh continuation gates each pass 6408 tests (Unit 2509, Functional 2359, Specification 1538,
+ConsumerTests 2), with 16 old mapped skips, in Debug/Release and isolated EF10.0.14 Release. Original
+`10.0.0-default-reference-20261116.1` archive content and both-patch/mode public consumers are replayed;
+archive/consumer hashes match its recorded original build. No new package or current-source/archive
+binary equality is claimed; the new nested collection cases run on rebuilt source.
+
+Preceding module on base `b0bdae0`: DefaultIfEmpty reference/presence continuation under
 QRY-01/03/05/11 and MAP-07. Anonymous/DTO/constructed mapped objects and boxed scalars retain whole
 NULL defaults; present all-NULL members still construct objects. Required nullable expressions retain
 present-NULL exceptions. Preserve navigation snapshot semantics, client/member projection modes and
