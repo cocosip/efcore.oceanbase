@@ -19,10 +19,23 @@
 ## 当前检查点
 
 创建本文档时记录的历史提交和测试总数属于此前的模块检查点；当前最新模块、测试结果和包版本分别记录在下面的
-set-operation checkpoint 中。不要使用旧 handoff 行推断当前 HEAD 或当前测试总数。
+raw-query-runtime checkpoint 中。不要使用旧 handoff 行推断当前 HEAD 或当前测试总数。
 - 当前没有真实 OceanBase SQL/DDL 验收。已有 live 探针在握手阶段报 `Connection closed while reading the packet`，没有执行 SQL 或 DDL。
 
 因此，CFG-04 的服务注册生命周期已有官方本地规格证据，但整体 CFG-04 仍为 In progress；连接波次已转入剩余映射、查询、更新和事务边界。不得重复已经完成的连接 characterization。
+
+### 2026-11-16：QRY-10 raw query materialization/recovery
+
+Thirty-six both-mode sync/async cases cover the existing FromSqlRaw/Interpolated workflow: mapped
+result names/case/order, converters/nulls, identity scopes, composition/current inputs, missing/invalid
+columns/values, pre-open composition rejection and failure/cancellation/recovery. No production defect
+or added API. Fixture-local service-cache isolation fixes a detailed-error option's global provider-count
+warning; no diagnostic suppression. Review's outer scalar projection/order assertion gap is strengthened.
+Full Debug/Release and isolated EF10.0.14 Release each pass 6222 tests with 16 existing mapped skips.
+Content and fresh both-patch/mode public consumers pass on the unchanged set-operation package;
+archive/consumer hashes match the recorded original artifact, while current source revision stamps differ.
+[Module record](efcore-10-raw-query-runtime-plan.md). Native SQL/metadata, wider official runtime and
+release acceptance remain open; no Required row promotion or fresh CLI/bundle evidence.
 
 ### 2026-11-16：QRY-03/11 relational set operations
 

@@ -47,6 +47,7 @@ namespace PackageConsumer
                 TphRuntimeSmoke.Run(mode);
                 RelationshipWriteSmoke.Run(mode);
                 SetOperationSmoke.Run(mode);
+                RawQuerySmoke.Run(mode);
                 TransactionSmoke.Run(mode);
                 RetrySmoke.Run(mode);
                 SplitQuerySmoke.Run(mode);

@@ -7,6 +7,30 @@ execution, transactions, complete scalar mappings and package validation remain 
 [feature checklist](efcore-10-feature-checklist.md). SQL-generation tests and intercepted commands do not prove
 that a server accepts the SQL, generates identity values or commits and rolls back correctly.
 
+## Raw query materialization and recovery contract (QRY-10, QRY-05/08/11, CON-04/05)
+
+FromSqlRaw/FromSqlInterpolated reuse EF10's raw query shaper. For the tested multi-column entity shape,
+noncomposed queries match mapped store column names case-insensitively, independently of
+reader column order; extra columns are ignored. Required mapped columns must exist even when no rows
+are returned. Nullable and enum-converted properties retain their mappings. Tracking, no tracking and
+identity resolution use EF's normal identity scope, including supplied duplicate keys and repeat queries.
+
+Composition uses the existing OceanBase derived-table dialect with the requested scalar projection,
+predicate, ordering and paging. SQL and inputs are checked independently of the reader's supplied rows.
+Constructing a new raw/interpolated query captures that invocation's inputs; this does not promise that
+mutating a CLR variable rewrites the arguments of an already constructed FormattableString/query.
+Hostile string values and NULL stay in parameters. Raw SQL syntax/identifiers belong to the caller;
+this contract does not infer OceanBase support from Oracle Database or MySQL Server features.
+
+Noncomposable SQL used with composition rejects before opening. Missing columns, required NULL keys,
+invalid enum values and command failures release readers/owned leases so a later query can succeed.
+EnableDetailedErrors supplies EF property diagnostics when the application enables it; the provider
+does not enable it globally. In-flight async cancellation keeps the caller token and cancellation identity.
+MySQL's existing repeated caller-owned native parameter restriction stays explicit: reject before reader
+execution without a connector clone contract, then close the owned lease. Oracle named references reuse
+the input parameter. Both behaviors have local tests; native metadata/SQL/evaluation/cancellation remain open.
+See [the module record](efcore-10-raw-query-runtime-plan.md). No new raw SQL API or native SQL parser.
+
 ## Relational set-operation contract (QRY-01/02/03/05/11, MAP-07)
 
 Queryable Union, Concat, Intersect and Except use EF's existing set translation, projection mapping,

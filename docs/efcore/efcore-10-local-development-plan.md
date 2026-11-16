@@ -14,13 +14,25 @@ public APIs and per-mode mappings/SQL. Separate local implementation evidence fr
 The compact execution board is [efcore-10-roadmap.md](efcore-10-roadmap.md); this file remains the detailed
 batch ledger and acceptance notes.
 
-**Updated:** 2026-11-16, relational set operations following relationship writes, TPH runtime verification, SaveChanges concurrency interception, concurrency-protection specifications, write SQL specifications, DateOnly calendar correction, DateTime calendar addition, DateTimeOffset.UtcTicks, CFG-04/TST-01 service-registration lifetime, DateOnly.AddYears, DateOnly.AddMonths,
+**Updated:** 2026-11-16, raw query materialization/recovery following relational set operations, relationship writes, TPH runtime verification, SaveChanges concurrency interception, concurrency-protection specifications, write SQL specifications, DateOnly calendar correction, DateTime calendar addition, DateTimeOffset.UtcTicks, CFG-04/TST-01 service-registration lifetime, DateOnly.AddYears, DateOnly.AddMonths,
 DateOnly.AddDays, DateTimeOffset.UtcNow, DateTimeOffset.UtcDateTime, DateTimeOffset members, the server clock,
 DateTime.Ticks, TimeOnly.Ticks, TimeSpan.Ticks, DateOnly.DayNumber, DateTime.TimeOfDay and TST-01 model-building 101
 checkpoints.
 Keep one complete module active and review it before committing. EF8/EF9 remains postponed; live execution is opt-in and
 currently blocked before authentication by the supplied endpoint/transport behavior.
 The full goal remains incomplete.
+
+### Raw query materialization/recovery module (2026-11-16)
+
+**IDs:** QRY-10, QRY-05/08/11, MAP-07, CON-04/05, TST-01, PKG-03/04. Thirty-six both-mode cases
+verify existing FromSqlRaw/Interpolated column-name matching, tracking, converters/nulls, composed
+SQL/bindings, result-schema/value errors and recovery. No production defect/new API. The detailed-error
+fixture now disables its own service cache to avoid global provider-count warning pollution; diagnostics
+are not suppressed. Review's scalar projection/order assertion gap is strengthened. Full Debug/Release
+and isolated EF10.0.14 Release each pass 6222 tests with 16 existing skips. Fresh public raw-query smokes
+pass both patches/modes on the unchanged set-operation nupkg; archive/consumer hashes match, current
+rebuild revision stamps differ. [Module record](efcore-10-raw-query-runtime-plan.md) contains provenance
+and final gates. Native metadata/SQL, official runtime and release remain open; no row promotion.
 
 ### Relational set-operation module (2026-11-16)
 

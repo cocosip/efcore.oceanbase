@@ -6,7 +6,7 @@ The ordered development and acceptance rules are in
 [efcore-10-development-acceptance-plan.md](efcore-10-development-acceptance-plan.md). This file keeps the
 historical handoff and module evidence; it does not authorize jumping between unfinished feature families.
 
-The latest local module is the 2026-11-16 set-operation checkpoint recorded below. Earlier commit
+The latest local module is the 2026-11-16 raw-query-runtime checkpoint recorded below. Earlier commit
 identifiers and test totals remain historical evidence for their original modules; they are not the current branch
 baseline. The current feature evidence is recorded in the latest checkpoint sections and module plan.
 
@@ -19,6 +19,25 @@ TPC, many-to-many and Connector 0.3.0 reverse engineering.
 Test each module and review completed major modules before committing. EF8/EF9 remain postponed.
 The provider is not release-ready. The [feature checklist](efcore-10-feature-checklist.md) remains the
 acceptance authority; this document records the handoff rather than defining a different completion target.
+
+### QRY-10 raw query materialization/recovery checkpoint (2026-11-16)
+
+On base `6e31783`, 36 both-mode sync/async cases verify mapped column-name/case/order handling,
+nullable/converted entities, all tracking modes, composition/input isolation, missing columns on
+empty/nonempty readers, detailed conversion/required-NULL diagnostics and later query recovery.
+Noncomposable composition rejects before open; command cancellation preserves token/identity. The
+existing MySQL repeated native-parameter rejection also releases its lease. No production defect or
+new API is claimed. The fixture's detailed-error cache combinations triggered EF's global provider-count
+warning during initial full runs; local cache isolation fixes the fixture without suppressing the warning.
+Independent review's scalar projection/order assertion gap is strengthened.
+
+The final full gates each pass Unit 2463, Functional 2219, Specification 1538, ConsumerTests 2
+(6222 pass, 16 existing mapped skips). The unchanged set-operation package passes content and fresh
+both-patch/mode public raw-query consumers. Archive/consumer hashes match its recorded original build;
+the current source rebuild has a different informational stamp/hash. Commands, final review and reuse
+provenance are in [the module record](efcore-10-raw-query-runtime-plan.md). Native raw SQL/metadata,
+broader official runtime and release gates remain open. Required status remains 9 Done / 44 In progress
+per mode; no new package, tooling/live result or push/publication.
 
 ### QRY-03/11 relational set-operation checkpoint (2026-11-16)
 

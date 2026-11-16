@@ -2,7 +2,7 @@
 
 **Updated:** 2026-11-16
 **Branch:** `efcore/10.0`  
-**State:** Active local development; relational set operations is the latest local module, following relationship writes, TPH,
+**State:** Active local development; raw query materialization/recovery is the latest local module, following set operations, relationship writes, TPH,
 SaveChanges concurrency interception, concurrency-protection and write SQL specifications,
 DateOnly/DateTime calendar arithmetic, `DateTimeOffset.UtcTicks`, scalar extrema and service lifetimes.
 **Acceptance authority:** [efcore-10-feature-checklist.md](efcore-10-feature-checklist.md)
@@ -13,15 +13,17 @@ pre-authentication failure are unresolved.
 
 **Execution control:** Follow [efcore-10-development-acceptance-plan.md](efcore-10-development-acceptance-plan.md)
 for the ordered waves, evidence levels and handoff format. The latest SpecificationTests result is 1,538
-passed and 16 explicitly mapped skips (1,554 total); Release/Debug Unit/Functional are 2,463/2,183 and
-ConsumerTests 2 (6,186 passed). Isolated EF10.0.14 Release has the same totals. Set operations add 42
-unit/62 functional cases and fix OceanBase Oracle MINUS plus LOB/unsupported ALL rejection. Both
-mode contracts use OceanBase V4.3.5 sources; NCLOB is a conservative provider boundary. Independent
-review found no code defect; its evidence wording correction is incorporated. A new baseline-built
-`10.0.0-set-operations-20261116` package passes content and both-patch/mode public runtime consumers,
-with matching source/archive/consumer DLL hashes. See [the module record](efcore-10-set-operations-plan.md)
-for exact gates. Broader official store-backed/runtime and native set/SQL acceptance remain open.
-No fresh CLI/bundle/live/hosted/Linux claim or row promotion.
+passed and 16 explicitly mapped skips (1,554 total); Release/Debug Unit/Functional are 2,463/2,219 and
+ConsumerTests 2 (6,222 passed). Isolated EF10.0.14 Release has the same totals. Raw queries add 36
+local cases for column names/order/case, identity, converted/null materialization, composition/binds and
+schema/value/command failure recovery. Existing production services pass without changes. Fixture cache
+isolation fixes global provider-count warnings; review's scalar projection/order assertion gap is strengthened.
+The unchanged `10.0.0-set-operations-20261116` package passes content and fresh both-patch/mode public
+runtime consumers, including raw query schema-error recovery. Archive/consumer hashes match its recorded
+build; the current source rebuild has a different informational stamp/hash. See
+[the module record](efcore-10-raw-query-runtime-plan.md) for exact gates and reuse provenance. Broader
+official store-backed/runtime and native SQL/metadata acceptance remain open. No fresh CLI/bundle/live/
+hosted/Linux claim or row promotion.
 
 This is the execution board for the first OceanBase EF Core 10 provider. It separates provider work from
 evidence work so an intercepted test cannot be mistaken for native OceanBase acceptance.
