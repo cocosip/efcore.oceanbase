@@ -24,6 +24,22 @@ grouped-result checkpoint 中。不要使用旧 handoff 行推断当前 HEAD 或
 
 因此，CFG-04 的服务注册生命周期已有官方本地规格证据，但整体 CFG-04 仍为 In progress；连接波次已转入剩余映射、查询、更新和事务边界。不得重复已经完成的连接 characterization。
 
+### 2026-11-16：`DateTimeOffset.TotalOffsetMinutes` 查询模块
+
+Module: Oracle `DateTimeOffset.TotalOffsetMinutes` translation and MySQL rejection
+Checklist IDs: `MAP-05`, `QRY-07`, `QRY-11`
+Base commit: `4815261`
+Implementation files: `OceanBaseTemporalMemberTranslator.cs`, `OceanBaseQuerySqlGenerator.cs`
+Tests added/changed: `TemporalMemberQueryTests.cs`, `TimeSpanTicksFunctionalTests.cs`, packed `Program.cs`
+Focused command and result: Unit 4/4 and Functional 3/3 passed in Release; initial Oracle RED was an untranslatable member.
+Full local command and result: Unit 2537, Functional 2460, Specification 1538 passed; Specification retained 16 existing mapped skips.
+Package/tooling command and result: package `10.0.0-total-offset-minutes-20261116` content check and PackageConsumer passed on EF10.0.0/10.0.14 in both modes; no tooling implementation changed.
+Live command and result: `LiveConnectionTests` MySQL/Oracle both failed before authentication at `172.16.2.45:2881` with packet closure; SQL/DDL not executed and EF readers remained 0.
+Evidence boundary: local tests prove EF translation, Oracle SQL shape, NULL materialization, sync/async reader handling, MySQL pre-open rejection and package graphs; they do not prove OceanBase `EXTRACT(TIMEZONE_*)`, timezone/session precision or native results.
+Known gaps: live/Connector handshake remains `Blocked-live`; Required rows stay `In progress`; no Connector source or dependency change is needed.
+Next module: choose another coherent Required mapping/query/write/transaction gap after this reviewed commit; do not repeat this temporal boundary.
+Commit: local commit created after the final review; the final hash is reported by `git log`.
+
 ### 2026-11-16：QRY-03/04/05/11 grouped aggregate result composition
 
 On base `0aa2601`, close the local grouped-result module with explicit NULL grouping-key correlation,

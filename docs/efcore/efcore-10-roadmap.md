@@ -2,12 +2,19 @@
 
 **Updated:** 2026-11-16
 **Branch:** `efcore/10.0`  
-**State:** Grouped aggregate result composition is locally complete; stop at the user's wrap-up/local-commit checkpoint. It follows query enumeration, DefaultIfEmpty reference/collection semantics, scalar defaults, correlated lateral queries, the read-only EF fixture, raw queries, set operations, relationship writes, TPH,
+**State:** `DateTimeOffset.TotalOffsetMinutes` is locally complete at the Provider/pack boundary; native/live acceptance remains blocked by the Connector handshake endpoint. It follows grouped aggregate result composition, query enumeration, DefaultIfEmpty reference/collection semantics, scalar defaults, correlated lateral queries, the read-only EF fixture, raw queries, set operations, relationship writes, TPH,
 SaveChanges concurrency interception, concurrency-protection and write SQL specifications,
 DateOnly/DateTime calendar arithmetic, `DateTimeOffset.UtcTicks`, scalar extrema and service lifetimes.
 **Acceptance authority:** [efcore-10-feature-checklist.md](efcore-10-feature-checklist.md)
 
-Latest module on base `0aa2601`: explicit NULL grouping-key correlation fixes aggregate/ordered first
+Latest module on base `4815261`: Oracle `DateTimeOffset.TotalOffsetMinutes` uses validated `EXTRACT(TIMEZONE_HOUR/MINUTE)`;
+MySQL rejects the member before SQL generation because its carrier is UTC-normalized. Unit 4/4 and Functional 3/3
+pass, full Release passes Unit 2537, Functional 2460 and Specification 1538 with 16 existing mapped skips, and
+package `10.0.0-total-offset-minutes-20261116` passes EF10.0.0/10.0.14 both-mode consumers. No Connector change
+was needed. Live MySQL/Oracle probes both fail in pre-authentication at `172.16.2.45:2881` with packet closure;
+no SQL/DDL ran and EF readers remained 0. See [module record](efcore-10-total-offset-minutes-plan.md).
+
+The preceding module on base `0aa2601`: explicit NULL grouping-key correlation fixes aggregate/ordered first
 composition while preserving ordinary Join equality. Final grouped SQL24 + correlated16 and runtime64
 pass; initial SQL RED was 8 failures/8 controls pass. Both result forms, null configurations, tracking,
 converted/composite keys, paging/binding and recovery are covered locally. NULL correlation may retain
@@ -16,7 +23,7 @@ namespace finding is corrected; source Debug/Release/isolated EF10.0.14 each pas
 skips. New `10.0.0-grouped-results-20261116.1` package contents and public both-patch/mode consumers pass,
 with matching tested baseline source/archive/consumer DLL hashes. See
 [module record](efcore-10-grouped-results-plan.md). Native results/performance and wider runtime/release
-acceptance remain open; Required stays 9 Done / 44 In progress per mode. No next module, push/publication.
+acceptance remain open; Required stays 9 Done / 44 In progress per mode. No push/publication.
 
 The `REL-01` support record now exists at [efcore-10-release-support.md](efcore-10-release-support.md),
 but remains `In progress` while the supplied endpoint's direct/proxy routing, transport options and

@@ -469,6 +469,27 @@ namespace PackageConsumer
                         : !offsetClockSql.Contains("CAST(SYS_EXTRACT_UTC(SYSTIMESTAMP) AS TIMESTAMP)", StringComparison.Ordinal))
                     || offsetClockSql.Contains("__oceanbase_internal_", StringComparison.Ordinal))
                     throw new Exception("Packed provider did not translate DateTimeOffset.UtcNow.");
+                if (mode == OceanBaseCompatibilityMode.MySql)
+                {
+                    try
+                    {
+                        context.Set<Row>().Where(row => row.OffsetAt.TotalOffsetMinutes < 0)
+                            .Select(row => row.Id).ToQueryString();
+                        throw new Exception("Packed MySQL provider translated unsupported DateTimeOffset.TotalOffsetMinutes.");
+                    }
+                    catch (InvalidOperationException)
+                    {
+                    }
+                }
+                else
+                {
+                    var totalOffsetSql = context.Set<Row>().Where(row => row.OffsetAt.TotalOffsetMinutes < 0)
+                        .Select(row => row.OffsetAt.TotalOffsetMinutes).ToQueryString();
+                    if (!totalOffsetSql.Contains("EXTRACT(TIMEZONE_HOUR FROM", StringComparison.Ordinal)
+                        || !totalOffsetSql.Contains("EXTRACT(TIMEZONE_MINUTE FROM", StringComparison.Ordinal)
+                        || totalOffsetSql.Contains("__oceanbase_internal_", StringComparison.Ordinal))
+                        throw new Exception("Packed Oracle provider did not translate DateTimeOffset.TotalOffsetMinutes.");
+                }
                 var dateAddSql = context.Set<Row>().Where(row => row.Day.AddDays(3) > new DateOnly(2024, 1, 1))
                     .Select(row => row.Day.AddDays(3)).ToQueryString();
                 if ((mode == OceanBaseCompatibilityMode.MySql

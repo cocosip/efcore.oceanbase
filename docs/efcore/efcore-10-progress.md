@@ -6,20 +6,32 @@ The ordered development and acceptance rules are in
 [efcore-10-development-acceptance-plan.md](efcore-10-development-acceptance-plan.md). This file keeps the
 historical handoff and module evidence; it does not authorize jumping between unfinished feature families.
 
-The latest local module is the 2026-11-16 grouped aggregate result composition checkpoint recorded below. Earlier commit
+The latest local module is the 2026-11-16 `DateTimeOffset.TotalOffsetMinutes` query checkpoint recorded below. Earlier commit
 identifiers and test totals remain historical evidence for their original modules; they are not the current branch
 baseline. The current feature evidence is recorded in the latest checkpoint sections and module plan.
 
 ## Current checkpoint: 2026-11-16
 
-Local grouped-result development is complete on efcore/10.0; stop at this checkpoint as requested.
-This follows the HasData, connection-boundary, CFG-04, Boolean conversion,
+Local `DateTimeOffset.TotalOffsetMinutes` development is complete on efcore/10.0; the grouped-result checkpoint
+remains the preceding handoff. This follows the HasData, connection-boundary, CFG-04, Boolean conversion,
 temporal fractional and service-registration-lifetime checkpoints.
 The current local checkpoint includes lazy-loading integration, ordinary compiled models, split queries, retries,
 TPC, many-to-many and Connector 0.3.0 reverse engineering.
 Test each module and review completed major modules before committing. EF8/EF9 remain postponed.
 The provider is not release-ready. The [feature checklist](efcore-10-feature-checklist.md) remains the
 acceptance authority; this document records the handoff rather than defining a different completion target.
+
+### MAP-05/QRY-07/QRY-11 `DateTimeOffset.TotalOffsetMinutes` (2026-11-16)
+
+On base `4815261`, Oracle mode translates `DateTimeOffset.TotalOffsetMinutes` through a validated private marker
+to `EXTRACT(TIMEZONE_HOUR/MINUTE)` and MySQL rejects the member before SQL generation because its DateTimeOffset
+carrier is UTC-normalized `DATETIME`. Unit 4/4 and Functional 3/3 pass in Release after the Oracle RED case.
+Full Release passes Unit 2537, Functional 2460 and Specification 1538 with the existing 16 mapped skips.
+Package `10.0.0-total-offset-minutes-20261116` and its EF10.0.0/10.0.14 both-mode PackageConsumer pass.
+No Connector source or dependency changed. Live MySQL/Oracle probes both fail during Connector 0.3.0
+pre-authentication at `172.16.2.45:2881` with packet closure; no SQL/DDL ran and EF readers remained 0.
+Native timezone/extract behavior and the Required rows remain `In progress`; see
+[module record](efcore-10-total-offset-minutes-plan.md).
 
 ### QRY-03/04/05/11 and MAP-07 grouped aggregate result composition (2026-11-16)
 

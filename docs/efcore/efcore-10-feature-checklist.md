@@ -52,7 +52,16 @@ so that an undocumented feature is not accidentally advertised.
 
 ## Current evidence and blockers
 
-Latest module on base `0aa2601`: grouped aggregate result composition under QRY-03/04/05/11 and MAP-07.
+Latest module on base `4815261`: Oracle `DateTimeOffset.TotalOffsetMinutes` under MAP-05, QRY-07 and QRY-11.
+Oracle emits validated `EXTRACT(TIMEZONE_HOUR/MINUTE)` from the existing timestamp-with-time-zone carrier;
+MySQL rejects the member before SQL generation because its DateTimeOffset carrier is UTC-normalized. Unit 4/4,
+Functional 3/3, full Release Unit 2537/Functional 2460/Specification 1538 and the new package's EF10.0.0/10.0.14
+both-mode consumers pass. The 16 existing Specification mapped skips remain unchanged. Live MySQL/Oracle probes
+both fail during Connector 0.3.0 pre-authentication at `172.16.2.45:2881` with packet closure; no SQL/DDL ran and
+EF readers remained 0. Native timezone/extract behavior remains Blocked-live; Required rows stay In progress.
+Exact scope and evidence: [module record](efcore-10-total-offset-minutes-plan.md).
+
+Preceding module on base `0aa2601`: grouped aggregate result composition under QRY-03/04/05/11 and MAP-07.
 Grouping enumerable correlation explicitly matches nullable keys, including the NULL group with
 UseRelationalNulls. Ordered elements/first entity compose with aggregates; ordinary Join/nonnullable
 keys retain equality semantics. The nullable shape can retain LATERAL with the existing documented
@@ -61,7 +70,7 @@ and runtime64 pass. Debug/Release/isolated EF10.0.14 each pass 6530 tests with 1
 New `10.0.0-grouped-results-20261116.1` package contents and both-patch/mode public consumers pass with
 matching tested baseline source/archive/consumer DLL hashes. Independent review's consumer namespace
 finding is corrected and compiler/consumer gates pass. Native grouping/ordering/performance and broader
-runtime/release acceptance remain open; no Required promotion. Stop at this checkpoint as requested.
+runtime/release acceptance remain open; no Required promotion.
 Exact scope, provenance and limitations: [module record](efcore-10-grouped-results-plan.md).
 
 Preceding module on base `b3b1c4f`: query enumeration lifecycle under CON-03/04/05, QRY-05 and DEF-09.

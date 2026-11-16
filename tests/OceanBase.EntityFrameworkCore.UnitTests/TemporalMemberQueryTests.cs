@@ -545,6 +545,63 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
         }
 
         [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle)]
+        public void DateTimeOffset_total_offset_minutes_uses_the_native_oracle_carrier_only(
+            OceanBaseCompatibilityMode mode)
+        {
+            using var context = CreateContext(mode);
+            var source = context.GetService<IRelationalTypeMappingSource>();
+            var factory = context.GetService<ISqlExpressionFactory>();
+            var members = context.GetService<IMemberTranslatorProvider>();
+            var logger = context.GetService<IDiagnosticsLogger<DbLoggerCategory.Query>>();
+            var member = typeof(DateTimeOffset).GetProperty(nameof(DateTimeOffset.TotalOffsetMinutes))!;
+            var translated = members.Translate(factory.Constant(DateTimeOffset.UtcNow,
+                    source.FindMapping(typeof(DateTimeOffset))!), member, typeof(int), logger);
+
+            if (mode == OceanBaseCompatibilityMode.MySql)
+            {
+                Assert.Null(translated);
+                Assert.Throws<InvalidOperationException>(() => context.Rows
+                    .Where(row => row.Zoned.TotalOffsetMinutes > 0)
+                    .Select(row => row.Zoned.TotalOffsetMinutes).ToQueryString());
+            }
+            else
+            {
+                var function = Assert.IsType<SqlFunctionExpression>(translated);
+                Assert.Equal("__oceanbase_internal_total_offset_minutes", function.Name);
+                Assert.Same(source.FindMapping(typeof(int)), function.TypeMapping);
+                var sql = context.Rows.Where(row => row.Zoned.TotalOffsetMinutes < 0)
+                    .Select(row => row.Zoned.TotalOffsetMinutes).ToQueryString();
+                Assert.Contains("EXTRACT(TIMEZONE_HOUR FROM", sql);
+                Assert.Contains("EXTRACT(TIMEZONE_MINUTE FROM", sql);
+                Assert.Contains("* 60", sql);
+                Assert.DoesNotContain("__oceanbase_internal", sql, StringComparison.Ordinal);
+            }
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle)]
+        public void DateTimeOffset_total_offset_minutes_rejects_unowned_and_null_converting_carriers(
+            OceanBaseCompatibilityMode mode)
+        {
+            using var context = CreateContext(mode);
+            var source = context.GetService<IRelationalTypeMappingSource>();
+            var factory = context.GetService<ISqlExpressionFactory>();
+            var logger = context.GetService<IDiagnosticsLogger<DbLoggerCategory.Query>>();
+            var members = context.GetService<IMemberTranslatorProvider>();
+            var member = typeof(DateTimeOffset).GetProperty(nameof(DateTimeOffset.TotalOffsetMinutes))!;
+            var text = (RelationalTypeMapping)source.FindMapping(typeof(string))!.WithComposedConverter(
+                new ValueConverter<DateTimeOffset, string>(value => value.ToString("O"), value => DateTimeOffset.Parse(value)));
+            var nullConverting = (RelationalTypeMapping)source.FindMapping(typeof(DateTimeOffset))!.WithComposedConverter(
+                new ValueConverter<DateTimeOffset, DateTimeOffset>(value => value, value => value, convertsNulls: true));
+
+            Assert.Null(members.Translate(factory.Constant(DateTimeOffset.UtcNow, text), member, typeof(int), logger));
+            Assert.Null(members.Translate(factory.Constant(DateTimeOffset.UtcNow, nullConverting), member, typeof(int), logger));
+        }
+
+        [Theory]
         [InlineData(OceanBaseCompatibilityMode.MySql, false)]
         [InlineData(OceanBaseCompatibilityMode.MySql, true)]
         [InlineData(OceanBaseCompatibilityMode.Oracle, false)]

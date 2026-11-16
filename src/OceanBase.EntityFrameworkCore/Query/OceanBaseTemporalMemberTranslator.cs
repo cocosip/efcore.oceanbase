@@ -26,6 +26,7 @@ namespace OceanBase.EntityFrameworkCore.Query
         internal const string DateTimeTodayMarker = "__oceanbase_internal_datetime_today";
         internal const string DateTimeOffsetUtcDateTimeMarker = "__oceanbase_internal_datetimeoffset_utc_datetime";
         internal const string DateTimeOffsetUtcNowMarker = "__oceanbase_internal_datetimeoffset_utc_now";
+        internal const string DateTimeOffsetTotalOffsetMinutesMarker = "__oceanbase_internal_total_offset_minutes";
 
         private static readonly Dictionary<MemberInfo, (Type Receiver, string Unit, string MySqlFunction)> Parts = new()
         {
@@ -98,6 +99,8 @@ namespace OceanBase.EntityFrameworkCore.Query
         private static readonly MemberInfo DateTimeToday = typeof(DateTime).GetProperty(nameof(DateTime.Today))!;
         private static readonly MemberInfo DateTimeOffsetUtcDateTime = typeof(DateTimeOffset).GetProperty(nameof(DateTimeOffset.UtcDateTime))!;
         private static readonly MemberInfo DateTimeOffsetUtcNow = typeof(DateTimeOffset).GetProperty(nameof(DateTimeOffset.UtcNow))!;
+        private static readonly MemberInfo DateTimeOffsetTotalOffsetMinutes =
+            typeof(DateTimeOffset).GetProperty(nameof(DateTimeOffset.TotalOffsetMinutes))!;
 
         public SqlExpression? Translate(SqlExpression? instance, MemberInfo member, Type returnType,
             IDiagnosticsLogger<DbLoggerCategory.Query> logger)
@@ -152,6 +155,19 @@ namespace OceanBase.EntityFrameworkCore.Query
                 return factory.Function(DateTimeOffsetUtcNowMarker, [], nullable: false,
                     argumentsPropagateNullability: [], typeof(DateTimeOffset),
                     mappingSource.FindMapping(typeof(DateTimeOffset), storeType));
+            }
+
+            if (instance is not null && member == DateTimeOffsetTotalOffsetMinutes
+                && returnType == typeof(int) && mode == OceanBaseCompatibilityMode.Oracle)
+            {
+                instance = factory.ApplyDefaultTypeMapping(instance);
+                if (instance.TypeMapping is not { } offsetMapping
+                    || offsetMapping.Converter?.ConvertsNulls == true
+                    || !SupportsCarrier(typeof(DateTimeOffset), offsetMapping))
+                    return null;
+
+                return factory.Function(DateTimeOffsetTotalOffsetMinutesMarker, [instance], nullable: true,
+                    argumentsPropagateNullability: [false], typeof(int), mappingSource.FindMapping(typeof(int)));
             }
 
             if (instance is not null && member == DateOnlyDayNumber && instance.Type == typeof(DateOnly)

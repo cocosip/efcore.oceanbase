@@ -140,6 +140,48 @@ public sealed class TimeSpanTicksFunctionalTests
         }
     }
 
+    [Theory]
+    [InlineData(OceanBaseCompatibilityMode.Oracle, false)]
+    [InlineData(OceanBaseCompatibilityMode.Oracle, true)]
+    public async Task Oracle_DateTimeOffset_TotalOffsetMinutes_materializes_and_preserves_null(
+        OceanBaseCompatibilityMode mode, bool async)
+    {
+        using var table = new DataTable();
+        table.Columns.Add("Value", typeof(object));
+        table.Rows.Add(480);
+        table.Rows.Add(DBNull.Value);
+
+        var capture = new Capture(table);
+        await using var context = Create(mode, capture);
+        var query = context.Rows
+            .Where(row => row.Zoned.TotalOffsetMinutes >= 0)
+            .OrderBy(row => row.Zoned.TotalOffsetMinutes)
+            .Select(row => (int?)row.Zoned.TotalOffsetMinutes);
+        var result = async ? await query.ToListAsync() : query.ToList();
+
+        Assert.Equal([480, null], result);
+        var sql = Assert.Single(capture.Sql);
+        Assert.DoesNotContain("__oceanbase_internal", sql);
+        Assert.Contains("EXTRACT(TIMEZONE_HOUR FROM", sql);
+        Assert.Contains("EXTRACT(TIMEZONE_MINUTE FROM", sql);
+    }
+
+    [Fact]
+    public void MySql_DateTimeOffset_TotalOffsetMinutes_is_rejected_before_command_execution()
+    {
+        using var table = new DataTable();
+        table.Columns.Add("Value", typeof(object));
+        table.Rows.Add(0);
+
+        var capture = new Capture(table);
+        using var context = Create(OceanBaseCompatibilityMode.MySql, capture);
+        Assert.Throws<InvalidOperationException>(() => context.Rows
+            .Where(row => row.Zoned.TotalOffsetMinutes < 0)
+            .Select(row => row.Id)
+            .ToQueryString());
+        Assert.Empty(capture.Sql);
+    }
+
     private static TestContext Create(OceanBaseCompatibilityMode mode, Capture capture)
         => new(new DbContextOptionsBuilder<TestContext>()
             .UseOceanBase("Server=offline;Database=timespan_ticks", mode)
