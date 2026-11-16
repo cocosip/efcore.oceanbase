@@ -7,11 +7,12 @@
 ## Contract
 
 Translate `DateOnly.AddMonths(int)` through the provider's existing `DateOnly` `DATE` carrier.
-The operation preserves the `DateOnly` result and .NET month arithmetic; timezone and local-clock
-semantics are outside this slice.
+The operation preserves the `DateOnly` result and emits CLR-style day clamping; native month arithmetic
+remains unverified. Timezone and local-clock semantics are outside this slice.
 
 - MySQL emits `DATE_ADD(input, INTERVAL months MONTH)`.
-- Oracle emits `ADD_MONTHS(input, months)`, keeping the Oracle `DATE` carrier for the DateOnly reader.
+- Oracle anchors ADD_MONTHS at `TRUNC(input, 'MM')`, then adds the lesser of the original day minus one
+  and the target last day minus one, keeping the DATE carrier. This requires NLS_CALENDAR=GREGORIAN.
 - Only a non-null-converting `DateOnly` to `DATE` mapping and an `int` month argument are admitted.
 - Unrelated and null-converting carriers return no translation and remain EF translation errors.
 - No Connector API or dependency changed.
@@ -21,7 +22,7 @@ semantics are outside this slice.
 The RED query failed in both modes with EF's `DateOnly.AddMonths` translation error. The provider now
 uses a private marker validated by the SQL generator before emitting either dialect expression.
 
-Focused Release evidence:
+Initial checkpoint evidence (historical; the correction below supersedes its Oracle SQL):
 
 - `TemporalMemberQueryTests.DateOnly_add_months*`: 4 passed, 0 failed.
 - `DateOnlyDayNumberFunctionalTests.DateOnly_AddMonths_materializes_server_value`: 4 passed, 0 failed,
@@ -49,10 +50,10 @@ native coercion.
 
 ## Remaining risk
 
-Connected-code inspection during the 2026-11-16 DateTime calendar-add module confirms that the older
-Oracle path still calls `ADD_MONTHS(input, months)` directly. Its source-month-end rule differs from
-CLR day clamping (for example, Gregorian 2024-02-29 plus one month). Existing constant-amount SQL and
-intercepted readers do not establish equivalence. Fix this in the next DateOnly calendar module.
+The 2026-11-16 [DateOnly calendar correction](efcore-10-date-only-calendar-fix-plan.md) replaces direct
+ADD_MONTHS on the source date with month-start/day-clamp construction. The previous source-month-end
+rule differed from CLR clamping (for example, Gregorian 2024-02-29 plus one month). New SQL regressions
+catch the old renderer; intercepted values still do not establish native calendar equivalence.
 
 The supplied live endpoint still closes the packet during pre-authentication for both modes, so native
 `DATE_ADD`, `ADD_MONTHS`, end-of-month behavior, tenant calendar behavior and server coercion remain

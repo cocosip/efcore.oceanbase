@@ -11,7 +11,8 @@ The operation preserves the `DateOnly` result; native arithmetic remains unverif
 local-clock semantics are outside this slice.
 
 - MySQL emits `DATE_ADD(input, INTERVAL years YEAR)`.
-- Oracle emits `ADD_MONTHS(input, years * 12)`, keeping the Oracle `DATE` carrier for the DateOnly reader.
+- Oracle anchors ADD_MONTHS at `TRUNC(input, 'MM')` with `(years) * 12`, then clamps the original day
+  to the target month's last day. It retains DATE and requires NLS_CALENDAR=GREGORIAN.
 - Only a non-null-converting `DateOnly` to `DATE` mapping and an `int` year argument are admitted.
 - Unrelated and null-converting carriers return no translation and remain EF translation errors.
 - No Connector API or dependency changed.
@@ -21,7 +22,7 @@ local-clock semantics are outside this slice.
 The RED query failed in both modes with EF's `DateOnly.AddYears` translation error. The provider now
 uses a private marker validated by the SQL generator before emitting either dialect expression.
 
-Focused Release evidence:
+Initial checkpoint evidence (historical; the correction below supersedes its Oracle SQL):
 
 - `TemporalMemberQueryTests.DateOnly_add_years*`: 4 passed, 0 failed.
 - `DateOnlyDayNumberFunctionalTests.DateOnly_AddYears_materializes_server_value`: 4 passed, 0 failed,
@@ -48,11 +49,10 @@ behavior only. They do not prove OceanBase year arithmetic, leap-day rules, cale
 
 ## Remaining risk
 
-Connected-code inspection during the 2026-11-16 DateTime calendar-add module confirms two existing
-Oracle gaps: raw `ADD_MONTHS(input, years * 12)` applies source-month-end rules, and compound year
-expressions are not grouped before multiplication. For example, `Id + 1` becomes `Id + 1 * 12`.
-The existing constant-amount tests miss these cases. This module's historical local checkpoint does
-not close .NET calendar equivalence; the next calendar module must add regressions and fix both.
+The 2026-11-16 [DateOnly calendar correction](efcore-10-date-only-calendar-fix-plan.md) fixes both
+the source-month-end rule and missing compound-year grouping. For example, `Id + 1` now becomes
+`(Id + 1) * 12`. New SQL regressions catch the old renderer; intercepted values do not establish native
+calendar equivalence. The initial constant-amount checkpoint above remains historical evidence only.
 
 The supplied live endpoint still closes the packet during pre-authentication for both modes, so native
 `DATE_ADD`, `ADD_MONTHS`, leap-day behavior, tenant calendar behavior and server coercion remain unverified.

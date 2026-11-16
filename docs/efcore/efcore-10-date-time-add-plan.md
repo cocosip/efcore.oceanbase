@@ -97,10 +97,9 @@ No live query, CLI/bundle rerun, push or publication was performed for this tran
 MAP-05/QRY-07/QRY-11 remain `In progress`: native calendar/session, precision, range/error behavior and
 the wider required function matrix still need acceptance.
 
-## Adjacent existing gap for the next module
+## Adjacent gap resolved by the following module
 
-Final connected-code inspection confirms the older DateOnly Oracle paths still call ADD_MONTHS on the
-original date and render year amounts without grouping. They therefore retain source-month-end behavior
-and the same compound-year precedence defect fixed here for DateTime. DateOnly constant-amount tests
-do not cover those cases. Reconcile DateOnly calendar arithmetic as the next coherent module before
-adding further temporal APIs; this module does not change the older DateOnly implementation.
+Final connected-code inspection found the older DateOnly Oracle paths calling ADD_MONTHS on the
+original date and rendering year amounts without grouping. This checkpoint did not change DateOnly.
+The following [DateOnly calendar correction](efcore-10-date-only-calendar-fix-plan.md) shares the target-date
+renderer and adds regressions for both issues; DateTime's time restoration and DATE cast remain intact.

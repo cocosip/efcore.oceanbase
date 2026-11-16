@@ -6,7 +6,7 @@ The ordered development and acceptance rules are in
 [efcore-10-development-acceptance-plan.md](efcore-10-development-acceptance-plan.md). This file keeps the
 historical handoff and module evidence; it does not authorize jumping between unfinished feature families.
 
-The latest local feature module is the 2026-11-16 DateTime calendar-add checkpoint recorded below. Earlier commit
+The latest local feature module is the 2026-11-16 DateOnly calendar-correction checkpoint recorded below. Earlier commit
 identifiers and test totals remain historical evidence for their original modules; they are not the current branch
 baseline. The current feature evidence is recorded in the latest checkpoint sections and module plan.
 
@@ -19,6 +19,21 @@ TPC, many-to-many and Connector 0.3.0 reverse engineering.
 Test each module and review completed major modules before committing. EF8/EF9 remain postponed.
 The provider is not release-ready. The [feature checklist](efcore-10-feature-checklist.md) remains the
 acceptance authority; this document records the handoff rather than defining a different completion target.
+
+### QRY-07/QRY-11/MAP-05 DateOnly calendar-correction checkpoint (2026-11-16)
+
+Oracle `DateOnly.AddMonths` / `AddYears` now share DateTime's target-month-start/day-clamp renderer,
+avoiding the source-month-end rule and grouping compound year amounts before multiplication by 12.
+The result retains DATE and its mapping/converter; DateTime time/fraction restoration is unchanged.
+Three Oracle unit regressions and four Oracle intercepted cases failed before the fix; seven new unit
+and eight new functional cases now pass. Independent review found no actionable findings.
+
+Full Debug/Release and isolated EF10.0.14 Release each pass Unit 2,421, Functional 1,955,
+Specification 1,452 and ConsumerTests 2, with 16 existing mapped skips. Package
+`10.0.0-date-only-calendar-fix-20261116` passes content and packed consumers on both EF patches/modes,
+with verified graphs and matching provider hashes. Native SQL/calendar/session behavior remains open;
+Oracle requires NLS_CALENDAR=GREGORIAN. See [the correction plan](efcore-10-date-only-calendar-fix-plan.md).
+Local commit only; no push or publication. The overall development goal remains incomplete.
 
 ### QRY-07/QRY-11/MAP-05 DateTime calendar-add checkpoint (2026-11-16)
 

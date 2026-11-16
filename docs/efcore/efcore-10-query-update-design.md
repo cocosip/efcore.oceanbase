@@ -618,6 +618,19 @@ DateTimeOffset, clocks/Now/UtcNow/Today, fractional parts/Ticks, Date/DayNumber,
 parts and Add operations need their own timezone/range/precision/calendar/wrapping contracts. This slice makes
 no server extraction, DATE cast, calendar/zero-date, interval-clock or result-metadata claim without live evidence.
 
+### DateOnly calendar addition correction (QRY-07/11, MAP-05)
+
+Oracle `DateOnly.AddMonths(int)` / `AddYears(int)` share DateTime's target-date renderer: anchor
+ADD_MONTHS at TRUNC(input, 'MM'), then add LEAST(original day - 1, target last day - 1). This avoids
+Oracle's source-month-end rule. Year amounts are grouped before multiplying by 12, including column
+and captured compound expressions. The result remains physical DATE with its original DateOnly mapping
+and converter, so calendar/DayNumber composition uses date arithmetic. MySQL keeps DATE_ADD.
+
+Oracle requires NLS_CALENDAR=GREGORIAN and stable input expressions; the provider does not change
+session state or promise CLR range/error equivalence. NULL, negative/captured amounts, parameter rebinding,
+nullable DateOnly readers and invalid carrier/marker boundaries have local coverage. The test reader supplies
+results; native arithmetic/SQL acceptance remain open. See [the correction plan](efcore-10-date-only-calendar-fix-plan.md).
+
 ### DateTime calendar addition local contract (QRY-07/11, MAP-05)
 
 The exact `DateTime.AddMonths(int)` and `DateTime.AddYears(int)` methods accept MySQL DATETIME and

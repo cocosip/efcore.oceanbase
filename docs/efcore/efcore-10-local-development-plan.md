@@ -14,13 +14,24 @@ public APIs and per-mode mappings/SQL. Separate local implementation evidence fr
 The compact execution board is [efcore-10-roadmap.md](efcore-10-roadmap.md); this file remains the detailed
 batch ledger and acceptance notes.
 
-**Updated:** 2026-11-16, DateTime calendar addition following DateTimeOffset.UtcTicks, CFG-04/TST-01 service-registration lifetime, DateOnly.AddYears, DateOnly.AddMonths,
+**Updated:** 2026-11-16, DateOnly calendar correction following DateTime calendar addition, DateTimeOffset.UtcTicks, CFG-04/TST-01 service-registration lifetime, DateOnly.AddYears, DateOnly.AddMonths,
 DateOnly.AddDays, DateTimeOffset.UtcNow, DateTimeOffset.UtcDateTime, DateTimeOffset members, the server clock,
 DateTime.Ticks, TimeOnly.Ticks, TimeSpan.Ticks, DateOnly.DayNumber, DateTime.TimeOfDay and TST-01 model-building 101
 checkpoints.
 Keep one complete module active and review it before committing. EF8/EF9 remains postponed; live execution is opt-in and
 currently blocked before authentication by the supplied endpoint/transport behavior.
 The full goal remains incomplete.
+
+### DateOnly calendar-correction module (2026-11-16)
+
+Oracle DateOnly month/year arithmetic now shares the existing DateTime target-date clamp and groups
+compound year amounts. DATE mapping, NULL/converter guards and MySQL rendering remain intact. Seven
+new unit and eight new functional cases pass after observed Oracle RED; independent review found no
+actionable findings. Full Debug/Release and isolated EF10.0.14 Release pass Unit 2,421, Functional 1,955,
+Specification 1,452 and ConsumerTests 2, with 16 mapped skips. Package
+`10.0.0-date-only-calendar-fix-20261116` passes content and both-patch/both-mode packed consumers.
+Native calendar/SQL/session gates remain open; Oracle requires NLS_CALENDAR=GREGORIAN. See
+[the correction plan](efcore-10-date-only-calendar-fix-plan.md).
 
 ### DateTime calendar-add module (2026-11-16)
 

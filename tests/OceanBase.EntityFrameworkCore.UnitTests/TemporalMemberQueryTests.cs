@@ -206,6 +206,105 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
         }
 
         [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public void DateOnly_calendar_add_uses_Oracle_month_start_and_clamps_the_original_day(bool years)
+        {
+            using var context = CreateContext(OceanBaseCompatibilityMode.Oracle);
+            var sql = years
+                ? context.Rows.Where(row => row.Date.AddYears(1).Day > 0)
+                    .Select(row => (int?)row.OptionalDate!.Value.AddYears(-1).DayNumber).ToQueryString()
+                : context.Rows.Where(row => row.Date.AddMonths(1).Day > 0)
+                    .Select(row => (int?)row.OptionalDate!.Value.AddMonths(-1).DayNumber).ToQueryString();
+
+            Assert.Contains("ADD_MONTHS(TRUNC(\"r\".\"Date\", 'MM'), ", sql);
+            Assert.Contains("LEAST(EXTRACT(DAY FROM \"r\".\"Date\") - 1", sql);
+            Assert.Contains("LAST_DAY(ADD_MONTHS(TRUNC(", sql);
+            Assert.Contains("OptionalDate", sql);
+            Assert.Contains(" - DATE '0001-01-01'", sql);
+            Assert.DoesNotContain("TIMESTAMP", sql);
+            Assert.DoesNotContain("__oceanbase_internal", sql);
+        }
+
+        [Fact]
+        public void DateOnly_calendar_add_groups_Oracle_compound_year_amounts()
+        {
+            using var context = CreateContext(OceanBaseCompatibilityMode.Oracle);
+            var amount = 2;
+            var sql = context.Rows.Where(row => row.Date.AddYears(row.Id + 1).Year > 2000
+                && row.Date.AddYears(row.Id - amount).Year > 2000).ToQueryString();
+
+            Assert.Contains("(\"r\".\"Id\" + 1) * 12", sql);
+            Assert.Contains("(\"r\".\"Id\" - :amount) * 12", sql);
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle)]
+        public void DateOnly_calendar_add_preserves_mapping_and_rejects_invalid_amount_carriers(OceanBaseCompatibilityMode mode)
+        {
+            using var context = CreateContext(mode);
+            var source = context.GetService<IRelationalTypeMappingSource>();
+            var factory = context.GetService<ISqlExpressionFactory>();
+            var methods = context.GetService<IMethodCallTranslatorProvider>();
+            var logger = context.GetService<IDiagnosticsLogger<DbLoggerCategory.Query>>();
+            var mapping = source.FindMapping(typeof(DateOnly))!;
+            var converted = (RelationalTypeMapping)mapping.WithComposedConverter(
+                new ValueConverter<DateOnly, DateOnly>(value => value, value => value));
+            var integer = source.FindMapping(typeof(int))!;
+            var textAmount = (RelationalTypeMapping)source.FindMapping(typeof(string))!.WithComposedConverter(
+                new ValueConverter<int, string>(value => value.ToString(), value => int.Parse(value)));
+            var nullAmount = (RelationalTypeMapping)integer.WithComposedConverter(
+                new ValueConverter<int, int>(value => value, value => value, convertsNulls: true));
+            foreach (var name in new[] { nameof(DateOnly.AddMonths), nameof(DateOnly.AddYears) })
+            {
+                var method = typeof(DateOnly).GetMethod(name, [typeof(int)])!;
+                foreach (var inputMapping in new[] { mapping, converted })
+                {
+                    var input = new ColumnExpression("Date", "r", typeof(DateOnly), inputMapping, true);
+                    var result = Assert.IsType<SqlFunctionExpression>(methods.Translate(context.Model, input, method,
+                        [factory.Constant(-1, integer)], logger));
+                    Assert.Same(inputMapping, result.TypeMapping);
+                    Assert.Same(input, result.Arguments![0]);
+                    Assert.Null(methods.Translate(context.Model, input, method, [factory.Constant(1, textAmount)], logger));
+                    Assert.Null(methods.Translate(context.Model, input, method, [factory.Constant(1, nullAmount)], logger));
+                }
+            }
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle)]
+        public void DateOnly_calendar_add_renderer_rejects_invalid_markers(OceanBaseCompatibilityMode mode)
+        {
+            using var context = CreateContext(mode);
+            var factory = context.GetService<ISqlExpressionFactory>();
+            var source = context.GetService<IRelationalTypeMappingSource>();
+            var mapping = source.FindMapping(typeof(DateOnly))!;
+            var integer = source.FindMapping(typeof(int))!;
+            var input = new ColumnExpression("Date", "r", typeof(DateOnly), mapping, true);
+            var amount = factory.Constant(1, integer);
+            foreach (var marker in new[] { OceanBaseTemporalMethodTranslator.DateOnlyAddMonthsMarker,
+                OceanBaseTemporalMethodTranslator.DateOnlyAddYearsMarker })
+            {
+                SqlExpression[] invalid =
+                [
+                    factory.Function(marker, [input], true, [false], typeof(DateOnly), mapping),
+                    factory.Function(marker, [input, amount], false, [false, false], typeof(DateOnly), mapping),
+                    factory.Function(marker, [input, amount], true, [true, true], typeof(DateOnly), mapping),
+                    factory.Function(marker, [input, amount], true, [false, false], typeof(int), integer),
+                    factory.Function(marker, [input, factory.Constant(1L)], true, [false, false], typeof(DateOnly), mapping)
+                ];
+                foreach (var expression in invalid)
+                {
+                    var generator = new OceanBaseQuerySqlGenerator(context.GetService<QuerySqlGeneratorDependencies>(), mode);
+                    Assert.Contains("Invalid internal DateOnly.Add", Assert.Throws<InvalidOperationException>(
+                        () => generator.GetCommand(expression)).Message);
+                }
+            }
+        }
+
+        [Theory]
         [InlineData(OceanBaseCompatibilityMode.MySql)]
         [InlineData(OceanBaseCompatibilityMode.Oracle)]
         public void DateTime_calendar_add_methods_translate_to_server_expression(OceanBaseCompatibilityMode mode)

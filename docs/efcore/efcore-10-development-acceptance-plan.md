@@ -19,10 +19,22 @@
 ## 当前检查点
 
 创建本文档时记录的历史提交和测试总数属于此前的模块检查点；当前最新模块、测试结果和包版本分别记录在下面的
-DateTime calendar-add checkpoint 中。不要使用旧 handoff 行推断当前 HEAD 或当前测试总数。
+DateOnly calendar-correction checkpoint 中。不要使用旧 handoff 行推断当前 HEAD 或当前测试总数。
 - 当前没有真实 OceanBase SQL/DDL 验收。已有 live 探针在握手阶段报 `Connection closed while reading the packet`，没有执行 SQL 或 DDL。
 
 因此，CFG-04 的服务注册生命周期已有官方本地规格证据，但整体 CFG-04 仍为 In progress；连接波次已转入剩余映射、查询、更新和事务边界。不得重复已经完成的连接 characterization。
+
+### 2026-11-16：QRY-07/QRY-11/MAP-05 DateOnly calendar-correction
+
+Module: correct existing Oracle DateOnly month/year arithmetic using the shared target-month-start/day
+clamp and grouped year amounts. Keep DATE mapping/converter, NULL and amount guards; DateTime time
+restoration and MySQL SQL remain unchanged. Three Oracle unit and four Oracle functional RED cases
+precede the fix. Seven new unit/eight functional cases pass; independent review found no actionable issues.
+Full Debug/Release and isolated EF10.0.14 Release pass Unit 2,421, Functional 1,955, Specification 1,452,
+ConsumerTests 2, with 16 mapped skips. Package content and both-patch/both-mode packed consumers pass
+with exact graphs/matching DLL hashes. Native calendar/session/SQL acceptance remains open; Oracle
+requires NLS_CALENDAR=GREGORIAN. See [the correction plan](efcore-10-date-only-calendar-fix-plan.md).
+Local commit only; no live SQL, CLI/bundle rerun, push or publication. The overall goal remains active.
 
 ### 2026-11-16：QRY-07/QRY-11/MAP-05 DateTime calendar-add
 

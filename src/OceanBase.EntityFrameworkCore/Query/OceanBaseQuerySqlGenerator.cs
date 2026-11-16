@@ -594,10 +594,8 @@ namespace OceanBase.EntityFrameworkCore.Query
                 }
                 else
                 {
-                    Sql.Append("ADD_MONTHS(");
-                    Visit(sqlFunctionExpression.Arguments[0]);
-                    Sql.Append(", ");
-                    Visit(sqlFunctionExpression.Arguments[1]);
+                    Sql.Append("(");
+                    AppendOracleCalendarDate(sqlFunctionExpression.Arguments[0], sqlFunctionExpression.Arguments[1], years: false);
                     Sql.Append(")");
                 }
 
@@ -630,11 +628,9 @@ namespace OceanBase.EntityFrameworkCore.Query
                 }
                 else
                 {
-                    Sql.Append("ADD_MONTHS(");
-                    Visit(sqlFunctionExpression.Arguments[0]);
-                    Sql.Append(", ");
-                    Visit(sqlFunctionExpression.Arguments[1]);
-                    Sql.Append(" * 12)");
+                    Sql.Append("(");
+                    AppendOracleCalendarDate(sqlFunctionExpression.Arguments[0], sqlFunctionExpression.Arguments[1], years: true);
+                    Sql.Append(")");
                 }
 
                 return sqlFunctionExpression;

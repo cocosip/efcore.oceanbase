@@ -2,8 +2,8 @@
 
 **Updated:** 2026-11-16
 **Branch:** `efcore/10.0`  
-**State:** Active local development; DateTime calendar addition is the latest local module, following
-`DateTimeOffset.UtcTicks`, finite `MinNumber`/`MaxNumber` and CFG-04/TST-01 service-registration lifetime.
+**State:** Active local development; DateOnly calendar correction is the latest local module, following
+DateTime calendar addition, `DateTimeOffset.UtcTicks`, finite `MinNumber`/`MaxNumber` and service lifetimes.
 **Acceptance authority:** [efcore-10-feature-checklist.md](efcore-10-feature-checklist.md)
 
 The `REL-01` support record now exists at [efcore-10-release-support.md](efcore-10-release-support.md),
@@ -12,11 +12,11 @@ pre-authentication failure are unresolved.
 
 **Execution control:** Follow [efcore-10-development-acceptance-plan.md](efcore-10-development-acceptance-plan.md)
 for the ordered waves, evidence levels and handoff format. The latest Release SpecificationTests result is 1,452
-passed and 16 explicitly mapped skips (1,468 total); Release/Debug Unit/Functional are 2,414/1,947 and
-ConsumerTests 2. Isolated EF10.0.14 Release has the same totals. The calendar-add module adds 11 unit and
-8 intercepted functional cases, fixes both independent review findings, and passes package content and
-both-patch/both-mode consumers. Native calendar/session, precision, range/error and SQL acceptance remain
-open; Oracle requires NLS_CALENDAR=GREGORIAN. See [the module plan](efcore-10-date-time-add-plan.md).
+passed and 16 explicitly mapped skips (1,468 total); Release/Debug Unit/Functional are 2,421/1,955 and
+ConsumerTests 2. Isolated EF10.0.14 Release has the same totals. The DateOnly correction adds seven unit
+and eight intercepted functional cases, passes independent review, package content and both-patch/both-mode
+consumers. Native calendar/session, precision, range/error and SQL acceptance remain open; Oracle requires
+NLS_CALENDAR=GREGORIAN. See [the correction plan](efcore-10-date-only-calendar-fix-plan.md).
 
 This is the execution board for the first OceanBase EF Core 10 provider. It separates provider work from
 evidence work so an intercepted test cannot be mistaken for native OceanBase acceptance.

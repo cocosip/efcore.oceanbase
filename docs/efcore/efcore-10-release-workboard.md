@@ -13,17 +13,18 @@
 - 模式：MySQL、Oracle
 - Required 行：53 行；两种模式均为 9 行 `Done`、44 行 `In progress`
 - 已完成 Required 行：`CFG-01..03`、`CON-01`、`SQL-02`、`PKG-01..04`
-- 当前实现基线：DateTime calendar-add 模块提交（见 `git log`）；本地完成，未推送
+- 当前实现基线：DateOnly calendar-correction 模块提交（见 `git log`）；本地完成，未推送
 
 最近一次完整本地证据：
 
 | 检查 | 结果 | 证据边界 |
 | --- | --- | --- |
-| Release Unit | 2414 通过 | Provider 单元和本地 doubles |
-| Release Functional | 1947 通过 | 拦截式同步/异步命令管线 |
+| Release Unit | 2421 通过 | Provider 单元和本地 doubles |
+| Release Functional | 1955 通过 | 拦截式同步/异步命令管线 |
 | Release Specification | 1452 通过，16 个明确跳过 | 跳过已映射到 `MAP-01/03/05/06` |
-| Debug Unit / Functional | 2414 / 1947 通过 | 本地源代码；Specification 1452 + 16 mapped skips，ConsumerTests 2 |
-| EF10.0.14 isolated Release | Unit 2414、Functional 1947、Specification 1452、ConsumerTests 2 通过 | 16 mapped skips；Connector 0.3.0 |
+| Debug Unit / Functional | 2421 / 1955 通过 | 本地源代码；Specification 1452 + 16 mapped skips，ConsumerTests 2 |
+| EF10.0.14 isolated Release | Unit 2421、Functional 1955、Specification 1452、ConsumerTests 2 通过 | 16 mapped skips；Connector 0.3.0 |
+| DateOnly calendar correction/package | Unit 7、Functional 8 通过；`10.0.0-date-only-calendar-fix-20261116` 通过 | 修复 Oracle 月末规则和年数优先级；独立走查无阻塞；包内容、两补丁/两模式 consumer、graph/hash 校验通过；native acceptance 未完成 |
 | DateTime calendar-add module/package | Unit 11、Functional 8 通过；`10.0.0-date-time-calendar-add-20261116` 通过 | 走查修复年数优先级和 Oracle DATE 结果类型；包内容、两 EF 补丁/两模式 consumer、graph/hash 校验通过；Oracle 需要 Gregorian session；native acceptance 未完成 |
 | server clock package | `10.0.0-date-time-clocks-20261116` 通过 | 包内容、EF10.0.0/10.0.14、两模式 consumer |
 | DateTimeOffset member focused tests | Unit 8/8、Functional 8/8 通过 | 两模式、同步/异步、MySQL TimeSpan/Oracle interval reader；包内容校验通过 |
@@ -97,9 +98,9 @@ retry 禁止条件、错误分类、拥有边界、EnsureCreated/EnsureDeleted/M
 
 ## 固定开发顺序
 
-下一本地模块：修正既有 DateOnly Oracle 日历运算。当前直接 ADD_MONTHS 保留源月末规则，且 AddYears
-复合年数表达式缺少乘以 12 前的括号；现有常量测试未覆盖。这是已确认的代码缺口，先加回归并统一
-AddMonths/AddYears 的日历语义，再继续新增 temporal API。参见两个 DateOnly module plan 的 Remaining risk。
+DateOnly Oracle 日历修正已完成本地闭环：两种方法复用目标月首与日号 clamp，AddYears 复合年数先分组
+再乘以 12；参见 [correction plan](efcore-10-date-only-calendar-fix-plan.md)。后续从 Required 缺口中
+选择一个完整功能族，先定义验收用例，避免继续散落增加 temporal API。真实环境和发布门槛保持开放。
 
 1. **一个本地模块**：先写该模块的行为表、RED 测试和负面边界，再改 Provider 代码。
 2. **本地闭环**：两种模式、同步/异步、正常/NULL/空值/边界/失败路径全部通过；需要时补 packed consumer。

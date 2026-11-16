@@ -38,18 +38,24 @@ namespace OceanBase.EntityFrameworkCore.Query
             var date = resultMapping.StoreTypeNameBase.Trim().Equals("DATE", StringComparison.OrdinalIgnoreCase);
             if (date) Sql.Append("CAST(");
             Sql.Append("(CAST(");
-            AppendMonthStart();
-            Sql.Append(" + LEAST(EXTRACT(DAY FROM ");
-            Visit(input);
-            Sql.Append(") - 1, EXTRACT(DAY FROM LAST_DAY(");
-            AppendMonthStart();
-            Sql.Append(")) - 1) AS TIMESTAMP(7)) + (CAST(");
+            AppendOracleCalendarDate(input, amount, years);
+            Sql.Append(" AS TIMESTAMP(7)) + (CAST(");
             Visit(input);
             Sql.Append(" AS TIMESTAMP(7)) - CAST(TRUNC(");
             Visit(input);
             Sql.Append(") AS TIMESTAMP(7))))");
             if (date) Sql.Append(" AS DATE)");
             return expression;
+        }
+
+        private void AppendOracleCalendarDate(SqlExpression input, SqlExpression amount, bool years)
+        {
+            AppendMonthStart();
+            Sql.Append(" + LEAST(EXTRACT(DAY FROM ");
+            Visit(input);
+            Sql.Append(") - 1, EXTRACT(DAY FROM LAST_DAY(");
+            AppendMonthStart();
+            Sql.Append(")) - 1)");
 
             void AppendMonthStart()
             {
