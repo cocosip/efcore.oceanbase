@@ -463,6 +463,16 @@ namespace PackageConsumer
                         : !dateYearsSql.Contains("ADD_MONTHS", StringComparison.Ordinal))
                     || dateYearsSql.Contains("__oceanbase_internal_", StringComparison.Ordinal))
                     throw new Exception("Packed provider did not translate DateOnly.AddYears.");
+                var stampAddSql = context.Set<Row>()
+                    .Where(row => row.OccurredAt.AddMonths(-1) > new DateTime(2000, 1, 1))
+                    .Select(row => row.OccurredAt.AddYears(row.Id + 1)).ToQueryString();
+                var stampAddFragments = mode == OceanBaseCompatibilityMode.MySql
+                    ? new[] { "DATE_ADD", "INTERVAL -1 MONTH", " YEAR)" }
+                    : new[] { "LEAST(EXTRACT(DAY FROM", "LAST_DAY(ADD_MONTHS(TRUNC(",
+                        "(\"r\".\"Id\" + 1) * 12", " AS TIMESTAMP(7)) - CAST(TRUNC(" };
+                if (stampAddFragments.Any(fragment => !stampAddSql.Contains(fragment, StringComparison.Ordinal))
+                    || stampAddSql.Contains("__oceanbase_internal_", StringComparison.Ordinal))
+                    throw new Exception("Packed provider did not translate DateTime calendar addition.");
                 var clockSql = context.Set<Row>().Select(row => new
                 {
                     Now = DateTime.Now,

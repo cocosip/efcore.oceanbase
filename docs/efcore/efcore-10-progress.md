@@ -6,7 +6,7 @@ The ordered development and acceptance rules are in
 [efcore-10-development-acceptance-plan.md](efcore-10-development-acceptance-plan.md). This file keeps the
 historical handoff and module evidence; it does not authorize jumping between unfinished feature families.
 
-The latest local feature module is the 2026-11-16 DateTimeOffset.UtcTicks checkpoint recorded below. Earlier commit
+The latest local feature module is the 2026-11-16 DateTime calendar-add checkpoint recorded below. Earlier commit
 identifiers and test totals remain historical evidence for their original modules; they are not the current branch
 baseline. The current feature evidence is recorded in the latest checkpoint sections and module plan.
 
@@ -19,6 +19,22 @@ TPC, many-to-many and Connector 0.3.0 reverse engineering.
 Test each module and review completed major modules before committing. EF8/EF9 remain postponed.
 The provider is not release-ready. The [feature checklist](efcore-10-feature-checklist.md) remains the
 acceptance authority; this document records the handoff rather than defining a different completion target.
+
+### QRY-07/QRY-11/MAP-05 DateTime calendar-add checkpoint (2026-11-16)
+
+`DateTime.AddMonths(int)` and `AddYears(int)` now translate through MySQL DATE_ADD and Oracle
+month-start/day-clamp/time reconstruction. Oracle DATE results retain physical DATE for subsequent
+Ticks/TimeOfDay composition; compound year amounts are grouped before multiplication by 12.
+Unrelated and null-converting input/amount carriers reject. Oracle requires a Gregorian calendar session.
+
+Eleven module unit cases and eight both-mode sync/async intercepted cases pass. Independent review found
+the precedence and DATE metadata bugs; all three regression cases failed before the fixes and now pass.
+Re-review found no further blockers. Full Debug/Release and isolated EF10.0.14 Release each pass
+Unit 2,414, Functional 1,947, Specification 1,452 and ConsumerTests 2, with 16 existing mapped skips.
+Package `10.0.0-date-time-calendar-add-20261116` passes content verification and packed consumers on
+both EF patches/modes; dependency graphs and provider hashes match. Native calendar/session, precision,
+range/error and SQL acceptance remain open. See [the module plan](efcore-10-date-time-add-plan.md).
+Local commit only; no push or publication. The overall development goal remains incomplete.
 
 ### QRY-07/QRY-11/MAP-02/MAP-07 `MinNumber`/`MaxNumber` checkpoint (2026-11-16)
 

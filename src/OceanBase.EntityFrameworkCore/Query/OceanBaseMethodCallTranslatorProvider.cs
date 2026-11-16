@@ -11,6 +11,6 @@ namespace OceanBase.EntityFrameworkCore.Query
                 new OceanBaseBooleanTranslator(dependencies.SqlExpressionFactory, dependencies.RelationalTypeMappingSource),
                 new OceanBaseMathTranslator(dependencies.SqlExpressionFactory, dependencies.RelationalTypeMappingSource, mode),
                 new OceanBaseRoundTranslator(dependencies.SqlExpressionFactory, dependencies.RelationalTypeMappingSource, mode),
-                new OceanBaseTemporalMethodTranslator(dependencies.SqlExpressionFactory)]);
+                new OceanBaseTemporalMethodTranslator(dependencies.SqlExpressionFactory, mode)]);
     }
 }

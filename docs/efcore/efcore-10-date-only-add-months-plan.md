@@ -49,6 +49,11 @@ native coercion.
 
 ## Remaining risk
 
+Connected-code inspection during the 2026-11-16 DateTime calendar-add module confirms that the older
+Oracle path still calls `ADD_MONTHS(input, months)` directly. Its source-month-end rule differs from
+CLR day clamping (for example, Gregorian 2024-02-29 plus one month). Existing constant-amount SQL and
+intercepted readers do not establish equivalence. Fix this in the next DateOnly calendar module.
+
 The supplied live endpoint still closes the packet during pre-authentication for both modes, so native
 `DATE_ADD`, `ADD_MONTHS`, end-of-month behavior, tenant calendar behavior and server coercion remain
 unverified. The feature remains `In progress` in the Required matrix until the live and release gates close.

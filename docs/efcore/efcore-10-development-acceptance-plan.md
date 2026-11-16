@@ -19,10 +19,26 @@
 ## 当前检查点
 
 创建本文档时记录的历史提交和测试总数属于此前的模块检查点；当前最新模块、测试结果和包版本分别记录在下面的
-DateTimeOffset.UtcTicks checkpoint 中。不要使用旧 handoff 行推断当前 HEAD 或当前测试总数。
+DateTime calendar-add checkpoint 中。不要使用旧 handoff 行推断当前 HEAD 或当前测试总数。
 - 当前没有真实 OceanBase SQL/DDL 验收。已有 live 探针在握手阶段报 `Connection closed while reading the packet`，没有执行 SQL 或 DDL。
 
 因此，CFG-04 的服务注册生命周期已有官方本地规格证据，但整体 CFG-04 仍为 In progress；连接波次已转入剩余映射、查询、更新和事务边界。不得重复已经完成的连接 characterization。
+
+### 2026-11-16：QRY-07/QRY-11/MAP-05 DateTime calendar-add
+
+Module: exact `DateTime.AddMonths(int)` / `AddYears(int)` translations in both modes.
+MySQL uses DATE_ADD; Oracle clamps the original day in the target month and restores the time interval.
+DATE results are physically cast back to DATE; year amounts are grouped before multiplication by 12.
+Oracle requires NLS_CALENDAR=GREGORIAN; stable expressions retain their existing mapping/converter.
+
+Both-method/mode Unit RED and eight Functional RED cases precede implementation. Eleven module unit
+and eight intercepted sync/async cases pass; independent review's precedence and DATE metadata findings
+have three RED-to-GREEN regressions and passed re-review. Full Debug/Release and isolated EF10.0.14
+Release each pass Unit 2,414, Functional 1,947, Specification 1,452 and ConsumerTests 2 with 16 mapped skips.
+Package content and both-patch/both-mode packed consumers pass with matching dependency graphs/DLL hashes.
+Evidence boundary: local SQL, binding, reader and package behavior; native calendar/session, precision,
+range/error and SQL acceptance remain open. No CLI/bundle rerun, push or publication.
+Plan: [DateTime calendar-add](efcore-10-date-time-add-plan.md). The overall goal remains active.
 
 ### 2026-11-16：CFG-04/TST-01 service registration lifetime
 

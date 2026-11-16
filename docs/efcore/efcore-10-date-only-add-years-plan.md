@@ -7,8 +7,8 @@
 ## Contract
 
 Translate `DateOnly.AddYears(int)` through the provider's existing `DateOnly` `DATE` carrier.
-The operation preserves the `DateOnly` result and .NET year arithmetic; timezone and local-clock
-semantics are outside this slice.
+The operation preserves the `DateOnly` result; native arithmetic remains unverified. Timezone and
+local-clock semantics are outside this slice.
 
 - MySQL emits `DATE_ADD(input, INTERVAL years YEAR)`.
 - Oracle emits `ADD_MONTHS(input, years * 12)`, keeping the Oracle `DATE` carrier for the DateOnly reader.
@@ -47,6 +47,12 @@ behavior only. They do not prove OceanBase year arithmetic, leap-day rules, cale
 - [ ] Re-run final release and live gates at the release revision.
 
 ## Remaining risk
+
+Connected-code inspection during the 2026-11-16 DateTime calendar-add module confirms two existing
+Oracle gaps: raw `ADD_MONTHS(input, years * 12)` applies source-month-end rules, and compound year
+expressions are not grouped before multiplication. For example, `Id + 1` becomes `Id + 1 * 12`.
+The existing constant-amount tests miss these cases. This module's historical local checkpoint does
+not close .NET calendar equivalence; the next calendar module must add regressions and fix both.
 
 The supplied live endpoint still closes the packet during pre-authentication for both modes, so native
 `DATE_ADD`, `ADD_MONTHS`, leap-day behavior, tenant calendar behavior and server coercion remain unverified.

@@ -14,13 +14,24 @@ public APIs and per-mode mappings/SQL. Separate local implementation evidence fr
 The compact execution board is [efcore-10-roadmap.md](efcore-10-roadmap.md); this file remains the detailed
 batch ledger and acceptance notes.
 
-**Updated:** 2026-11-16, DateTimeOffset.UtcTicks following CFG-04/TST-01 service-registration lifetime, DateOnly.AddYears, DateOnly.AddMonths,
+**Updated:** 2026-11-16, DateTime calendar addition following DateTimeOffset.UtcTicks, CFG-04/TST-01 service-registration lifetime, DateOnly.AddYears, DateOnly.AddMonths,
 DateOnly.AddDays, DateTimeOffset.UtcNow, DateTimeOffset.UtcDateTime, DateTimeOffset members, the server clock,
 DateTime.Ticks, TimeOnly.Ticks, TimeSpan.Ticks, DateOnly.DayNumber, DateTime.TimeOfDay and TST-01 model-building 101
 checkpoints.
 Keep one complete module active and review it before committing. EF8/EF9 remains postponed; live execution is opt-in and
 currently blocked before authentication by the supplied endpoint/transport behavior.
 The full goal remains incomplete.
+
+### DateTime calendar-add module (2026-11-16)
+
+`DateTime.AddMonths(int)` / `AddYears(int)` now have both-mode local translation, mapping and
+sync/async reader evidence. Oracle reconstructs the clamped calendar day and time interval, retains
+physical DATE where mapped, and groups compound year amounts. Eleven unit and eight functional
+cases pass after independent review and its regression fixes. Full Debug/Release and isolated
+EF10.0.14 Release pass Unit 2,414, Functional 1,947, Specification 1,452 and ConsumerTests 2 with
+16 mapped skips. Package `10.0.0-date-time-calendar-add-20261116` passes content and both-patch/both-mode
+consumers. Native calendar/session, precision and range/error gates remain open; Oracle requires
+NLS_CALENDAR=GREGORIAN. See [the module plan](efcore-10-date-time-add-plan.md).
 
 ### `DateTimeOffset.UtcTicks` temporal member module (2026-11-16)
 
@@ -69,7 +80,7 @@ The preceding
 `TimeSpan.Ticks` slice translates signed duration ticks; see [the TimeSpan.Ticks plan](efcore-10-time-span-ticks-plan.md).
 
 The DateOnly.AddYears package gate is complete: `10.0.0-date-only-add-years-20261116` passes package content
-verification and packed consumers on EF10.0.0/10.0.14 in both modes. The current full source regression is
+verification and packed consumers on EF10.0.0/10.0.14 in both modes. That module's historical full source regression is
 Release/Debug Unit 2395, Functional 1931 and Specification 1446 with 16 explicitly mapped skips. Native
 temporal/session-timezone validation remains open.
 The preceding

@@ -618,6 +618,21 @@ DateTimeOffset, clocks/Now/UtcNow/Today, fractional parts/Ticks, Date/DayNumber,
 parts and Add operations need their own timezone/range/precision/calendar/wrapping contracts. This slice makes
 no server extraction, DATE cast, calendar/zero-date, interval-clock or result-metadata claim without live evidence.
 
+### DateTime calendar addition local contract (QRY-07/11, MAP-05)
+
+The exact `DateTime.AddMonths(int)` and `DateTime.AddYears(int)` methods accept MySQL DATETIME and
+Oracle unzoned DATE/TIMESTAMP carriers with an Int32 amount. Input mapping/converter identity is retained;
+unrelated and null-converting input/amount carriers reject before SQL generation. MySQL emits
+`DATE_ADD(input, INTERVAL amount MONTH|YEAR)`. Oracle computes target month start, clamps the original
+day to that month's last day and restores the original time interval through TIMESTAMP(7). DATE-mapped
+results are cast back to DATE so subsequent Ticks/TimeOfDay arithmetic uses truthful SQL metadata.
+Compound year amounts are grouped before multiplication by 12.
+
+Oracle requires `NLS_CALENDAR=GREGORIAN`; the provider does not change session state. Stable inputs are
+supported; repeated occurrences do not guarantee single evaluation of volatile expressions. Local SQL,
+binding, NULL/fractional reader and package checks do not prove native calendar, range/error, precision or
+SQL acceptance. See [the DateTime calendar-add plan](efcore-10-date-time-add-plan.md).
+
 ### DateTimeOffset.UtcTicks local contract (QRY-07/11, MAP-05)
 
 `DateTimeOffset.UtcTicks` returns the UTC Gregorian epoch tick count and therefore matches the provider's
