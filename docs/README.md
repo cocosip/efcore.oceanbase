@@ -1,32 +1,11 @@
-# OceanBase Entity Framework Core Provider Documentation
+# OceanBase Entity Framework Core Provider 文档
 
-This directory contains the design, support boundaries, development rules and release process for the
-OceanBase Entity Framework Core provider built on top of OceanBaseConnector.
+EF Core 10 只保留三份工作文档，按这个顺序使用：
 
-Start development and acceptance review with the [EF Core 10 feature checklist](efcore/efcore-10-feature-checklist.md).
-It assigns stable feature IDs, separate MySQL/Oracle statuses, acceptance criteria, evidence gaps and explicit
-deferred features. The implementation plan follows those requirements; it does not replace them.
+1. [EF Core 10 功能矩阵](efcore/efcore-10-feature-matrix.md)：完整功能范围、MySQL/Oracle 状态和每行验收标准。
+2. [EF Core 10 功能缺失矩阵](efcore/efcore-10-gap-matrix.md)：缺口、责任归属、Connector/服务端边界和延期项。
+3. [EF Core 10 开发进度](efcore/efcore-10-progress.md)：当前提交、固定开发顺序、测试证据和下一步。
 
-## Documents
+以后选择功能只看第 3 份；判断是否完成只看第 1 份；判断缺口由谁负责只看第 2 份。模块历史 plan 已合并进矩阵和 Git 提交，不再单独维护。
 
-| Document | Purpose |
-| --- | --- |
-| [Repository guidelines](repository-guidelines.md) | C# style, project layout, tests, commits and review rules. |
-| [Provider architecture](provider-architecture.md) | Provider boundaries, MySQL/Oracle mode handling, branch and package strategy. |
-| [Version support matrix](efcore/version-support-matrix.md) | Relationship between application TFM, EF Core version, provider branch and package. |
-| [EF Core 8 design](efcore/efcore-8-design.md) | Independent EF Core 8 adaptation boundary and intended feature profile. |
-| [EF Core 9 design](efcore/efcore-9-design.md) | EF Core 9 porting boundary and feature review checklist. |
-| [EF Core 10 design](efcore/efcore-10-design.md) | EF Core 10 porting boundary and feature review checklist. |
-| [EF Core 10 technical baseline](efcore/efcore-10-technical-baseline.md) | Exact provider contracts and first-slice verification gates. |
-| [EF Core 10 feature checklist](efcore/efcore-10-feature-checklist.md) | Release feature boundary, statuses and definition of complete. |
-| [EF Core 10 release workboard](efcore/efcore-10-release-workboard.md) | Current progress, concrete gaps, development order and acceptance gates. |
-| [EF Core 10 development and acceptance plan](efcore/efcore-10-development-acceptance-plan.md) | Ordered implementation waves, per-feature acceptance gates and handoff record. |
-| [EF Core 10 implementation plan](efcore/efcore-10-implementation-plan.md) | Development tasks mapped to checklist IDs and remaining acceptance work. |
-| [EF Core 10 local development plan](efcore/efcore-10-local-development-plan.md) | Active end-to-end local implementation ledger; live database and EF8/EF9 work postponed. |
-| [EF Core 10 query and update pipeline](efcore/efcore-10-query-update-design.md) | EF10 service contracts, generated-value paths and command-test evidence limits. |
-| [EF Core 10 migrations core](efcore/efcore-10-migrations-design.md) | Operation SQL, scoped execution/history/locking, upgrade/downgrade scripts and unsupported boundaries. |
-| [EF Core 10 migrations execution plan](efcore/efcore-10-migrations-plan.md) | Whole-module development, review and validation evidence. |
-| [EF Core references](efcore/official-references.md) | Official Microsoft documentation to read before implementing each version. |
-
-The version documents describe intended support. They are not evidence of implementation or live OceanBase
-compatibility until the corresponding tests and server matrix pass.
+仓库规范见 [repository-guidelines.md](repository-guidelines.md)，Provider 总体架构见 [provider-architecture.md](provider-architecture.md)，EF 官方参考见 [official-references.md](efcore/official-references.md)。

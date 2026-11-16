@@ -125,7 +125,7 @@ secrets or open connections. Native execution requires the opt-in and
 `--filter FullyQualifiedName~LiveReadOnlyQueryTests`. Keep these filters distinct: default solution tests
 exclude this project, while an unfiltered explicit project run includes live cases. Native profile errors
 record only stage/type/server code/reader count, never arbitrary connector messages or inner exceptions.
-See `docs/efcore/efcore-10-release-support.md` for commands and the current environment boundary.
+See `docs/efcore/efcore-10-progress.md` for commands and the current environment boundary.
 
 Do not put credentials in source, tracked configuration, documentation, command output or test artifacts. Do not
 print secret values or full connection strings when configuring or diagnosing tests. Keep sensitive-data logging
@@ -142,7 +142,7 @@ Public behavior, unsupported features and server prerequisites are documented be
 that affects more than one EF Core branch must update the shared design document and each affected branch's
 compatibility notes.
 
-Use docs/efcore/efcore-10-feature-checklist.md as the EF10 acceptance inventory. Name affected feature IDs before
+Use docs/efcore/efcore-10-feature-matrix.md as the EF10 acceptance inventory. Name affected feature IDs before
 development and update their criteria, tests and per-mode evidence together. Add missing features to the inventory
 before implementation. Inherited EF behavior, generated SQL and intercepted commands are not live server proof.
 
