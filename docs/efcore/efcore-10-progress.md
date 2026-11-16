@@ -6,7 +6,7 @@ The ordered development and acceptance rules are in
 [efcore-10-development-acceptance-plan.md](efcore-10-development-acceptance-plan.md). This file keeps the
 historical handoff and module evidence; it does not authorize jumping between unfinished feature families.
 
-The latest local module is the 2026-11-16 correlated-queries checkpoint recorded below. Earlier commit
+The latest local module is the 2026-11-16 DefaultIfEmpty checkpoint recorded below. Earlier commit
 identifiers and test totals remain historical evidence for their original modules; they are not the current branch
 baseline. The current feature evidence is recorded in the latest checkpoint sections and module plan.
 
@@ -19,6 +19,22 @@ TPC, many-to-many and Connector 0.3.0 reverse engineering.
 Test each module and review completed major modules before committing. EF8/EF9 remain postponed.
 The provider is not release-ready. The [feature checklist](efcore-10-feature-checklist.md) remains the
 acceptance authority; this document records the handoff rather than defining a different completion target.
+
+### QRY-01/03/05 DefaultIfEmpty scalar checkpoint (2026-11-16)
+
+On base `1df3779`, nullable scalar defaults preserve NULL, nonentity correlated sources create their
+default row before scalar compensation, and computed projections run inside the original source.
+Converted defaults keep the original mapping. Entities retain EF identity/tracking and no phantom
+entity is created from a supplied missing key. This changes only EF translation over Connector 0.3.0
+public APIs. New SQL/runtime profiles pass 24/40; prior correlation assertions track corrected scalar
+sources. Independent review's computed-expression and mapped-CLR-projection findings have RED
+regressions and fixes. Full Debug/Release/isolated EF10.0.14 each pass 6338 tests with 16 existing skips;
+eight excluded offline live-fixture checks pass per patch. No new native attempt.
+
+Package/review/commands are in [the module record](efcore-10-default-if-empty-plan.md). Anonymous/DTO
+member policy differs between EF10.0.0/10.0.14 and is characterized rather than unified; whole-reference
+NULL defaults, boxing and nullable-to-required exception semantics remain unresolved. Native execution
+and the full goal remain open. Required status stays 9 Done / 44 In progress per mode.
 
 ### QRY-03 correlated lateral-query checkpoint (2026-11-16)
 

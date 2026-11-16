@@ -59,6 +59,11 @@ the prior opening failures cannot establish that this endpoint meets that prereq
 connection attempt or lateral result is claimed for that extension. It uses existing public Connector
 commands/readers and adds no driver capability.
 
+The [DefaultIfEmpty module](efcore-10-default-if-empty-plan.md) adds scalar default-row/NULL assertions
+to that read-only profile and brings independent offline checks to eight per EF patch. These native
+expectations have not executed: no repeat connection attempt or new server/version/result evidence.
+Whole-reference/boxing/default exception semantics remain outside the tested scalar profile.
+
 ## Reproduction
 
 Restore from an available package source first. Run offline fixture checks without the live opt-in:

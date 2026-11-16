@@ -37,6 +37,21 @@ namespace OceanBase.EntityFrameworkCore.Query
 
             protected override QueryableMethodTranslatingExpressionVisitor CreateSubqueryVisitor() => new Visitor(this);
 
+            protected override ShapedQueryExpression? TranslateDefaultIfEmpty(ShapedQueryExpression source, Expression? defaultValue)
+            {
+                var projection = new OceanBaseDefaultIfEmptyProjection(source);
+                projection.Capture();
+                if (projection.RequiresPushdown) ((SelectExpression)source.QueryExpression).PushdownIntoSubquery();
+                var translated = base.TranslateDefaultIfEmpty(source, defaultValue);
+                if (translated is not null) projection.Restore();
+                return translated;
+            }
+
+            protected override ShapedQueryExpression? TranslateSelectMany(ShapedQueryExpression source,
+                LambdaExpression collectionSelector, LambdaExpression resultSelector)
+                => base.TranslateSelectMany(source,
+                    OceanBaseDefaultIfEmptyProjection.PreserveDefaultRows(collectionSelector, RelationalDependencies.Model), resultSelector);
+
             protected override ShapedQueryExpression TranslateDistinct(ShapedQueryExpression source)
                 // EF10 needs the element mapping's KeyComparer before its final type-mapping pass.
                 => base.TranslateDistinct((ShapedQueryExpression)new OceanBaseCollectionProjectionTypeMappingNormalizer(

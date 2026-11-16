@@ -76,6 +76,27 @@ namespace OceanBase.EntityFrameworkCore.LiveTests
             }
         }
 
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle)]
+        public void Offline_profile_preserves_default_rows_and_nullable_scalar_values(OceanBaseCompatibilityMode mode)
+        {
+            using var context = Create(mode);
+            var rows = ReadOnlyQueryProfile.Rows(context, mode);
+            foreach (var nullable in new[] { false, true })
+            {
+                var sql = ReadOnlyQueryProfile.DefaultPairs(rows, nullable).ToQueryString();
+                Assert.Contains("JOIN LATERAL (", sql);
+                Assert.Contains("LEFT JOIN (", sql);
+                Assert.DoesNotContain("LEFT JOIN LATERAL", sql);
+                Assert.Equal(!nullable, sql.Contains("COALESCE", StringComparison.Ordinal));
+                Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? "LIMIT 1" : "FETCH FIRST 1 ROWS ONLY", sql);
+            }
+            var empty = rows.Where(r => r.Id < 0).Select(r => r.Value).DefaultIfEmpty().ToQueryString();
+            Assert.Contains("LEFT JOIN (", empty);
+            Assert.DoesNotContain("COALESCE", empty);
+        }
+
         private static ReadOnlyQueryProfile.Context Create(OceanBaseCompatibilityMode mode)
             => new(new DbContextOptionsBuilder<ReadOnlyQueryProfile.Context>().UseOceanBase("Server=offline;Database=offline", mode).Options);
     }

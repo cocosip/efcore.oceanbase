@@ -19,10 +19,20 @@
 ## 当前检查点
 
 创建本文档时记录的历史提交和测试总数属于此前的模块检查点；当前最新模块、测试结果和包版本分别记录在下面的
-correlated-queries checkpoint 中。不要使用旧 handoff 行推断当前 HEAD 或当前测试总数。
+DefaultIfEmpty checkpoint 中。不要使用旧 handoff 行推断当前 HEAD 或当前测试总数。
 - 当前没有真实 OceanBase SQL/DDL 验收。已有 live 探针在握手阶段报 `Connection closed while reading the packet`，没有执行 SQL 或 DDL。
 
 因此，CFG-04 的服务注册生命周期已有官方本地规格证据，但整体 CFG-04 仍为 In progress；连接波次已转入剩余映射、查询、更新和事务边界。不得重复已经完成的连接 characterization。
+
+### 2026-11-16：QRY-01/03/05 DefaultIfEmpty scalars
+
+On base `1df3779`, the current module fixes nullable default compensation, per-parent scalar default
+rows and computed-source placement. It is EF translation/shaping over existing public Connector APIs.
+New 24 unit/40 runtime cases and all three full source gates pass (6338 each, 16 mapped skips);
+eight excluded offline fixture checks pass per EF patch. Review's computed-projection/mapped-CLR
+findings have RED regressions and fixes. Anonymous/DTO policy remains patch-specific; whole-reference,
+boxing and nullable-to-required semantics remain open. See [the module plan](efcore-10-default-if-empty-plan.md)
+for package provenance and exact remaining boundaries. Required status and the overall goal stay open.
 
 ### 2026-11-16：QRY-03 correlated lateral queries
 

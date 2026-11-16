@@ -19,6 +19,11 @@ This is a development provider. Local tests cover model/type mappings, SQL gener
 pipelines and package consumption. Real OceanBase query, write, transaction and schema acceptance is still open
 for both modes. Passing local tests does not establish server compatibility or release readiness.
 
+Parameterless `DefaultIfEmpty` has a local scalar profile for ordinary integral/Boolean, nullable/text
+and converted integral results, including per-parent scalar paging. Native results remain unverified.
+Anonymous/DTO member defaults follow the selected EF patch; whole-reference NULL shaping, boxing and
+nullable-to-required `.Value` exception semantics remain unresolved and are not claimed as supported.
+
 Enable EF operation retries explicitly for replayable queries and writes:
 
 ```csharp

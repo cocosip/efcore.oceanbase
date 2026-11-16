@@ -14,13 +14,23 @@ public APIs and per-mode mappings/SQL. Separate local implementation evidence fr
 The compact execution board is [efcore-10-roadmap.md](efcore-10-roadmap.md); this file remains the detailed
 batch ledger and acceptance notes.
 
-**Updated:** 2026-11-16, correlated lateral queries following the read-only native EF query fixture, raw query materialization/recovery, relational set operations, relationship writes, TPH runtime verification, SaveChanges concurrency interception, concurrency-protection specifications, write SQL specifications, DateOnly calendar correction, DateTime calendar addition, DateTimeOffset.UtcTicks, CFG-04/TST-01 service-registration lifetime, DateOnly.AddYears, DateOnly.AddMonths,
+**Updated:** 2026-11-16, DefaultIfEmpty scalar semantics following correlated lateral queries, the read-only native EF query fixture, raw query materialization/recovery, relational set operations, relationship writes, TPH runtime verification, SaveChanges concurrency interception, concurrency-protection specifications, write SQL specifications, DateOnly calendar correction, DateTime calendar addition, DateTimeOffset.UtcTicks, CFG-04/TST-01 service-registration lifetime, DateOnly.AddYears, DateOnly.AddMonths,
 DateOnly.AddDays, DateTimeOffset.UtcNow, DateTimeOffset.UtcDateTime, DateTimeOffset members, the server clock,
 DateTime.Ticks, TimeOnly.Ticks, TimeSpan.Ticks, DateOnly.DayNumber, DateTime.TimeOfDay and TST-01 model-building 101
 checkpoints.
 Keep one complete module active and review it before committing. EF8/EF9 remains postponed; live execution is opt-in and
 currently blocked before authentication by the supplied endpoint/transport behavior.
 The full goal remains incomplete.
+
+### DefaultIfEmpty scalar module (2026-11-16)
+
+**IDs:** QRY-01/03/05/11, MAP-07, CON-04/05 and package rows in
+[the module plan](efcore-10-default-if-empty-plan.md). Correct nullable compensation, per-parent scalar
+default rows and computed-source placement through EF's existing machinery. Independent review's two
+material findings have RED regressions/fixes. New 24 unit/40 runtime cases plus complete source gates
+pass 6338 tests per configuration (16 old skips); excluded offline fixture checks pass 8 per patch.
+Entity shaping stays with EF; anonymous/reference/boxing limits remain explicit. No new native result,
+Connector implementation, Required promotion or release claim. Package evidence is recorded in the plan.
 
 ### Correlated lateral-query module (2026-11-16)
 

@@ -38,6 +38,15 @@ namespace OceanBase.EntityFrameworkCore.LiveTests
 
         internal sealed record Pair(int Parent, int? Child);
 
+        internal static IQueryable<Pair> DefaultPairs(IQueryable<Row> rows, bool nullable)
+            => nullable
+                ? rows.SelectMany(parent => rows.Where(child => child.Id > parent.Id).OrderBy(child => child.Id).Take(1)
+                    .Select(child => child.Value).DefaultIfEmpty(), (parent, child) => new { Parent = parent.Id, Child = child })
+                    .OrderBy(pair => pair.Parent).Select(pair => new Pair(pair.Parent, pair.Child))
+                : rows.SelectMany(parent => rows.Where(child => child.Id > parent.Id).OrderBy(child => child.Id).Take(1)
+                    .Select(child => child.Id).DefaultIfEmpty(), (parent, child) => new { Parent = parent.Id, Child = (int?)child })
+                    .OrderBy(pair => pair.Parent).Select(pair => new Pair(pair.Parent, pair.Child));
+
         internal static IQueryable<int?> Set(IQueryable<int?> left, IQueryable<int?> right, string operation)
             => operation switch { "Union" => left.Union(right), "Concat" => left.Concat(right),
                 "Intersect" => left.Intersect(right), _ => left.Except(right) };
@@ -103,6 +112,13 @@ namespace OceanBase.EntityFrameworkCore.LiveTests
                 await List(LateralPairs(rows, false), async, token));
             Assert.Equal(new[] { new Pair(1, 2), new Pair(2, 3), new Pair(3, 4), new Pair(4, null) },
                 await List(LateralPairs(rows, true), async, token));
+            Assert.Equal(new[] { new Pair(1, 2), new Pair(2, 3), new Pair(3, 4), new Pair(4, 0) },
+                await List(DefaultPairs(rows, false), async, token));
+            Assert.Equal(new[] { new Pair(1, 20), new Pair(2, null), new Pair(3, 10), new Pair(4, null) },
+                await List(DefaultPairs(rows, true), async, token));
+            Assert.Equal(new[] { 0 }, await List(rows.Where(r => r.Id < 0).Select(r => r.Id).DefaultIfEmpty(), async, token));
+            Assert.Equal(new int?[] { null }, await List(rows.Where(r => r.Id < 0).Select(r => r.Value).DefaultIfEmpty(), async, token));
+            Assert.Equal(new int?[] { null }, await List(rows.Where(r => r.Id == 3).Select(r => r.Value).DefaultIfEmpty(), async, token));
         }
 
         private static Task<List<T>> List<T>(IQueryable<T> query, bool async, CancellationToken token)

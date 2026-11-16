@@ -7,6 +7,28 @@ execution, transactions, complete scalar mappings and package validation remain 
 [feature checklist](efcore-10-feature-checklist.md). SQL-generation tests and intercepted commands do not prove
 that a server accepts the SQL, generates identity values or commits and rolls back correctly.
 
+## DefaultIfEmpty scalar results (QRY-01/03/05/11, MAP-07)
+
+Parameterless DefaultIfEmpty over ordinary stored integral/Boolean scalars supplies the model default;
+nullable and text scalars retain NULL. Converted integral defaults use the original mapping, so an
+offset converter can encode model zero as 100. Capture actual CLR projection types before EF erases
+Nullable<T>; remove only newly introduced SQL compensation. Preserve explicit user COALESCE and
+evaluate computed projections inside a derived source before adding the default row.
+
+For nonentity SelectMany sources, keep the real default-row operation inside the correlated source.
+A translation-stage true-filter barrier prevents EF's default lifting, then disappears from SQL;
+the lateral source's one-row dummy LEFT JOIN supplies a row before scalar compensation runs. Creating
+a DTO of a mapped CLR type is still a projection; ordinary entity shapers keep their existing path.
+Use existing public Connector command/parameter/reader APIs; this is exclusively EF Provider work.
+
+Anonymous/DTO member policy remains patch-specific EF behavior: 10.0.0 compensates required value
+members; 10.0.14 omits that compensation for a reference shaper, and reading a supplied NULL required
+member throws. This module does not promise whole-reference default(NULL) shaping, arbitrary boxing,
+or nullable-to-required `.Value` exception preservation. Those shapes may inherit EF behavior without
+an early rejection; their semantics remain unresolved, rather than a supported profile. Explicit-default
+overloads/local predicates reject before opening. Native default-row/coercion/version execution remains
+open. See [contract, source evidence and tests](efcore-10-default-if-empty-plan.md).
+
 ## Correlated lateral query translation (QRY-03/05/08/11)
 
 This is EF Provider work: SQL generation and shaping over existing Connector 0.3.0 public command/
