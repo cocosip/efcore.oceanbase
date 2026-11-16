@@ -14,13 +14,24 @@ public APIs and per-mode mappings/SQL. Separate local implementation evidence fr
 The compact execution board is [efcore-10-roadmap.md](efcore-10-roadmap.md); this file remains the detailed
 batch ledger and acceptance notes.
 
-**Updated:** 2026-11-16, relationship writes following TPH runtime verification, SaveChanges concurrency interception, concurrency-protection specifications, write SQL specifications, DateOnly calendar correction, DateTime calendar addition, DateTimeOffset.UtcTicks, CFG-04/TST-01 service-registration lifetime, DateOnly.AddYears, DateOnly.AddMonths,
+**Updated:** 2026-11-16, relational set operations following relationship writes, TPH runtime verification, SaveChanges concurrency interception, concurrency-protection specifications, write SQL specifications, DateOnly calendar correction, DateTime calendar addition, DateTimeOffset.UtcTicks, CFG-04/TST-01 service-registration lifetime, DateOnly.AddYears, DateOnly.AddMonths,
 DateOnly.AddDays, DateTimeOffset.UtcNow, DateTimeOffset.UtcDateTime, DateTimeOffset members, the server clock,
 DateTime.Ticks, TimeOnly.Ticks, TimeSpan.Ticks, DateOnly.DayNumber, DateTime.TimeOfDay and TST-01 model-building 101
 checkpoints.
 Keep one complete module active and review it before committing. EF8/EF9 remains postponed; live execution is opt-in and
 currently blocked before authentication by the supplied endpoint/transport behavior.
 The full goal remains incomplete.
+
+### Relational set-operation module (2026-11-16)
+
+**IDs:** QRY-01/02/03/05/11, MAP-07, TST-01, PKG-03/04. Preserve EF's query pipeline and implement
+only OceanBase Oracle MINUS and the LOB/unsupported ALL boundary. OceanBase V4.3.5 defines both mode
+contracts; NCLOB rejection is conservative provider policy. Sixteen syntax/LOB and two ALL RED probes
+precede the final 42 unit/62 functional passes. Full Debug/Release and isolated EF10.0.14 Release each
+pass 6186 tests with 16 existing skips. New package content and both-patch/mode public consumers pass,
+with source/archive/consumer DLL identity. Independent review found no code defect; its NCLOB wording
+correction is included. See [the module record](efcore-10-set-operations-plan.md). Native results/SQL,
+broader official runtime families and release remain open; no row promotion or fresh CLI/bundle evidence.
 
 ### Relationship-write module (2026-11-16)
 

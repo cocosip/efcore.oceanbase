@@ -19,10 +19,23 @@
 ## 当前检查点
 
 创建本文档时记录的历史提交和测试总数属于此前的模块检查点；当前最新模块、测试结果和包版本分别记录在下面的
-relationship-write checkpoint 中。不要使用旧 handoff 行推断当前 HEAD 或当前测试总数。
+set-operation checkpoint 中。不要使用旧 handoff 行推断当前 HEAD 或当前测试总数。
 - 当前没有真实 OceanBase SQL/DDL 验收。已有 live 探针在握手阶段报 `Connection closed while reading the packet`，没有执行 SQL 或 DDL。
 
 因此，CFG-04 的服务注册生命周期已有官方本地规格证据，但整体 CFG-04 仍为 In progress；连接波次已转入剩余映射、查询、更新和事务边界。不得重复已经完成的连接 characterization。
+
+### 2026-11-16：QRY-03/11 relational set operations
+
+OceanBase V4.3.5, rather than Oracle Database/MySQL Server, defines Union/Concat/Intersect/Except:
+Oracle mode uses MINUS and rejects LOB projections/non-distinct difference/intersection trees before
+ADO; MySQL mode keeps EXCEPT. Preserve EF grouping, composition, bindings and shaping. NCLOB is a
+conservative provider boundary; the pinned OceanBase source explicitly excludes BLOB/CLOB.
+Sixteen syntax/LOB and two ALL RED probes precede 42 unit/62 functional passes. Full Debug/Release and
+isolated EF10.0.14 Release each pass Unit 2463, Functional 2183, Specification 1538, ConsumerTests 2,
+with 16 existing mapped skips. New baseline-built package content and both-patch/mode public consumers
+pass with matching source/archive/consumer DLL hashes. Independent review found no code defect; its
+NCLOB wording correction is incorporated. [Module record](efcore-10-set-operations-plan.md).
+Native set/SQL and wider official runtime/release acceptance remain open; Required counts unchanged.
 
 ### 2026-11-16：MOD-02/UPD-05 relationship writes
 

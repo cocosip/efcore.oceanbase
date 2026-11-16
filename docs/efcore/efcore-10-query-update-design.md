@@ -7,6 +7,28 @@ execution, transactions, complete scalar mappings and package validation remain 
 [feature checklist](efcore-10-feature-checklist.md). SQL-generation tests and intercepted commands do not prove
 that a server accepts the SQL, generates identity values or commits and rolls back correctly.
 
+## Relational set-operation contract (QRY-01/02/03/05/11, MAP-07)
+
+Queryable Union, Concat, Intersect and Except use EF's existing set translation, projection mapping,
+operand grouping and shapers. OceanBase MySQL mode emits UNION, UNION ALL, INTERSECT and EXCEPT;
+OceanBase Oracle mode emits UNION, UNION ALL, INTERSECT and MINUS. These contracts come from
+OceanBase V4.3.5 documentation, not the similarly named upstream databases. In that OceanBase
+Oracle contract, EXCEPT and non-distinct MINUS/INTERSECT are unsupported; reject the latter expression
+trees before ADO rather than emitting ALL. Queryable Except/Intersect already request distinctness.
+
+Retain explicit parentheses for nested difference and mixed operator/distinctness trees. Use derived
+tables for operand/result composition, and preserve current predicate/paging parameters and nullable,
+converted and entity materialization. Supplied reader duplicates exercise identity handling, not server
+deduplication. Comparer overloads remain unsupported without a client-side predicate fallback.
+
+OceanBase's pinned Oracle compound-query page excludes BLOB/CLOB set projections. Check mappings
+on both operand projections, including a LOB on only one side. This provider also conservatively rejects
+NCLOB; the pinned page does not independently document that type's native set behavior. Project bounded
+scalars instead; do not truncate LOBs or silently rewrite the set query. MySQL mode is unaffected by this
+Oracle-mode boundary. Native set membership, NULL/collation/coercion, ordering, LOB and SQL execution
+remain live acceptance work. The [module record](efcore-10-set-operations-plan.md) pins OceanBase/EF
+sources and records both-mode tests, package verification and review. No Required row is promoted.
+
 ## Text and temporal aggregate extrema contract (Batch3ad, QRY-04/11, MAP-06/07)
 
 Own the exact Queryable Min/Max generic scalar/selector identities for string, DateTime,

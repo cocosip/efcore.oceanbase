@@ -6,7 +6,7 @@ The ordered development and acceptance rules are in
 [efcore-10-development-acceptance-plan.md](efcore-10-development-acceptance-plan.md). This file keeps the
 historical handoff and module evidence; it does not authorize jumping between unfinished feature families.
 
-The latest local module is the 2026-11-16 relationship-write checkpoint recorded below. Earlier commit
+The latest local module is the 2026-11-16 set-operation checkpoint recorded below. Earlier commit
 identifiers and test totals remain historical evidence for their original modules; they are not the current branch
 baseline. The current feature evidence is recorded in the latest checkpoint sections and module plan.
 
@@ -19,6 +19,25 @@ TPC, many-to-many and Connector 0.3.0 reverse engineering.
 Test each module and review completed major modules before committing. EF8/EF9 remain postponed.
 The provider is not release-ready. The [feature checklist](efcore-10-feature-checklist.md) remains the
 acceptance authority; this document records the handoff rather than defining a different completion target.
+
+### QRY-03/11 relational set-operation checkpoint (2026-11-16)
+
+On base `4b8fed2`, Queryable Union/Concat/Intersect/Except now have one complete local module:
+OceanBase Oracle mode emits MINUS for Except and rejects LOB projections and unsupported non-distinct
+MINUS/INTERSECT trees before ADO. OceanBase MySQL mode retains EXCEPT. EF owns projection mapping,
+nested operand grouping, query composition and shaping. OceanBase V4.3.5 sources, not the similarly
+named upstream databases, define this contract. NCLOB is a conservative provider boundary, not a
+separately documented native limitation.
+
+Meaningful RED evidence covers 16 syntax/LOB failures and two ALL guard failures; final focused runs
+pass 42 unit and 62 functional cases. Full Debug/Release and isolated EF10.0.14 Release each pass
+6186 tests (Unit 2463, Functional 2183, Specification 1538, ConsumerTests 2), with 16 existing mapped
+skips. A new baseline-built `10.0.0-set-operations-20261116` package passes content and both-patch/mode
+public runtime consumers; source/archive/consumer DLL hashes match. Independent review found no code
+defect; its NCLOB evidence wording correction is incorporated. See
+[the module record](efcore-10-set-operations-plan.md) for commands, provenance and limits.
+Native set results/SQL and broader official runtime specifications remain open; Required rows stay
+9 Done / 44 In progress per mode. No fresh CLI/bundle/live/hosted/Linux result or push/publication.
 
 ### MOD-02/UPD-05 relationship-write checkpoint (2026-11-16)
 

@@ -46,6 +46,7 @@ namespace PackageConsumer
                 ConcurrencyInterceptionSmoke.Run(mode);
                 TphRuntimeSmoke.Run(mode);
                 RelationshipWriteSmoke.Run(mode);
+                SetOperationSmoke.Run(mode);
                 TransactionSmoke.Run(mode);
                 RetrySmoke.Run(mode);
                 SplitQuerySmoke.Run(mode);

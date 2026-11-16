@@ -6,6 +6,11 @@ This repository contains the Entity Framework Core provider for the managed Ocea
 driver. Provider code must consume the ADO.NET driver through its public APIs. Protocol, pooling, TLS,
 authentication and wire-format work belongs in the connector repository.
 
+Both compatibility modes are OceanBase Database modes, not Oracle Database or MySQL Server. Base
+feature support, SQL syntax and restrictions on the targeted OceanBase version's own documentation
+and source, and verify execution against OceanBase. Upstream Oracle/MySQL references may explain a
+comparison; they do not establish an OceanBase capability or replace its live acceptance evidence.
+
 ## Repository layout
 
     docs/                         Design and support contracts
