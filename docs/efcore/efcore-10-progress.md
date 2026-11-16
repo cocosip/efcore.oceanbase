@@ -6,7 +6,7 @@ The ordered development and acceptance rules are in
 [efcore-10-development-acceptance-plan.md](efcore-10-development-acceptance-plan.md). This file keeps the
 historical handoff and module evidence; it does not authorize jumping between unfinished feature families.
 
-The latest local module is the 2026-11-16 DefaultIfEmpty projected-collection continuation recorded below. Earlier commit
+The latest local module is the 2026-11-16 query enumeration lifecycle checkpoint recorded below. Earlier commit
 identifiers and test totals remain historical evidence for their original modules; they are not the current branch
 baseline. The current feature evidence is recorded in the latest checkpoint sections and module plan.
 
@@ -19,6 +19,21 @@ TPC, many-to-many and Connector 0.3.0 reverse engineering.
 Test each module and review completed major modules before committing. EF8/EF9 remain postponed.
 The provider is not release-ready. The [feature checklist](efcore-10-feature-checklist.md) remains the
 acceptance authority; this document records the handoff rather than defining a different completion target.
+
+### CON-03/04/05 and QRY-05 query enumeration lifecycle (2026-11-16)
+
+On base `b3b1c4f`, add 34 cases for the previously unverified post-reader boundary, without changing
+production code or Connector APIs. Sync/async early disposal, retry buffering, second-read errors and
+cancellation, caller EF connection leases, identity scope and reuse pass in both modes. Async consumer
+cancellation after the first yielded row also passes, preserving the original reader exception and
+separately verifying the caller token reaching ReadAsync. Full command profile 48/48; connected
+execution-strategy profile 112/112. Removing base buffering temporarily makes 8/48 fail; restored code
+passes. Independent review finds no material issue. Exact source/package evidence and fixture-token
+observations are in [the module record](efcore-10-query-enumeration-plan.md). No new driver capability,
+native physical connection/pool/cancellation claim or Required-row promotion.
+Full Debug/Release/isolated EF10.0.14 each pass 6442 tests, with 16 old mapped skips. Original package
+content and public both-patch/mode consumers pass again with their recorded original DLL provenance;
+the new enumeration profile runs on rebuilt source and no new archive is produced.
 
 ### QRY-01/03/05/08 DefaultIfEmpty projected collections (2026-11-16)
 

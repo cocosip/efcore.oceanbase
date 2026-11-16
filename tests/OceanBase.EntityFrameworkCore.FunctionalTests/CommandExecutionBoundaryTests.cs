@@ -8,6 +8,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.EntityFrameworkCore.Storage;
 using OceanBaseConnector;
 using Xunit;
 
@@ -15,6 +16,220 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
 {
     public sealed class CommandExecutionBoundaryTests
     {
+        public static IEnumerable<object[]> EnumerationCases()
+        {
+            foreach (var pair in TransactionTests.Modes())
+                foreach (var retries in new[] { false, true })
+                    yield return [pair[0], pair[1], retries];
+        }
+
+        [Theory]
+        [MemberData(nameof(EnumerationCases))]
+        public async Task Early_enumerator_disposal_releases_reader_and_lease_with_or_without_buffering(
+            OceanBaseCompatibilityMode mode, bool async, bool retries)
+        {
+            var commands = new CommandProbe(null) { ReturnedRows = [1, 2, 3] };
+            await using var context = CreateEnumerationContext(mode, commands, retries);
+            var query = context.Set<Row>().OrderBy(r => r.Id).Select(r => r.Id);
+            if (async)
+            {
+                await using var iterator = query.AsAsyncEnumerable().GetAsyncEnumerator();
+                Assert.Equal(0, commands.Executions);
+                Assert.True(await iterator.MoveNextAsync());
+                Assert.Equal(1, iterator.Current);
+                Assert.Equal(retries, Assert.Single(commands.Readers).Disposed);
+            }
+            else
+            {
+                using var iterator = query.AsEnumerable().GetEnumerator();
+                Assert.Equal(0, commands.Executions);
+                Assert.True(iterator.MoveNext());
+                Assert.Equal(1, iterator.Current);
+                Assert.Equal(retries, Assert.Single(commands.Readers).Disposed);
+            }
+            Assert.Equal(retries ? 4 : 1, commands.Readers[0].Reads);
+            Assert.True(commands.Readers[0].Disposed);
+            Assert.Equal(ConnectionState.Closed, context.Database.GetDbConnection().State);
+            commands.ReturnedRows = [4];
+            Assert.Equal(new[] { 4 }, async ? await query.ToArrayAsync() : query.ToArray());
+            Assert.Equal(2, commands.Executions);
+            Assert.All(commands.Readers, reader => Assert.True(reader.Disposed));
+            Assert.Equal(ConnectionState.Closed, context.Database.GetDbConnection().State);
+        }
+
+        [Theory]
+        [MemberData(nameof(EnumerationCases))]
+        public async Task Read_failure_and_cancellation_preserve_outcomes_release_resources_and_allow_reuse(
+            OceanBaseCompatibilityMode mode, bool async, bool retries)
+        {
+            foreach (var cancel in new[] { false, true })
+            {
+                using var cancellation = new CancellationTokenSource();
+                var failure = cancel ? (Exception)new OperationCanceledException(cancellation.Token)
+                    : new InvalidOperationException("second read failed");
+                var commands = new CommandProbe(null) { ReturnedRows = [1, 2, 3] };
+                await using var context = CreateEnumerationContext(mode, commands, retries);
+                commands.BeforeRead = (read, token) =>
+                {
+                    Assert.Equal(ConnectionState.Open, context.Database.GetDbConnection().State);
+                    Assert.Equal(async ? cancellation.Token : default, token);
+                    if (read != 2) return;
+                    if (cancel) cancellation.Cancel();
+                    throw failure;
+                };
+                var observed = new List<int>();
+                var query = context.Set<Row>().OrderBy(r => r.Id).Select(r => r.Id);
+                var actual = await Record.ExceptionAsync(async () =>
+                {
+                    if (async)
+                    {
+                        await foreach (var value in query.AsAsyncEnumerable().WithCancellation(cancellation.Token)) observed.Add(value);
+                    }
+                    else
+                    {
+                        foreach (var value in query.AsEnumerable()) observed.Add(value);
+                    }
+                });
+                Assert.Same(failure, actual);
+                Assert.Equal(retries ? Array.Empty<int>() : [1], observed);
+                Assert.Equal(1, commands.Executions);
+                var reader = Assert.Single(commands.Readers);
+                Assert.Equal(2, reader.Reads);
+                Assert.True(reader.Disposed);
+                Assert.Equal(ConnectionState.Closed, context.Database.GetDbConnection().State);
+                commands.BeforeRead = null;
+                commands.ReturnedRows = [7];
+                Assert.Equal(new[] { 7 }, async ? await query.ToArrayAsync() : query.ToArray());
+                Assert.Equal(2, commands.Executions);
+                Assert.All(commands.Readers, item => Assert.True(item.Disposed));
+                Assert.Equal(ConnectionState.Closed, context.Database.GetDbConnection().State);
+            }
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle)]
+        public async Task Consumer_cancellation_after_a_yield_reaches_the_next_read_and_allows_reuse(OceanBaseCompatibilityMode mode)
+        {
+            var commands = new CommandProbe(null) { ReturnedRows = [1, 2] };
+            await using var context = CreateEnumerationContext(mode, commands);
+            using var cancellation = new CancellationTokenSource();
+            var query = context.Set<Row>().OrderBy(r => r.Id).Select(r => r.Id);
+            await using (var iterator = query.AsAsyncEnumerable().GetAsyncEnumerator(cancellation.Token))
+            {
+                Assert.True(await iterator.MoveNextAsync());
+                Assert.Equal(1, iterator.Current);
+                cancellation.Cancel();
+                var error = await Assert.ThrowsAnyAsync<OperationCanceledException>(() => iterator.MoveNextAsync().AsTask());
+                Assert.Same(commands.Readers[0].ReadFailure, error);
+                Assert.True(error.CancellationToken.IsCancellationRequested);
+            }
+            var reader = Assert.Single(commands.Readers);
+            Assert.Equal(2, reader.Reads);
+            Assert.Equal(new[] { cancellation.Token, cancellation.Token }, reader.ReadTokens);
+            Assert.Equal(cancellation.Token, Assert.Single(commands.Tokens));
+            Assert.True(reader.Disposed);
+            Assert.Equal(ConnectionState.Closed, context.Database.GetDbConnection().State);
+            commands.ReturnedRows = [7];
+            Assert.Equal(new[] { 7 }, await query.ToArrayAsync());
+            Assert.Equal(2, commands.Executions);
+            Assert.All(commands.Readers, item => Assert.True(item.Disposed));
+            Assert.Equal(ConnectionState.Closed, context.Database.GetDbConnection().State);
+        }
+
+        [Theory]
+        [MemberData(nameof(TransactionTests.Modes), MemberType = typeof(TransactionTests))]
+        public async Task Enumeration_releases_only_its_own_lease_on_completion_early_stop_failure_and_cancellation(
+            OceanBaseCompatibilityMode mode, bool async)
+        {
+            foreach (var outcome in new[] { "complete", "early", "failure", "cancel" })
+            {
+                using var cancellation = new CancellationTokenSource();
+                var commands = new CommandProbe(null) { ReturnedRows = [1, 2] };
+                await using var context = CreateEnumerationContext(mode, commands);
+                if (async) await context.Database.OpenConnectionAsync(); else context.Database.OpenConnection();
+                var failure = outcome == "cancel" ? (Exception)new OperationCanceledException(cancellation.Token)
+                    : new InvalidOperationException("read failed with caller lease");
+                commands.BeforeRead = (read, token) =>
+                {
+                    if (read != 2 || outcome is "complete" or "early") return;
+                    if (outcome == "cancel") cancellation.Cancel();
+                    throw failure;
+                };
+                var query = context.Set<Row>().OrderBy(r => r.Id).Select(r => r.Id);
+                var error = await Record.ExceptionAsync(async () =>
+                {
+                    if (async)
+                    {
+                        await foreach (var value in query.AsAsyncEnumerable().WithCancellation(cancellation.Token))
+                        {
+                            Assert.InRange(value, 1, 2);
+                            if (outcome == "early") break;
+                        }
+                    }
+                    else
+                    {
+                        foreach (var value in query.AsEnumerable())
+                        {
+                            Assert.InRange(value, 1, 2);
+                            if (outcome == "early") break;
+                        }
+                    }
+                });
+                if (outcome is "failure" or "cancel") Assert.Same(failure, error); else Assert.Null(error);
+                Assert.Equal(1, commands.Executions);
+                Assert.Equal(outcome == "complete" ? 3 : outcome == "early" ? 1 : 2, Assert.Single(commands.Readers).Reads);
+                Assert.True(commands.Readers[0].Disposed);
+                Assert.Equal(ConnectionState.Open, context.Database.GetDbConnection().State);
+                if (async) await context.Database.CloseConnectionAsync(); else context.Database.CloseConnection();
+                Assert.Equal(ConnectionState.Closed, context.Database.GetDbConnection().State);
+                commands.BeforeRead = null;
+                commands.ReturnedRows = [9];
+                Assert.Equal(new[] { 9 }, async ? await query.ToArrayAsync() : query.ToArray());
+                Assert.Equal(2, commands.Executions);
+                Assert.All(commands.Readers, reader => Assert.True(reader.Disposed));
+                Assert.Equal(ConnectionState.Closed, context.Database.GetDbConnection().State);
+            }
+        }
+
+        [Theory]
+        [MemberData(nameof(ModelMaterializationTests.TrackingCases), MemberType = typeof(ModelMaterializationTests))]
+        public async Task Partial_entity_enumeration_keeps_identity_scope_and_already_tracked_rows(
+            OceanBaseCompatibilityMode mode, bool async, QueryTrackingBehavior tracking)
+        {
+            var commands = new CommandProbe(null) { ReturnedRows = [1, 1, 2] };
+            await using var context = CreateEnumerationContext(mode, commands);
+            context.ChangeTracker.QueryTrackingBehavior = tracking;
+            var query = context.Set<Row>().OrderBy(r => r.Id);
+            Row first;
+            if (async)
+            {
+                await using var iterator = query.AsAsyncEnumerable().GetAsyncEnumerator();
+                Assert.True(await iterator.MoveNextAsync());
+                first = iterator.Current;
+                Assert.True(await iterator.MoveNextAsync());
+                Assert.Equal(tracking != QueryTrackingBehavior.NoTracking, ReferenceEquals(first, iterator.Current));
+            }
+            else
+            {
+                using var iterator = query.AsEnumerable().GetEnumerator();
+                Assert.True(iterator.MoveNext());
+                first = iterator.Current;
+                Assert.True(iterator.MoveNext());
+                Assert.Equal(tracking != QueryTrackingBehavior.NoTracking, ReferenceEquals(first, iterator.Current));
+            }
+            Assert.Equal(1, first.Id);
+            Assert.Equal(tracking == QueryTrackingBehavior.TrackAll ? 1 : 0, context.ChangeTracker.Entries().Count());
+            Assert.Equal(2, Assert.Single(commands.Readers).Reads);
+            Assert.True(commands.Readers[0].Disposed);
+            Assert.Equal(ConnectionState.Closed, context.Database.GetDbConnection().State);
+            commands.ReturnedRows = [1];
+            var again = Assert.Single(async ? await query.ToArrayAsync() : query.ToArray());
+            Assert.Equal(tracking == QueryTrackingBehavior.TrackAll, ReferenceEquals(first, again));
+            Assert.All(commands.Readers, reader => Assert.True(reader.Disposed));
+            Assert.Equal(ConnectionState.Closed, context.Database.GetDbConnection().State);
+        }
+
         [Theory]
         [InlineData(OceanBaseCompatibilityMode.MySql, false)]
         [InlineData(OceanBaseCompatibilityMode.MySql, true)]
@@ -132,6 +347,15 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
                 .UseOceanBase("Server=localhost;Database=test", mode)
                 .AddInterceptors(new NoNetwork(), commands).Options);
 
+        private static TestContext CreateEnumerationContext(OceanBaseCompatibilityMode mode, CommandProbe commands, bool retries = false)
+            => new(new DbContextOptionsBuilder<TestContext>()
+                .UseOceanBase("Server=offline;Database=app", mode, options =>
+                {
+                    if (retries) options.EnableRetryOnFailure(1, TimeSpan.Zero);
+                })
+                .ReplaceService<IRelationalConnection, TransactionTests.TestConnection>()
+                .AddInterceptors(commands).Options);
+
         private sealed class TestContext(DbContextOptions<TestContext> options) : DbContext(options)
         {
             public DbSet<Row> Rows => Set<Row>();
@@ -162,6 +386,7 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
             public List<CancellationToken> Tokens { get; } = [];
             public List<TrackingReader> Readers { get; } = [];
             public int[] ReturnedRows { get; set; } = [];
+            public Action<int, CancellationToken>? BeforeRead { get; set; }
 
             public override InterceptionResult<DbDataReader> ReaderExecuting(
                 DbCommand command, CommandEventData eventData, InterceptionResult<DbDataReader> result)
@@ -192,17 +417,35 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
                 var table = new DataTable();
                 table.Columns.Add("Id", typeof(int));
                 foreach (var value in ReturnedRows) table.Rows.Add(value);
-                var reader = new TrackingReader(table.CreateDataReader());
+                var reader = new TrackingReader(table.CreateDataReader(), BeforeRead);
                 Readers.Add(reader);
                 return reader;
             }
         }
 
-        private sealed class TrackingReader(DbDataReader inner) : DbDataReader
+        private sealed class TrackingReader(DbDataReader inner, Action<int, CancellationToken>? beforeRead) : DbDataReader
         {
             public bool Disposed { get; private set; }
-            public override bool Read() => inner.Read();
-            public override Task<bool> ReadAsync(CancellationToken cancellationToken) => inner.ReadAsync(cancellationToken);
+            public int Reads { get; private set; }
+            public List<CancellationToken> ReadTokens { get; } = [];
+            public Exception? ReadFailure { get; private set; }
+            public override bool Read()
+            {
+                Reads++;
+                beforeRead?.Invoke(Reads, default);
+                return inner.Read();
+            }
+            public override async Task<bool> ReadAsync(CancellationToken cancellationToken)
+            {
+                Reads++;
+                ReadTokens.Add(cancellationToken);
+                try
+                {
+                    beforeRead?.Invoke(Reads, cancellationToken);
+                    return await inner.ReadAsync(cancellationToken);
+                }
+                catch (Exception error) { ReadFailure = error; throw; }
+            }
             public override void Close() => inner.Close();
             protected override void Dispose(bool disposing)
             {

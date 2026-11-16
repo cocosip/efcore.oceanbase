@@ -39,6 +39,10 @@ authorized non-destructive matrix succeed.
 
 ## Recorded evidence
 
+The later [query enumeration module](efcore-10-query-enumeration-plan.md) separately covers read-stage
+cancellation and early disposal. The original in-flight cases below throw during command interception,
+before a reader exists; do not use them alone as proof of read-stage cancellation or disposal.
+
 - New `Pre_cancelled_query_does_not_open_or_execute` and
   `Pre_cancelled_save_does_not_open_or_execute` cases pass 4 focused combinations across MySQL and Oracle;
   existing timeout and in-flight cancellation cases remain green.

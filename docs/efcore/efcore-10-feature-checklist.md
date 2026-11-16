@@ -52,7 +52,23 @@ so that an undocumented feature is not accidentally advertised.
 
 ## Current evidence and blockers
 
-Latest continuation on base `79006f3`: 32 nested projected-collection runtime cases extend the
+Latest module on base `b3b1c4f`: query enumeration lifecycle under CON-03/04/05, QRY-05 and DEF-09.
+Existing production code passes 34 new cases: lazy start/early disposal, retry buffering, second-read
+failure/cancellation, external cancellation after a yield, caller EF connection leases, tracking scope
+and later reuse. Full command-boundary profile 48/48; connected execution-strategy profile 112/112.
+Removing base buffering temporarily makes 8/48 fail. Independent read-only review finds no material
+issue. These are real EF enumeration/lease/shaping operations over supplied readers and a local
+connection fixture, not physical Connector, wire/pool or native server proof. The caller token reaching
+ReadAsync and the reader's original exception identity are asserted separately. See the
+[module record](efcore-10-query-enumeration-plan.md) for gates and unchanged-package provenance.
+Required rows retain their current status.
+
+Fresh enumeration gates each pass 6442 tests (Unit 2509, Functional 2393, Specification 1538,
+ConsumerTests 2), with 16 old mapped skips, in Debug/Release and isolated EF10.0.14 Release. Original
+package content and both-patch/mode public consumers pass again with matching original archive/consumer
+DLL hashes; new enumeration cases run on rebuilt source. No new package or current-source/archive hash claim.
+
+Preceding continuation on base `79006f3`: 32 nested projected-collection runtime cases extend the
 DefaultIfEmpty profile to 104/104 under QRY-01/03/05/08/11 and MAP-07. Existing production code
 passes missing-parent/default, empty/populated grouping, nullable/converter children, tracking/identity,
 paging/rebinding, explicit user construction and failure/recovery assertions in both modes sync/async.
@@ -774,7 +790,7 @@ specification families and the remaining checklist criteria stay open; no Requir
 | CON-02 | Reject configured/detected mode conflicts before execution for supplied/created connections; cleanup remains safe after rejection. | Required | In progress | In progress | UO mutation/replacement/cleanup regressions pass; `ConnectionLifecycleTests.Open_rechecks_mode_after_open_callback_and_restores_accounting` covers MySQL/Oracle sync/async post-open conflicts and lease rollback. Native handshake detection, physical cleanup and live behavior remain open. |
 | CON-03 | Caller-owned connections survive context disposal; provider-owned connections close/dispose in sync/async success/error paths. | Required | In progress | In progress | UO/ConnectionOwnershipTests add 16 registered-provider sync/async cases for successful open, command failure, caller survival and provider disposal; ConnectionLifecycleTests covers physical lease/accounting doubles. Suppressed opening does not prove physical opened-state cleanup; native/live behavior remains open. |
 | CON-04 | Sync/async open, execute, read, close and connection reuse honor mode and connector settings. | Required | In progress | In progress | FP/CommandExecutionBoundaryTests add four registered-provider sync/async success/reuse cases covering reader disposal, EF-visible close/reopen, ExpectedMode and UseAffectedRows=false. No live wire/timeout/pool evidence; EF10 private snapshot contracts still require patch review. |
-| CON-05 | Timeout/cancellation reach connector; pre-cancelled/in-flight query/save operations release resources. | Required | In progress | In progress | FP adds pre-cancelled query/save short-circuit cases; existing timeout/in-flight query and SaveChanges cancellation cases pass in both modes. Physical connector close/reuse, wire cancellation, server timeout enforcement and live resource behavior remain open. |
+| CON-05 | Timeout/cancellation reach connector; pre-cancelled/in-flight query/save operations release resources. | Required | In progress | In progress | FP adds pre-cancelled query/save short-circuit cases; existing timeout/in-flight query and SaveChanges cancellation cases pass in both modes. The [enumeration profile](efcore-10-query-enumeration-plan.md) adds actual second-read and post-yield cancellation, exact reader-error preservation, read-token propagation, local EF lease release and recovery; both modes/sync/async, with external consumer token async-only. Physical connector close/reuse, wire cancellation, server timeout enforcement and live resource behavior remain open. |
 | DIA-01 | Logging/interceptors report commands and failures; parameter values stay protected unless sensitive logging is explicitly enabled. | Required | In progress | In progress | CommandLoggingTests covers both modes/sync/async: command and synthetic failure logs are emitted; runtime-captured values are redacted by default and visible only with EnableSensitiveDataLogging. SaveChangesInterceptionTests adds once-only standard concurrency diagnostics with/without a SaveChanges interceptor and matching sync/async hooks; payload is core ConcurrencyExceptionEventData without native correlation. Connector/server sinks and live policy remain open. |
 | DIA-02 | Update failures retain inner connector errors and entries; cancellation is not wrapped as DbUpdateException. | Required | In progress | In progress | GraphUpdateTests retains synthetic connector-error/entry identity and in-flight cancellation/token in both modes sync/async, including MySQL generated readback. SaveChangesInterceptionTests pins the exact concurrency exception/context/entries, async token, callback failure wrapping and unwrapped command/callback cancellation. Actual connector/network failure and cancellation remain live gates. |
 

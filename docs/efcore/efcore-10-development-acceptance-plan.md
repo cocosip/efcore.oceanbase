@@ -24,6 +24,17 @@ DefaultIfEmpty checkpoint 中。不要使用旧 handoff 行推断当前 HEAD 或
 
 因此，CFG-04 的服务注册生命周期已有官方本地规格证据，但整体 CFG-04 仍为 In progress；连接波次已转入剩余映射、查询、更新和事务边界。不得重复已经完成的连接 characterization。
 
+### 2026-11-16：CON-03/04/05 and QRY-05 query enumeration lifecycle
+
+On base `b3b1c4f`, close the local post-reader enumeration evidence gap with 34 new cases, retaining
+existing production code. Full command profile 48/48 and connected execution-strategy profile 112/112
+pass. Temporarily removing base buffering makes 8/48 fail, then restored code passes. Independent
+read-only review finds no material issue. The caller token at ReadAsync and exact reader cancellation
+exception are separate assertions; native transport/driver cleanup/pool behavior remains unverified.
+See [module record](efcore-10-query-enumeration-plan.md) for source/package gates and limits.
+Final Debug/Release/isolated EF10.0.14 each pass 6442 tests with 16 old mapped skips. Original archive
+content and public both-patch/mode consumers pass again; new enumeration cases run on rebuilt source.
+
 ### 2026-11-16：QRY-01/03/05/08 DefaultIfEmpty projected collections
 
 On base `79006f3`, extend the same module with 32 supplied-reader cases, bringing default runtime

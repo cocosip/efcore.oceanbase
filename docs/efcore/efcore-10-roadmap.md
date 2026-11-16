@@ -2,7 +2,7 @@
 
 **Updated:** 2026-11-16
 **Branch:** `efcore/10.0`  
-**State:** Active local development; DefaultIfEmpty projected-collection runtime verification continues the latest reference/presence module, following scalar defaults, correlated lateral queries, the read-only EF fixture, raw queries, set operations, relationship writes, TPH,
+**State:** Active local development; query enumeration lifecycle is the latest local module, following DefaultIfEmpty reference/collection semantics, scalar defaults, correlated lateral queries, the read-only EF fixture, raw queries, set operations, relationship writes, TPH,
 SaveChanges concurrency interception, concurrency-protection and write SQL specifications,
 DateOnly/DateTime calendar arithmetic, `DateTimeOffset.UtcTicks`, scalar extrema and service lifetimes.
 **Acceptance authority:** [efcore-10-feature-checklist.md](efcore-10-feature-checklist.md)
@@ -17,7 +17,17 @@ per EF patch. Prior native attempts in both modes fail at opening (OceanBaseExce
 readers); SQL/authentication/server version remain unestablished. No new native result is claimed.
 
 **Execution control:** Follow [efcore-10-development-acceptance-plan.md](efcore-10-development-acceptance-plan.md)
-for the ordered waves, evidence levels and handoff format. The latest full Debug/Release/isolated
+for the ordered waves, evidence levels and handoff format. The latest enumeration module adds 34
+post-reader cases (48 command-boundary and 112 connected cases pass), with no production change.
+Streaming/buffering, read-stage cancellation, explicit caller EF leases and partial identity scopes
+are locally verified. Removing base buffering temporarily makes eight cases fail; independent review
+has no material finding. Native transport/pool/cancellation remains open. See the
+[enumeration record](efcore-10-query-enumeration-plan.md) for final gates and original-package provenance.
+Its full Debug/Release/isolated EF10.0.14 gates each pass 6442 tests (2509 Unit, 2393 Functional,
+1538 Specification, 2 ConsumerTests), retaining 16 old skips. Original package content and both-patch/
+mode public consumers pass again; new enumeration cases run on rebuilt source with no new package.
+
+The preceding DefaultIfEmpty continuation's full Debug/Release/isolated
 EF10.0.14 gates each pass Unit 2509, Functional 2359, Specification 1538, ConsumerTests 2 (6408 total),
 with 16 existing mapped skips. The current default profile has 30 SQL/104 runtime cases for whole
 reference defaults, boxing, required nullable expressions, converter defaults, tracking and recovery.

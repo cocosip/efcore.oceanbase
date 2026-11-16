@@ -7,6 +7,17 @@ execution, transactions, complete scalar mappings and package validation remain 
 [feature checklist](efcore-10-feature-checklist.md). SQL-generation tests and intercepted commands do not prove
 that a server accepts the SQL, generates identity values or commits and rolls back correctly.
 
+## Query enumeration lifecycle (CON-03/04/05, QRY-05, DEF-09)
+
+Reuse EF enumeration, tracking and buffering. Ordinary queries stream; an enabled retry strategy must
+buffer before exposing any row. Early disposal or read failure/cancellation disposes EF's reader and
+releases only its operation lease, retaining an explicit caller OpenConnection lease until closed.
+Already materialized tracked rows remain tracked; no-tracking identity resolution stays local to that
+enumeration. Pass the caller token to ReadAsync and retain the original reader exception. The driver
+owns that exception's contents and physical cancellation; EF must not fabricate replacement tokens.
+The [local lifecycle profile](efcore-10-query-enumeration-plan.md) uses supplied readers and an existing
+local connection fixture; it does not establish native transport, pool return or server behavior.
+
 ## DefaultIfEmpty scalar results (QRY-01/03/05/11, MAP-07)
 
 Parameterless DefaultIfEmpty over ordinary stored integral/Boolean scalars supplies the model default;
