@@ -13,7 +13,7 @@
 - 模式：MySQL、Oracle
 - Required 行：53 行；两种模式均为 9 行 `Done`、44 行 `In progress`
 - 已完成 Required 行：`CFG-01..03`、`CON-01`、`SQL-02`、`PKG-01..04`
-- 当前本地模块：raw query materialization/recovery（base `6e31783`，提交见 `git log`），本轮未推送
+- 当前本地模块：只读原生 EF 查询验收夹具（base `53f2c4b`，提交见 `git log`），本轮未推送
 
 最近一次完整本地证据：
 
@@ -24,6 +24,7 @@
 | Release Specification | 1538 通过，16 个明确跳过 | 跳过已映射到 `MAP-01/03/05/06`；本轮无新增跳过 |
 | Debug Unit / Functional | 2463 / 2219 通过 | 本地源代码；Specification 1538 + 16 mapped skips，ConsumerTests 2；合计 6222 通过 |
 | EF10.0.14 isolated Release | Unit 2463、Functional 2219、Specification 1538、ConsumerTests 2 通过 | 合计 6222 通过，16 mapped skips；Connector 0.3.0；最终夹具隔离/断言均纳入全量门禁 |
+| Read-only native EF query fixture | 离线 4/4，EF10.0.0 / 10.0.14 各通过；原生 0/2 通过 | 内联四行，无建表或写入；真实 EF 同步/异步查询断言；两模式开连接失败，OceanBaseException/code 0/EF readers 0；未取得认证、服务端版本或 SQL 结果；独立走查无待修问题；[模块记录](efcore-10-read-only-live-query-plan.md) |
 | Raw query materialization/recovery | 聚焦 36/36，完整 Functional 2219/2219 | 按列名/大小写/顺序物化、converter/NULL/identity、组合/绑定、缺列/错误值、失败/取消/恢复；现有生产代码通过；修正夹具全局缓存污染及走查的投影/排序断言；[模块记录](efcore-10-raw-query-runtime-plan.md) |
 | Relational set operations | Unit 42/42、Functional 62/62；16 syntax/LOB + 2 ALL RED | 四种集合运算、嵌套/组合/绑定/物化/恢复；OceanBase Oracle MINUS、LOB/非 distinct 差集交集拒绝；基于 OceanBase 4.3.5 文档；NCLOB 是保守 Provider 边界；独立走查无代码问题，证据措辞已修正；[模块记录](efcore-10-set-operations-plan.md) |
 | Relationship-change writes | 聚焦 36/36、关联 460/460 | 可选 shadow FK 断开、ClientSetNull、必需关系重挂接/孤儿时机、一对一替换顺序、接受和后续失败/取消/savepoint 恢复；仅测试和文档变更；走查的开连接前拒绝断言已补强；[模块记录](efcore-10-relationship-writes-plan.md) |
@@ -44,8 +45,9 @@
 | `MinNumber`/`MaxNumber` focused tests | Unit 47/47、Functional 4/4 通过 | `float`/`double` exact overloads, both modes, sync/async intercepted SQL/materialization; native non-finite semantics remain open |
 | `DateTimeOffset.UtcTicks` focused tests | Unit 4/4、Functional 4/4 通过 | 两模式、同步/异步、UTC Gregorian ticks、NULL 和 carrier rejection；native timezone/session semantics remain open |
 
-这些结果不能关闭真实 OceanBase 验收。当前提供的端点在认证前报
-`Connection closed while reading the packet`，没有执行 SQL 或 DDL。
+这些结果不能关闭真实 OceanBase 验收。历史探针在认证前报
+`Connection closed while reading the packet`；本轮脱敏 EF 探针也在开连接阶段失败，reader 命令为 0，
+但不据此推断更具体的原因。本轮未执行 EF 查询，未取得服务端 SQL 执行证据，未尝试 DDL。
 
 ## 已完成和部分完成的功能
 
@@ -106,8 +108,9 @@ retry 禁止条件、错误分类、拥有边界、EnsureCreated/EnsureDeleted/M
 
 ## 固定开发顺序
 
-本轮补齐原始 SQL 查询的物化/跟踪/组合/错误恢复证据，参见
-[module plan](efcore-10-raw-query-runtime-plan.md)。现有 Provider/EF 实现通过完整 profile，无生产代码变更。
+本轮补齐不建表、不写入的原生 EF 查询验收夹具，参见
+[module plan](efcore-10-read-only-live-query-plan.md)。离线 4 项在两补丁通过，但两模式原生尝试均在开连接阶段失败，
+未执行 EF reader。需要分类端点/传输/认证路径，之后重跑现有夹具；本轮无生产代码变更。
 剩余 store-backed runtime 家族仍需正确的存储夹具；后续按完整模块推进 Required 查询/写入/runtime 缺口，
 避免重复已接入家族和零散新增 temporal API。真实环境和发布门槛保持开放。
 

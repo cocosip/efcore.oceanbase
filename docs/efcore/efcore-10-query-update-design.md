@@ -7,6 +7,18 @@ execution, transactions, complete scalar mappings and package validation remain 
 [feature checklist](efcore-10-feature-checklist.md). SQL-generation tests and intercepted commands do not prove
 that a server accepts the SQL, generates identity values or commits and rolls back correctly.
 
+## Read-only native query acceptance fixture (TST-02)
+
+The excluded LiveTests project now has a real EF sync/async profile over four literal SELECT/UNION ALL
+rows, requiring no schema objects or data writes. It asserts mapped reads, current numeric/text/NULL
+parameters, Boolean operations, deterministic paging, aggregates/GroupBy/HAVING, Any/All and sets.
+Offline shape tests do not load secrets, connect or fabricate native results. The profile is controlled
+by the existing opt-in/User Secrets contract and sanitizes connector failures. See
+[the module record](efcore-10-read-only-live-query-plan.md) and
+[support environment](efcore-10-release-support.md). Opening fails in both native attempts before any
+EF reader; query execution remains unverified. This fixture does not establish upstream Oracle/MySQL
+capabilities, deployed OceanBase version or completion of the full query/write/transaction/schema suite.
+
 ## Raw query materialization and recovery contract (QRY-10, QRY-05/08/11, CON-04/05)
 
 FromSqlRaw/FromSqlInterpolated reuse EF10's raw query shaper. For the tested multi-column entity shape,

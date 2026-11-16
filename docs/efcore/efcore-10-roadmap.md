@@ -2,7 +2,7 @@
 
 **Updated:** 2026-11-16
 **Branch:** `efcore/10.0`  
-**State:** Active local development; raw query materialization/recovery is the latest local module, following set operations, relationship writes, TPH,
+**State:** Active local development; the read-only native EF query fixture is the latest local module, following raw queries, set operations, relationship writes, TPH,
 SaveChanges concurrency interception, concurrency-protection and write SQL specifications,
 DateOnly/DateTime calendar arithmetic, `DateTimeOffset.UtcTicks`, scalar extrema and service lifetimes.
 **Acceptance authority:** [efcore-10-feature-checklist.md](efcore-10-feature-checklist.md)
@@ -10,6 +10,12 @@ DateOnly/DateTime calendar arithmetic, `DateTimeOffset.UtcTicks`, scalar extrema
 The `REL-01` support record now exists at [efcore-10-release-support.md](efcore-10-release-support.md),
 but remains `In progress` while the supplied endpoint's direct/proxy routing, transport options and
 pre-authentication failure are unresolved.
+
+The [read-only query fixture](efcore-10-read-only-live-query-plan.md) now supplies native sync/async EF
+assertions without test objects or writes. Its four offline checks pass at both EF patches. Explicit
+native attempts in both modes fail at opening (OceanBaseException/code 0/zero EF readers), so no SQL,
+authentication or server version is established. Independent review finds no actionable issue; TST-02
+and Required statuses stay open. The full source and unchanged package gates are recorded in that plan.
 
 **Execution control:** Follow [efcore-10-development-acceptance-plan.md](efcore-10-development-acceptance-plan.md)
 for the ordered waves, evidence levels and handoff format. The latest SpecificationTests result is 1,538

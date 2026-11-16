@@ -14,13 +14,22 @@ public APIs and per-mode mappings/SQL. Separate local implementation evidence fr
 The compact execution board is [efcore-10-roadmap.md](efcore-10-roadmap.md); this file remains the detailed
 batch ledger and acceptance notes.
 
-**Updated:** 2026-11-16, raw query materialization/recovery following relational set operations, relationship writes, TPH runtime verification, SaveChanges concurrency interception, concurrency-protection specifications, write SQL specifications, DateOnly calendar correction, DateTime calendar addition, DateTimeOffset.UtcTicks, CFG-04/TST-01 service-registration lifetime, DateOnly.AddYears, DateOnly.AddMonths,
+**Updated:** 2026-11-16, read-only native EF query fixture following raw query materialization/recovery, relational set operations, relationship writes, TPH runtime verification, SaveChanges concurrency interception, concurrency-protection specifications, write SQL specifications, DateOnly calendar correction, DateTime calendar addition, DateTimeOffset.UtcTicks, CFG-04/TST-01 service-registration lifetime, DateOnly.AddYears, DateOnly.AddMonths,
 DateOnly.AddDays, DateTimeOffset.UtcNow, DateTimeOffset.UtcDateTime, DateTimeOffset members, the server clock,
 DateTime.Ticks, TimeOnly.Ticks, TimeSpan.Ticks, DateOnly.DayNumber, DateTime.TimeOfDay and TST-01 model-building 101
 checkpoints.
 Keep one complete module active and review it before committing. EF8/EF9 remains postponed; live execution is opt-in and
 currently blocked before authentication by the supplied endpoint/transport behavior.
 The full goal remains incomplete.
+
+### Read-only native EF query fixture module (2026-11-16)
+
+**IDs:** TST-02, REL-01 and the core query/mapping IDs named in
+[the module plan](efcore-10-read-only-live-query-plan.md). Native sync/async EF assertions use four
+literal inline rows, with no tables/DDL/writes or fake result reader. Offline fixture checks pass 4/4 at
+both EF patches. Explicit native attempts fail in both modes at opening (OceanBaseException/code 0,
+zero EF readers); authentication/server version/query results remain unverified. Independent review
+finds no actionable issue. Full source/unchanged-package evidence is in the plan; no Required promotion.
 
 ### Raw query materialization/recovery module (2026-11-16)
 

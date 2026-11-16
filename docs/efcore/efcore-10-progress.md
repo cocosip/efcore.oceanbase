@@ -6,7 +6,7 @@ The ordered development and acceptance rules are in
 [efcore-10-development-acceptance-plan.md](efcore-10-development-acceptance-plan.md). This file keeps the
 historical handoff and module evidence; it does not authorize jumping between unfinished feature families.
 
-The latest local module is the 2026-11-16 raw-query-runtime checkpoint recorded below. Earlier commit
+The latest local module is the 2026-11-16 read-only-live-query checkpoint recorded below. Earlier commit
 identifiers and test totals remain historical evidence for their original modules; they are not the current branch
 baseline. The current feature evidence is recorded in the latest checkpoint sections and module plan.
 
@@ -19,6 +19,18 @@ TPC, many-to-many and Connector 0.3.0 reverse engineering.
 Test each module and review completed major modules before committing. EF8/EF9 remain postponed.
 The provider is not release-ready. The [feature checklist](efcore-10-feature-checklist.md) remains the
 acceptance authority; this document records the handoff rather than defining a different completion target.
+
+### TST-02 read-only native query fixture checkpoint (2026-11-16)
+
+On base `53f2c4b`, the excluded LiveTests project gains an opt-in real EF sync/async query profile over
+four inline SELECT/UNION ALL rows, with no test objects, DDL or writes. It checks mapped scalar reads,
+current numeric/text/NULL parameters, Boolean operations, deterministic paging, aggregates/grouping,
+Any/All and sets including nested difference. Offline checks do not load secrets or fabricate results.
+All four pass at EF10.0.0 and isolated EF10.0.14. Native attempts in both modes fail at opening with
+OceanBaseException/code 0/zero EF readers; no authentication/server version/SQL is established.
+Independent review finds no actionable issue. Full gates and unchanged package provenance are in
+[the module record](efcore-10-read-only-live-query-plan.md). No Required promotion, push or publication;
+TST-02/REL-01 and the overall goal remain open.
 
 ### QRY-10 raw query materialization/recovery checkpoint (2026-11-16)
 

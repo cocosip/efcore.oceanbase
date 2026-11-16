@@ -111,6 +111,14 @@ The opt-in fixture lives in `tests/OceanBase.EntityFrameworkCore.LiveTests` and 
 the default solution run; set `OCEANBASE_RUN_LIVE_TESTS=1` only for an explicit live acceptance command.
 This is the agreed fixture contract; the current intercepted tests do not load secrets or connect to a server.
 
+The read-only EF query profile uses four inline SELECT/UNION ALL rows without creating tables or writing
+data. Run local shape checks with `--filter FullyQualifiedName~ReadOnlyQueryProfileTests`; they do not read
+secrets or open connections. Native execution requires the opt-in and
+`--filter FullyQualifiedName~LiveReadOnlyQueryTests`. Keep these filters distinct: default solution tests
+exclude this project, while an unfiltered explicit project run includes live cases. Native profile errors
+record only stage/type/server code/reader count, never arbitrary connector messages or inner exceptions.
+See `docs/efcore/efcore-10-release-support.md` for commands and the current environment boundary.
+
 Do not put credentials in source, tracked configuration, documentation, command output or test artifacts. Do not
 print secret values or full connection strings when configuring or diagnosing tests. Keep sensitive-data logging
 disabled for live acceptance runs and redact connector errors before recording evidence. Store credentials via a
