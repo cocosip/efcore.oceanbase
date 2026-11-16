@@ -14,13 +14,25 @@ public APIs and per-mode mappings/SQL. Separate local implementation evidence fr
 The compact execution board is [efcore-10-roadmap.md](efcore-10-roadmap.md); this file remains the detailed
 batch ledger and acceptance notes.
 
-**Updated:** 2026-11-16, write SQL specifications following DateOnly calendar correction, DateTime calendar addition, DateTimeOffset.UtcTicks, CFG-04/TST-01 service-registration lifetime, DateOnly.AddYears, DateOnly.AddMonths,
+**Updated:** 2026-11-16, concurrency-protection specifications following write SQL specifications, DateOnly calendar correction, DateTime calendar addition, DateTimeOffset.UtcTicks, CFG-04/TST-01 service-registration lifetime, DateOnly.AddYears, DateOnly.AddMonths,
 DateOnly.AddDays, DateTimeOffset.UtcNow, DateTimeOffset.UtcDateTime, DateTimeOffset members, the server clock,
 DateTime.Ticks, TimeOnly.Ticks, TimeSpan.Ticks, DateOnly.DayNumber, DateTime.TimeOfDay and TST-01 model-building 101
 checkpoints.
 Keep one complete module active and review it before committing. EF8/EF9 remains postponed; live execution is opt-in and
 currently blocked before authentication by the supplied endpoint/transport behavior.
 The full goal remains incomplete.
+
+### DbContext concurrency-protection specification module (2026-11-16)
+
+Both-mode enabled concurrency protection now has 36 official-family local profile cases and 20 bulk/
+recovery/disabled-check/fixture controls. Seven inherited query bodies remain unchanged; FromSql and
+SaveChanges have two explicit store-free adaptations. Default protection rejects before opening;
+twenty disabled-check sensitivity probes fail, followed by 56/56 focused passes. No production fix or
+native result is invented. Review's explicit-true masking gap is corrected and the final Specification
+suite is rerun in all configurations. Full Debug/Release and isolated EF10.0.14 Release totals are
+2,421 Unit, 1,955 Functional, 1,538 Specification and 2 ConsumerTests, with 16 existing mapped skips.
+No new package/CLI/bundle/live check; see [the module plan](efcore-10-concurrency-detector-plan.md).
+Broader store-backed runtime families and the overall goal remain open.
 
 ### Write SQL specification module (2026-11-16)
 

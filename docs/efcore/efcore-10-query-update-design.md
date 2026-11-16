@@ -552,6 +552,26 @@ text. NCLOB translation is an explicitly unverified extension because the pinned
 String-to-binary converter predicates remain unsupported. Conservative nullable function metadata preserves
 result null tests even for required sources. Existing plugin/DbFunction/mode and Oracle parameter rules remain.
 
+## DbContext concurrency-protection specification contract (TST-01, CFG-04, QRY-01/11, UPD-01, DEF-03)
+
+Default EF thread-safety checks must reject a competing operation on the same DbContext before
+connection opening. The provider reuses EF's scoped concurrency detector; no extra lock or provider
+concurrency service is introduced. The local enabled specification profile covers Find, cardinality,
+enumeration, raw SQL, SaveChanges and ordinary ExecuteUpdate/Delete in both modes, sync and async.
+It retains the official enabled base's cross-flow critical section and exact exception-message check.
+
+The fixture uses the upstream assigned-key model and actual OceanBase connection/services with a
+per-context opening guard. FromSql's TestStore normalization and SaveChanges' subsequent store absence
+query have two explicit local adaptations, recorded in
+[specification exclusions](efcore-10-specification-exclusions.md#enabled-dbcontext-concurrency-detector-family).
+No store is initialized or seeded, no reader results are fabricated and no connection service is replaced.
+
+After the competing critical section exits, the context can reach the opening guard again. Explicit
+EnableThreadSafetyChecks(false) likewise reaches that guard during contention; it does not make a
+DbContext safe for concurrent use. These controls establish local execution boundaries, not query
+results, persisted state, cross-context database concurrency or native transactions. See
+[the module plan](efcore-10-concurrency-detector-plan.md). Broader TST-01 and live acceptance remain open.
+
 ## Write SQL generator specification contract (TST-01, UPD-01..04, DEF-06)
 
 The official EF10 UpdateSqlGeneratorTestBase now runs for both modes through the registered provider

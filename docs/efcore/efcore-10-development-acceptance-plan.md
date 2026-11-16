@@ -19,10 +19,23 @@
 ## 当前检查点
 
 创建本文档时记录的历史提交和测试总数属于此前的模块检查点；当前最新模块、测试结果和包版本分别记录在下面的
-write SQL specification checkpoint 中。不要使用旧 handoff 行推断当前 HEAD 或当前测试总数。
+concurrency-protection checkpoint 中。不要使用旧 handoff 行推断当前 HEAD 或当前测试总数。
 - 当前没有真实 OceanBase SQL/DDL 验收。已有 live 探针在握手阶段报 `Connection closed while reading the packet`，没有执行 SQL 或 DDL。
 
 因此，CFG-04 的服务注册生命周期已有官方本地规格证据，但整体 CFG-04 仍为 In progress；连接波次已转入剩余映射、查询、更新和事务边界。不得重复已经完成的连接 characterization。
+
+### 2026-11-16：TST-01/CFG-04 DbContext concurrency protection
+
+The enabled official concurrency family now has a local pre-execution profile: both modes, seven
+unchanged query bodies, two documented store-free method adaptations, and the official cross-flow
+exact exception assertion. Bulk rejection, recovery, disabled-check and fixture controls bring the
+focused result to 56 passes without new skips. Twenty selected probes fail when checks are temporarily
+disabled and pass after restoration. Review's default-option masking gap is corrected: the default
+fixture no longer explicitly enables checks. No production defect or native result is claimed.
+Full Debug/Release and isolated EF10.0.14 Release pass 5,916 tests (2,421 Unit, 1,955 Functional,
+1,538 Specification, 2 ConsumerTests), with 16 existing mapped skips; final fixture review receives
+fresh full Specification runs. No new package/tooling/live run. See
+[the module plan](efcore-10-concurrency-detector-plan.md). Broader TST-01/live/release gates stay open.
 
 ### 2026-11-16：TST-01/UPD-01..04 write SQL specification
 

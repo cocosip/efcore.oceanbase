@@ -2,7 +2,8 @@
 
 **Updated:** 2026-11-16
 **Branch:** `efcore/10.0`  
-**State:** Active local development; write SQL specifications are the latest local module, following
+**State:** Active local development; concurrency-protection specifications are the latest local module, following
+write SQL specifications,
 DateOnly/DateTime calendar arithmetic, `DateTimeOffset.UtcTicks`, scalar extrema and service lifetimes.
 **Acceptance authority:** [efcore-10-feature-checklist.md](efcore-10-feature-checklist.md)
 
@@ -11,13 +12,14 @@ but remains `In progress` while the supplied endpoint's direct/proxy routing, tr
 pre-authentication failure are unresolved.
 
 **Execution control:** Follow [efcore-10-development-acceptance-plan.md](efcore-10-development-acceptance-plan.md)
-for the ordered waves, evidence levels and handoff format. The latest Release SpecificationTests result is 1,482
-passed and 16 explicitly mapped skips (1,498 total); Release/Debug Unit/Functional are 2,421/1,955 and
-ConsumerTests 2. Isolated EF10.0.14 Release has the same totals. The write SQL family adds thirty passing
-cases with three explicit profile adaptations per mode and no new skips. Sequence SQL entrypoints now
-reject consistently while DEF-06 stays Deferred. Independent review, package content and both-patch/both-mode
-consumers pass. Native DML/readback/transaction and broader runtime acceptance remain open; see
-[the module plan](efcore-10-update-sql-specification-plan.md).
+for the ordered waves, evidence levels and handoff format. The latest SpecificationTests result is 1,538
+passed and 16 explicitly mapped skips (1,554 total); Release/Debug Unit/Functional are 2,421/1,955 and
+ConsumerTests 2. Isolated EF10.0.14 Release has the same totals. The enabled concurrency local profile
+adds 56 cases including controls, two documented store-free adaptations and no new skips. Twenty
+temporary disabled-check probes fail before restoration. Review's default-option masking gap is fixed;
+final Specification suites rerun in all three configurations. This test-only module adds no production
+algorithm or fresh package/tooling/live evidence. Broader store-backed/runtime and native acceptance
+remain open; see [the module plan](efcore-10-concurrency-detector-plan.md).
 
 This is the execution board for the first OceanBase EF Core 10 provider. It separates provider work from
 evidence work so an intercepted test cannot be mistaken for native OceanBase acceptance.

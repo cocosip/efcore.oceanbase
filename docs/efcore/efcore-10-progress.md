@@ -6,7 +6,7 @@ The ordered development and acceptance rules are in
 [efcore-10-development-acceptance-plan.md](efcore-10-development-acceptance-plan.md). This file keeps the
 historical handoff and module evidence; it does not authorize jumping between unfinished feature families.
 
-The latest local module is the 2026-11-16 write SQL specification checkpoint recorded below. Earlier commit
+The latest local module is the 2026-11-16 concurrency-protection specification checkpoint recorded below. Earlier commit
 identifiers and test totals remain historical evidence for their original modules; they are not the current branch
 baseline. The current feature evidence is recorded in the latest checkpoint sections and module plan.
 
@@ -19,6 +19,32 @@ TPC, many-to-many and Connector 0.3.0 reverse engineering.
 Test each module and review completed major modules before committing. EF8/EF9 remain postponed.
 The provider is not release-ready. The [feature checklist](efcore-10-feature-checklist.md) remains the
 acceptance authority; this document records the handoff rather than defining a different completion target.
+
+### TST-01/CFG-04 DbContext concurrency-protection checkpoint (2026-11-16)
+
+On base `f339d08`, the enabled concurrency-detector family now runs as an explicit local pre-execution
+profile in both modes: seven inherited query bodies, two documented store-free method adaptations,
+and the unchanged official cross-flow exact-message assertion. Extra bulk rejection, recovery,
+disabled-check control and fixture integrity bring the focused total to 56 passes, no skips.
+All rejection paths require zero connection-opening attempts; no rows or physical operations are faked.
+
+Temporarily disabling default checks produces twenty expected sensitivity failures; restoration gives
+56 passes. This characterizes existing EF/provider behavior; no production fix is claimed. Independent
+review identified that explicitly setting true could mask a default regression. The final fixture now
+uses untouched defaults and only configures the explicit false control; sensitivity/green is repeated.
+
+Full baseline Debug/Release and isolated EF10.0.14 Release each pass Unit 2,421, Functional 1,955,
+Specification 1,538 and ConsumerTests 2 (5,916 passed, 16 existing mapped skips). The final fixture-only
+review change receives a fresh complete Specification run in all three configurations. No package/CLI/
+bundle rebuild is needed for this test-only module; the `f339d08` production package evidence remains
+historical evidence for that unchanged implementation. See
+[the module plan](efcore-10-concurrency-detector-plan.md) and
+[adaptation record](efcore-10-specification-exclusions.md#enabled-dbcontext-concurrency-detector-family).
+
+TST-01 and the overall goal remain incomplete. Store-backed disabled concurrency, interception, query,
+write and transaction families still require proper stores; this profile does not replace them. Continue
+with a coherent required query/write/runtime gap, without repeating admitted families or inventing
+native results. No live SQL, push or publication; local module commit is recorded in git log.
 
 ### TST-01/UPD-01..04 write SQL specification checkpoint (2026-11-16)
 

@@ -83,3 +83,32 @@ RETURNING placeholders and batch flags through registered provider services. The
 opening. It does not prove native affected rows, key allocation, generated-value readback, transactions or
 server SQL acceptance. TST-01 and the parent UPD/SQL rows retain their wider acceptance boundary.
 See [the module plan](efcore-10-update-sql-specification-plan.md) for current full/patch/package evidence.
+
+## Enabled DbContext concurrency-detector family
+
+`ConcurrencyDetectorTests.cs` admits the nine-method enabled EF10 core/relational family in both modes
+as a **local pre-execution profile**. Seven inherited query bodies (Find, Count, First, Last, Single,
+Any, ToList) execute unchanged. All nine methods retain the enabled base's cross-flow critical-section
+test and exact ConcurrentMethodInvocation assertion. The following two adaptations are intentional:
+
+| Inherited method | Local adaptation | Checklist IDs |
+| --- | --- | --- |
+| `FromSql` | Supply literal MySQL/Oracle delimiters instead of asking an initialized relational TestStore to normalize raw SQL. The actual FromSql pipeline must reject before opening a connection. | `TST-01`, `QRY-01`, `QRY-11` |
+| `SaveChanges` | Keep the concurrent insert attempt and exact rejection assertion. Replace the subsequent store-backed absence query with a zero-connection-open assertion. This does not prove persisted database state. | `TST-01`, `UPD-01` |
+
+The assigned-key Product model matches the upstream fixture. Initialization, seeding and store disposal
+are deliberately bypassed; the fixture's store factory throws if requested. Every context uses real
+OceanBase services and a distinct connection-opening guard. No connection service or command is replaced,
+and no result rows are supplied. The guard's exception cannot satisfy the inherited exact concurrency
+assertion; a wrapper also requires zero opening attempts for every rejection case.
+
+Both-mode sync/async bulk update/delete rejection, recovery, explicit disabled-check control and fixture
+integrity add twenty cases to the 36 family cases: 56 pass, no skips. Temporarily disabling the default
+fixture checks causes all twenty selected query/write/raw/bulk sensitivity probes to fail at the guard;
+restoring the default returns 56 passes. Recovery and disabled-check controls reach the guard, proving
+entry to execution only. This is characterization of existing provider/EF behavior, not a production fix.
+
+Full result-bearing disabled concurrency, command/transaction interception and other store fixtures
+remain unadmitted. Their physical results, store initialization and native transactions cannot be
+replaced by these pre-execution checks. TST-01 remains In progress. See
+[the module plan](efcore-10-concurrency-detector-plan.md) for verification and review evidence.
