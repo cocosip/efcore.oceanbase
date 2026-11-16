@@ -2,8 +2,8 @@
 
 **Updated:** 2026-11-16
 **Branch:** `efcore/10.0`  
-**State:** Active local development; concurrency-protection specifications are the latest local module, following
-write SQL specifications,
+**State:** Active local development; SaveChanges concurrency interception is the latest local module, following
+concurrency-protection and write SQL specifications,
 DateOnly/DateTime calendar arithmetic, `DateTimeOffset.UtcTicks`, scalar extrema and service lifetimes.
 **Acceptance authority:** [efcore-10-feature-checklist.md](efcore-10-feature-checklist.md)
 
@@ -13,13 +13,14 @@ pre-authentication failure are unresolved.
 
 **Execution control:** Follow [efcore-10-development-acceptance-plan.md](efcore-10-development-acceptance-plan.md)
 for the ordered waves, evidence levels and handoff format. The latest SpecificationTests result is 1,538
-passed and 16 explicitly mapped skips (1,554 total); Release/Debug Unit/Functional are 2,421/1,955 and
-ConsumerTests 2. Isolated EF10.0.14 Release has the same totals. The enabled concurrency local profile
-adds 56 cases including controls, two documented store-free adaptations and no new skips. Twenty
-temporary disabled-check probes fail before restoration. Review's default-option masking gap is fixed;
-final Specification suites rerun in all three configurations. This test-only module adds no production
-algorithm or fresh package/tooling/live evidence. Broader store-backed/runtime and native acceptance
-remain open; see [the module plan](efcore-10-concurrency-detector-plan.md).
+passed and 16 explicitly mapped skips (1,554 total); Release/Debug Unit/Functional are 2,421/2,007 and
+ConsumerTests 2 (5,968 passed). Isolated EF10.0.14 Release has the same totals. SaveChanges conflict
+diagnostics/interception adds 52 both-mode cases after observed RED; connected regressions pass 186/186.
+Independent review found no actionable issues. The baseline-built
+`10.0.0-save-concurrency-interception-20261116` package passes content and both-patch/both-mode runtime
+consumers with exact graphs and matching DLL hashes. Core payload and EF acceptance/identity/suppression
+boundaries are explicit. Broader store-backed/runtime and native acceptance remain open; see
+[the module plan](efcore-10-save-concurrency-interception-plan.md). No new CLI/bundle/live claim.
 
 This is the execution board for the first OceanBase EF Core 10 provider. It separates provider work from
 evidence work so an intercepted test cannot be mistaken for native OceanBase acceptance.

@@ -1410,8 +1410,31 @@ the previous NULL token as IS NULL or binds its original non-NULL provider value
 snapshot on success. Required NULLs and fractional integer-converted outputs fail as DbUpdateException with
 the affected entity. EF discards partially published generated values on failure, retaining temporary insert
 keys and pending update/original state. A zero affected-row result prevents readback/propagation; a missing
-MySQL generated row raises DbUpdateConcurrencyException. These intercepted tests disable automatic
+MySQL generated row raises DbUpdateConcurrencyException unless explicitly suppressed through EF's
+concurrency interceptor. These intercepted tests disable automatic
 transactions and prove client state/SQL only, not execution of expressions, physical storage or atomicity.
+
+### SaveChanges concurrency diagnostics and interception (UPD-02/04, DIA-01/02, TXN-02/03)
+
+Unexpected affected counts (including INSERT) and missing MySQL readback rows dispatch
+CoreEventId.OptimisticConcurrencyException once through the update logger. The matching sync/async
+SaveChangesInterceptor.ThrowingConcurrencyException hook receives the same exception, context and
+entries; async dispatch forwards the caller token. Without suppression, that exception propagates.
+This nonquery batch uses core ConcurrencyExceptionEventData: native DML command/reader correlation
+fields from RelationalConcurrencyExceptionEventData are not available or fabricated.
+
+Suppression skips the conflicted batch's remaining readback/output propagation and allows later
+batches to run. SaveChanges counts processed commands, not proven native mutations; acceptance and
+transaction completion follow EF's normal rules. A propagated conflict disposes an owned uncommitted
+transaction or rolls back a caller savepoint. Suppression permits owned commit and leaves the caller
+transaction intact. Local doubles establish these calls, not native rollback or atomicity.
+
+Suppression cannot supply an absent identity. SaveChanges(false) retains Added/temporary state;
+default acceptance clears the temporary flag and marks the entry Unchanged with its unset CLR key.
+Applications own reconciliation before accepting such changes. No key invention, detach policy or
+automatic conflict retry is added. SaveChangesInterceptionTests and TransactionTests cover both modes,
+sync/async, command/callback cancellation, observer/suppressor composition and later-batch continuation;
+the packed consumer exercises the public hook. See [the module record](efcore-10-save-concurrency-interception-plan.md).
 
 ### Offline create scripts (SCH-02 / MOD-03)
 

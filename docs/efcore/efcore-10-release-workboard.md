@@ -13,17 +13,19 @@
 - 模式：MySQL、Oracle
 - Required 行：53 行；两种模式均为 9 行 `Done`、44 行 `In progress`
 - 已完成 Required 行：`CFG-01..03`、`CON-01`、`SQL-02`、`PKG-01..04`
-- 当前本地模块：DbContext concurrency-protection specifications（见 `git log`）；生产实现仍为 `f339d08`，未推送
+- 当前本地模块：SaveChanges concurrency diagnostics/interception（base `2deb9ee`，提交见 `git log`），未推送
 
 最近一次完整本地证据：
 
 | 检查 | 结果 | 证据边界 |
 | --- | --- | --- |
 | Release Unit | 2421 通过 | Provider 单元和本地 doubles |
-| Release Functional | 1955 通过 | 拦截式同步/异步命令管线 |
+| Release Functional | 2007 通过 | 拦截式同步/异步命令管线 |
 | Release Specification | 1538 通过，16 个明确跳过 | 跳过已映射到 `MAP-01/03/05/06`；本轮无新增跳过 |
-| Debug Unit / Functional | 2421 / 1955 通过 | 本地源代码；Specification 1538 + 16 mapped skips，ConsumerTests 2 |
-| EF10.0.14 isolated Release | Unit 2421、Functional 1955、Specification 1538、ConsumerTests 2 通过 | 16 mapped skips；Connector 0.3.0 |
+| Debug Unit / Functional | 2421 / 2007 通过 | 本地源代码；Specification 1538 + 16 mapped skips，ConsumerTests 2 |
+| EF10.0.14 isolated Release | Unit 2421、Functional 2007、Specification 1538、ConsumerTests 2 通过 | 16 mapped skips；Connector 0.3.0 |
+| SaveChanges concurrency interception | 聚焦 52/52、关联 186/186；初始 RED 28 失败/8 通过 | 标准诊断、同步/异步 hook 和显式抑制；保留异常/entries/token，跳过旧输出并继续后续 batch；独立走查无待修问题；[模块记录](efcore-10-save-concurrency-interception-plan.md) |
+| Current package/runtime | `10.0.0-save-concurrency-interception-20261116` 通过 | 包内容、两补丁/两模式 consumer、graph/source/archive/DLL hash 校验通过；无新 CLI/bundle/hosted/Linux/native evidence |
 | Concurrency-protection specifications | 56/56；临时关闭检查时 20/20 敏感性用例失败，恢复后通过 | 真实 Provider 服务，开连接前拒绝；两处本地适配已记录；走查修正显式 true 掩盖默认值问题；仅测试变更，无新包或 native evidence |
 | Write SQL specifications/package | Specification 30/30、关联 runtime 134/134；`10.0.0-update-sql-specification-20261116` 通过 | 官方写入 SQL 家族，两模式三处明确适配；sequence 入口一致拒绝；独立走查、包内容和两补丁/两模式 consumer、graph/hash 校验通过 |
 | DateOnly calendar correction/package | Unit 7、Functional 8 通过；`10.0.0-date-only-calendar-fix-20261116` 通过 | 修复 Oracle 月末规则和年数优先级；独立走查无阻塞；包内容、两补丁/两模式 consumer、graph/hash 校验通过；native acceptance 未完成 |

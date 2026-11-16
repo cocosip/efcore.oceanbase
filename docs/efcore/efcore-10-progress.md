@@ -6,7 +6,7 @@ The ordered development and acceptance rules are in
 [efcore-10-development-acceptance-plan.md](efcore-10-development-acceptance-plan.md). This file keeps the
 historical handoff and module evidence; it does not authorize jumping between unfinished feature families.
 
-The latest local module is the 2026-11-16 concurrency-protection specification checkpoint recorded below. Earlier commit
+The latest local module is the 2026-11-16 SaveChanges concurrency-interception checkpoint recorded below. Earlier commit
 identifiers and test totals remain historical evidence for their original modules; they are not the current branch
 baseline. The current feature evidence is recorded in the latest checkpoint sections and module plan.
 
@@ -19,6 +19,22 @@ TPC, many-to-many and Connector 0.3.0 reverse engineering.
 Test each module and review completed major modules before committing. EF8/EF9 remain postponed.
 The provider is not release-ready. The [feature checklist](efcore-10-feature-checklist.md) remains the
 acceptance authority; this document records the handoff rather than defining a different completion target.
+
+### UPD-02/04 SaveChanges concurrency-interception checkpoint (2026-11-16)
+
+On base `2deb9ee`, affected-row and missing-MySQL-readback conflicts now dispatch EF's standard
+concurrency diagnostic and matching sync/async SaveChanges interceptor. Unsuppressed conflicts retain
+exception/context/entries identity; suppression skips stale generated values and permits later batches.
+The core event payload deliberately has no native command/reader correlation. EF owns counting,
+acceptance and transaction completion; applications suppressing identity conflicts must reconcile
+missing keys. No dependency, public option or automatic retry is added.
+
+The initial regression suite failed 28/36 cases before the fix. Final focused tests pass 52/52 and
+connected generated-value/graph/transaction/interception regressions pass 186/186. Independent read-only
+review found no actionable issues. Full-suite and package evidence is recorded in
+[the module plan](efcore-10-save-concurrency-interception-plan.md). Native conflict/readback/atomicity,
+broader official runtime specifications and release acceptance remain open; no status promotion.
+Local module commit is recorded in git log; no push or publication.
 
 ### TST-01/CFG-04 DbContext concurrency-protection checkpoint (2026-11-16)
 

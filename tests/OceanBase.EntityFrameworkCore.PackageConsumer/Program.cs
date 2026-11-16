@@ -43,6 +43,7 @@ namespace PackageConsumer
             {
                 VerifyFailedOpen(mode);
                 VerifyNullableConcurrency(mode);
+                ConcurrencyInterceptionSmoke.Run(mode);
                 TransactionSmoke.Run(mode);
                 RetrySmoke.Run(mode);
                 SplitQuerySmoke.Run(mode);

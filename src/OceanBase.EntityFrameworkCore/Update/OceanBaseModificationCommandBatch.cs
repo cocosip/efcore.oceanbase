@@ -170,11 +170,20 @@ namespace OceanBase.EntityFrameworkCore.Update
             try
             {
                 ValidateWriteValues();
-                CheckRows(_write!.ExecuteNonQuery(Parameters(connection)));
+                var affectedRows = _write!.ExecuteNonQuery(Parameters(connection));
+                if (affectedRows != 1)
+                {
+                    ThrowConcurrencyException($"Expected one affected row, but OceanBase reported {affectedRows}.");
+                    return;
+                }
                 if (_read is not null)
                 {
                     using var reader = _read.ExecuteReader(Parameters(connection));
-                    if (!reader.Read()) throw new DbUpdateConcurrencyException("The generated row could not be read.", _commands[0].Entries);
+                    if (!reader.Read())
+                    {
+                        ThrowConcurrencyException("The generated row could not be read.");
+                        return;
+                    }
                     _commands[0].PropagateResults(reader);
                 }
 
@@ -193,13 +202,20 @@ namespace OceanBase.EntityFrameworkCore.Update
             try
             {
                 ValidateWriteValues();
-                CheckRows(await _write!.ExecuteNonQueryAsync(Parameters(connection), cancellationToken).ConfigureAwait(false));
+                var affectedRows = await _write!.ExecuteNonQueryAsync(Parameters(connection), cancellationToken).ConfigureAwait(false);
+                if (affectedRows != 1)
+                {
+                    await ThrowConcurrencyExceptionAsync(
+                        $"Expected one affected row, but OceanBase reported {affectedRows}.", cancellationToken).ConfigureAwait(false);
+                    return;
+                }
                 if (_read is not null)
                 {
                     await using var reader = await _read.ExecuteReaderAsync(Parameters(connection), cancellationToken).ConfigureAwait(false);
                     if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
                     {
-                        throw new DbUpdateConcurrencyException("The generated row could not be read.", _commands[0].Entries);
+                        await ThrowConcurrencyExceptionAsync("The generated row could not be read.", cancellationToken).ConfigureAwait(false);
+                        return;
                     }
 
                     _commands[0].PropagateResults(reader);
@@ -228,11 +244,26 @@ namespace OceanBase.EntityFrameworkCore.Update
             }
         }
 
-        private void CheckRows(int affectedRows)
+        private void ThrowConcurrencyException(string message)
         {
-            if (affectedRows != 1)
+            var entries = _commands[0].Entries;
+            var exception = new DbUpdateConcurrencyException(message, entries);
+            if (!_dependencies.UpdateLogger.OptimisticConcurrencyException(
+                _dependencies.CurrentContext.Context, entries, exception, createEventData: null).IsSuppressed)
             {
-                throw new DbUpdateConcurrencyException($"Expected one affected row, but OceanBase reported {affectedRows}.", _commands[0].Entries);
+                throw exception;
+            }
+        }
+
+        private async Task ThrowConcurrencyExceptionAsync(string message, CancellationToken cancellationToken)
+        {
+            var entries = _commands[0].Entries;
+            var exception = new DbUpdateConcurrencyException(message, entries);
+            if (!(await _dependencies.UpdateLogger.OptimisticConcurrencyExceptionAsync(
+                _dependencies.CurrentContext.Context, entries, exception, createEventData: null, cancellationToken)
+                .ConfigureAwait(false)).IsSuppressed)
+            {
+                throw exception;
             }
         }
 

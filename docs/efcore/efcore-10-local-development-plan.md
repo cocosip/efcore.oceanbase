@@ -14,13 +14,23 @@ public APIs and per-mode mappings/SQL. Separate local implementation evidence fr
 The compact execution board is [efcore-10-roadmap.md](efcore-10-roadmap.md); this file remains the detailed
 batch ledger and acceptance notes.
 
-**Updated:** 2026-11-16, concurrency-protection specifications following write SQL specifications, DateOnly calendar correction, DateTime calendar addition, DateTimeOffset.UtcTicks, CFG-04/TST-01 service-registration lifetime, DateOnly.AddYears, DateOnly.AddMonths,
+**Updated:** 2026-11-16, SaveChanges concurrency interception following concurrency-protection specifications, write SQL specifications, DateOnly calendar correction, DateTime calendar addition, DateTimeOffset.UtcTicks, CFG-04/TST-01 service-registration lifetime, DateOnly.AddYears, DateOnly.AddMonths,
 DateOnly.AddDays, DateTimeOffset.UtcNow, DateTimeOffset.UtcDateTime, DateTimeOffset members, the server clock,
 DateTime.Ticks, TimeOnly.Ticks, TimeSpan.Ticks, DateOnly.DayNumber, DateTime.TimeOfDay and TST-01 model-building 101
 checkpoints.
 Keep one complete module active and review it before committing. EF8/EF9 remains postponed; live execution is opt-in and
 currently blocked before authentication by the supplied endpoint/transport behavior.
 The full goal remains incomplete.
+
+### SaveChanges concurrency-interception module (2026-11-16)
+
+The custom batch now dispatches standard concurrency diagnostics and matching sync/async interceptors
+for affected-row and missing-readback conflicts. Suppression skips stale generated values, continues
+later batches and follows normal EF acceptance/transaction rules; core payload and missing-identity
+boundaries are explicit. Initial RED: 28 failures/8 passes. Focused: 52/52; connected: 186/186.
+Independent review found no actionable issues. Full-suite/patch/package evidence and limits are in
+[the module record](efcore-10-save-concurrency-interception-plan.md); native acceptance and the overall
+goal remain open. No new dependency, public option or retry policy.
 
 ### DbContext concurrency-protection specification module (2026-11-16)
 

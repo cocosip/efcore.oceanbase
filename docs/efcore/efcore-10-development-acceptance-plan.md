@@ -19,10 +19,21 @@
 ## 当前检查点
 
 创建本文档时记录的历史提交和测试总数属于此前的模块检查点；当前最新模块、测试结果和包版本分别记录在下面的
-concurrency-protection checkpoint 中。不要使用旧 handoff 行推断当前 HEAD 或当前测试总数。
+SaveChanges concurrency-interception checkpoint 中。不要使用旧 handoff 行推断当前 HEAD 或当前测试总数。
 - 当前没有真实 OceanBase SQL/DDL 验收。已有 live 探针在握手阶段报 `Connection closed while reading the packet`，没有执行 SQL 或 DDL。
 
 因此，CFG-04 的服务注册生命周期已有官方本地规格证据，但整体 CFG-04 仍为 In progress；连接波次已转入剩余映射、查询、更新和事务边界。不得重复已经完成的连接 characterization。
+
+### 2026-11-16：UPD-02/04、DIA-01/02 SaveChanges concurrency interception
+
+The affected-row/missing-readback conflict boundary now uses EF's standard diagnostic and matching
+sync/async interception. Preserve the exact unsuppressed exception and allow explicit suppression
+without stale readback/output propagation or skipping later batches. Core payload and EF-owned
+counting/acceptance/identity/transaction boundaries are documented. No new policy or dependency.
+Initial RED: 28 fail/8 pass; final focused: 52 pass; connected regression: 186 pass. Independent
+review found no actionable issues. See [the module record](efcore-10-save-concurrency-interception-plan.md)
+for complete Debug/Release/isolated-patch/package evidence. Local evidence does not close native
+conflict/readback/atomicity or broader runtime specification/release gates. No row is promoted.
 
 ### 2026-11-16：TST-01/CFG-04 DbContext concurrency protection
 
