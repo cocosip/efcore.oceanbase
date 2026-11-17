@@ -19,7 +19,7 @@
 | ID | 功能 | 缺口 | 责任 |
 | --- | --- | --- | --- |
 | `MOD-01..03` | 模型约定、关系、生成/默认/计算值 | 更宽模型、生成值和 Schema 组合仍需覆盖 | Provider |
-| `MAP-01..07` | 整数/Boolean、Decimal/Float、文本、Binary/Guid、Temporal、facet/converter | Oracle national 字面量及普通字面量 CR/LF 保真已修复，default/HasData/converter 本地测试和 UTF8MB4/latin1 只读往返通过；普通值 4000 字符、CHAR 比较及不可编码值拒绝已有证据。真实 bounded text 参数写入、NULL/空串、padding/converter/default/seed 已验收，MySQL DEFAULT 字面量与生成值 reader 消费已修复；精度、BYTE/full capacity/LOB、Guid 字节序、时区和更宽转换组合仍需补齐 | Provider + Server/live；见 [national](efcore-10-national-literals-plan.md) / [ordinary](efcore-10-ordinary-literals-plan.md) literals |
+| `MAP-01..07` | 整数/Boolean、Decimal/Float、文本、Binary/Guid、Temporal、facet/converter | Oracle national 字面量及普通字面量 CR/LF 保真已修复，default/HasData/converter 本地测试和 UTF8MB4/latin1 只读往返通过；普通值 4000 字符、CHAR 比较及不可编码值拒绝已有证据。真实 bounded text 参数写入、NULL/空串、padding/converter/default/seed 已验收，MySQL DEFAULT 字面量与生成值 reader 消费已修复；已补 AL32UTF8 BYTE 边界/12899 与 ordinary CLOB/MySQL LONGTEXT 大值/converter；NCLOB DDL 在目标 4.4.2.2 返回 902（direct 对照一致），不归为驱动/Provider 缺陷。精度、full capacity/national LOB/其他 charset、Guid 字节序、时区和更宽转换组合仍需补齐 | Provider + Server/live；见 [national](efcore-10-national-literals-plan.md) / [ordinary](efcore-10-ordinary-literals-plan.md) literals |
 | `QRY-01..11` | 查询翻译和物化 | 剩余 overload、复杂组合、官方 runtime specification、真实排序/聚合/集合结果仍需补齐 | Provider + Server/live |
 | `UPD-01..05` | INSERT/UPDATE/DELETE、生成值、并发、图保存 | 两模式 bounded text 的 tracked insert/update/delete、默认值回读已通过；MySQL 回读完整消费后 commit 成功，Oracle 显式开启 Connector PrepareExecute。更宽生成值/约束/冲突/图保存未完成 | Provider + Server/live |
 | `TXN-01..03` | transaction、savepoint、原子性、取消恢复 | 本地恢复路径已有，MySQL 文本默认值回读的 owned commit 已通过；更宽 commit、rollback/savepoint/失败恢复仍待验收 | Provider + Server/live；句柄由 Connector 提供 |

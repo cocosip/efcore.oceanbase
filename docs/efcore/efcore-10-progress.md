@@ -6,13 +6,13 @@
 
 | 项目 | 结果 |
 | --- | --- |
-| 分支 / 提交 | `efcore/10.0`；真实 bounded text storage 模块，基线 `a47602c` |
+| 分支 / 提交 | `efcore/10.0`；large text / BYTE 验收模块，基线 `234387f` |
 | 工作区 | 本模块源码、测试和文档一并提交；凭据仅从 User Secrets 读取 |
-| 最新模块 | 两模式真实文本列、默认值/HasData 和 tracked DML；修复 MySQL 字面量 DEFAULT 与生成值回读；见 [模块记录](efcore-10-text-storage-plan.md) |
+| 最新模块 | Oracle CLOB、MySQL LONGTEXT、converter 和 Oracle BYTE 容量/错误；NCLOB 服务端拒绝已归类；见 [模块记录](efcore-10-large-text-plan.md) |
 | Required 状态 | 每个模式 9 Done / 44 In progress |
-| Local Release | EF10.0.0 和隔离 EF10.0.14 各通过 Unit 2613、Functional 2487、Specification 1538、Consumer 2；16 个既有映射 skip |
-| Package | text-storage 包内容检查和两个 patch 的两模式消费者通过；消费 DLL 与已测试源码 DLL 哈希相同 |
-| Native | 4.4.2.2 普通直连；此前的两模式连接/只读查询/字面量通过；本模块已执行唯一自建表的 DDL、HasData、默认值、参数写入/读取、tracked update/delete 和清理；Oracle 生成值测试显式开启 Connector PrepareExecute |
+| Local Release | 本模块仅扩展 LiveTests；生产源码未变，`234387f` 的两 patch 各 6640 pass / 16 skip 为既有全量证据 |
+| Package | 本模块未重打包；生产源码与 `234387f` 一致，text-storage r1 包及消费者为既有证据；当前 DLL 的提交元数据已更新，不能宣称与旧包哈希相同 |
+| Native | 4.4.2.2 普通直连；Oracle CLOB/MySQL LONGTEXT 的大值及 converter 往返通过；Oracle BYTE 在 AL32UTF8 下的边界、padding、12899 和本地长度拒绝通过；NCLOB DDL 902 与 direct Connector 一致；未宣称 national LOB 支持 |
 
 ## 固定开发顺序
 
@@ -41,6 +41,7 @@
 
 | 日期 | 模块 | 提交 / 证据 | 未关闭边界 |
 | --- | --- | --- | --- |
+| 2026-11-17 | Large text / BYTE 真实存储 | 本模块；EF10.0.0、10.0.14 各 33 LiveTests（23 live、10 offline）；复用原 owned-table 夹具，生产源码未变 | NCLOB 在目标 4.4.2.2 上返回 902；更大容量/其他 charset/版本、LOB locator API、numeric/Binary/Guid/temporal 仍按矩阵推进 |
 | 2026-11-17 | 真实 bounded text storage、MySQL DEFAULT 和生成值回读 | 本模块；两 patch 本地各 6640 通过/16 skip；两 patch 串行 LiveTests 各 25 通过（15 live、10 offline）；包消费者通过 | 32 scalar variable text、8 字符 fixed、NULL/空串/converter/default/seed/DML 已验收；LOB/BYTE/更宽容量、索引、事务失败恢复仍待补齐 |
 | 2026-11-17 | Oracle 普通字符串 CR/LF/CRLF 字面量 | 本模块；Unit 定向 108、Functional 12；完整两 patch 各 6628 通过/16 skip；LiveTests 两 patch 各 19 通过（9 live、10 offline）；r2 打包消费者通过 | 4000 字符值含全换行/重复 CRLF 和 CHAR 空格补齐比较已有证据；真实列写入、LOB、Schema 默认值/HasData 待验收 |
 | 2026-11-17 | Oracle national literals、连接恢复 | 本模块；Unit 定向 74、Functional 6；完整两 patch 各 6588 通过/16 skip；打包消费者通过；LiveTests 两 patch 各 17 通过（7 个真实测试、10 个离线 profile 测试） | national SQL/literal 往返仅验证只读表达式；真实列容量、padding、LOB 和 Schema/DML 尚未验收 |
@@ -68,6 +69,8 @@
 真实列验收使用普通账号和唯一 `EFT_` 表，仅在观察到 CREATE 成功后清理对应表；未使用管理员账号或创建/删除 namespace。MySQL 的 CONVERT 文本 DEFAULT 返回 5023，改为 `_utf8mb4 X'...'` 字符字面量后，默认值、HasData 和查询可共享同一表示。MySQL 生成值 SELECT 的 reader 现在消费至最终结果再释放，避免提前 Close 使 Connector 会话 Broken 后无法 commit。两处问题均有 RED/GREEN 和 direct Connector 对照，未修改 Connector 源码。
 
 Oracle 的 RETURNING INTO 依赖 Connector 明确支持、默认关闭的 `Use Oracle Prepare Execute=true`；测试 profile 显式开启，未更改 User Secrets 或 Provider 全局连接策略。MySQL 同步/异步另覆盖 NO_BACKSLASH_ESCAPES 会话。第一次并行 live run 为 23/25，两项在握手阶段中断，其中一次是清理连接；已通过独立连接清理该自建表，随后串行运行 25/25。该瞬时连接结果不被归为 Provider 功能缺陷。
+
+Large-text 后续验收补充 CLOB/LONGTEXT 的 NULL/空串、4001/32768 ASCII、8192 次 mixed Unicode/换行文本、65537 字符更新和 converter；Oracle 的 NCLOB CREATE 在 EF 和 direct Connector 均返回 902，拆为明确的版本化拒绝测试，未静默改存 CLOB。BYTE 验收先读取 NLS_DATABASE_PARAMETERS 的 AL32UTF8，再验证 8-byte 成功/补齐、9-scalar 本地拒绝、9-byte 多字节值的服务端 12899、异常 entries 和失败后表可用性。客户端编码没有被用于推断服务端容量。
 
 ## 模块完成规则
 
