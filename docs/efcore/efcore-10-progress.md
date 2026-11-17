@@ -6,7 +6,7 @@
 
 | 项目 | 结果 |
 | --- | --- |
-| 分支 / 提交 | `efcore/10.0` / `f398c42` |
+| 分支 / 提交 | `efcore/10.0` / `f32349d` |
 | 工作区 | 干净 |
 | 最新模块 | `DateTimeOffset.DateTime` |
 | Required 状态 | 每个模式 9 Done / 44 In progress |
@@ -42,11 +42,11 @@
 
 ## 连接阻塞的事实
 
-2026-11-17 使用 User Secrets 对同一端点执行了 EF 和 direct Connector 的只读连接对比。两种模式的脱敏选项一致：TLS Disabled、OB20 关闭、Pooling 关闭、`UseAffectedRows=false`、连接/命令超时分别为 15/30 秒，并分别设置匹配的 `ExpectedMode`。两条路径都在 Connector 握手阶段收到 `Connection closed while reading the packet`；没有认证、服务端版本、SQL、DDL 或 reader 结果证据。这个事实把当前阻塞归类为环境/Connector 待分类，不支持修改 Provider 连接逻辑。
+2026-11-17 使用 User Secrets 对同一端点执行了 EF 和 direct Connector 的只读连接对比。两种模式的脱敏选项一致：TLS Disabled、OB20 关闭、Pooling 关闭、`UseAffectedRows=false`、连接/命令超时分别为 15/30 秒，并分别设置匹配的 `ExpectedMode`。TCP 端口可建立连接，但服务端未发送任何初始协议字节就关闭；direct Connector 在 `Use OB20=false/true` 下结果相同，EF 也收到 `Connection closed while reading the packet`。没有认证、服务端版本、SQL、DDL 或 reader 结果证据。这个事实把当前阻塞归类为端点服务/代理路由/访问策略或 Connector 待分类，不支持修改 Provider 连接逻辑。
 
 下一次必须先完成：
 
-1. 确认 `172.16.2.45:2881` 的 direct/proxy、服务端版本和握手所需 transport 设置；当前 EF/direct 结果已经一致，不修改 Provider 绕过握手失败。
+1. 确认 `172.16.2.45:2881` 实际对应的 direct/proxy 服务、服务端版本和访问策略；TCP 可达但无初始协议数据，当前 EF/direct 结果已经一致，不修改 Provider 绕过握手失败。
 2. 在端点或 transport 修正后重新执行两模式只读探针；成功后记录身份/版本并进入 `TST-02`。
 
 ## 模块完成规则
