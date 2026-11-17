@@ -6,13 +6,15 @@
 
 | 项目 | 结果 |
 | --- | --- |
-| 分支 / 提交 | `efcore/10.0`；Aggregate query 模块，基线 `f8532df` |
-| 工作区 | 本模块 Provider、测试和文档一并提交；凭据仅从 User Secrets 读取 |
-| 最新模块 | Count/Sum/Average/Min/Max、空集/NULL、转换器、GroupBy 和分组 shaping 实库验收；修复 nullable Single converter marker 校验；见 [模块记录](efcore-10-aggregate-query-plan.md) |
-| Required 状态 | MySQL：11 Done / 42 In progress；Oracle：12 Done / 41 In progress。Oracle QRY-04 已关闭，MySQL 默认 Decimal 聚合结果明确未完成；每模式总数仍为 53 |
-| Local Release | EF10.0.0 和隔离 EF10.0.14 各 6652 pass / 16 existing skip；最终生产代码和调用者测试均已重跑 |
-| Package | `10.0.0-aggregate-query-r1-20261117` 内容/依赖及两模式两 patch 消费者、打包时 DLL/README identity 通过；未发布 |
-| Native | 4.4.2.2 普通直连；两 patch 全套 LiveTests 各 267/267（各 257 live、10 offline profile），EF10.0.0 最后扩展的 HAVING/order/非数值 grouped 投影另 12/12；EF10.0.14 全套已包含这些扩展。最终两模式均无诊断表残留。MySQL 默认 DECIMAL(65,28) SUM/AVG characterization 不代表该功能支持；Oracle Double 既有限制不变 |
+| 分支 / 提交 | `efcore/10.0`；String query 模块，基线 `d5e8d25` |
+| 工作区 | Provider、测试和文档一并本地提交；凭据仅从 User Secrets 读取；不推送/发布 |
+| 最新模块 | 两模式字符串查询验收；修复 MySQL 更长后缀误匹配与 Oracle CLOB 后缀932；见 [模块记录](efcore-10-string-query-plan.md) |
+| Required 状态 | MySQL：12 Done / 41 In progress；Oracle：13 Done / 40 In progress。QRY-06 两模式关闭；每模式总数53 |
+| Local Release | EF10.0.0、隔离 EF10.0.14 各6655 pass /16 existing specification skip |
+| Package | `10.0.0-string-query-r1-20261117` 内容/依赖、两模式两 patch 消费者及源/包/消费者 DLL、README identity 通过；未发布 |
+| Native | 4.4.2.2 普通直连；新增64个字符串用例通过。EF10.0.0 全套330/331，一项既有 Oracle 相关查询被远端关闭连接(code0)，保留原失败后，其完整家族与补强 LOB 家族定向16/16；EF10.0.14 全套331/331（321 live、10 offline profile），已包含最终大文本结果断言。最终两模式诊断表残留均为0 |
+| Review | 独立走查0 Critical/0 Important/1 Minor：标量与 CLOB 全空格 Trim 文档区分，已修正。更宽 charset/collation/version/full-capacity/performance、任意 converter 和 NCLOB deployment 留在所属矩阵 |
+
 
 ## 固定开发顺序
 
@@ -41,6 +43,7 @@
 
 | 日期 | 模块 | 提交 / 证据 | 未关闭边界 |
 | --- | --- | --- | --- |
+| 2026-11-17 | String query | 基线 `d5e8d25` 后本模块；两 patch 各6655 pass/16 skip；root live330/331后定向16/16、compat331/331；r1包及消费者通过；独立走查无阻塞问题 | 关闭两模式 QRY-06；支持窄原生语义域：字符长度/范围、空格、padding、collation、converter、CLOB/LONGTEXT；NCLOB、全容量、其他部署与任意 converter 不自动完成 |
 | 2026-11-17 | Aggregate / grouped query | 基线 `f8532df` 后的本模块；两 patch 各 6652 pass/16 skip、LiveTests 各 267/267；r1 包和消费者通过；独立走查 0 Critical/0 Important/1 deferred Minor；见 [模块记录](efcore-10-aggregate-query-plan.md) | 修复 nullable Single converter marker，关闭 Oracle QRY-04；MySQL 默认 Decimal SUM/AVG 仍在公开 reader metadata 边界失败。复合键 fixture 的 Tag 依赖 Bucket，尚不能检测仅遗漏第二键的回归；更宽映射/部署留在原矩阵 |
 | 2026-11-17 | Relational query composition | 两 patch 各 6650 pass/16 skip；r3 包及两 patch/两模式消费者通过；最终 live 与走查见 [模块记录](efcore-10-relational-query-plan.md) | Oracle 全分支参数/常量公共 carrier、TO_BLOB 和 variable non-LOB TO_CHAR/TO_NCHAR 已修复；普通 BLOB 比较/IN 和 Oracle contextual CHAR/NCHAR roots 执行前拒绝，RAW 有正向实库证据；MySQL contextual text root 返回 1267，更宽 collation/LOB/转换组合仍开放 |
 | 2026-11-17 | 排序、分页和 First/Single 基数 | 两 patch 各 135 LiveTests；最终审查修正后各 16 定向通过；r1 包及消费者通过；生产 C# 未改，关闭 QRY-02/05 | 原有 SingleOrDefault 拒绝探针可能被多行错误误满足，已改空源并完成敏感性 RED/GREEN；负分页/comparer/显式 default overload 不在支持契约，字符串 collation、图/raw/runtime、其他部署与取消另行验收 |

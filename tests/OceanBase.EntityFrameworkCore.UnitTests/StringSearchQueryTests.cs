@@ -18,6 +18,28 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
         [Theory]
         [InlineData(OceanBaseCompatibilityMode.MySql)]
         [InlineData(OceanBaseCompatibilityMode.Oracle)]
+        public void Suffix_search_requires_enough_source_characters_before_native_comparison(OceanBaseCompatibilityMode mode)
+        {
+            using var context = CreateContext(mode);
+            var sql = context.Rows.Where(row => row.Optional!.EndsWith(row.Needle!)).ToQueryString();
+            var length = mode == OceanBaseCompatibilityMode.MySql ? "CHAR_LENGTH" : "LENGTH";
+            Assert.Matches(length + @"\([^)]+\) >= " + length + @"\(", sql);
+        }
+
+        [Fact]
+        public void Oracle_lob_suffix_search_uses_last_position_without_lob_equality()
+        {
+            using var context = CreateContext(OceanBaseCompatibilityMode.Oracle);
+            var sql = context.Rows.Where(row => row.Large!.EndsWith(row.Needle!)).ToQueryString();
+            Assert.Contains("INSTR(", sql);
+            Assert.Contains(", -1)", sql);
+            Assert.DoesNotContain("SUBSTR(", sql);
+            Assert.Contains(">=", sql);
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle)]
         public void Search_methods_translate_as_total_native_boolean_expressions(OceanBaseCompatibilityMode mode)
         {
             using var context = CreateContext(mode);
@@ -258,14 +280,16 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             var builder = new DbContextOptionsBuilder<TestContext>().UseOceanBase("Server=localhost;Database=test", mode);
             ((IDbContextOptionsBuilderInfrastructure)builder).AddOrUpdateExtension(
                 builder.Options.Extensions.OfType<RelationalOptionsExtension>().Single().WithUseRelationalNulls(relationalNulls));
-            return new TestContext(builder.Options);
+            return new TestContext(builder.Options, mode);
         }
 
-        private sealed class TestContext(DbContextOptions<TestContext> options) : DbContext(options)
+        private sealed class TestContext(DbContextOptions<TestContext> options, OceanBaseCompatibilityMode mode) : DbContext(options)
         {
             public DbSet<Row> Rows => Set<Row>();
             protected override void OnModelCreating(ModelBuilder modelBuilder)
             {
+                modelBuilder.Entity<Row>().Property(row => row.Large).IsUnicode(false)
+                    .HasColumnType(mode == OceanBaseCompatibilityMode.Oracle ? "CLOB" : "LONGTEXT");
                 modelBuilder.Entity<Row>().Property(row => row.Converted)
                     .HasConversion(value => value + "!", value => value.Substring(0, value.Length - 1));
                 modelBuilder.Entity<Row>().Property(row => row.BinaryConverted)
@@ -281,6 +305,7 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             public string Required { get; set; } = "";
             public string? Optional { get; set; }
             public string? Needle { get; set; }
+            public string? Large { get; set; }
             public string Converted { get; set; } = "";
             public string BinaryConverted { get; set; } = "";
         }

@@ -83,6 +83,28 @@ tested MySQL mode sorts NULL first ascending and Oracle sorts NULL last ascendin
 descending reverses those positions. Use explicit null-rank/coalesce expressions
 when portable placement is required; this does not configure string collation.
 
+String translations support ordinary equality, two/three/four-string concat,
+single-string Contains/StartsWith/EndsWith, Length, both integer Substring overloads,
+parameterless ToLower/ToUpper and parameterless Trim/TrimStart/TrimEnd. Length and
+substring bounds count native characters rather than CLR UTF-16 units. Substring
+uses native negative/out-of-range/zero-length rules; trim removes ordinary spaces,
+and case conversion follows the database. StringComparison, culture/Invariant,
+char-search, explicit trim-character and Remove overloads are not translated in
+predicates; EF may evaluate permitted final client projections.
+
+Search treats percent, underscore, quotes and backslashes as text. NULL source or
+needle is false; a known empty needle matches a non-NULL source. Oracle computed
+empty scalar text becomes NULL. Suffixes require enough source characters and
+use native equality; Oracle LOB suffixes use a final-position search because
+ordinary LOB equality is unavailable. Comparison behavior can differ by function:
+the tested MySQL utf8mb4_unicode_ci profile equates NBSP/em-space with ordinary
+space in equality, while INSTR distinguishes them. Fixed padding follows storage
+semantics. Oracle scalar all-space trim becomes NULL, but ordinary CLOB trim and
+empty substrings can return non-NULL empty LOBs. NCLOB remains unaccepted on the
+tested 4.4.2.2 target (CREATE returns 902). Value converters operate on stored text
+and apply their inverse once to string results; arbitrary converter equivalence
+and string-to-binary function translation are not supported.
+
 First/FirstOrDefault/Single/SingleOrDefault and ordinary predicate overloads have
 sync/async native coverage for empty, one and multiple rows with entity, scalar,
 nullable, converter and reference projections. Comparer and explicit default-value

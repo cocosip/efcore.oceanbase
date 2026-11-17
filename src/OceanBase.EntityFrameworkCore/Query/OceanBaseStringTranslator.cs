@@ -106,12 +106,27 @@ namespace OceanBase.EntityFrameworkCore.Query
             {
                 var length = factory.Function(mode == OceanBaseCompatibilityMode.MySql ? "CHAR_LENGTH" : "LENGTH",
                     [needle], nullable: true, argumentsPropagateNullability: [false], typeof(int));
-                var suffix = mode == OceanBaseCompatibilityMode.MySql
-                    ? factory.Function("RIGHT", [source, length], nullable: true,
-                        argumentsPropagateNullability: [false, false], typeof(string), source.TypeMapping)
-                    : factory.Function("SUBSTR", [source, factory.Negate(length)], nullable: true,
-                        argumentsPropagateNullability: [false, false], typeof(string), source.TypeMapping);
-                matched = factory.Equal(suffix, needle);
+                var sourceLength = factory.Function(mode == OceanBaseCompatibilityMode.MySql ? "CHAR_LENGTH" : "LENGTH",
+                    [source], nullable: true, argumentsPropagateNullability: [false], typeof(int));
+                if (mode == OceanBaseCompatibilityMode.Oracle
+                    && source.TypeMapping?.StoreTypeNameBase.Trim().ToUpperInvariant() is "CLOB" or "NCLOB")
+                {
+                    // Oracle LOBs cannot use ordinary equality; locate the final occurrence instead.
+                    var position = factory.Function("INSTR", [source, needle, factory.Constant(-1)], nullable: true,
+                        argumentsPropagateNullability: [false, false, false], typeof(int));
+                    matched = factory.Equal(position, factory.Add(factory.Subtract(sourceLength, length), factory.Constant(1)));
+                }
+                else
+                {
+                    var suffix = mode == OceanBaseCompatibilityMode.MySql
+                        ? factory.Function("RIGHT", [source, length], nullable: true,
+                            argumentsPropagateNullability: [false, false], typeof(string), source.TypeMapping)
+                        : factory.Function("SUBSTR", [source, factory.Negate(length)], nullable: true,
+                            argumentsPropagateNullability: [false, false], typeof(string), source.TypeMapping);
+                    matched = factory.Equal(suffix, needle);
+                }
+                // PAD SPACE equality and a missing LOB match must not accept a longer needle.
+                matched = factory.AndAlso(factory.GreaterThanOrEqual(sourceLength, length), matched);
             }
             else
             {
