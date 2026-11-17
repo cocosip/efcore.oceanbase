@@ -8,10 +8,10 @@
 
 | ID | 缺失项 | 责任 | 当前事实 | 完成条件 |
 | --- | --- | --- | --- | --- |
-| `CFG-04`, `CON-02..05` | EF 连接对象、所有权、mode recheck、超时/取消后的租约恢复 | Provider + Driver evidence | Provider 有本地回归；2026-11-17 TCP 可达但端点未发送初始协议字节即关闭，direct Connector 与 EF 使用同一 User Secrets 和等价脱敏选项，`Use OB20` 两种取值均失败 | direct 成功而 EF 失败时修 Provider；当前两者都失败，先确认端点服务/代理路由/访问策略，再验证 wire/pool/timeout |
+| `CFG-04`, `CON-02..05` | EF 连接对象、所有权、mode recheck、超时/取消后的租约恢复 | Provider + Driver evidence | Provider 有本地回归；2026-11-17 两模式的原配置 Connector、EF 等价配置 Connector 和 EF 共六次均在初始 greeting 读取时 packet closure，ServerErrorCode=0；EF 仅增加 ExpectedMode，DLL 与 0.3.0 还原包一致 | direct 成功而 EF 失败时修 Provider；当前只阻塞普通直连 live 验收，继续本地 Provider 工作，不新增 proxy/OB20 要求 |
 | `DIA-01..02`, `SQL-01` | 错误保留、日志脱敏、完整标识符/服务 facade 生命周期 | Provider | 本地命令和异常测试已有；live correlation/DDL 未完成 | 两模式同步/异步测试、走查、真实错误分类和 release 记录 |
 | `TST-02` | 真实查询、写入、事务、Schema、标量 round-trip | Server/live + Provider | 2026-11-17 TCP 端口可达但 EF 与 direct Connector 两模式均在初始握手前失败，SQL/DDL/reader 均为 0 | 先完成只读 SELECT/身份/版本，再扩展写入、事务和 Schema；两模式各有结果 |
-| `REL-01` | 支持环境、tenant、server、direct/proxy、TLS/transport 记录 | Server/live | User Secrets、endpoint、TLS Disabled、OB20/Pooling 关闭已记录；direct/proxy、server version 未确认 | 成功的非破坏探针 + 脱敏环境记录 |
+| `REL-01` | 普通直连支持环境、tenant、server、TLS/transport 记录 | Server/live | User Secrets、endpoint、TLS Disabled、OB20/压缩/Pooling 关闭已记录；当前服务端版本未确认，Connector 历史 4.4.2.2 证据不能替代 EF live | 两模式成功的普通直连非破坏探针 + 脱敏环境记录；扩展部署不作为前置条件 |
 | `REL-02`, `TST-01` | 关系型 runtime specification 和最终 revision 审核 | Provider + Release | 已有模型/非关系/服务/写 SQL/并发 profile；16 个 skip 已解释 | 补剩余关系型 families，在最终 revision 重跑全套 package/consumer/review |
 
 ## B. Provider 仍有开发或本地验收缺口
@@ -29,13 +29,16 @@
 
 | 能力 | EF Provider 的边界 | 需要的 Connector 证据/能力 |
 | --- | --- | --- |
-| 协议、认证、TLS、Proxy/OB20、压缩 | Provider 只传递连接字符串和调用 `DbConnection.Open/OpenAsync` | Connector direct/proxy/TLS/认证矩阵和错误保留 |
+| 普通直连协议、认证及错误保留 | Provider 只传递连接字符串、设置 ExpectedMode 并调用 `DbConnection.Open/OpenAsync` | 使用 Connector 0.3.0 已有公共 API，不在 EF 内新增协议 |
+| Proxy/ODP、多节点/OCP/TNS、TLS、OB20/trace、压缩 | 以 Connector 对应 revision 的支持与验收范围为上限；不作为 EF10 普通直连前置任务 | 真实扩展部署暂不开发或未验收；compressed OB20/proxy reroute 明确排除；详见进度文档中的 Connector 能力边界 |
 | 连接池、物理连接关闭、wire timeout/cancellation | Provider 负责 EF lease、调用方/Provider ownership 和取消 token 传递 | Connector 证明物理 close/reuse、wire cancel、timeout 和 pool cleanup |
 | 参数 codec、DbType、OceanBaseDecimal、时间/interval、LOB reader | Provider 选择 EF mapping、参数 metadata 和 reader 适配 | Connector 提供公共 parameter/reader 类型和无损 codec |
 | 原生 transaction 句柄 | Provider 负责 EF transaction/savepoint 编排 | Connector 负责 `DbTransaction` 的 commit/rollback/dispose 行为 |
 | 服务端 SQL、类型、权限、DDL、生成值 | Provider 生成/绑定 SQL 并记录预期；不模拟服务端 | OceanBase 版本/模式/权限/执行结果的真实矩阵 |
 
 当前 packet closure 不足以判断 Connector 缺陷。先做 direct Connector 与 EF Provider 的同参数对比：direct 成功而 EF 失败，归 Provider；两者都失败，记录为环境/服务端或 Connector 待分类，不在 EF 内绕过驱动。
+
+连接不可用只保留依赖 live 的验收缺口；按开发队列继续本地实现和测试。Connector 未支持、排除或冻结的能力不转化为 EF 缺陷，也不成为所有 Provider 开发的停止条件。
 
 ## D. 明确延期
 
