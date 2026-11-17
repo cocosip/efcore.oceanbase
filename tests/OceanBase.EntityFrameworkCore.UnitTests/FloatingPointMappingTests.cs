@@ -111,7 +111,7 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
         [Theory]
         [InlineData(OceanBaseCompatibilityMode.MySql, typeof(float), "0.10000000149011612E0")]
         [InlineData(OceanBaseCompatibilityMode.MySql, typeof(double), "0.1E0")]
-        [InlineData(OceanBaseCompatibilityMode.Oracle, typeof(float), "0.1F")]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, typeof(float), "0.10000000149011612F")]
         [InlineData(OceanBaseCompatibilityMode.Oracle, typeof(double), "0.1D")]
         public void Floating_literals_preserve_type_and_round_trip_value(
             OceanBaseCompatibilityMode mode, Type type, string expected)
@@ -126,6 +126,18 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
                 Assert.Equal(expected, mapping.GenerateSqlLiteral(value));
             }
             finally { CultureInfo.CurrentCulture = priorCulture; }
+        }
+
+        [Theory]
+        [InlineData(float.MinValue, "-3.4028234663852886E+38F")]
+        [InlineData(float.MaxValue, "3.4028234663852886E+38F")]
+        [InlineData(float.Epsilon, "1.401298464324817E-45F")]
+        [InlineData(-float.Epsilon, "-1.401298464324817E-45F")]
+        public void Oracle_Single_literal_stays_within_the_exact_binary_storage_range(float value, string expected)
+        {
+            using var context = CreateContext(OceanBaseCompatibilityMode.Oracle);
+            var mapping = context.GetService<IRelationalTypeMappingSource>().FindMapping(typeof(float))!;
+            Assert.Equal(expected, mapping.GenerateSqlLiteral(value));
         }
 
         [Theory]

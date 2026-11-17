@@ -186,7 +186,7 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             var column = oracle ? "\"WideSingle\"" : "`WideSingle`";
             Assert.Contains(column + cast, away);
             Assert.Contains((oracle ? " * 100F" : " * 100E0") + cast, away);
-            Assert.Contains(oracle ? "0.49999997F" : "0.4999999701976776E0", away);
+            Assert.Contains(oracle ? "0.4999999701976776F" : "0.4999999701976776E0", away);
             Assert.Contains(oracle ? "8388608F" : "8388608E0", away);
             Assert.Contains(oracle ? "100000000F" : "100000000E0", away);
             Assert.DoesNotContain(" AS BINARY_DOUBLE)", away);

@@ -24,6 +24,15 @@ pipelines and package consumption. OceanBase 4.4.2.2 direct connections have nar
 text/default/HasData/tracked-write coverage in both modes. Wider mapping, transaction and schema acceptance
 remains open. Passing these profiles does not establish release readiness or other deployments.
 
+Numeric acceptance includes all eight integer widths, nullable Boolean logic, exact decimal
+storage/facets/converters and native Single boundaries in both modes. MySQL Double boundaries also
+round-trip. Oracle Double parameters are **not accepted across the CLR range** with Connector 0.3.0
+on the tested 4.4.2.2 server: MinValue/MaxValue return 1426, and tested tiny nonzero values become
+zero. Direct Connector controls reproduce both behaviors, including explicit Prepare. Ordinary
+values and D-suffixed SQL literals have separate passing coverage; that does not establish safe
+Double parameter storage. This remains a Connector/server boundary requiring resolution before
+applications rely on those values; the provider does not silently substitute another carrier.
+
 Parameterless `DefaultIfEmpty` has local coverage for ordinary scalar/converter defaults, anonymous
 objects, DTOs, constructed mapped CLR types and boxed scalar projections, including per-parent paging.
 A missing source returns null for reference projections; a present row with NULL members remains an

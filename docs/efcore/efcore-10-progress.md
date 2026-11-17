@@ -6,13 +6,13 @@
 
 | 项目 | 结果 |
 | --- | --- |
-| 分支 / 提交 | `efcore/10.0`；large text / BYTE 验收模块，基线 `234387f` |
+| 分支 / 提交 | `efcore/10.0`；numeric storage 模块，基线 `a31cbf9` |
 | 工作区 | 本模块源码、测试和文档一并提交；凭据仅从 User Secrets 读取 |
-| 最新模块 | Oracle CLOB、MySQL LONGTEXT、converter 和 Oracle BYTE 容量/错误；NCLOB 服务端拒绝已归类；见 [模块记录](efcore-10-large-text-plan.md) |
+| 最新模块 | 整数/Boolean/Decimal/native floating 实库存储；Oracle Single 字面量精确边界修复；Double 参数风险保留；见 [模块记录](efcore-10-numeric-storage-plan.md) |
 | Required 状态 | 每个模式 9 Done / 44 In progress |
-| Local Release | 本模块仅扩展 LiveTests；生产源码未变，`234387f` 的两 patch 各 6640 pass / 16 skip 为既有全量证据 |
-| Package | 本模块未重打包；生产源码与 `234387f` 一致，text-storage r1 包及消费者为既有证据；当前 DLL 的提交元数据已更新，不能宣称与旧包哈希相同 |
-| Native | 4.4.2.2 普通直连；Oracle CLOB/MySQL LONGTEXT 的大值及 converter 往返通过；Oracle BYTE 在 AL32UTF8 下的边界、padding、12899 和本地长度拒绝通过；NCLOB DDL 902 与 direct Connector 一致；未宣称 national LOB 支持 |
+| Local Release | EF10.0.0、隔离 10.0.14 各 6644 pass / 16 existing skip；生产改动仅 shared Single literal formatter |
+| Package | `10.0.0-numeric-storage-r1-20261117` 内容/依赖和两模式两 patch 消费者通过；打包时与源码 DLL identity 验证通过，未发布 |
+| Native | 4.4.2.2 普通直连；两 patch 各 59 LiveTests（49 live、10 offline）通过；包含 Oracle Double 已知错误 characterization，不能据通过数宣称无损 Double 参数绑定 |
 
 ## 固定开发顺序
 
@@ -41,6 +41,7 @@
 
 | 日期 | 模块 | 提交 / 证据 | 未关闭边界 |
 | --- | --- | --- | --- |
+| 2026-11-17 | 数值真实存储与 Oracle Single 字面量 | 本模块；两 patch 各 6644 pass/16 skip；各 59 LiveTests；r1 包及两 patch 两模式消费者通过 | Oracle Double 参数极值 1426、测试微小值变零，direct/显式 Prepare 同样复现；完整 Double 绑定未验收；Binary/Guid/temporal 和宽映射仍待推进 |
 | 2026-11-17 | Large text / BYTE 真实存储 | 本模块；EF10.0.0、10.0.14 各 33 LiveTests（23 live、10 offline）；复用原 owned-table 夹具，生产源码未变 | NCLOB 在目标 4.4.2.2 上返回 902；更大容量/其他 charset/版本、LOB locator API、numeric/Binary/Guid/temporal 仍按矩阵推进 |
 | 2026-11-17 | 真实 bounded text storage、MySQL DEFAULT 和生成值回读 | 本模块；两 patch 本地各 6640 通过/16 skip；两 patch 串行 LiveTests 各 25 通过（15 live、10 offline）；包消费者通过 | 32 scalar variable text、8 字符 fixed、NULL/空串/converter/default/seed/DML 已验收；LOB/BYTE/更宽容量、索引、事务失败恢复仍待补齐 |
 | 2026-11-17 | Oracle 普通字符串 CR/LF/CRLF 字面量 | 本模块；Unit 定向 108、Functional 12；完整两 patch 各 6628 通过/16 skip；LiveTests 两 patch 各 19 通过（9 live、10 offline）；r2 打包消费者通过 | 4000 字符值含全换行/重复 CRLF 和 CHAR 空格补齐比较已有证据；真实列写入、LOB、Schema 默认值/HasData 待验收 |
@@ -71,6 +72,10 @@
 Oracle 的 RETURNING INTO 依赖 Connector 明确支持、默认关闭的 `Use Oracle Prepare Execute=true`；测试 profile 显式开启，未更改 User Secrets 或 Provider 全局连接策略。MySQL 同步/异步另覆盖 NO_BACKSLASH_ESCAPES 会话。第一次并行 live run 为 23/25，两项在握手阶段中断，其中一次是清理连接；已通过独立连接清理该自建表，随后串行运行 25/25。该瞬时连接结果不被归为 Provider 功能缺陷。
 
 Large-text 后续验收补充 CLOB/LONGTEXT 的 NULL/空串、4001/32768 ASCII、8192 次 mixed Unicode/换行文本、65537 字符更新和 converter；Oracle 的 NCLOB CREATE 在 EF 和 direct Connector 均返回 902，拆为明确的版本化拒绝测试，未静默改存 CLOB。BYTE 验收先读取 NLS_DATABASE_PARAMETERS 的 AL32UTF8，再验证 8-byte 成功/补齐、9-scalar 本地拒绝、9-byte 多字节值的服务端 12899、异常 entries 和失败后表可用性。客户端编码没有被用于推断服务端容量。
+
+数值模块复用 owned-table 生命周期并保留原 14 个文本测试，再补 26 个数值用例。两模式整数八类型 nullable 端点、enum query/update、Boolean 九组逻辑、默认 Decimal 极值/scale-28、显式 (5,2)/converter 和拒绝舍入、Single 参数端点/次正规值已通过。Oracle Single 的最短 F 字面量触发 1426，direct 对照证明展开到精确 Double 文本再加 F 可成功；只修共同 formatter。完整两 patch 回归更新了一处 Round guard 的旧字面量断言，查询翻译逻辑未变。
+
+MySQL Double 参数端点通过；Oracle Double 普通值通过，但参数 MinValue/MaxValue 返回 1426，测试 Epsilon/最小正 normal 变零。direct Connector 0.3.0 的 PrepareExecute 开/关与显式 Prepare 对照同样观察到极值错误和 Epsilon 丢失；D 字面量查询可保真。当前仅归为 Connector/服务端 carrier 待分类，不修改 Connector、不静默换文本 carrier，也不把负向 characterization 的通过写成 Double 完整支持。风险已进入包 README/功能矩阵/缺失矩阵；后续先推进 Binary/Guid 等既定映射，Double 绑定需要对应层证据和修复后再验收。
 
 ## 模块完成规则
 

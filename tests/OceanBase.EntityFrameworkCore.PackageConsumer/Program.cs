@@ -76,6 +76,10 @@ namespace PackageConsumer
                 if (nationalLiteral != expectedLiteral) throw new Exception("Packed provider lost literal text.");
                 if (mode == OceanBaseCompatibilityMode.Oracle)
                 {
+                    var single = context.GetService<IRelationalTypeMappingSource>().FindMapping(typeof(float))!;
+                    if (single.GenerateSqlLiteral(float.MaxValue) != "3.4028234663852886E+38F"
+                        || single.GenerateSqlLiteral(float.Epsilon) != "1.401298464324817E-45F")
+                        throw new Exception("Packed provider lost Oracle Single literal boundaries.");
                     var ordinary = context.GetService<IRelationalTypeMappingSource>()
                         .FindMapping(typeof(string), "VARCHAR2(40 CHAR)")!;
                     if (ordinary.GenerateSqlLiteral("a'\\\r\nb")

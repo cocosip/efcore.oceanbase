@@ -19,7 +19,7 @@
 | ID | 功能 | 缺口 | 责任 |
 | --- | --- | --- | --- |
 | `MOD-01..03` | 模型约定、关系、生成/默认/计算值 | 更宽模型、生成值和 Schema 组合仍需覆盖 | Provider |
-| `MAP-01..07` | 整数/Boolean、Decimal/Float、文本、Binary/Guid、Temporal、facet/converter | Oracle national 字面量及普通字面量 CR/LF 保真已修复，default/HasData/converter 本地测试和 UTF8MB4/latin1 只读往返通过；普通值 4000 字符、CHAR 比较及不可编码值拒绝已有证据。真实 bounded text 参数写入、NULL/空串、padding/converter/default/seed 已验收，MySQL DEFAULT 字面量与生成值 reader 消费已修复；已补 AL32UTF8 BYTE 边界/12899 与 ordinary CLOB/MySQL LONGTEXT 大值/converter；NCLOB DDL 在目标 4.4.2.2 返回 902（direct 对照一致），不归为驱动/Provider 缺陷。精度、full capacity/national LOB/其他 charset、Guid 字节序、时区和更宽转换组合仍需补齐 | Provider + Server/live；见 [national](efcore-10-national-literals-plan.md) / [ordinary](efcore-10-ordinary-literals-plan.md) literals |
+| `MAP-01..07` | 整数/Boolean、Decimal/Float、文本、Binary/Guid、Temporal、facet/converter | Oracle national 字面量及普通字面量 CR/LF 保真已修复，default/HasData/converter 本地测试和 UTF8MB4/latin1 只读往返通过；普通值 4000 字符、CHAR 比较及不可编码值拒绝已有证据。真实 bounded text 参数写入、NULL/空串、padding/converter/default/seed 已验收，MySQL DEFAULT 字面量与生成值 reader 消费已修复；已补 AL32UTF8 BYTE 边界/12899 与 ordinary CLOB/MySQL LONGTEXT 大值/converter；NCLOB DDL 在目标 4.4.2.2 返回 902（direct 对照一致），不归为驱动/Provider 缺陷。数值模块已补两模式整数八类型端点/enum、Boolean 九组逻辑、默认 Decimal 极值/scale-28、显式精度/拒绝和 Single 端点；MySQL Double 端点通过。Oracle Single 字面量 1426 已修复；Double 参数极值 1426、微小值变零在 direct Connector 同样复现，完整 Double 绑定仍未验收。更宽精度、full capacity/national LOB/其他 charset、Guid 字节序、时区和转换组合仍需补齐 | Provider + Connector/server boundary；见 [numeric storage](efcore-10-numeric-storage-plan.md) / [national](efcore-10-national-literals-plan.md) / [ordinary](efcore-10-ordinary-literals-plan.md) literals |
 | `QRY-01..11` | 查询翻译和物化 | 剩余 overload、复杂组合、官方 runtime specification、真实排序/聚合/集合结果仍需补齐 | Provider + Server/live |
 | `UPD-01..05` | INSERT/UPDATE/DELETE、生成值、并发、图保存 | 两模式 bounded text 的 tracked insert/update/delete、默认值回读已通过；MySQL 回读完整消费后 commit 成功，Oracle 显式开启 Connector PrepareExecute。更宽生成值/约束/冲突/图保存未完成 | Provider + Server/live |
 | `TXN-01..03` | transaction、savepoint、原子性、取消恢复 | 本地恢复路径已有，MySQL 文本默认值回读的 owned commit 已通过；更宽 commit、rollback/savepoint/失败恢复仍待验收 | Provider + Server/live；句柄由 Connector 提供 |
@@ -32,6 +32,7 @@
 | 普通直连协议、认证及错误保留 | Provider 只传递连接字符串、设置 ExpectedMode 并调用 `DbConnection.Open/OpenAsync` | 使用 Connector 0.3.0 已有公共 API，不在 EF 内新增协议 |
 | Proxy/ODP、多节点/OCP/TNS、TLS、OB20/trace、压缩 | 以 Connector 对应 revision 的支持与验收范围为上限；不作为 EF10 普通直连前置任务 | 真实扩展部署暂不开发或未验收；compressed OB20/proxy reroute 明确排除；详见进度文档中的 Connector 能力边界 |
 | 连接池、物理连接关闭、wire timeout/cancellation | Provider 负责 EF lease、调用方/Provider ownership 和取消 token 传递 | Connector 证明物理 close/reuse、wire cancel、timeout 和 pool cleanup |
+| Oracle Double 参数范围/无损绑定 | Provider 仍绑定公开 Double carrier，不在 EF 内改协议或静默换成文本；MAP-02 保持未完成 | 4.4.2.2 + Connector 0.3.0 direct/显式 Prepare 对照：极值 1426，测试微小值读写变零；需继续区分 codec/服务端行为，不能宣称完整 Double 支持 |
 | 参数 codec、DbType、OceanBaseDecimal、时间/interval、LOB reader | Provider 选择 EF mapping、参数 metadata 和 reader 适配 | Connector 提供公共 parameter/reader 类型和无损 codec |
 | 原生 transaction 句柄 | Provider 负责 EF transaction/savepoint 编排 | Connector 负责 `DbTransaction` 的 commit/rollback/dispose 行为 |
 | 服务端 SQL、类型、权限、DDL、生成值 | Provider 生成/绑定 SQL 并记录预期；不模拟服务端 | OceanBase 版本/模式/权限/执行结果的真实矩阵 |
