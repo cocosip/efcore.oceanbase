@@ -934,6 +934,8 @@ namespace PackageConsumer
                         "LOG_BASE" => mode == OceanBaseCompatibilityMode.MySql ? "LN(" : "LOG(",
                         "LOG2" => mode == OceanBaseCompatibilityMode.MySql ? "LOG2(" : "LOG(2",
                         "LOG10" => mode == OceanBaseCompatibilityMode.MySql ? "LOG10(" : "LOG(",
+                        "SINH" or "COSH" or "TANH" when mode == OceanBaseCompatibilityMode.MySql => "EXP(",
+                        "ASINH" or "ATANH" => "LN(",
                         _ => operation + "("
                     };
                     if (!numericSql.Contains(function, StringComparison.Ordinal)
@@ -967,7 +969,8 @@ namespace PackageConsumer
                     || !aggregateSql.Contains("ORDER BY", StringComparison.Ordinal)
                     || !aggregateSql.Contains("SUM(DISTINCT (CASE", StringComparison.Ordinal)
                     || aggregateSql.Contains("AVG(CAST(", StringComparison.Ordinal)
-                    || aggregateSql.Contains(" AS DOUBLE", StringComparison.Ordinal)
+                    || mode == OceanBaseCompatibilityMode.MySql
+                        && aggregateSql.Split(" AS FLOAT) AS DOUBLE)", StringSplitOptions.None).Length != 8
                     || aggregateSql.Contains(" AS BINARY_DOUBLE)", StringComparison.Ordinal))
                     throw new Exception("Packed aggregates lost native input precision or Single result normalization: " + aggregateSql);
                 var singleAggregateTarget = mode == OceanBaseCompatibilityMode.MySql ? "FLOAT" : "BINARY_FLOAT";
@@ -975,7 +978,8 @@ namespace PackageConsumer
                 var aggregateIdentifiers = context.GetService<ISqlGenerationHelper>();
                 foreach (var projection in new[] { "SumSingle", "AverageSingle", "SumWide", "AverageWide", "MinimumWide", "MaximumWide" })
                 {
-                    var normalizedProjection = " AS " + singleAggregateTarget + ")" + aggregateAliasSeparator
+                    var normalizedProjection = " AS " + singleAggregateTarget + ")"
+                        + (mode == OceanBaseCompatibilityMode.MySql ? " AS DOUBLE)" : "") + aggregateAliasSeparator
                         + aggregateIdentifiers.DelimitIdentifier(projection);
                     if (!aggregateSql.Contains(normalizedProjection, StringComparison.Ordinal))
                         throw new Exception("Packed aggregate projection lost Single normalization: " + projection + ": " + aggregateSql);

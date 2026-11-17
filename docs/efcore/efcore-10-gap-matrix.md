@@ -26,6 +26,12 @@
 | `TXN-01..03` | transaction、savepoint、原子性、取消恢复 | 本地恢复路径已有，MySQL 文本默认值回读的 owned commit 已通过；更宽 commit、rollback/savepoint/失败恢复仍待验收 | Provider + Server/live；句柄由 Connector 提供 |
 | `SCH-01..03` | EnsureCreated/Deleted、权限、命名空间、DDL 清理 | 唯一自建表的 CreateTables、HasData 和精确清理已有 native 证据；更宽权限/namespace/锁/删除仍未完成 | Provider + Server/live |
 
+Numeric QRY-07 acceptance is in progress: [module record](efcore-10-numeric-query-plan.md).
+The tested default MySQL Decimal scalar LEAST/GREATEST result is also rejected by public
+Connector readers. Explicit(18,6) only establishes that domain; no default precision
+narrowing or text-result workaround is used. This scalar boundary does not contradict
+the separately accepted aggregate MIN/MAX profile. Temporal query acceptance remains open.
+
 ## C. Connector 责任，不在 EF Provider 内实现
 
 | 能力 | EF Provider 的边界 | 需要的 Connector 证据/能力 |
@@ -35,6 +41,7 @@
 | 连接池、物理连接关闭、wire timeout/cancellation | Provider 负责 EF lease、调用方/Provider ownership 和取消 token 传递 | Connector 证明物理 close/reuse、wire cancel、timeout 和 pool cleanup |
 | Oracle Double 参数范围/无损绑定 | Provider 仍绑定公开 Double carrier，不在 EF 内改协议或静默换成文本；MAP-02 保持未完成 | 4.4.2.2 + Connector 0.3.0 direct/显式 Prepare 对照：极值 1426，测试微小值读写变零；需继续区分 codec/服务端行为，不能宣称完整 Double 支持 |
 | MySQL 默认 Decimal SUM/AVG 结果 | Provider 保留默认精度与 native aggregate，不静默缩窄声明或修改协议 | 4.4.2.2 + Connector 0.3.0：DECIMAL(65,28) 的 SUM/AVG 在 GetValue/GetProviderSpecificValue/GetFieldValue<OceanBaseDecimal> 均拒绝 metadata；MIN/MAX、显式 (18,4) 和文本诊断对照通过。QRY-04/MySQL 保持未完成 |
+| MySQL 默认 Decimal scalar LEAST/GREATEST | 保留默认精度和 native scalar extrema；QRY-07 未关闭 | 4.4.2.2 + Connector 0.3.0 的公开 reader 拒绝结果 metadata；显式 (18,6) 仅证明该声明域，内部根因尚未归责 |
 | 参数 codec、DbType、OceanBaseDecimal、时间/interval、LOB reader | Provider 选择 EF mapping、参数 metadata 和 reader 适配 | Connector 提供公共 parameter/reader 类型和无损 codec |
 | 原生 transaction 句柄 | Provider 负责 EF transaction/savepoint 编排 | Connector 负责 `DbTransaction` 的 commit/rollback/dispose 行为 |
 | 服务端 SQL、类型、权限、DDL、生成值 | Provider 生成/绑定 SQL 并记录预期；不模拟服务端 | OceanBase 版本/模式/权限/执行结果的真实矩阵 |

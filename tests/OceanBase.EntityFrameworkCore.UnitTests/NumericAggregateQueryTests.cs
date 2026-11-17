@@ -337,7 +337,9 @@ public sealed class NumericAggregateQueryTests
         }).ToQueryString();
         Assert.Equal(4, single.Split(mode == OceanBaseCompatibilityMode.MySql ? " AS FLOAT)" : " AS BINARY_FLOAT)").Length - 1);
         Assert.Contains("CAST(COALESCE(SUM(", single);
-        Assert.DoesNotContain(" AS " + (mode == OceanBaseCompatibilityMode.MySql ? "DOUBLE" : "BINARY_DOUBLE") + ")", single);
+        if (mode == OceanBaseCompatibilityMode.MySql)
+            Assert.Equal(4, single.Split(" AS FLOAT) AS DOUBLE)").Length - 1);
+        else Assert.DoesNotContain(" AS BINARY_DOUBLE)", single);
     }
 
     [Theory]

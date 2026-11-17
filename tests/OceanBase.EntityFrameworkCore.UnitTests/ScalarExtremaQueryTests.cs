@@ -242,10 +242,13 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             var query = context.Rows.Where(r => MathF.Min(r.WideSingle, MathF.Min(r.Single, r.WideSingle)) > 0)
                 .OrderBy(r => Math.Max(r.Decimal, Math.Max(r.AlternateDecimal, r.Decimal)));
             var sql = query.ToQueryString();
-            Assert.Contains($"CAST(LEAST({Column("WideSingle")}, CAST(LEAST({Column("Single")}, {Column("WideSingle")}) AS {cast})) AS {cast})", sql);
+            var inner = Normalize($"LEAST({Column("Single")}, {Column("WideSingle")})");
+            Assert.Contains(Normalize($"LEAST({Column("WideSingle")}, {inner})"), sql);
             Assert.Contains($"GREATEST({Column("Decimal")}, GREATEST({Column("AlternateDecimal")}, {Column("Decimal")}))", sql);
 
             string Column(string name) => $"{quote}r{quote}.{quote}{name}{quote}";
+            string Normalize(string value) => mode == OceanBaseCompatibilityMode.MySql
+                ? $"CAST(CAST({value} AS FLOAT) AS DOUBLE)" : $"CAST({value} AS {cast})";
         }
 
         [Theory]

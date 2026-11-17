@@ -49,6 +49,27 @@ does not preserve the full Double range/precision and can underflow or overflow.
 Double-to-NUMBER mapping and precision facets on native Oracle binary floating types remain
 unsupported by this provider.
 
+Numeric queries have a finite-domain native profile for Abs/Sign/Floor/Ceiling/Truncate,
+the implemented Math/MathF transcendental overloads, scalar extrema, Clamp/CopySign,
+Round, CASE and coalesce. Oracle binary-floating Sign explicitly returns zero for zero.
+On the tested server MySQL lacks SINH/COSH/TANH/ASINH/ATANH and Oracle lacks ASINH/ATANH;
+the provider composes supported EXP/LN/SQRT/arithmetic with small/large-input branches.
+Floating transcendental results use native precision and are approximate; this is not
+a bit-for-bit CLR, signed-zero or non-finite/domain-error contract. MySQL Single results
+normalize to FLOAT and then widen to DOUBLE for transport, avoiding FLOAT text formatting
+that otherwise loses significant digits. The Single reader/result semantics are retained.
+
+Round supports decimal digits 0..28, Double 0..15 and Single 0..6, all five
+MidpointRounding rules, and current captured digits/rules. Invalid options reject before
+execution; row-dependent options and unlisted signatures do not translate in predicates.
+Nullable same-carrier converters retain their stored-space arithmetic and apply the
+inverse once to results; they need not be equivalent to arithmetic in model space.
+With Connector 0.3.0 on tested MySQL 4.4.2.2, scalar LEAST/GREATEST over default
+DECIMAL(65,28) also fail public reader metadata validation. Explicit (18,6) has positive
+coverage only for that domain. The provider does not narrow default Decimal precision
+or replace numeric results with text to hide this boundary. Temporal query acceptance,
+wider converter/declaration combinations and other deployments remain open.
+
 Guid defaults use canonical 36-character text in MySQL and RAW(16) in Oracle. Binary Guid mappings
 use EF's `GuidToBytesConverter` / .NET `Guid.ToByteArray()` mixed-endian layout: the UUID
 `00112233-4455-6677-8899-aabbccddeeff` stores `33221100554477668899AABBCCDDEEFF`, rather than

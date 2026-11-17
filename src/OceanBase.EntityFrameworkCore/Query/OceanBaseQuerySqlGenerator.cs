@@ -381,20 +381,23 @@ namespace OceanBase.EntityFrameworkCore.Query
             {
                 var mapping = sqlFunctionExpression.TypeMapping;
                 var carrier = mapping?.Converter?.ProviderClrType ?? mapping?.ClrType;
+                var operandType = sqlFunctionExpression.Arguments is { Count: 1 } operands
+                    ? Nullable.GetUnderlyingType(operands[0].Type) ?? operands[0].Type : null;
                 if (sqlFunctionExpression is not { IsBuiltIn: true, Instance: null, Schema: null, Arguments.Count: 1,
                         IsNullable: true, ArgumentsPropagateNullability: [false] }
                     || mapping is null || mapping.Converter?.ConvertsNulls == true
                     || sqlFunctionExpression.Type != (Nullable.GetUnderlyingType(mapping.ClrType) ?? mapping.ClrType)
                     || !OceanBaseMathTranslator.IsNumeric(sqlFunctionExpression.Type)
                     || (Nullable.GetUnderlyingType(carrier!) ?? carrier) != typeof(float)
-                    || sqlFunctionExpression.Arguments[0].Type != typeof(double)
-                        && sqlFunctionExpression.Arguments[0].Type != sqlFunctionExpression.Type
+                    || operandType != typeof(double)
+                        && operandType != sqlFunctionExpression.Type
                         // EF's SUM compensation derives COALESCE.Type from its Int32 zero constant.
                         && !IsCompensatedSingleSum(sqlFunctionExpression.Arguments[0], sqlFunctionExpression.Type, mapping))
                     throw new InvalidOperationException("Invalid internal Single result expression.");
-                Sql.Append("CAST(");
+                // MySQL text results format FLOAT with fewer digits; widen only after Single normalization.
+                Sql.Append(_mode == OceanBaseCompatibilityMode.MySql ? "CAST(CAST(" : "CAST(");
                 Visit(sqlFunctionExpression.Arguments[0]);
-                Sql.Append(_mode == OceanBaseCompatibilityMode.MySql ? " AS FLOAT)" : " AS BINARY_FLOAT)");
+                Sql.Append(_mode == OceanBaseCompatibilityMode.MySql ? " AS FLOAT) AS DOUBLE)" : " AS BINARY_FLOAT)");
                 return sqlFunctionExpression;
             }
 

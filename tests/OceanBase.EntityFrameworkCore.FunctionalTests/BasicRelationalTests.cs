@@ -1337,7 +1337,14 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
                 Assert.All(commands.Inputs.Where(p => p.DbType == DbType.Decimal), p =>
                 { Assert.Equal((byte)0, p.Precision); Assert.Null(p.DecimalScale); });
                 var sql = commands.Sql[^1];
-                foreach (var function in new[] { "SQRT(", "EXP(", "LN(", "POWER(", "SIN(", "COS(", "TAN(", "ASIN(", "ACOS(", "ATAN(", "SINH(", "COSH(", "TANH(", "ASINH(", "ATANH(" }) Assert.Contains(function, sql);
+                foreach (var function in new[] { "SQRT(", "EXP(", "LN(", "POWER(", "SIN(", "COS(", "TAN(", "ASIN(", "ACOS(", "ATAN(" }) Assert.Contains(function, sql);
+                foreach (var function in new[] { "SINH(", "COSH(", "TANH(" })
+                {
+                    if (mode == OceanBaseCompatibilityMode.Oracle) Assert.Contains(function, sql);
+                    else Assert.DoesNotContain(function, sql);
+                }
+                Assert.DoesNotContain("ASINH(", sql);
+                Assert.DoesNotContain("ATANH(", sql);
                 Assert.Contains("ATAN2(", sql);
                 Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? "LOG2(" : "LOG(", sql);
                 Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? "LOG10(" : "LOG(", sql);
