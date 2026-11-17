@@ -1,5 +1,6 @@
 using System;
 using System.Buffers;
+using System.Collections.Generic;
 using System.Data;
 using System.Data.Common;
 using System.Globalization;
@@ -60,6 +61,31 @@ namespace OceanBase.EntityFrameworkCore.Storage
                         return literal.Append('\'').ToString();
                     }
                 }
+            }
+
+            if (_mode == OceanBaseCompatibilityMode.Oracle && !IsUnicode && (text.Contains('\r') || text.Contains('\n')))
+            {
+                var parts = new List<string>();
+                var start = 0;
+                for (var index = 0; index < text.Length; index++)
+                {
+                    if (text[index] is not ('\r' or '\n')) continue;
+                    if (index > start) parts.Add(base.GenerateNonNullSqlLiteral(text[start..index]));
+                    // Keep CHAR operands so fixed-column comparisons retain blank-padding semantics.
+                    parts.Add(text[index] == '\r' ? "CAST(CHR(13) AS CHAR(1))" : "CAST(CHR(10) AS CHAR(1))");
+                    start = index + 1;
+                }
+                if (start < text.Length) parts.Add(base.GenerateNonNullSqlLiteral(text[start..]));
+
+                // Pair adjacent fragments to avoid server expression-depth failures on newline-heavy text.
+                while (parts.Count > 1)
+                {
+                    var count = 0;
+                    for (var index = 0; index < parts.Count; index += 2)
+                        parts[count++] = index + 1 < parts.Count ? "(" + parts[index] + " || " + parts[index + 1] + ")" : parts[index];
+                    parts.RemoveRange(count, parts.Count - count);
+                }
+                return parts[0];
             }
 
             return (_mode == OceanBaseCompatibilityMode.Oracle && IsUnicode ? "N" : string.Empty)

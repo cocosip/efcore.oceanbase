@@ -74,6 +74,14 @@ namespace PackageConsumer
                     ? @"u'\6d77\d83c\df0a\005c\0027\000a'"
                     : "CONVERT(X'E6B5B7F09F8C8A5C270A' USING utf8mb4)";
                 if (nationalLiteral != expectedLiteral) throw new Exception("Packed provider lost literal text.");
+                if (mode == OceanBaseCompatibilityMode.Oracle)
+                {
+                    var ordinary = context.GetService<IRelationalTypeMappingSource>()
+                        .FindMapping(typeof(string), "VARCHAR2(40 CHAR)")!;
+                    if (ordinary.GenerateSqlLiteral("a'\\\r\nb")
+                        != @"(('a''\' || CAST(CHR(13) AS CHAR(1))) || (CAST(CHR(10) AS CHAR(1)) || 'b'))")
+                        throw new Exception("Packed provider changed ordinary literal newlines or CHAR semantics.");
+                }
                 var updateGenerator = context.GetService<IUpdateSqlGenerator>();
                 var sequenceBuilder = new StringBuilder("existing command");
                 Action[] sequenceOperations =

@@ -1,5 +1,6 @@
 using System;
 using System.Linq;
+using System.Text;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
@@ -14,11 +15,13 @@ namespace OceanBase.EntityFrameworkCore.LiveTests;
 public sealed class LiveStringLiteralTests
 {
     [Theory]
-    [InlineData(OceanBaseCompatibilityMode.MySql, "utf8mb4")]
-    [InlineData(OceanBaseCompatibilityMode.Oracle, "utf8mb4")]
-    [InlineData(OceanBaseCompatibilityMode.Oracle, "latin1")]
+    [InlineData(OceanBaseCompatibilityMode.MySql, "utf8mb4", true)]
+    [InlineData(OceanBaseCompatibilityMode.Oracle, "utf8mb4", true)]
+    [InlineData(OceanBaseCompatibilityMode.Oracle, "latin1", true)]
+    [InlineData(OceanBaseCompatibilityMode.Oracle, "utf8mb4", false)]
+    [InlineData(OceanBaseCompatibilityMode.Oracle, "latin1", false)]
     public async Task Generated_text_literals_round_trip_without_test_objects(
-        OceanBaseCompatibilityMode mode, string characterSet)
+        OceanBaseCompatibilityMode mode, string characterSet, bool unicode)
     {
         if (Environment.GetEnvironmentVariable("OCEANBASE_RUN_LIVE_TESTS") != "1")
             throw new InvalidOperationException("Set OCEANBASE_RUN_LIVE_TESTS=1 to run live OceanBase tests.");
@@ -30,8 +33,12 @@ public sealed class LiveStringLiteralTests
         {
             await using var context = new DbContext(new DbContextOptionsBuilder()
                 .UseOceanBase(connection.ConnectionString, mode).Options);
-            var mapping = context.GetService<IRelationalTypeMappingSource>().FindMapping(typeof(string))!;
-            foreach (var text in new string?[] { null, "", "Ready's", "海", "海🌊", @"\6d77", "' OR 1=1--\n\0" })
+            var mapping = context.GetService<IRelationalTypeMappingSource>().FindMapping(typeof(string), null, unicode: unicode)!;
+            var texts = new string?[] { null, "", "Ready's", @"\6d77", "\n", "a\rb", "a\r\nb", "\r\n\t\0", "' OR 1=1--\n\0" };
+            if (unicode || characterSet == "utf8mb4") texts = texts.Concat(["海", "海🌊", "海🌊\n"]).ToArray();
+            if (!unicode) texts = texts.Concat([new string('a', 3998) + "\nb", new string('\n', 4000),
+                string.Concat(Enumerable.Repeat("\r\n", 2000))]).ToArray();
+            foreach (var text in texts)
             {
                 var literal = mapping.GenerateSqlLiteral(text);
                 var sql = mode == OceanBaseCompatibilityMode.Oracle
@@ -47,6 +54,22 @@ public sealed class LiveStringLiteralTests
                     Assert.Equal(text, Assert.Single(filtered.ToList()));
                     Assert.Equal(text, Assert.Single(await filtered.ToListAsync()));
                 }
+            }
+            if (!unicode)
+            {
+                foreach (var (newline, source) in new[] { ("\n", "CHR(10)"), ("\r", "CHR(13)"), ("\r\n", "CHR(13) || CHR(10)") })
+                {
+                    var sql = "SELECT CASE WHEN CAST('a' || " + source + " AS CHAR(20 CHAR)) = "
+                        + mapping.GenerateSqlLiteral("a" + newline) + " THEN 'yes' ELSE 'no' END AS \"Value\" FROM DUAL";
+                    Assert.Equal("yes", Assert.Single(context.Database.SqlQueryRaw<string>(sql).ToList()));
+                    Assert.Equal("yes", Assert.Single(await context.Database.SqlQueryRaw<string>(sql).ToListAsync()));
+                }
+            }
+            if (!unicode && characterSet == "latin1")
+            {
+                var sql = "SELECT " + mapping.GenerateSqlLiteral("海\n") + " AS \"Value\" FROM DUAL";
+                Assert.Throws<EncoderFallbackException>(() => context.Database.SqlQueryRaw<string>(sql).ToList());
+                await Assert.ThrowsAsync<EncoderFallbackException>(() => context.Database.SqlQueryRaw<string>(sql).ToListAsync());
             }
         }
         catch (Exception error) when (error is not XunitException)

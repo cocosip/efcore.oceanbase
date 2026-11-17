@@ -6,12 +6,12 @@
 
 | 项目 | 结果 |
 | --- | --- |
-| 分支 / 提交 | `efcore/10.0`；national literals 模块，基线 `af7d0f4` |
+| 分支 / 提交 | `efcore/10.0`；ordinary newline literals 模块，基线 `764e8cc` |
 | 工作区 | 本模块源码、测试和文档一并提交；凭据仅从 User Secrets 读取 |
-| 最新模块 | Oracle national 字符串字面量；见 [模块记录](efcore-10-national-literals-plan.md) |
+| 最新模块 | Oracle 普通字符串换行字面量；见 [模块记录](efcore-10-ordinary-literals-plan.md) |
 | Required 状态 | 每个模式 9 Done / 44 In progress |
-| Local Release | EF10.0.0 和隔离 EF10.0.14 各通过 Unit 2573、Functional 2475、Specification 1538、Consumer 2；16 个既有映射 skip |
-| Package | national-literals 包内容检查和两个 patch 的两模式消费者通过；消费 DLL 与已测试源码 DLL 哈希相同 |
+| Local Release | EF10.0.0 和隔离 EF10.0.14 各通过 Unit 2607、Functional 2481、Specification 1538、Consumer 2；16 个既有映射 skip |
+| Package | ordinary-literals 包内容检查和两个 patch 的两模式消费者通过；消费 DLL 与已测试源码 DLL 哈希相同 |
 | Native | 两模式 direct Connector / EF 等价 Connector / EF 六条连接路径均成功；身份与 4.4.2.2 版本已验证；只读查询每模式 72 条 reader 命令通过；字面量 UTF8MB4/Oracle latin1 往返通过，未执行 DDL/DML |
 
 ## 固定开发顺序
@@ -41,6 +41,7 @@
 
 | 日期 | 模块 | 提交 / 证据 | 未关闭边界 |
 | --- | --- | --- | --- |
+| 2026-11-17 | Oracle 普通字符串 CR/LF/CRLF 字面量 | 本模块；Unit 定向 108、Functional 12；完整两 patch 各 6628 通过/16 skip；LiveTests 两 patch 各 19 通过（9 live、10 offline）；r2 打包消费者通过 | 4000 字符值含全换行/重复 CRLF 和 CHAR 空格补齐比较已有证据；真实列写入、LOB、Schema 默认值/HasData 待验收 |
 | 2026-11-17 | Oracle national literals、连接恢复 | 本模块；Unit 定向 74、Functional 6；完整两 patch 各 6588 通过/16 skip；打包消费者通过；LiveTests 两 patch 各 17 通过（7 个真实测试、10 个离线 profile 测试） | national SQL/literal 往返仅验证只读表达式；真实列容量、padding、LOB 和 Schema/DML 尚未验收 |
 | 2026-11-16 | `DateTimeOffset.DateTime` | `c44f008`；Unit 3/3、Functional 3/3、Package 2/2 | Oracle native timezone/session 和 MySQL live rejection |
 | 2026-11-16 | `DateTimeOffset.Ticks` | `a7aec5d` | Oracle native timezone/session |
@@ -58,6 +59,10 @@
 以上是恢复前的历史结果。2026-11-17 用户确认服务器故障并修复后，未更改 User Secrets，原 Connector、EF 等价 Connector 和 EF 的两模式六条路径均执行 SELECT 1 成功，握手阻塞已解除。官方连接探针修正了 Oracle `OceanBaseDecimal` 的测试端转换；它不是 Provider/驱动连接故障。
 
 `LiveConnectionTests` 验证当前数据库/Schema 与配置匹配；`LiveReadOnlyQueryTests` 在两模式同步/异步执行过滤、参数刷新、NULL、Boolean、排序分页、聚合、分组、集合运算、相关 lateral 与 DefaultIfEmpty，每模式 72 条 EF reader 命令通过，服务端均报告 4.4.2.2。`LiveStringLiteralTests` 另验证 MySQL UTF8MB4 和 Oracle UTF8MB4/latin1 下的生成字面量、LINQ 常量比较与空串语义。测试未创建对象或执行业务写入，也未使用管理员账号；这些只读结果不关闭 DML/事务/DDL、完整映射或广泛 runtime specification 的缺口。
+
+普通 Oracle CR/LF 字面量还复现了 EF 格式化把 LF 改成 CRLF 的数据变化。现在使用显式 CHAR(1) 的 CHR 片段拼接，保持配置的普通客户端编码和 CHAR 比较语义；裸 CHR 拼接会改变固定字段的空格补齐比较，未采用。UTF8MB4/latin1 只读测试涵盖 CR/LF/CRLF、Unicode/引号/反斜杠、4000 字符查询值及 CHAR(20) 比较；latin1 无法编码的普通 Unicode 值仍明确失败。
+
+独立走查后补充的 4000 个 LF / 2000 组 CRLF 测试发现线性拼接触发服务端 600；direct Connector 对照证明同样的 CHAR 片段改成平衡分组即可成功。最终实现按相邻片段成对合并，避免线性表达式深度，并覆盖奇数片段保序。上述版本/包记录均指补充修复后的完整回归结果。
 
 ## 模块完成规则
 

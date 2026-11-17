@@ -19,7 +19,7 @@
 | ID | 功能 | 缺口 | 责任 |
 | --- | --- | --- | --- |
 | `MOD-01..03` | 模型约定、关系、生成/默认/计算值 | 更宽模型、生成值和 Schema 组合仍需覆盖 | Provider |
-| `MAP-01..07` | 整数/Boolean、Decimal/Float、文本、Binary/Guid、Temporal、facet/converter | Oracle national 字面量已用 ASCII UTF-16 escapes 修复，默认/HasData/converter 本地测试及 UTF8MB4/latin1 只读往返通过；精度、列容量/padding/LOB、Guid 字节序、时区及更宽转换组合仍需补齐 | Provider + Server/live；见 [national literals](efcore-10-national-literals-plan.md) |
+| `MAP-01..07` | 整数/Boolean、Decimal/Float、文本、Binary/Guid、Temporal、facet/converter | Oracle national 字面量及普通字面量 CR/LF 保真已修复，default/HasData/converter 本地测试和 UTF8MB4/latin1 只读往返通过；普通值 4000 字符、CHAR 比较及不可编码值拒绝已有证据。精度、真实列容量/padding/LOB、Guid 字节序、时区和更宽转换组合仍需补齐 | Provider + Server/live；见 [national](efcore-10-national-literals-plan.md) / [ordinary](efcore-10-ordinary-literals-plan.md) literals |
 | `QRY-01..11` | 查询翻译和物化 | 剩余 overload、复杂组合、官方 runtime specification、真实排序/聚合/集合结果仍需补齐 | Provider + Server/live |
 | `UPD-01..05` | INSERT/UPDATE/DELETE、生成值、并发、图保存 | 本地 SQL/double 已有，真实生成值、约束、冲突和提交结果未完成 | Provider + Server/live |
 | `TXN-01..03` | transaction、savepoint、原子性、取消恢复 | 本地恢复路径已有，真实 commit/rollback/savepoint 未完成 | Provider + Server/live；句柄由 Connector 提供 |

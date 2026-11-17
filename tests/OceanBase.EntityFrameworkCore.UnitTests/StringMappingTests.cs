@@ -42,11 +42,53 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
         [InlineData("CHAR(20)")]
         [InlineData("VARCHAR2(20)")]
         [InlineData("CLOB")]
-        public void Oracle_ordinary_literals_keep_their_character_set_contract(string declaration)
+        public void Oracle_ordinary_literals_without_newlines_keep_their_character_set_contract(string declaration)
         {
             using var context = CreateContext(OceanBaseCompatibilityMode.Oracle);
             var mapping = Source(context).FindMapping(typeof(string), declaration)!;
-            Assert.Equal("'海🌊\\''\n'", mapping.GenerateSqlLiteral("海🌊\\'\n"));
+            Assert.Equal("'海🌊\\'''", mapping.GenerateSqlLiteral("海🌊\\'"));
+        }
+
+        public static IEnumerable<object?[]> OrdinaryNewlineCases()
+        {
+            foreach (var declaration in new[] { "CHAR(20 CHAR)", "VARCHAR2(20 CHAR)", "CLOB" })
+            foreach (var (value, sql) in new (string?, string)[]
+            {
+                (null, "NULL"), ("", "''"), ("a'\\b", "'a''\\b'"),
+                ("\n", "CAST(CHR(10) AS CHAR(1))"),
+                ("a\rb", "(('a' || CAST(CHR(13) AS CHAR(1))) || 'b')"),
+                ("a\r\nb", "(('a' || CAST(CHR(13) AS CHAR(1))) || (CAST(CHR(10) AS CHAR(1)) || 'b'))"),
+                ("a'\\\nb", @"(('a''\' || CAST(CHR(10) AS CHAR(1))) || 'b')"),
+                ("海🌊\n", "('海🌊' || CAST(CHR(10) AS CHAR(1)))"),
+                ("\r\n\t\0", "((CAST(CHR(13) AS CHAR(1)) || CAST(CHR(10) AS CHAR(1))) || '\t\0')"),
+                ("\n\r\n", "((CAST(CHR(10) AS CHAR(1)) || CAST(CHR(13) AS CHAR(1))) || CAST(CHR(10) AS CHAR(1)))"),
+                ("a\nb\nc", "((('a' || CAST(CHR(10) AS CHAR(1))) || ('b' || CAST(CHR(10) AS CHAR(1)))) || 'c')")
+            }) yield return [declaration, value, sql];
+        }
+
+        [Theory]
+        [MemberData(nameof(OrdinaryNewlineCases))]
+        public void Oracle_ordinary_newline_literals_preserve_CHAR_operands(string declaration, string? value, string expected)
+        {
+            using var context = CreateContext(OceanBaseCompatibilityMode.Oracle);
+            var mapping = Source(context).FindMapping(typeof(string), declaration)!;
+            Assert.Equal(expected, mapping.GenerateSqlLiteral(value));
+        }
+
+        [Fact]
+        public void Oracle_ordinary_newline_literals_survive_clones_and_converters_without_changing_parameters()
+        {
+            using var context = CreateContext(OceanBaseCompatibilityMode.Oracle);
+            var mapping = Source(context).FindMapping(typeof(string), "VARCHAR2(2 CHAR)")!;
+            var converted = (RelationalTypeMapping)mapping.WithStoreTypeAndSize("VARCHAR2(4 CHAR)", 4)
+                .WithComposedConverter(new ValueConverter<Caption, string>(value => value.Value + "\n", value => new Caption(value)));
+            Assert.Equal("('海🌊' || CAST(CHR(10) AS CHAR(1)))", converted.GenerateSqlLiteral(new Caption("海🌊")));
+            using var command = new OceanBaseCommand();
+            var parameter = converted.CreateParameter(command, "text", new Caption("海🌊"));
+            Assert.Equal("海🌊\n", parameter.Value);
+            Assert.Equal(DbType.AnsiString, parameter.DbType);
+            Assert.Null(((OceanBaseParameter)parameter).OceanBaseDbType);
+            Assert.Throws<ArgumentException>(() => converted.GenerateSqlLiteral(new Caption("\ud800")));
         }
 
         [Theory]
