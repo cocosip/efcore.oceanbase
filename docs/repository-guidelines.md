@@ -130,7 +130,7 @@ secrets or open connections. Native execution requires the opt-in and
 `--filter FullyQualifiedName~LiveReadOnlyQueryTests`. Keep these filters distinct: default solution tests
 exclude this project, while an unfiltered explicit project run includes live cases. Native profile errors
 record only stage/type/server code/reader count, never arbitrary connector messages or inner exceptions.
-See `docs/efcore/efcore-10-progress.md` for commands and the current environment boundary.
+See `docs/efcore/efcore-10-release-checklist.md` for commands and the current environment boundary.
 
 Do not put credentials in source, tracked configuration, documentation, command output or test artifacts. Do not
 print secret values or full connection strings when configuring or diagnosing tests. Keep sensitive-data logging
@@ -147,9 +147,19 @@ Public behavior, unsupported features and server prerequisites are documented be
 that affects more than one EF Core branch must update the shared design document and each affected branch's
 compatibility notes.
 
-Use docs/efcore/efcore-10-feature-matrix.md as the EF10 acceptance inventory. Name affected feature IDs before
-development and update their criteria, tests and per-mode evidence together. Add missing features to the inventory
-before implementation. Inherited EF behavior, generated SQL and intercepted commands are not live server proof.
+Write all repository documentation in English. Follow the root AGENTS.md documentation-size rules
+for every EF Core version, including 8, 9, 10, 11 and future versions. Reuse each version's existing topics
+and keep shared contracts in one place; do not
+automatically create a new set of development documents for a version or a small feature. Separate feature
+scope, development gaps and release acceptance. The three existing EF10 primary inventories are:
+docs/efcore/efcore-10-feature-matrix.md for feature scope and code status,
+docs/efcore/efcore-10-gap-matrix.md for stable gap IDs, development states and closure conditions,
+and docs/efcore/efcore-10-release-checklist.md for test/live/package/release evidence.
+Update existing entries instead of creating a document for each small feature, test run or commit. Add a new
+document only for a distinct long-lived topic or an explicitly requested standalone record; do not recreate
+module plans, progress copies or session logs. Name affected feature/gap IDs before implementation and update
+code status separately from acceptance. Inherited EF behavior, generated SQL and intercepted commands are not
+live server proof; missing live evidence does not make an implemented feature undeveloped.
 
 Before merging a feature, review the generated SQL, parameter names, identifier quoting, null semantics,
 identity/key retrieval, transaction behavior and cancellation behavior for both compatibility modes.

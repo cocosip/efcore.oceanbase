@@ -1,11 +1,23 @@
-# OceanBase Entity Framework Core Provider 文档
+# OceanBase Entity Framework Core Provider documentation
 
-EF Core 10 只保留三份工作文档，按这个顺序使用：
+EF Core 10 maintains three primary inventories:
 
-1. [EF Core 10 功能矩阵](efcore/efcore-10-feature-matrix.md)：完整功能范围、MySQL/Oracle 状态和每行验收标准。
-2. [EF Core 10 功能缺失矩阵](efcore/efcore-10-gap-matrix.md)：缺口、责任归属、Connector/服务端边界和延期项。
-3. [EF Core 10 开发进度](efcore/efcore-10-progress.md)：当前提交、固定开发顺序、测试证据和下一步。
+1. [Feature inventory](efcore/efcore-10-feature-matrix.md): 55 feature groups, implementation status in
+   both modes, supported scope and source entry points.
+2. [Gap inventory](efcore/efcore-10-gap-matrix.md): development status, priority, ownership and closure
+   conditions for each gap; external dependencies, uncertain capabilities and deferrals are separate.
+3. [Release checklist](efcore/efcore-10-release-checklist.md): test, live database, package, platform,
+   review and release gates with their evidence.
 
-以后选择功能只看第 3 份；判断是否完成只看第 1 份；判断缺口由谁负责只看第 2 份。模块历史 plan 已合并进矩阵和 Git 提交，不再单独维护。
+Use the gap inventory to select development work, the feature inventory to assess implemented scope,
+and the release checklist to assess release readiness. Module plans, duplicate gap lists and progress
+logs have been merged and removed. Git retains implementation history; ignored `artifacts/` retains
+raw local test evidence.
 
-仓库规范见 [repository-guidelines.md](repository-guidelines.md)，Provider 总体架构见 [provider-architecture.md](provider-architecture.md)，EF 官方参考见 [official-references.md](efcore/official-references.md)。
+Write documentation in English and organize it by lasting topic across all EF Core versions. New
+independent topics are allowed; small features do not get their own documents. See the root
+[AGENTS.md](../AGENTS.md) for these rules.
+
+See the [repository guidelines](repository-guidelines.md),
+[provider architecture](provider-architecture.md) and
+[official EF references](efcore/official-references.md) for shared guidance.

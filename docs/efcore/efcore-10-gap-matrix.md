@@ -1,74 +1,131 @@
-# EF Core 10 功能缺失矩阵
+# EF Core 10 Feature Gap Matrix
 
-本文档只回答两个问题：还缺什么、由谁负责。Provider 功能和 Connector/服务端能力分开记录；Connector 能力由驱动项目实现，EF Provider 只使用其公共 ADO.NET API，不在这里重复实现驱动。
+Updated: 2026-11-17; corresponds to the [55 feature groups](efcore-10-feature-matrix.md). This matrix tracks only code capability gaps,
+explicitly unsupported features, dependencies, and capabilities to confirm. Pre-release tests, acceptance coverage, and review evidence belong only in the [release checklist](efcore-10-release-checklist.md).
 
-状态说明：`Provider` = EF 代码或 EF 测试仍需开发；`Driver evidence` = Connector 公共 API 需要补齐或验证；`Server/live` = 需要 OceanBase 环境、权限或版本证据；`Release` = 代码基本完成但还缺规格/包/版本审核；`Deferred` = 当前版本不做。
+## Statuses and counts
 
-## A. 当前必须先完成
+- The fixed statuses are `Not started` / `In development` / `Implemented` / `Blocked` / `Deferred` / `Unsupported` / `To confirm`.
+  Update the existing row during development. Once implemented, retain its ID, set it to Implemented, and record the implementation entry point/commit; do not create a separate feature document.
+- `P0/P1 completion` identifies feature development to prioritize. `Extension` identifies signatures/metadata capabilities confirmed to be unavailable; it does not automatically add a commitment for the current release.
+  `Unsupported` is an explicit rejection in the current contract; update the scope and approach before lifting it. `Deferred` preserves the original release decision for four groups.
+- Count G entries as **gap records**: one record may cover a set of overloads. This is not an API count and must not be subtracted from the 55 feature groups.
+  G-21/G-28 are related details of deferred groups, not two additional deferred feature groups. Count B/C/D separately; do not present them as Provider development backlog counts.
+- The current known unavailable/rejected capabilities are based on the code and package README. Supporting every BCL method is not an implicit Provider commitment.
+  Add newly discovered valid requirements to their owning row or give them a new stable ID. Rejection of invalid inputs or malformed models/catalogs is validation, not a missing feature.
 
-| ID | 缺失项 | 责任 | 当前事实 | 完成条件 |
-| --- | --- | --- | --- | --- |
-| `CFG-04`, `CON-05` | EF 连接对象、所有权、mode recheck、超时/取消后的租约恢复 | Provider + Driver evidence | [连接模块](efcore-10-connection-lifecycle-plan.md) 两模式同步/异步56项 native 定向通过：三类 ownership、嵌套租约、真实错误、partial reader、模式冲突、opened callback、timeout/cancel和显式重开；修复 supplied connection 隐藏凭据被回写丢失和健康 reader 提前关闭破坏会话 | 两 patch 全套各590/590；CON-02/03/04普通直连profile已关闭，SaveChanges 取消/事务原子性和更宽 facade/schema 独立保留；不增加 TLS/pool/proxy/OB20 前置条件 |
-| `DIA-01..02`, `SQL-01` | 错误保留、日志脱敏、完整标识符/服务 facade 生命周期 | Provider | 本地命令和异常测试已有；live correlation/DDL 未完成 | 两模式同步/异步测试、走查、真实错误分类和 release 记录 |
-| `TST-02` | 真实查询、写入、事务、Schema、标量 round-trip | Server/live + Provider | 两模式身份探针和现有只读查询 profile 各 72 条 EF reader 命令通过；national 字面量 UTF8MB4/Oracle latin1 同步/异步往返通过 | 已补两模式唯一表的 bounded text/default/seed/tracked DML/清理；更宽标量/查询、事务失败恢复和 Schema 生命周期仍待验收 |
-| `REL-01` | 普通直连支持环境、tenant、server、TLS/transport 记录 | Server/live | 同一 User Secrets 普通直连成功；两模式服务端均报告 4.4.2.2，当前库/Schema 与配置一致；TLS Disabled、OB20/压缩/Pooling 关闭 | 当前连接/只读和唯一文本表 DML/DDL 证据已有；更宽事务/Schema profile 仍需各自权限和部署证据；扩展部署不作为前置条件 |
-| `REL-02`, `TST-01` | 关系型 runtime specification 和最终 revision 审核 | Provider + Release | 已有模型/非关系/服务/写 SQL/并发 profile；16 个 skip 已解释 | 补剩余关系型 families，在最终 revision 重跑全套 package/consumer/review |
+Current counts: 46 G records (25 Not started, 19 Unsupported, 2 Deferred); also retained are 2 Implemented F records, 9 external dependency B records, 4 To confirm C records, and 4 Deferred D groups.
 
-## B. Provider 仍有开发或本地验收缺口
+## Provider gaps and current limitations
 
-| ID | 功能 | 缺口 | 责任 |
+| ID | Related feature | Missing capability | Status | Scope/priority | Mode / owner layer | Closure conditions | Owning source |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| G-01 | QRY-07 | DateTime.AddDays(double) | Not started | P0 priority completion | Both modes / Provider | Translate server-side predicates/composition; define contracts for parameters/constants/columns, NULL, positive/negative values, precision, and range; never silently discard ticks | [Temporal methods][temporal] |
+| G-02 | QRY-07 | DateTime.AddHours(double) | Not started | P0 priority completion | Both modes / Provider | Translate server-side predicates/composition; define contracts for parameters/constants/columns, NULL, positive/negative values, precision, and range; never silently discard ticks | [Temporal methods][temporal] |
+| G-03 | QRY-07 | DateTime.AddMinutes(double) | Not started | P1 completion | Both modes / Provider | Translate server-side predicates/composition; define contracts for parameters/constants/columns, NULL, positive/negative values, precision, and range; never silently discard ticks | [Temporal methods][temporal] |
+| G-04 | QRY-07 | DateTime.AddSeconds(double) | Not started | P1 completion | Both modes / Provider | Translate server-side predicates/composition; define contracts for parameters/constants/columns, NULL, positive/negative values, precision, and range; never silently discard ticks | [Temporal methods][temporal] |
+| G-05 | QRY-07 | DateTime.AddMilliseconds(double) | Not started | P1 completion | Both modes / Provider | Translate server-side predicates/composition; define contracts for parameters/constants/columns, NULL, positive/negative values, precision, and range; never silently discard ticks | [Temporal methods][temporal] |
+| G-06 | QRY-07 | DateTime.AddMicroseconds(double) | Not started | P1 completion | Both modes / Provider | Translate server-side predicates/composition; define contracts for parameters/constants/columns, NULL, positive/negative values, precision, and range; never silently discard ticks | [Temporal methods][temporal] |
+| G-07 | QRY-07 | DateTime.AddTicks(long) | Not started | P1 completion | Both modes / Provider | Translate server-side predicates/composition; define contracts for parameters/constants/columns, NULL, positive/negative values, precision, and range; never silently discard ticks | [Temporal methods][temporal] |
+| G-08 | QRY-07 | DateTime.Subtract(DateTime) returning TimeSpan | Not started | P1 completion | Both modes / Provider | Correctly map differences between dates, negative values/NULL, result ranges, and long durations | [Temporal methods][temporal] |
+| G-09 | QRY-07 | TimeOnly.Add(TimeSpan) | Not started | P1 completion | Both modes / Provider | Correct 24-hour wrapping, positive/negative durations, NULL, and precision | [Temporal methods][temporal] |
+| G-10 | QRY-07 | TimeOnly.AddHours(double) | Not started | P1 completion | Both modes / Provider | Define wrapping, fraction-to-tick precision, and dynamic parameter/column contracts | [Temporal methods][temporal] |
+| G-11 | QRY-07 | TimeOnly.AddMinutes(double) | Not started | P1 completion | Both modes / Provider | Same as G-10, with separate coverage of minute-unit boundaries | [Temporal methods][temporal] |
+| G-12 | QRY-07 | DateTimeOffset Add/Subtract/calendar method families | Not started | Extension | Both modes / Provider | Determine UTC/local offset semantics, result mapping, and supported ranges for each signature | [Temporal methods][temporal] |
+| G-13 | QRY-07 | DateOnly.FromDateTime/ToDateTime; TimeOnly.FromDateTime/FromTimeSpan/ToTimeSpan/IsBetween | Not started | Extension | Both modes / Provider | Provide a support table by signature; handle midnight/wrapping/NULL and the corresponding carriers correctly; do not imply full support by naming the whole family | [Temporal methods][temporal] |
+| G-14 | QRY-06 | char search overloads | Not started | Extension | Both modes / Provider | Confirm Contains/StartsWith/EndsWith and other methods by signature; define character encoding/NULL semantics | [Strings][strings] |
+| G-15 | QRY-06 | Explicit trim char/char[] overloads | Not started | Extension | Both modes / Provider | Translate Trim/TrimStart/TrimEnd by signature; space trimming is not a substitute | [Strings][strings] |
+| G-16 | QRY-06 | string.Remove overloads | Not started | Extension | Both modes / Provider | Define contracts for both range shapes, NULL/character counting, and boundaries | [Strings][strings] |
+| G-17 | QRY-06 | StringComparison, culture/Invariant overloads | Unsupported | Current scope limitation | Both modes / Provider + Server | Lift only with a per-signature approach that preserves comparison semantics; do not assume equivalence to DB collation | [Strings][strings] |
+| G-18 | QRY-06 | string.IndexOf/Replace/Insert/PadLeft/PadRight method families | Not started | Extension | Both modes / Provider | Split support and tests by method/signature; do not add a generic "full string support" checkbox | [Strings][strings] |
+| G-19 | QRY-05/03 | FirstOrDefault/SingleOrDefault/DefaultIfEmpty overloads with explicit default values | Not started | Extension | Both modes / Provider | Distinguish an existing source row whose value is NULL from an empty source; support parameterized default values and composition | [Queries][roots] |
+| G-20 | QRY-02/03 | Custom comparers for ordering, joins, membership, and set operations | Unsupported | Current scope limitation | Both modes / Provider + Server | Add support only for specific comparers that can be translated consistently with SQL comparison rules | [Queries][roots] |
+| G-21 | QRY-03/DEF-04 | Primitive collection translation using a single JSON parameter | Deferred | Related to D-04 | Both modes / Provider | Establish a separate JSON SQL/type contract; preserve existing Constant/MultipleParameters support | [Queries][roots] |
+| G-22 | QRY-03 | Oracle contextual CHAR/NCHAR collection roots | Unsupported | Current scope limitation | Oracle / Provider | Preserve fixed blank-padding comparison; do not use TO_CHAR/TO_NCHAR as a supposedly equivalent fixed-length replacement | [SQL][sqlgenerator] |
+| G-23 | QRY-03 | Oracle ordinary BLOB equality/membership (including mixed RAW/BLOB subqueries) | Unsupported | Current scope limitation | Oracle / Provider + Server | Define a LOB comparison approach and NULL compensation; preserve the supported bounded RAW path | [SQL][sqlgenerator] |
+| G-24 | QRY-03 | Oracle CLOB/NCLOB/BLOB set projections, MINUS ALL/INTERSECT ALL | Unsupported | Current scope limitation | Oracle / Server + Provider | Confirm native capabilities of the target OB version; do not silently convert to narrower scalars or truncate LOBs to pass | [SQL][sqlgenerator] |
+| G-25 | DEF-03/MAP-07 | Bulk server expressions with incompatible converters | Unsupported | Current scope limitation | Both modes / Provider | Provide equivalent dedicated translations for specific converters/expressions; do not promise algebraic equivalence for arbitrary conversions | [Bulk][bulk] |
+| G-26 | UPD-02/MOD-03 | Reading back MySQL default/computed generated primary keys | Unsupported | Current scope limitation | MySQL / Provider + Server | Safely locate the new row and preserve generated keys; do not guess results using a non-unique query | [Writes][writes] |
+| G-27 | UPD-02/05 | MySQL readback shapes with multiple generated keys | Unsupported | Current scope limitation | MySQL / Provider + Server | Uniquely locate/return multiple generated values and reject unsupported shapes before DML | [Writes][writes] |
+| G-28 | DEF-07/06 | TPC store-generated key allocation across tables | Deferred | Related to D-06 | Both modes / Provider | Ensure uniqueness across the entire hierarchy; independent table identities are not a substitute; assigned/client Guid support is implemented | [Inheritance generated values][annotations] |
+| G-29 | MOD-03/SCH-02/DEF-01 | Model trigger metadata adaptation | Not started | Extension | Both modes / Provider | Accept/preserve valid trigger metadata and define its write effects; trigger SQL still requires explicit authoring | [DDL][schema] |
+| G-30 | SCH-02/DEF-01 | Table/column comment DDL | Not started | Extension | Both modes / Provider | Consistent create/alter/diff/script behavior and correct escaping; ordinary scaffold reads do not establish DDL support | [Migrations][migrations] |
+| G-31 | SCH-02/DEF-01 | Database collation changes | Not started | Extension | Both modes / Provider + Server | Define valid DDL and its impact according to namespace ownership and the target OB version | [Migrations][migrations] |
+| G-32 | SCH-02/DEF-01 | Oracle column collation DDL | Unsupported | Current scope limitation | Oracle / Provider + Server | First confirm target version/type support; do not ignore the configuration | [DDL][schema] |
+| G-33 | SCH-02/DEF-01 | Filtered index DDL | Unsupported | Current scope limitation | Both modes / Provider + Server | Provide an equivalent approach supported by the target OB version; Filter is currently explicitly rejected | [DDL][schema] |
+| G-34 | DEF-01 | Automatic alteration of identity/computed columns | Not started | Extension | Both modes / Provider | Provide a safe rebuild/migration approach that prevents data loss; do not silently discard changes | [Migrations][migrations] |
+| G-35 | DEF-01 | Table migration across namespaces | Unsupported | Current scope limitation | Both modes / Provider | Establish explicit permission/ownership and data migration contracts; ordinary rename is implemented | [Migrations][migrations] |
+| G-36 | DEF-02 | Reverse engineering of expression/prefix and other non-ordinary indexes | Not started | Extension | Both modes / Provider + Connector metadata | Public GetSchema must supply enough facts for the generated model to preserve semantics; do not guess missing facts | [Reverse engineering][scaffold] |
+| G-37 | DEF-02 | Reverse engineering of known ON UPDATE column behavior | Not started | Extension | Both modes / Provider | Carry behavior metadata into a model that writes correctly; HAS_ON_UPDATE=true is currently explicitly rejected | [Reverse engineering][scaffold] |
+| G-38 | DEF-02 | Reverse engineering of foreign key ON UPDATE actions | Unsupported | Current scope limitation | Both modes / Provider + Server | Establish a contract expressible by the EF model and target OB version; currently only NO ACTION/RESTRICT are accepted | [Reverse engineering][scaffold] |
+| G-39 | QRY-07 | Math/MathF.Acosh | Not started | Extension | Both modes / Provider | Define numerical domains/NULL/precision for both signatures; do not infer Acosh support from Asinh/Atanh | [Math methods][math] |
+| G-40 | TXN-01/DEF-09 | Provider guarantees for ambient/distributed transactions | Unsupported | Current scope limitation | Both modes / Provider + Connector | Establish public driver enlist/XA capabilities together with EF orchestration; native transactions do not imply distributed support | [Transactions][transactions] |
+| G-41 | QRY-07 | DateTimeOffset.Now | Unsupported | Current scope limitation | Both modes / Provider | First define the contract between CLR local offset and the database clock/session offset; existing UtcNow support does not establish local Now support | [Temporal methods][temporal] |
+| G-42 | QRY-07/MAP-05 | MySQL DateTimeOffset.DateTime/Ticks/Offset/TotalOffsetMinutes | Unsupported | Current storage contract limitation | MySQL / Provider + Server | Current DATETIME storage uses UTC and cannot recover the original offset; require a separate lossless storage approach, without changing the existing UTC contract to claim support | [Temporal mapping][temporalmap] |
+| G-43 | MOD-03/UPD-03/SCH-02 | Database-generated rowversion/IsRowVersion columns | Unsupported | Current scope limitation | Both modes / Provider + Server | Define an automatic version-column mechanism available on the target OB version and its readback; ordinary manual concurrency tokens are implemented | [DDL][schema] |
+| G-44 | MOD-01/SCH-02/DEF-01 | ON DELETE SET DEFAULT foreign key DDL | Unsupported | Current scope limitation | Both modes / Provider + Server | Lift only when supported by the target OB version and equivalent to EF delete behavior; do not silently downgrade to RESTRICT | [DDL][schema] |
+| G-45 | MOD-03/SCH-02/DEF-01 | Oracle stored computed columns | Unsupported | Current scope limitation | Oracle / Provider + Server | Distinguish supported virtual computed columns from physically stored computed columns; first confirm target OB capabilities | [Migrations][migrations] |
+| G-46 | QRY-04 | Oracle CLOB/NCLOB aggregate Min/Max | Unsupported | Current scope limitation | Oracle / Provider + Server | Establish lossless LOB comparison/return-type contracts; preserve bounded text/temporal extrema | [Aggregates][aggregates] |
+
+## Implemented entries
+
+Retain only stable gap IDs and closure results; do not append development logs.
+
+| ID | Related feature | Capability | Status | Implementation location/commit | Owner | Closure result | Code |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| F-01 | QRY-07 | DateTime.Add(TimeSpan) | Implemented | `f119f51` | Both modes / Provider | Production translator/renderer supports predicates, columns/parameters/constants/NULL, and result precision promotion; record evidence only in the release checklist | [Temporal methods][temporal] |
+| F-02 | QRY-07 | DateTime.Subtract(TimeSpan) | Implemented | `f119f51` | Both modes / Provider | Same as F-01; negative durations, fractional DATE results, and exactly one execution of the inverse converter | [Temporal methods][temporal] |
+
+## Connector / server dependencies
+
+The following historical failures have direct Connector/SQL comparisons; recheck the current pinned dependency identity against the release checklist.
+The Provider must not bypass them by changing the wire protocol, narrowing mappings, silently converting to text, or swallowing errors. Explain driver changes first and wait for user confirmation.
+
+| ID | Related feature | Mode | Status | Issue and conditions for resolution | Owner |
+| --- | --- | --- | --- | --- | --- |
+| B-01 | MAP-02 | Oracle | Blocked | Extreme Double parameters return 1426, and tested tiny values become zero; default/explicit BINARY_DOUBLE, Prepare, and Precision17 did not resolve this. The same D literals retain fidelity; locate/fix the issue in the owning layer, then rerun with the same parameters | Connector/Server; root cause undetermined |
+| B-02 | QRY-04 | MySQL | Blocked | SUM/AVG with default DECIMAL(65,28), including zero compensation for empty sets, are rejected at public reader metadata; require correct result transport preserving the default precision | Connector/Server result boundary |
+| B-03 | QRY-07 | MySQL | Blocked | Default Decimal scalar LEAST/GREATEST encounter the same metadata rejection; success with explicitly narrower precision does not close the default profile | Connector/Server result boundary |
+| B-04 | SQL-02/QRY-10 | MySQL | Blocked | Repeated positions of caller-owned native parameters require a public clone/ownership contract; currently no cloning occurs and these are explicitly rejected; independent parameters work | Connector public API + EF leases |
+| B-05 | MAP-03 | Oracle | Blocked | NCLOB CREATE on target 4.4.2.2 returns 902 through both EF and direct execution; require a supported version/declaration, without substituting CLOB storage to claim completion | Server |
+| B-06 | MAP-03/04 | MySQL | Blocked | LOB DEFAULT returns 1067 on the target; bounded VARBINARY and other existing supported types remain supported; require target server capabilities or an explicit limitation | Server |
+| B-07 | SQL-01 | Oracle | Blocked | Identifiers containing embedded double quotes return 600 for EF/direct CREATE or SELECT; backtick-only/ordinary name controls succeed; do not change correct escaping to conceal server behavior | Server; recheck by version |
+| B-08 | QRY-03 | MySQL | Blocked | Collection roots associated with bounded/fixed text properties produce collation error 1267; require an equivalent collation approach, without truncating through a narrower CAST or changing comparison rules | Provider SQL + Server |
+| B-09 | SQL-02/DEF-06 | MySQL | Unsupported | Current Provider command adaptation supports only Input; repeated streams also cannot be safely reused; Output/InputOutput/ReturnValue require public driver contracts and explicit Provider integration | Provider + Connector |
+
+## Capabilities to confirm
+
+To confirm does not mean unimplemented. After investigation, move the item to G (a code gap), the release checklist (only evidence is missing), or Implemented; do not leave an ambiguous status indefinitely instead of investigating.
+
+| ID | Related feature | Status | Capability to confirm and next step |
 | --- | --- | --- | --- |
-| `MOD-01..03` | 模型约定、关系、生成/默认/计算值 | 更宽模型、生成值和 Schema 组合仍需覆盖 | Provider |
-| `MAP-01..07` | 整数/Boolean、Decimal/Float、文本、Binary/Guid、Temporal、facet/converter | Oracle national 字面量及普通字面量 CR/LF 保真已修复，default/HasData/converter 本地测试和 UTF8MB4/latin1 只读往返通过；普通值 4000 字符、CHAR 比较及不可编码值拒绝已有证据。真实 bounded text 参数写入、NULL/空串、padding/converter/default/seed 已验收，MySQL DEFAULT 字面量与生成值 reader 消费已修复；已补 AL32UTF8 BYTE 边界/12899 与 ordinary CLOB/MySQL LONGTEXT 大值/converter；NCLOB DDL 在目标 4.4.2.2 返回 902（direct 对照一致），不归为驱动/Provider 缺陷。数值模块已补两模式整数八类型端点/enum、Boolean 九组逻辑、默认 Decimal 极值/scale-28、显式精度/拒绝和 Single 端点；MySQL Double 端点通过。Oracle Single 字面量 1426 已修复；Double 参数极值 1426、微小值变零在 direct Connector 同样复现，完整 Double 绑定仍未验收。新增 [声明/精度回归](efcore-10-oracle-double-declarations-plan.md) 已核实默认/显式 BINARY_DOUBLE 的目录与实际存储：D 字面量可保真，相同参数极值失败/微小值丢失；Precision17 无改善。NUMBER(18,6) 正常按 scale 舍入，decimal converter 仅接受受限精确域，不能解决完整 Double 范围。更宽精度、full capacity/national LOB/其他 charset、时区和转换组合仍需补齐；Binary/Guid 模块已补最大 RAW/VARBINARY、padding、大 BLOB、mixed-endian Guid 服务端字节、default/seed/converter。Oracle 空 BLOB 原有保守拒绝已修复为参数保真及 EMPTY_BLOB() 字面量，RAW 空值仍拒绝；MySQL LOB DEFAULT 在目标上返回 1067。Temporal 模块已补五 CLR 类型/default/seed/generated/converter/update、精度拒绝、fractional comparands/CASE/原值冲突、Oracle exact wrapper 拒绝与 numeric-offset 会话验收；MySQL TIME 上界修正为精确的 ±838:59:59，避免原先额外小数导致的丢值。更宽日期运算、命名时区/DST、其他声明和部署仍开放；见 [Temporal storage](efcore-10-temporal-storage-plan.md) | Provider + Connector/server boundary；见 [binary/Guid storage](efcore-10-binary-guid-storage-plan.md) / [numeric storage](efcore-10-numeric-storage-plan.md) / [national](efcore-10-national-literals-plan.md) / [ordinary](efcore-10-ordinary-literals-plan.md) literals |
-| `QRY-01`, `QRY-03`, `QRY-07`, `QRY-10..11` | 查询翻译和物化 | `QRY-02/05/06/08/09` 已关闭声明的普通 profile；QRY-06 的两模式64个字符串用例、原生 collation/定长/LOB/转换边界及后缀修复见 [模块记录](efcore-10-string-query-plan.md)。NCLOB 和更宽 charset/collation/容量/版本仍属于 MAP 与环境边界。新增 [组合实库验收](efcore-10-relational-query-plan.md) 覆盖 Join/相关分页与集合 shaping、Any/All、NULL membership、20 类 typed root 和四种集合运算；Oracle UNION 公共 carrier/charset、TO_BLOB 及窄 CAST 截断已修复。普通 BLOB 比较/IN（含 mixed RAW item/BLOB subquery）执行前明确拒绝，RAW 有正向证据；Oracle contextual CHAR/NCHAR roots 暂明确拒绝，避免改变定长空格比较。MySQL 与 bounded/fixed 属性关联的 text root 在当前环境返回 1267，仍需独立 collation 方案及回归；`QRY-03` 不因此全量完成。更宽 overload/转换、raw/继承/lazy 组合、官方 runtime families 和其他部署仍待验收 | Provider + Server/live |
-| `QRY-04`（MySQL） | 默认 Decimal 聚合结果 | [聚合实库模块](efcore-10-aggregate-query-plan.md) 两 patch 全套 LiveTests 各 267/267（257 live、10 offline），Oracle QRY-04 已关闭。可空 Single 转换器的内部 marker 类型校验已有 RED/GREEN 修复。MySQL 默认 DECIMAL(65,28) 的 SUM/AVG 在 Connector 0.3.0 公开 reader 中被 metadata 校验拒绝，SUM 的空集/全 NULL 补零结果也受影响；相同 SQL 的文本诊断投影能读取正确服务端值，显式 (18,4) 仅证明该声明域。默认 mapping 未缩窄、未改为文本传输；内部根因未归责。独立走查的一项复合键 fixture 次要缺口见模块记录 | Connector/server result boundary + Provider regression |
-| `UPD-01..05` | INSERT/UPDATE/DELETE、生成值、并发、图保存 | 两模式 bounded text 的 tracked insert/update/delete、默认值回读已通过；MySQL 回读完整消费后 commit 成功，Oracle 显式开启 Connector PrepareExecute。更宽生成值/约束/冲突/图保存未完成 | Provider + Server/live |
-| `TXN-01..03` | transaction、savepoint、原子性、取消恢复 | 本地恢复路径已有，MySQL 文本默认值回读的 owned commit 已通过；更宽 commit、rollback/savepoint/失败恢复仍待验收 | Provider + Server/live；句柄由 Connector 提供 |
-| `SCH-01..03` | EnsureCreated/Deleted、权限、命名空间、DDL 清理 | 唯一自建表的 CreateTables、HasData 和精确清理已有 native 证据；更宽权限/namespace/锁/删除仍未完成 | Provider + Server/live |
+| C-01 | DEF-08 | To confirm | NativeAOT/precompiled queries: separately check EF10 generation/runtime restrictions and Provider entry points; do not infer support from ordinary compiled model results |
+| C-02 | MAP-05/QRY-07 | To confirm | Named timezones/DST/non-Gregorian calendars and TIMESTAMP WITH LOCAL TIME ZONE: first check mapping/semantic contracts; numeric offset evidence is insufficient to determine completeness |
+| C-03 | DEF-02 | To confirm | Scaffold fidelity for Oracle identity modes/options: check GetSchema facts and the generated model to determine whether metadata is missing or only live database evidence is absent |
+| C-04 | DEF-08/QRY-08 | To confirm | Check whether change-tracking proxies, lazy proxies with compiled models, and broader inheritance combinations have dedicated rejections or missing adaptations; nested lazy loading within ordinary streaming roots is explicitly excluded by the single active reader, so do not infer implementation gaps from missing tests |
 
-普通图查询/命名过滤器的 [实库记录](efcore-10-graph-query-plan.md) 新增56 graph 和10 ownership 用例，
-两 patch 全套各533/533（521 live、12 offline），关闭 QRY-08/09 的声明范围。
-独立走查0 Critical/0 Important/2 Minor：尚未逐条比较后续 split command 的 SQL/binding，
-optional FK 在关闭 Tenant 时的第二键敏感性尚未独立证明。两项均为测试增强缺口，
-不是已证实的 Provider 缺陷；更宽图/失败恢复/隔离/继承/lazy/AOT 不随此关闭。
+## Four groups explicitly deferred for the current release
 
-Numeric QRY-07 acceptance is in progress: [module record](efcore-10-numeric-query-plan.md).
-The tested default MySQL Decimal scalar LEAST/GREATEST result is also rejected by public
-Connector readers. Explicit(18,6) only establishes that domain; no default precision
-narrowing or text-result workaround is used. This scalar boundary does not contradict
-the separately accepted aggregate MIN/MAX profile. The implemented temporal profile has native member/calendar/duration/offset/clock
-coverage and evidence-driven fixes; see [module record](efcore-10-temporal-query-plan.md).
-Named zones/DST, non-Gregorian sessions, additional methods, wider converter and
-coercion combinations remain outside that accepted profile; QRY-07 remains open.
+| ID | Related feature group | Status | Unavailable functionality | Conditions for lifting deferral |
+| --- | --- | --- | --- | --- |
+| D-04 | DEF-04 | Deferred | Mapping/query/update for JSON, mapped primitive collections/arrays, and complex/JSON-owned types | Separate native type/SQL contracts and implementation; captured collection IN parameters are already supported |
+| D-05 | DEF-05 | Deferred | Provider integration for Spatial, XML, native enum, OBJECT, LOB locators, and REF CURSOR | Define Connector public capabilities and OceanBase type contracts; ordinary enum/CLOB/BLOB scalars are outside this group |
+| D-06 | DEF-06 | Deferred | Stored procedure INSERT/UPDATE/DELETE mapping, sequence/HiLo, and TPC allocation strategies | Design parameter/return-value/key strategies; preserve current rejecting entry points |
+| D-10 | DEF-10 | Deferred | Full-text/vector/search functions and advanced batching optimizations | Target server versions, separate feature implementations, and performance goals |
 
-## C. Connector 责任，不在 EF Provider 内实现
+Do not remove data precision/NULL/ownership validation or intentional rejections while completing features. Update feature group, gap, and acceptance statuses separately.
 
-| 能力 | EF Provider 的边界 | 需要的 Connector 证据/能力 |
-| --- | --- | --- |
-| 普通直连协议、认证及错误保留 | Provider 自建连接设置 ExpectedMode；supplied connection 只验证配置/检测模式、不改写可能已隐藏凭据的公开连接字符串；调用 `DbConnection.Open/OpenAsync` | 使用 Connector 0.3.0 已有公共 API，不在 EF 内新增协议 |
-| Proxy/ODP、多节点/OCP/TNS、TLS、OB20/trace、压缩 | 以 Connector 对应 revision 的支持与验收范围为上限；不作为 EF10 普通直连前置任务 | 真实扩展部署暂不开发或未验收；compressed OB20/proxy reroute 明确排除；详见进度文档中的 Connector 能力边界 |
-| 连接池、物理连接关闭、wire timeout/cancellation | Provider 负责 EF lease、调用方/Provider ownership 和取消 token 传递 | Connector 证明物理 close/reuse、wire cancel、timeout 和 pool cleanup |
-| Oracle Double 参数范围/无损绑定 | Provider 仍绑定公开 Double carrier，不在 EF 内改协议或静默换成文本；MAP-02 保持未完成 | 4.4.2.2 + Connector 0.3.0 direct/显式 Prepare 对照：极值 1426，测试微小值读写变零；需继续区分 codec/服务端行为，不能宣称完整 Double 支持 |
-| MySQL 默认 Decimal SUM/AVG 结果 | Provider 保留默认精度与 native aggregate，不静默缩窄声明或修改协议 | 4.4.2.2 + Connector 0.3.0：DECIMAL(65,28) 的 SUM/AVG 在 GetValue/GetProviderSpecificValue/GetFieldValue<OceanBaseDecimal> 均拒绝 metadata；MIN/MAX、显式 (18,4) 和文本诊断对照通过。QRY-04/MySQL 保持未完成 |
-| MySQL 默认 Decimal scalar LEAST/GREATEST | 保留默认精度和 native scalar extrema；QRY-07 未关闭 | 4.4.2.2 + Connector 0.3.0 的公开 reader 拒绝结果 metadata；显式 (18,6) 仅证明该声明域，内部根因尚未归责 |
-| 参数 codec、DbType、OceanBaseDecimal、时间/interval、LOB reader | Provider 选择 EF mapping、参数 metadata 和 reader 适配 | Connector 提供公共 parameter/reader 类型和无损 codec |
-| 原生 transaction 句柄 | Provider 负责 EF transaction/savepoint 编排 | Connector 负责 `DbTransaction` 的 commit/rollback/dispose 行为 |
-| 服务端 SQL、类型、权限、DDL、生成值 | Provider 生成/绑定 SQL 并记录预期；不模拟服务端 | OceanBase 版本/模式/权限/执行结果的真实矩阵 |
-
-先前 packet closure 在用户修复服务器后已解除，不是已证实的 Connector 缺陷。后续仍按同参数对比归责：direct 成功而 EF 失败才查 Provider 差异；两者都失败先保留分类证据，不在 EF 内绕过驱动。
-
-连接不可用只保留依赖 live 的验收缺口；按开发队列继续本地实现和测试。Connector 未支持、排除或冻结的能力不转化为 EF 缺陷，也不成为所有 Provider 开发的停止条件。
-
-## D. 明确延期
-
-| ID | 功能 | 原因/边界 |
-| --- | --- | --- |
-| `DEF-04` | JSON、primitive collections/arrays、complex types | 当前版本不做 mapping/query/update profile |
-| `DEF-05` | Spatial、XML、native enum、OBJECT、LOB locator、REF CURSOR | 需要独立 Connector capability 和 native mapping 设计 |
-| `DEF-06` | stored-procedure modification mappings、sequence/HiLo | 参数/生成值契约未纳入当前 release |
-| `DEF-10` | full-text/vector/search、advanced batching | 需要服务端版本契约和独立 benchmark |
-| `DEF-01/02/03/07/08/09` | migrations/tooling、bulk、inheritance、split/compiled/lazy、seeding/retry | 有部分本地实现，native/组合/规格证据未完，不得宣传完整支持 |
-
-## E. 缺失项关闭规则
-
-每关闭一项，必须在 [功能矩阵](efcore-10-feature-matrix.md) 更新 MySQL/Oracle 状态，在 [开发进度](efcore-10-progress.md) 写提交和验证，在本矩阵删除或改写缺口；Connector 责任只能记录公共 API/证据，不把驱动代码混入 Provider commit。
+[writes]: ../../src/OceanBase.EntityFrameworkCore/Update/OceanBaseModificationCommandBatch.cs
+[schema]: ../../src/OceanBase.EntityFrameworkCore/Storage/OceanBaseSchemaSqlGenerator.cs
+[sqlgenerator]: ../../src/OceanBase.EntityFrameworkCore/Query/OceanBaseQuerySqlGenerator.cs
+[roots]: ../../src/OceanBase.EntityFrameworkCore/Query/OceanBaseQueryableMethodTranslatingExpressionVisitorFactory.cs
+[strings]: ../../src/OceanBase.EntityFrameworkCore/Query/OceanBaseStringTranslator.cs
+[temporal]: ../../src/OceanBase.EntityFrameworkCore/Query/OceanBaseTemporalMethodTranslator.cs
+[temporalmap]: ../../src/OceanBase.EntityFrameworkCore/Storage/OceanBaseTemporalTypeMapping.cs
+[transactions]: ../../src/OceanBase.EntityFrameworkCore/Storage/OceanBaseRelationalTransactionFactory.cs
+[migrations]: ../../src/OceanBase.EntityFrameworkCore/Migrations/OceanBaseMigrationsSqlGenerator.cs
+[scaffold]: ../../src/OceanBase.EntityFrameworkCore/Design/OceanBaseDatabaseModelFactory.cs
+[bulk]: ../../src/OceanBase.EntityFrameworkCore/Query/OceanBaseBulkDmlVisitor.cs
+[annotations]: ../../src/OceanBase.EntityFrameworkCore/Metadata/OceanBaseRelationalAnnotationProvider.cs
+[math]: ../../src/OceanBase.EntityFrameworkCore/Query/OceanBaseMathTranslator.cs
+[aggregates]: ../../src/OceanBase.EntityFrameworkCore/Query/OceanBaseAggregateMethodTranslator.cs
