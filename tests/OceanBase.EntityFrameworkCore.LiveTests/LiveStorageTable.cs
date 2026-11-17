@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Data.Common;
 using System.Linq;
 using System.Threading;
@@ -17,7 +18,7 @@ internal static class LiveStorageTable
 {
     internal static async Task WithTable<TContext>(OceanBaseCompatibilityMode mode, bool async, bool noBackslashEscapes,
         Func<DbContextOptions<TContext>, string, TContext> createContext,
-        Func<TContext, Commands, Action<string>, Task> run) where TContext : DbContext
+        Func<TContext, Commands, Action<string>, Task> run, string[]? tableSuffixes = null) where TContext : DbContext
     {
         if (Environment.GetEnvironmentVariable("OCEANBASE_RUN_LIVE_TESTS") != "1"
             || Environment.GetEnvironmentVariable("OCEANBASE_RUN_LIVE_SCHEMA_TESTS") != "1")
@@ -29,6 +30,7 @@ internal static class LiveStorageTable
         if (mode == OceanBaseCompatibilityMode.Oracle)
             configured = new OceanBaseConnectionStringBuilder(configured) { UseOraclePrepareExecute = true }.ConnectionString;
         var table = "EFT_" + Guid.NewGuid().ToString("N")[..24];
+        var tables = (tableSuffixes ?? [""]).Select(suffix => table + suffix).ToArray();
         var observer = new Commands();
         var stage = "scope";
         Exception? failure = null;
@@ -52,12 +54,14 @@ internal static class LiveStorageTable
                 if (async) await context.Database.ExecuteSqlRawAsync(sqlMode);
                 else context.Database.ExecuteSqlRaw(sqlMode);
             }
-            observer.CreateSql = "CREATE TABLE " + context.GetService<ISqlGenerationHelper>().DelimitIdentifier(table);
+            var sqlHelper = context.GetService<ISqlGenerationHelper>();
+            observer.CreateStatements = tables.ToDictionary(name => name,
+                name => "CREATE TABLE " + sqlHelper.DelimitIdentifier(name), StringComparer.Ordinal);
             stage = "CreateTables/defaults/HasData";
             var creator = context.GetService<IRelationalDatabaseCreator>();
             if (async) await creator.CreateTablesAsync();
             else creator.CreateTables();
-            Assert.True(observer.OwnsTable);
+            Assert.Equal(observer.CreateStatements.Count, observer.CreatedTables.Count);
 
             await run(context, observer, value => stage = value);
         }
@@ -68,27 +72,34 @@ internal static class LiveStorageTable
         }
         finally
         {
-            if (observer.OwnsTable)
+            var cleanupFailures = new List<Exception>();
+            // DDL creates alphabetically, then adds FKs; callers declare principals before dependents.
+            foreach (var createdTable in tables.Reverse().Where(observer.CreatedTables.Contains))
             {
                 try
                 {
                     await using var cleanup = new DbContext(new DbContextOptionsBuilder().UseOceanBase(configured, mode).Options);
-                    var identifier = cleanup.GetService<ISqlGenerationHelper>().DelimitIdentifier(table);
+                    if (async) await cleanup.Database.OpenConnectionAsync();
+                    else cleanup.Database.OpenConnection();
+                    var identifier = cleanup.GetService<ISqlGenerationHelper>().DelimitIdentifier(createdTable);
                     var dropSql = "DROP TABLE " + identifier;
                     if (async) await cleanup.Database.ExecuteSqlRawAsync(dropSql);
                     else cleanup.Database.ExecuteSqlRaw(dropSql);
                     var existsSql = mode == OceanBaseCompatibilityMode.MySql
                         ? "SELECT table_name AS `Value` FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = {0}"
                         : "SELECT TABLE_NAME AS \"Value\" FROM USER_TABLES WHERE TABLE_NAME = {0}";
-                    var remaining = cleanup.Database.SqlQueryRaw<string>(existsSql, table);
+                    var remaining = cleanup.Database.SqlQueryRaw<string>(existsSql, createdTable);
                     Assert.Empty(async ? await remaining.ToListAsync() : remaining.ToList());
                 }
                 catch (Exception error)
                 {
-                    var cleanupFailure = SafeFailure(mode, table, "cleanup; inspect owned table", error, configured);
-                    if (failure is null) throw cleanupFailure;
-                    throw new AggregateException(failure, cleanupFailure);
+                    cleanupFailures.Add(SafeFailure(mode, createdTable, "cleanup; inspect owned table", error, configured));
                 }
+            }
+            if (cleanupFailures.Count != 0)
+            {
+                if (failure is not null) cleanupFailures.Insert(0, failure);
+                throw new AggregateException(cleanupFailures);
             }
         }
     }
@@ -114,8 +125,8 @@ internal static class LiveStorageTable
 
     internal sealed class Commands : DbCommandInterceptor
     {
-        public string CreateSql { get; set; } = "";
-        public bool OwnsTable { get; private set; }
+        public Dictionary<string, string> CreateStatements { get; set; } = new(StringComparer.Ordinal);
+        public List<string> CreatedTables { get; } = [];
         public int ParameterWrites { get; private set; }
 
         public override InterceptionResult<int> NonQueryExecuting(DbCommand command, CommandEventData eventData, InterceptionResult<int> result)
@@ -128,7 +139,9 @@ internal static class LiveStorageTable
             => ValueTask.FromResult(NonQueryExecuting(command, eventData, result));
         public override int NonQueryExecuted(DbCommand command, CommandExecutedEventData eventData, int result)
         {
-            if (command.CommandText.StartsWith(CreateSql + " (", StringComparison.Ordinal)) OwnsTable = true;
+            foreach (var (table, sql) in CreateStatements)
+                if (command.CommandText.StartsWith(sql + " (", StringComparison.Ordinal) && !CreatedTables.Contains(table))
+                    CreatedTables.Add(table);
             return result;
         }
         public override ValueTask<int> NonQueryExecutedAsync(DbCommand command, CommandExecutedEventData eventData,

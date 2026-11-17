@@ -2,19 +2,21 @@
 
 本文档是开发队列和当前检查点。完整范围看 [功能矩阵](efcore-10-feature-matrix.md)，责任归属看 [功能缺失矩阵](efcore-10-gap-matrix.md)。
 
+只看代码是否实现时，请看 [功能实现缺口](efcore-10-implementation-gaps.md)。下列 Required 状态含验收要求，不能作为“尚未开发的功能数量”。
+
 ## 当前检查点：2026-11-17
 
 | 项目 | 结果 |
 | --- | --- |
-| 分支 / 提交 | `efcore/10.0`；Temporal query 模块，基线 `8791a87` |
-| 工作区 | Provider、测试和文档一并本地提交；凭据仅从 User Secrets 读取；不推送/发布 |
-| 最新模块 | 两模式 temporal query：Ticks/纳秒/Seconds/Double totals、Oracle 本地偏移与 UTC 精度、DATE metadata 和五类型 nullable converter；见 [模块记录](efcore-10-temporal-query-plan.md) |
-| Required 状态 | MySQL：12 Done / 41 In progress；Oracle：13 Done / 40 In progress。QRY-07 已实现的数值/日期 profile 已补 native；默认 MySQL Decimal scalar 和更宽组合使整项仍开放；每模式总数53 |
-| Local Release | EF10.0.0、隔离 EF10.0.14 各6679 pass /16 existing specification skip；走查后仅修正 synthetic fixture，两 patch 定向各16/16 |
-| Package | `10.0.0-temporal-query-r1-20261117` 内容/依赖及两模式两 patch 消费者通过；源/包/消费者 DLL、README identity audit 通过；未发布 |
-| Native | 普通直连4.4.2.2；两 patch 串行全套各467/467（457 live、10 offline），含72 temporal；root 最新 endpoint/Kind 定向8/8，compat 全套包含最新断言；两模式诊断表最终残留0 |
-| Review | 独立走查0 Critical/0 Important/1 Minor：既有 synthetic DateTimeOffset fixture 分量错误，已 CLR oracle RED4/GREEN 修正；两 patch 定向16/16。凭据/LF/空白/snapshot/包 identity 审计通过；QRY-07 仍未关闭 |
-
+| 分支 / 提交 | `efcore/10.0`；Graph query 模块，基线 `c2c9b65`，本模块本地提交 |
+| 工作区 | 本轮补齐已有图查询的 native 证据并修正多表测试夹具；Provider 生产 C# 未改；凭据仅从 User Secrets 读取；不推送/发布 |
+| 最新模块 | Include/ThenInclude、单/拆分查询、三种跟踪/身份解析、owned/shadow、多对多及 EF10 命名过滤器；见 [模块记录](efcore-10-graph-query-plan.md) |
+| Required 状态 | MySQL：14 Done / 39 In progress；Oracle：15 Done / 38 In progress；每模式53。QRY-08/09 关闭声明的普通关系图 profile；QRY-07、raw、写入/事务/Schema 等保留各自缺口。数量不是未实现功能数 |
+| Local Release | EF10.0.0、隔离 EF10.0.14 各6679 pass /16 existing specification skip；root 使用未改生产/本地测试的已有 Release binaries，compat 从隔离源码构建 |
+| Package | `10.0.0-graph-query-r1-20261117` 内容/依赖及两模式两 patch 消费者通过；源/包/消费者 DLL、README identity audit 通过；未发布 |
+| Native | 普通直连4.4.2.2；两 patch 串行全套各533/533（521 live、12 offline），新增56 graph、8 native ownership、2 offline ownership；root 先行定向66/66；最终两模式诊断表残留0 |
+| Review | 独立只读走查0 Critical/0 Important/2 Minor；逐命令 SQL/binding 与关闭 Tenant 后 optional FK 的敏感性增强留档，本轮不扩大验收宣称；凭据/LF/空白/snapshot/包 identity 审计通过 |
+| 暂停点 | 用户要求本模块收尾后下班暂停；本地提交后停止，不启动下一模块。完整 EF10 目标尚未完成 |
 
 ## 固定开发顺序
 
@@ -43,6 +45,7 @@
 
 | 日期 | 模块 | 提交 / 证据 | 未关闭边界 |
 | --- | --- | --- | --- |
+| 2026-11-17 | Graph query / EF10 named filters | 基线 `c2c9b65` 后本模块；两 patch 本地各6679 pass/16 skip；全套 LiveTests 各533/533；r1包/消费者通过；独立走查0阻塞/2 Minor；见 [模块记录](efcore-10-graph-query-plan.md) | QRY-08/09 声明普通 profile 关闭；现有 Provider 查询 C# 未改。多表夹具按声明依赖逆序清理 CREATE-confirmed 表，partial CREATE 和反向 CREATE 顺序已回归。两个测试增强点及更宽图/继承/lazy/AOT/隔离/失败恢复范围保持单独记录；最终残留0 |
 | 2026-11-17 | Temporal query | 基线 `8791a87` 后本模块；两 patch 本地各6679 pass/16 skip；两 patch live各467/467，root 后补 endpoint/Kind8/8；r1包/消费者通过；独立走查1 Minor已修正；见 [模块记录](efcore-10-temporal-query-plan.md) | 已实现的成员、epoch/fractions、duration totals、calendar、offset/UTC、clocks、NULL和五类型converter profile；SQL DateTime Kind.Unspecified。命名时区/DST/非Gregorian/更宽组合与默认 MySQL Decimal scalar 保持开放；两模式最终诊断表残留0 |
 | 2026-11-17 | Numeric query | 基线 `be0b795` 后本模块；两 patch 各6665 pass/16 skip、LiveTests 各395/395（含64 numeric）；r2 包及两 patch 两模式消费者通过；独立走查1 Important 已修复；见 [模块记录](efcore-10-numeric-query-plan.md) | Oracle SIGN(0)、不可用双曲函数、MySQL Single 结果传输、nullable converter 和整数中间运算修复；MySQL 默认 Decimal scalar LEAST/GREATEST 仍在公开 reader metadata 边界失败，QRY-07 日期及更宽范围仍开放 |
 | 2026-11-17 | String query | 基线 `d5e8d25` 后本模块；两 patch 各6655 pass/16 skip；root live330/331后定向16/16、compat331/331；r1包及消费者通过；独立走查无阻塞问题 | 关闭两模式 QRY-06；支持窄原生语义域：字符长度/范围、空格、padding、collation、converter、CLOB/LONGTEXT；NCLOB、全容量、其他部署与任意 converter 不自动完成 |

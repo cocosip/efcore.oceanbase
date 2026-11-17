@@ -143,8 +143,8 @@ First/FirstOrDefault/Single/SingleOrDefault and ordinary predicate overloads hav
 sync/async native coverage for empty, one and multiple rows with entity, scalar,
 nullable, converter and reference projections. Comparer and explicit default-value
 overloads are excluded. Ordinary duplicate-entity queries separately verify tracked,
-untracked and identity-resolution behavior. Graph Include and broader official
-runtime families retain their own acceptance requirements.
+untracked and identity-resolution behavior. The ordinary graph profile below has separate
+native evidence; broader official runtime families retain their own acceptance requirements.
 
 Ordinary inner/left/cross joins, correlated scalar/collection subqueries and per-parent
 paging, Any/All, nullable Contains and Union/Concat/Intersect/Except have sync/async
@@ -194,8 +194,18 @@ retry buffering is independent of splitting. Splitting adds memory use and datab
 unique order with paging; separate commands can observe concurrent changes unless the application selects
 an appropriate transaction/isolation level. Cancellation or unknown outcomes are not automatically replayed;
 after failed graph materialization, discard or clear partially tracked entities before reusing a context.
-Native SQL/results, consistency and session reuse remain unverified. Lazy loading and ordinary compiled
-models have separate configuration below.
+On OceanBase4.4.2.2 ordinary direct connections, both modes have native sync/async
+coverage for single/split Include/ThenInclude, composite and alternate keys, optional
+references, owned references/collections and shadow owner keys, filtered Include and
+root paging, many-to-many shared identities, and all three tracking modes. Tracked
+filtered Includes retain pretracked entities through EF fixup; no-tracking queries
+return fresh filtered graphs. EF10 named Tenant/Active filters support selective/all
+disable and current-context parameter refresh in the tested parent/child/tag graphs.
+Captured query values have native row checks and observed parameter binding. These checks
+do not prove identical SQL text or binding in every later split command; optional-reference
+tenant-component sensitivity with the Tenant filter disabled remains untested.
+Concurrent-change isolation, arbitrary model/converter combinations, graph failure recovery,
+lazy loading and ordinary compiled models retain their separate acceptance requirements.
 
 Lazy loading can use EF's injected `ILazyLoader`, or the optional official
 `Microsoft.EntityFrameworkCore.Proxies` package at the application's EF10 patch version:
@@ -364,7 +374,7 @@ administrative removal. Generated scripts require external serialization and sto
 scripts target SQL*Plus-style clients, disable variable substitution, exit on SQL errors and commit the final
 history changes; rollback cannot undo DDL. MySQL scripts require autocommit. Raw migration SQL is trusted,
 single-statement server input; client directives and multi-statement raw batches are outside this contract.
-Native DDL/locking, script-client execution, reverse engineering, sequence/HiLo
+Native DDL/locking, script-client execution, sequence/HiLo
 and model trigger scaffolding remain unverified or unsupported.
 
 TPT (`UseTptMappingStrategy`, with a table for each mapped type) has a locally tested schema/query/write
@@ -413,8 +423,8 @@ optionsBuilder.UseOceanBase(connectionString, OceanBaseCompatibilityMode.MySql, 
 Omit `MigrationsAssembly` to keep migrations in the context assembly. A history schema, when supplied, must
 match the opted-in namespace. Initial/evolved migrations, model snapshots, pending-model checks, forward/reverse/
 idempotent scripts, migration listing/removal and framework-dependent Windows bundles have a package-only
-verification fixture under `tests/OceanBase.EntityFrameworkCore.ToolingConsumer`. Reverse engineering is not
-implemented. `dotnet ef migrations remove --force` may inspect or change a live database; the fixture blocks all
+verification fixture under `tests/OceanBase.EntityFrameworkCore.ToolingConsumer`.
+`dotnet ef migrations remove --force` may inspect or change a live database; the fixture blocks all
 connection opens and tests local file removal only. Bundle verification builds the executable and runs `--help`;
 applying a bundle remains a separate native acceptance step.
 
