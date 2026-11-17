@@ -8,7 +8,7 @@
 
 | ID | 缺失项 | 责任 | 当前事实 | 完成条件 |
 | --- | --- | --- | --- | --- |
-| `CFG-04`, `CON-02..05` | EF 连接对象、所有权、mode recheck、超时/取消后的租约恢复 | Provider + Driver evidence | 2026-11-17 服务器恢复后，同一 User Secrets 下两模式的原 Connector、EF 等价 Connector 和 EF 六条路径 SELECT 1 均通过；握手阻塞已解除 | 继续物理 close/reuse、真实 timeout/cancel 和恢复验收；不新增 proxy/OB20 要求 |
+| `CFG-04`, `CON-05` | EF 连接对象、所有权、mode recheck、超时/取消后的租约恢复 | Provider + Driver evidence | [连接模块](efcore-10-connection-lifecycle-plan.md) 两模式同步/异步56项 native 定向通过：三类 ownership、嵌套租约、真实错误、partial reader、模式冲突、opened callback、timeout/cancel和显式重开；修复 supplied connection 隐藏凭据被回写丢失和健康 reader 提前关闭破坏会话 | 两 patch 全套各590/590；CON-02/03/04普通直连profile已关闭，SaveChanges 取消/事务原子性和更宽 facade/schema 独立保留；不增加 TLS/pool/proxy/OB20 前置条件 |
 | `DIA-01..02`, `SQL-01` | 错误保留、日志脱敏、完整标识符/服务 facade 生命周期 | Provider | 本地命令和异常测试已有；live correlation/DDL 未完成 | 两模式同步/异步测试、走查、真实错误分类和 release 记录 |
 | `TST-02` | 真实查询、写入、事务、Schema、标量 round-trip | Server/live + Provider | 两模式身份探针和现有只读查询 profile 各 72 条 EF reader 命令通过；national 字面量 UTF8MB4/Oracle latin1 同步/异步往返通过 | 已补两模式唯一表的 bounded text/default/seed/tracked DML/清理；更宽标量/查询、事务失败恢复和 Schema 生命周期仍待验收 |
 | `REL-01` | 普通直连支持环境、tenant、server、TLS/transport 记录 | Server/live | 同一 User Secrets 普通直连成功；两模式服务端均报告 4.4.2.2，当前库/Schema 与配置一致；TLS Disabled、OB20/压缩/Pooling 关闭 | 当前连接/只读和唯一文本表 DML/DDL 证据已有；更宽事务/Schema profile 仍需各自权限和部署证据；扩展部署不作为前置条件 |
@@ -45,7 +45,7 @@ coercion combinations remain outside that accepted profile; QRY-07 remains open.
 
 | 能力 | EF Provider 的边界 | 需要的 Connector 证据/能力 |
 | --- | --- | --- |
-| 普通直连协议、认证及错误保留 | Provider 只传递连接字符串、设置 ExpectedMode 并调用 `DbConnection.Open/OpenAsync` | 使用 Connector 0.3.0 已有公共 API，不在 EF 内新增协议 |
+| 普通直连协议、认证及错误保留 | Provider 自建连接设置 ExpectedMode；supplied connection 只验证配置/检测模式、不改写可能已隐藏凭据的公开连接字符串；调用 `DbConnection.Open/OpenAsync` | 使用 Connector 0.3.0 已有公共 API，不在 EF 内新增协议 |
 | Proxy/ODP、多节点/OCP/TNS、TLS、OB20/trace、压缩 | 以 Connector 对应 revision 的支持与验收范围为上限；不作为 EF10 普通直连前置任务 | 真实扩展部署暂不开发或未验收；compressed OB20/proxy reroute 明确排除；详见进度文档中的 Connector 能力边界 |
 | 连接池、物理连接关闭、wire timeout/cancellation | Provider 负责 EF lease、调用方/Provider ownership 和取消 token 传递 | Connector 证明物理 close/reuse、wire cancel、timeout 和 pool cleanup |
 | Oracle Double 参数范围/无损绑定 | Provider 仍绑定公开 Double carrier，不在 EF 内改协议或静默换成文本；MAP-02 保持未完成 | 4.4.2.2 + Connector 0.3.0 direct/显式 Prepare 对照：极值 1426，测试微小值读写变零；需继续区分 codec/服务端行为，不能宣称完整 Double 支持 |

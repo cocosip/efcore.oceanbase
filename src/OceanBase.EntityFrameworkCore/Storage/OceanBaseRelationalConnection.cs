@@ -188,17 +188,14 @@ namespace OceanBase.EntityFrameworkCore.Storage
                 throw new InvalidOperationException("The OceanBase provider requires an OceanBaseConnector connection.");
             }
 
-            var connectionString = ValidateConnectionString(connection.ConnectionString);
+            _ = ValidateConnectionString(connection.ConnectionString);
             if (oceanBaseConnection.CompatibilityMode is { } actualMode && actualMode != ExpectedMode)
             {
                 throw new InvalidOperationException($"The connection mode does not match '{ExpectedMode}'.");
             }
 
-            // EF also reads DbConnection during cleanup, so validation belongs at use boundaries.
-            if (connection.State == ConnectionState.Closed && connection.ConnectionString != connectionString)
-            {
-                connection.ConnectionString = connectionString;
-            }
+            // A supplied connection may hide credentials after opening or have fixed data-source options.
+            // Validate its configured and detected modes without rewriting its configuration.
         }
     }
 }

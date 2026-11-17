@@ -8,15 +8,15 @@
 
 | 项目 | 结果 |
 | --- | --- |
-| 分支 / 提交 | `efcore/10.0`；Graph query 模块，基线 `c2c9b65`，本模块本地提交 |
-| 工作区 | 本轮补齐已有图查询的 native 证据并修正多表测试夹具；Provider 生产 C# 未改；凭据仅从 User Secrets 读取；不推送/发布 |
-| 最新模块 | Include/ThenInclude、单/拆分查询、三种跟踪/身份解析、owned/shadow、多对多及 EF10 命名过滤器；见 [模块记录](efcore-10-graph-query-plan.md) |
-| Required 状态 | MySQL：14 Done / 39 In progress；Oracle：15 Done / 38 In progress；每模式53。QRY-08/09 关闭声明的普通关系图 profile；QRY-07、raw、写入/事务/Schema 等保留各自缺口。数量不是未实现功能数 |
-| Local Release | EF10.0.0、隔离 EF10.0.14 各6679 pass /16 existing specification skip；root 使用未改生产/本地测试的已有 Release binaries，compat 从隔离源码构建 |
-| Package | `10.0.0-graph-query-r1-20261117` 内容/依赖及两模式两 patch 消费者通过；源/包/消费者 DLL、README identity audit 通过；未发布 |
-| Native | 普通直连4.4.2.2；两 patch 串行全套各533/533（521 live、12 offline），新增56 graph、8 native ownership、2 offline ownership；root 先行定向66/66；最终两模式诊断表残留0 |
-| Review | 独立只读走查0 Critical/0 Important/2 Minor；逐命令 SQL/binding 与关闭 Tenant 后 optional FK 的敏感性增强留档，本轮不扩大验收宣称；凭据/LF/空白/snapshot/包 identity 审计通过 |
-| 暂停点 | 用户要求本模块收尾后下班暂停；本地提交后停止，不启动下一模块。完整 EF10 目标尚未完成 |
+| 分支 / 提交 | `efcore/10.0`；Connection lifecycle 模块，基线 `5f73ef9`，本模块本地提交 |
+| 工作区 | Provider 修复 supplied connection 重开丢失凭据、提前释放健康 reader 后会话 Broken；测试仅在进程内按用户授权关闭 TLS；不改 Connector/User Secrets；不推送/发布 |
+| 最新模块 | 两模式同步/异步连接所有权、嵌套 lease、模式拒绝、真实错误、partial reader、opened callback、timeout/cancel、显式重开；见 [模块记录](efcore-10-connection-lifecycle-plan.md) |
+| Required 状态 | MySQL：17 Done / 36 In progress；Oracle：18 Done / 35 In progress；每模式53。CON-02/03/04关闭普通直连profile；CON-05写入取消及更宽facade/diagnostics/事务/Schema仍开放；数量不是未实现功能数 |
+| Local Release | 隔离 EF10.0.0、EF10.0.14 各6690 pass /16 existing specification skip；两套均从当前源码构建；Unit2663、Functional2487、Specification1538+16skip、Consumer2 |
+| Package | `10.0.0-connection-lifecycle-r1-20261117` 内容/依赖及两模式两 patch 消费者通过；源/包/消费者 DLL、README identity audit 通过；未发布 |
+| Native | 普通直连4.4.2.2；EF10.0.0、EF10.0.14 串行全套各590/590（577 live、13 offline）；新增56 lifecycle+1 offline TLS配置；root先行定向56/56；最终两模式诊断表残留0 |
+| Review | 独立只读走查1 Important：reader provider-specific APIs未转发，已RED/GREEN修复；supplied connection修复的后续走查0 Critical/0 Important；11个cleanup单元测试通过 |
+| 后续 | 按用户恢复后的持续目标推进；连接关闭后补 raw/diagnostics、写入/并发、事务、Schema 和最终发布门禁。完整 EF10 目标尚未完成 |
 
 ## 固定开发顺序
 
@@ -45,6 +45,7 @@
 
 | 日期 | 模块 | 提交 / 证据 | 未关闭边界 |
 | --- | --- | --- | --- |
+| 2026-11-17 | Connection lifecycle | 基线 `5f73ef9` 后本模块；两 patch 本地各6690 pass/16 skip；全套LiveTests各590/590；r1包/两模式两patch消费者通过；review 1 Important已修复、后续0阻塞；见 [模块记录](efcore-10-connection-lifecycle-plan.md) | 关闭CON-02/03/04普通直连profile；修复supplied连接凭据回写和健康reader提前释放破坏会话；SaveChanges取消、事务、Schema及TLS/pool/其他部署独立开放 |
 | 2026-11-17 | Graph query / EF10 named filters | 基线 `c2c9b65` 后本模块；两 patch 本地各6679 pass/16 skip；全套 LiveTests 各533/533；r1包/消费者通过；独立走查0阻塞/2 Minor；见 [模块记录](efcore-10-graph-query-plan.md) | QRY-08/09 声明普通 profile 关闭；现有 Provider 查询 C# 未改。多表夹具按声明依赖逆序清理 CREATE-confirmed 表，partial CREATE 和反向 CREATE 顺序已回归。两个测试增强点及更宽图/继承/lazy/AOT/隔离/失败恢复范围保持单独记录；最终残留0 |
 | 2026-11-17 | Temporal query | 基线 `8791a87` 后本模块；两 patch 本地各6679 pass/16 skip；两 patch live各467/467，root 后补 endpoint/Kind8/8；r1包/消费者通过；独立走查1 Minor已修正；见 [模块记录](efcore-10-temporal-query-plan.md) | 已实现的成员、epoch/fractions、duration totals、calendar、offset/UTC、clocks、NULL和五类型converter profile；SQL DateTime Kind.Unspecified。命名时区/DST/非Gregorian/更宽组合与默认 MySQL Decimal scalar 保持开放；两模式最终诊断表残留0 |
 | 2026-11-17 | Numeric query | 基线 `be0b795` 后本模块；两 patch 各6665 pass/16 skip、LiveTests 各395/395（含64 numeric）；r2 包及两 patch 两模式消费者通过；独立走查1 Important 已修复；见 [模块记录](efcore-10-numeric-query-plan.md) | Oracle SIGN(0)、不可用双曲函数、MySQL Single 结果传输、nullable converter 和整数中间运算修复；MySQL 默认 Decimal scalar LEAST/GREATEST 仍在公开 reader metadata 边界失败，QRY-07 日期及更宽范围仍开放 |

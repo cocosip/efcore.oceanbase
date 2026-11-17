@@ -28,6 +28,7 @@ public sealed class LiveStringLiteralTests
         var key = mode == OceanBaseCompatibilityMode.MySql ? "ConnectionStrings:OceanBaseMySql" : "ConnectionStrings:OceanBaseOracle";
         var configured = new ConfigurationBuilder().AddUserSecrets<LiveConnectionTests>(optional: false).Build()[key];
         if (string.IsNullOrWhiteSpace(configured)) throw new InvalidOperationException($"Missing User Secret '{key}'.");
+        configured = LiveTestConfiguration.ConnectionString(configured);
         var connection = new OceanBaseConnectionStringBuilder(configured) { CharacterSet = characterSet };
         try
         {

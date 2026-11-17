@@ -30,6 +30,7 @@ public sealed class LiveConnectionTests
             .Build()[connectionKey];
         if (string.IsNullOrWhiteSpace(connectionString))
             throw new InvalidOperationException($"Missing User Secret '{connectionKey}'.");
+        connectionString = LiveTestConfiguration.ConnectionString(connectionString);
 
         await using var context = new DbContext(new DbContextOptionsBuilder<DbContext>()
             .UseOceanBase(connectionString, mode)

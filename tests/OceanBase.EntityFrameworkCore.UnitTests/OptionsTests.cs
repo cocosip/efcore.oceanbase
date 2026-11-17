@@ -309,15 +309,15 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
         [Theory]
         [InlineData(OceanBaseCompatibilityMode.MySql)]
         [InlineData(OceanBaseCompatibilityMode.Oracle)]
-        public void Caller_owned_connection_receives_the_expected_mode(OceanBaseCompatibilityMode mode)
+        public void Caller_owned_connection_configuration_is_not_rewritten(OceanBaseCompatibilityMode mode)
         {
             using var connection = new OceanBaseConnector.OceanBaseConnection("Server=localhost");
+            var original = connection.ConnectionString;
             using var context = new TestContext(new DbContextOptionsBuilder<TestContext>()
                 .UseOceanBase(connection, mode).Options);
 
             Assert.Same(connection, context.GetService<IRelationalConnection>().DbConnection);
-            Assert.Equal(mode.ToString(), new OceanBaseConnector.OceanBaseConnectionStringBuilder(connection.ConnectionString)
-                .ExpectedMode.ToString());
+            Assert.Equal(original, connection.ConnectionString);
         }
 
         [Fact]

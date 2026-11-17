@@ -9,6 +9,19 @@ namespace OceanBase.EntityFrameworkCore.LiveTests
 {
     public sealed class ReadOnlyQueryProfileTests
     {
+        [Fact]
+        public void Offline_transport_override_is_explicit_and_retains_other_connector_options()
+        {
+            const string configured = "Server=offline;Database=profile;Password=test-only;TLS Mode=VerifyFull;Pooling=false;ExpectedMode=Oracle";
+            Assert.Equal(configured, LiveTestConfiguration.ApplyTransport(configured, false));
+            var settings = new OceanBaseConnector.OceanBaseConnectionStringBuilder(LiveTestConfiguration.ApplyTransport(configured, true));
+            Assert.Equal(OceanBaseConnector.OceanBaseTlsMode.Disabled, settings.TlsMode);
+            Assert.Equal("profile", settings.Database);
+            Assert.Equal("test-only", settings.Password);
+            Assert.False(settings.Pooling);
+            Assert.Equal(OceanBaseConnector.OceanBaseCompatibilityMode.Oracle, settings.ExpectedMode);
+        }
+
         [Theory]
         [InlineData(OceanBaseCompatibilityMode.MySql)]
         [InlineData(OceanBaseCompatibilityMode.Oracle)]

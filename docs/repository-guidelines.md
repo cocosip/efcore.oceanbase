@@ -119,6 +119,11 @@ The opt-in fixture lives in `tests/OceanBase.EntityFrameworkCore.LiveTests` and 
 the default solution run; set `OCEANBASE_RUN_LIVE_TESTS=1` only for an explicit live acceptance command.
 This is the agreed fixture contract; the current intercepted tests do not load secrets or connect to a server.
 
+Live tests preserve the configured TLS policy by default. For a server without TLS, the explicitly authorized
+ordinary-direct profile can set `OCEANBASE_LIVE_DISABLE_TLS=1` in the test process. This only overrides test
+connection strings in memory; it never changes User Secrets, the Provider or Connector defaults. Record that
+profile as TLS Disabled, not TLS acceptance. The connection-lifecycle profile creates no database objects.
+
 The read-only EF query profile uses four inline SELECT/UNION ALL rows without creating tables or writing
 data. Run local shape checks with `--filter FullyQualifiedName~ReadOnlyQueryProfileTests`; they do not read
 secrets or open connections. Native execution requires the opt-in and

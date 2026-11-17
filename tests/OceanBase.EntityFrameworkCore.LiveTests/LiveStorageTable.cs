@@ -26,6 +26,7 @@ internal static class LiveStorageTable
         var key = mode == OceanBaseCompatibilityMode.MySql ? "ConnectionStrings:OceanBaseMySql" : "ConnectionStrings:OceanBaseOracle";
         var configured = new ConfigurationBuilder().AddUserSecrets<LiveConnectionTests>(optional: false).Build()[key];
         if (string.IsNullOrWhiteSpace(configured)) throw new InvalidOperationException($"Missing User Secret '{key}'.");
+        configured = LiveTestConfiguration.ConnectionString(configured);
         // Connector's public Oracle RETURNING path requires this explicit write-profile opt-in.
         if (mode == OceanBaseCompatibilityMode.Oracle)
             configured = new OceanBaseConnectionStringBuilder(configured) { UseOraclePrepareExecute = true }.ConnectionString;

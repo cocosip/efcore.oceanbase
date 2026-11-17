@@ -1477,6 +1477,13 @@ namespace PackageConsumer
 
         private static void VerifyFailedOpen(OceanBaseCompatibilityMode mode)
         {
+            using var supplied = new OceanBaseConnector.OceanBaseConnection("Server=localhost");
+            var original = supplied.ConnectionString;
+            using (var suppliedContext = new DbContext(new DbContextOptionsBuilder().UseOceanBase(supplied, mode).Options))
+            {
+                if (!ReferenceEquals(supplied, suppliedContext.Database.GetDbConnection()) || supplied.ConnectionString != original)
+                    throw new Exception("Packed provider rewrote supplied connection configuration.");
+            }
             using var context = new DbContext(new DbContextOptionsBuilder()
                 .UseOceanBase("Server=localhost;Database=package_smoke", mode)
                 .AddInterceptors(new SuppressNetwork())

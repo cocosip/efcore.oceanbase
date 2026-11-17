@@ -15,6 +15,10 @@ optionsBuilder.UseOceanBase(connectionString, OceanBaseCompatibilityMode.MySql);
 Load the connection string from application configuration or a secret store. The selected mode must match the
 tenant. Driver protocol, authentication, connection pooling and transport settings belong to OceanBaseConnector.
 
+For a supplied `OceanBaseConnection`, the provider validates configured and detected tenant modes without
+rewriting its connection string. This preserves credentials hidden after a prior open and fixed data-source
+configuration. Provider-created connections receive the selected `ExpectedMode` before opening.
+
 Oracle generated-value writes use `RETURNING INTO`. Explicitly configure the Connector connection string
 with `Use Oracle Prepare Execute=true` for those writes; the Connector default is disabled. The provider
 does not silently enable that protocol option. Ordinary input-only writes do not need this option.
@@ -485,6 +489,14 @@ drop rollback or retry occurs. Actual server syntax, privileges and pool effects
 Automatic savepoint recovery after cancellation uses an uncancelled cleanup token and preserves the original
 save error. Recovery or native disposal can still fail; discard an unusable context/transaction and explicitly
 resolve native state. Local command doubles do not establish physical rollback or transaction atomicity.
+
+Healthy native query readers consume remaining rows/results during close/disposal so that an explicitly
+opened connection retains its session. Early enumeration disposal may therefore wait for the remaining
+response, within the original command timeout. Failed readers and broken connections are not drained.
+An explicitly infinite command timeout also leaves this cleanup without a timeout bound.
+In-flight native cancellation/timeout can retain an `OceanBaseException` with an unknown execution outcome
+and its cancellation/timeout cause; this state is never converted into a safe-to-retry result. Close/reopen
+the connection before further work and resolve any uncertain transaction outcome separately.
 
 `ExecuteUpdate` and `ExecuteDelete` have local sync/async coverage for ordinary relational operations.
 They execute immediately, return affected rows and bypass the change tracker; applications supply concurrency

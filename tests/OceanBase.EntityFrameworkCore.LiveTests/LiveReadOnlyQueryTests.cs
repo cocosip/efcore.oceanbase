@@ -25,6 +25,7 @@ namespace OceanBase.EntityFrameworkCore.LiveTests
             var key = mode == Mode.MySql ? "ConnectionStrings:OceanBaseMySql" : "ConnectionStrings:OceanBaseOracle";
             var connectionString = new ConfigurationBuilder().AddUserSecrets<LiveConnectionTests>(optional: true).Build()[key];
             if (string.IsNullOrWhiteSpace(connectionString)) throw new InvalidOperationException($"Missing User Secret '{key}'.");
+            connectionString = LiveTestConfiguration.ConnectionString(connectionString);
 
             var stage = "opening (authentication and SQL not established)";
             var commands = new ReadOnlyQueryProfile.Commands();
