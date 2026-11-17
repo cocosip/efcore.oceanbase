@@ -2,17 +2,17 @@
 
 本文档是开发队列和当前检查点。完整范围看 [功能矩阵](efcore-10-feature-matrix.md)，责任归属看 [功能缺失矩阵](efcore-10-gap-matrix.md)。
 
-## 当前检查点：2026-11-16
+## 当前检查点：2026-11-17
 
 | 项目 | 结果 |
 | --- | --- |
-| 分支 / 提交 | `efcore/10.0` / `c44f008` |
+| 分支 / 提交 | `efcore/10.0` / `f398c42` |
 | 工作区 | 干净 |
 | 最新模块 | `DateTimeOffset.DateTime` |
 | Required 状态 | 每个模式 9 Done / 44 In progress |
 | Local Release | Unit 2546、Functional 2469、Specification 1538；16 个既有映射 skip |
 | Package | Consumer 2/2；EF10.0.0/10.0.14、MySQL/Oracle 两模式通过 |
-| Native | 两模式均在 EF `OpenAsync` 阶段失败，未执行 SQL/DDL，reader 为 0 |
+| Native | EF 与 direct Connector 两模式均在握手阶段失败，未执行 SQL/DDL，reader 为 0 |
 
 ## 固定开发顺序
 
@@ -42,14 +42,12 @@
 
 ## 连接阻塞的事实
 
-User Secrets 中的两个模式都指向 `172.16.2.45:2881`。MySQL 和 Oracle 都在打开连接阶段收到 packet closure；没有认证、服务端版本、SQL、DDL 或结果证据。这个事实只说明 EF Provider 连接路径尚未完成验证，不足以判断 Connector 缺陷。
+2026-11-17 使用 User Secrets 对同一端点执行了 EF 和 direct Connector 的只读连接对比。两种模式的脱敏选项一致：TLS Disabled、OB20 关闭、Pooling 关闭、`UseAffectedRows=false`、连接/命令超时分别为 15/30 秒，并分别设置匹配的 `ExpectedMode`。两条路径都在 Connector 握手阶段收到 `Connection closed while reading the packet`；没有认证、服务端版本、SQL、DDL 或 reader 结果证据。这个事实把当前阻塞归类为环境/Connector 待分类，不支持修改 Provider 连接逻辑。
 
 下一次必须先完成：
 
-1. 记录 EF `OceanBaseRelationalConnection` 最终创建连接的脱敏选项。
-2. 用同一组 User Secrets 对比直接 Connector 与 EF 创建连接。
-3. direct 成功而 EF 失败时修 Provider 并加回归；两者都失败时记录为环境/服务端或 Connector 待分类。
-4. 重新执行两模式只读探针；成功后进入 `TST-02`。
+1. 确认 `172.16.2.45:2881` 的 direct/proxy、服务端版本和握手所需 transport 设置；当前 EF/direct 结果已经一致，不修改 Provider 绕过握手失败。
+2. 在端点或 transport 修正后重新执行两模式只读探针；成功后记录身份/版本并进入 `TST-02`。
 
 ## 模块完成规则
 
