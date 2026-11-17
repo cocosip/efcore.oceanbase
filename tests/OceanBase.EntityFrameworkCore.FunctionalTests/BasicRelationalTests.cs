@@ -863,6 +863,12 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
             string[] hex = ["0A", "0B"];
             commands.Values.Clear();
             var binary = context.Set<TextMembershipRow>().Where(row => hex.Contains(row.Binary)).Select(row => row.Id);
+            if (mode == OceanBaseCompatibilityMode.Oracle)
+            {
+                Assert.Contains("BLOB", Assert.Throws<NotSupportedException>(() => binary.ToQueryString()).Message);
+                Assert.Empty(commands.Values);
+                return;
+            }
             _ = async ? await binary.ToListAsync() : binary.ToList();
             Assert.All(commands.Values, value => Assert.IsType<byte[]>(value));
             Assert.Contains(commands.Values, value => value is byte[] bytes && bytes.SequenceEqual(new byte[] { 10 }));

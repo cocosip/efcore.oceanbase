@@ -202,13 +202,20 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             if (mode == OceanBaseCompatibilityMode.Oracle)
                 Assert.Contains(relationalNulls ? "IN (NULL, NULL)" : "\"EmptyConverted\" IS NULL", inlineEmpty);
             string[] binary = ["0A", "0B"];
-            var binarySql = context.Rows.Where(row => binary.Contains(row.Binary)).ToQueryString();
-            Assert.Contains(" IN (", binarySql);
-            Assert.DoesNotContain("IS NULL", binarySql);
-            binary = ["", "0A"];
-            Assert.Contains(" IN (", context.Rows.Where(row => binary.Contains(row.Binary)).ToQueryString());
             if (mode == OceanBaseCompatibilityMode.Oracle)
-                Assert.Contains("EMPTY_BLOB()", context.Rows.Where(row => EF.Constant(binary).Contains(row.Binary)).ToQueryString());
+            {
+                Assert.Contains("BLOB", Assert.Throws<NotSupportedException>(() => context.Rows.Where(row => binary.Contains(row.Binary)).ToQueryString()).Message);
+                binary = ["", "0A"];
+                Assert.Contains("BLOB", Assert.Throws<NotSupportedException>(() => context.Rows.Where(row => EF.Constant(binary).Contains(row.Binary)).ToQueryString()).Message);
+            }
+            else
+            {
+                var binarySql = context.Rows.Where(row => binary.Contains(row.Binary)).ToQueryString();
+                Assert.Contains(" IN (", binarySql);
+                Assert.DoesNotContain("IS NULL", binarySql);
+                binary = ["", "0A"];
+                Assert.Contains(" IN (", context.Rows.Where(row => binary.Contains(row.Binary)).ToQueryString());
+            }
             Assert.Contains(" IN (", context.Rows.Where(row => values.Contains(row.Preserved)).ToQueryString());
         }
 

@@ -90,6 +90,16 @@ overloads are excluded. Ordinary duplicate-entity queries separately verify trac
 untracked and identity-resolution behavior. Graph Include and broader official
 runtime families retain their own acceptance requirements.
 
+Ordinary inner/left/cross joins, correlated scalar/collection subqueries and per-parent
+paging, Any/All, nullable Contains and Union/Concat/Intersect/Except have sync/async
+native coverage in both modes, including empty inputs, current captures and string
+converters. Scalar-key joins use SQL equality; default anonymous composite keys retain
+EF's nullable equality compensation. With UseRelationalNulls, membership can be UNKNOWN:
+project it as bool? when needed; a required bool result can throw on NULL. Collection
+set operations preserve NULL equality and Concat duplicates. Comparer overloads are
+excluded. This bounded profile does not establish arbitrary projections, collation,
+full LOB comparison or other server versions.
+
 Parameterless `DefaultIfEmpty` has local coverage for ordinary scalar/converter defaults, anonymous
 objects, DTOs, constructed mapped CLR types and boxed scalar projections, including per-parent paging.
 A missing source returns null for reference projections; a present row with NULL members remains an
@@ -188,26 +198,45 @@ expands them into scalar parameters rather than sending a JSON array. Other sing
 non-target carriers and null-converting converters are not supported by this path. Boolean roots preserve
 the provider Boolean carrier in MySQL and the decimal Boolean carrier in Oracle.
 
+Oracle collection roots normalize every parameter/constant UNION ALL branch to the
+common carrier; MySQL casts the first branch. Oracle variable non-LOB text uses
+TO_CHAR/TO_NCHAR to preserve query values beyond a contextual column's length
+instead of narrowing them through CAST. Contextual CHAR/NCHAR collection roots reject
+before execution because a variable carrier changes fixed-width padding comparisons.
+Ordinary scalar fixed-text comparisons retain their existing behavior. The ASCII profile includes
+2001-character values. This does not establish general collation or LOB capacity.
+Default Oracle byte-array roots use TO_BLOB, including typed empty roots. BLOB enumeration
+and IS NULL/IS NOT NULL are supported; ordinary BLOB equality/inequality and membership
+reject before execution. Use explicitly bounded RAW for comparable binary values;
+RAW collection membership has native coverage. Oracle Queryable LOB set-operation
+exclusions still apply. This does not add a general LOB comparison API.
+
 Explicit temporal `EF.Parameter` arrays/lists for DateTime, DateTimeOffset, DateOnly, TimeOnly and TimeSpan
 are admitted when the context explicitly selects `Constant` or `MultipleParameters`. EF10 renders these
 explicit roots as scalar `IN` parameters; captured and inline temporal roots retain the provider's typed
 `VALUES` path. Current captures rebind, nullable values use the existing temporal readers and empty captures
 produce a false predicate. Unconfigured contexts and the single JSON-style collection parameter remain outside
-this contract. Native temporal precision, timezone, interval coercion and live results remain unverified.
+this contract. Ordinary whole-second temporal root values now have native coverage;
+wider precision, timezone and interval coercion remain separate acceptance boundaries.
 Direct contextually converted element projections support SelectMany, FirstOrDefault and Join,
 including nullable/empty roots and Distinct/Take composition. The owning numeric mapping controls
 bindings, projected readers and the CLR default fallback. Incompatible requirements for one root or
 its scalar-result consumers reject, including different converters with the same store type. Arbitrary
-converter/operator composition remains unsupported. Native UNION typing, results and costs are unverified.
+converter/operator composition remains unsupported. Native ordinary UNION typing/results
+are covered by the bounded composition profile; wider converter combinations and costs are unverified.
 
 Text collection roots support captured arrays/lists and empty inline arrays when the provider-owned mapping
 uses a string carrier and does not convert nulls. Model-to-string converters retain parameter and reader
-hooks; MySQL empty roots use `CAST(NULL AS CHAR)` and Oracle uses the declared text type. Explicit
+hooks; MySQL empty roots use `CAST(NULL AS CHAR)` and Oracle non-LOB text uses
+`TO_CHAR(NULL)`/`TO_NCHAR(NULL)` with the owning charset. Explicit
 `EF.Parameter(string[])`/`List<string?>` roots are also supported when the context explicitly selects
 `Constant` or `MultipleParameters`; the provider expands scalar values rather than sending a JSON array.
 Unconfigured contexts, EF's single JSON-style collection parameter, null-converting, binary and other
 non-text carriers remain unsupported by this path. Oracle empty-string normalization occurs after raw
-collection expansion. Native text collation, LOB behavior and UNION results remain unverified.
+collection expansion. Bounded ASCII root UNION/membership results have native coverage;
+wider text facets, collation and LOB behavior remain unverified.
+MySQL text roots contextually tied to bounded/fixed properties can return collation
+error 1267 on the tested server; this composition remains unaccepted.
 
 Text and temporal `Min/Max` support scalar/selector and nullable forms using native aggregates and
 the original mappings/readers. Supported temporal families are DateTime, DateTimeOffset, DateOnly,

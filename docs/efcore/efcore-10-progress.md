@@ -6,13 +6,13 @@
 
 | 项目 | 结果 |
 | --- | --- |
-| 分支 / 提交 | `efcore/10.0`；Ordered/cardinality 模块，基线 `1a4d129` |
-| 工作区 | 本模块测试和文档一并提交，生产 C# 未改；凭据仅从 User Secrets 读取 |
-| 最新模块 | 排序/Distinct/分页、First/Single 基数和普通实体 identity 的两模式同步/异步实库验收；见 [模块记录](efcore-10-ordered-cardinality-plan.md) |
-| Required 状态 | 每个模式 11 Done / 42 In progress；本模块关闭 `QRY-02/05`，总数仍为 53 |
-| Local Release | 生产和 offline 测试自 `1a4d129` 未改，沿用该检查点两 patch 各 6645 pass / 16 existing skip 的既有证据，本模块未重跑 offline 全套 |
-| Package | `10.0.0-ordered-cardinality-r1-20261117` 内容/依赖及两模式两 patch 消费者、打包时 DLL/README identity 通过；未发布 |
-| Native | 4.4.2.2 普通直连；两 patch 各 135 LiveTests（125 live、10 offline）通过；新增 16 个排序/基数用例，最终强化异常断言后各 16 定向通过；已知 Double characterization 不代表无损参数绑定 |
+| 分支 / 提交 | `efcore/10.0`；Relational query composition 模块，基线 `037df34` |
+| 工作区 | 本模块 Provider、测试和文档一并提交；凭据仅从 User Secrets 读取 |
+| 最新模块 | Join/相关子查询、Any/All/Contains、typed roots 和集合运算的实库验收；修复 Oracle UNION carrier/charset、BLOB root 与文本窄 CAST 截断；见 [模块记录](efcore-10-relational-query-plan.md) |
+| Required 状态 | 每个模式 11 Done / 42 In progress；QRY-03 保留更宽组合缺口，既有 QRY-02/05 Done；总数仍为 53 |
+| Local Release | EF10.0.0 和隔离 EF10.0.14 各 6650 pass / 16 existing skip；最终生产代码和调用者测试均已重跑 |
+| Package | `10.0.0-relational-query-r3-20261117` 内容/依赖及两模式两 patch 消费者、打包时 DLL/README identity 通过；未发布 |
+| Native | 4.4.2.2 普通直连；走查修正后 EF10.0.0 为 189/195，6 个握手错误所属方法补跑 10/10；EF10.0.14 为 194/195，1 个握手/清理错误所属方法补跑 4/4。两套各 60 个新增组合用例通过，最终两模式无诊断表残留；原始失败不改写为单次全绿。Double characterization 不代表无损绑定 |
 
 ## 固定开发顺序
 
@@ -41,6 +41,7 @@
 
 | 日期 | 模块 | 提交 / 证据 | 未关闭边界 |
 | --- | --- | --- | --- |
+| 2026-11-17 | Relational query composition | 两 patch 各 6650 pass/16 skip；r3 包及两 patch/两模式消费者通过；最终 live 与走查见 [模块记录](efcore-10-relational-query-plan.md) | Oracle 全分支参数/常量公共 carrier、TO_BLOB 和 variable non-LOB TO_CHAR/TO_NCHAR 已修复；普通 BLOB 比较/IN 和 Oracle contextual CHAR/NCHAR roots 执行前拒绝，RAW 有正向实库证据；MySQL contextual text root 返回 1267，更宽 collation/LOB/转换组合仍开放 |
 | 2026-11-17 | 排序、分页和 First/Single 基数 | 两 patch 各 135 LiveTests；最终审查修正后各 16 定向通过；r1 包及消费者通过；生产 C# 未改，关闭 QRY-02/05 | 原有 SingleOrDefault 拒绝探针可能被多行错误误满足，已改空源并完成敏感性 RED/GREEN；负分页/comparer/显式 default overload 不在支持契约，字符串 collation、图/raw/runtime、其他部署与取消另行验收 |
 | 2026-11-17 | Temporal 真实存储与 TIME 上界 | 两 patch 各 6645 pass/16 skip、119 LiveTests；r1 包及消费者通过；走查无阻塞发现 | 五类型 NULL/端点/精度/default/seed/generated/converter/update、比较/原值和 numeric-offset 会话已验收；命名时区/DST/更宽查询仍开放；一处即时生成值 Kind 测试缺口见模块记录 |
 | 2026-11-17 | Oracle Double 声明与精度回归 | 新增 8 个用例；两 patch 各 93 LiveTests；[对照记录](efcore-10-oracle-double-declarations-plan.md) | NUMBER(18,6) 的舍入与原生参数丢失已区分；显式 BINARY_DOUBLE/Precision17 未改善已测边界；Connector/server 根因和完整范围仍未验收 |

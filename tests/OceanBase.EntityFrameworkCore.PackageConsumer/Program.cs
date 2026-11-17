@@ -1281,7 +1281,7 @@ namespace PackageConsumer
 
             var empty = context.Set<Row>().Select(row => new string[] { }.Count(value => row.Id > 0)).ToQueryString();
             if (!empty.Contains("WHERE 1 = 0", StringComparison.Ordinal)
-                || !empty.Contains(mode == OceanBaseCompatibilityMode.MySql ? "CAST(NULL AS CHAR)" : "CAST(NULL AS NVARCHAR2",
+                || !empty.Contains(mode == OceanBaseCompatibilityMode.MySql ? "CAST(NULL AS CHAR)" : "TO_NCHAR(NULL)",
                     StringComparison.Ordinal))
                 throw new Exception("Packed text collection root lost its typed empty relation: " + empty);
         }
@@ -1314,7 +1314,7 @@ namespace PackageConsumer
         {
             byte[][] values = [];
             var query = context.Set<Row>().SelectMany(row => values.Where(value => row.Id > 0));
-            var target = mode == OceanBaseCompatibilityMode.MySql ? "BINARY" : "BLOB";
+            var typing = mode == OceanBaseCompatibilityMode.MySql ? " AS BINARY)" : "TO_BLOB(";
             foreach (var input in new[]
             {
                 Array.Empty<byte[]>(),
@@ -1326,14 +1326,14 @@ namespace PackageConsumer
             {
                 values = input;
                 var sql = query.ToQueryString();
-                if (!sql.Contains(" AS " + target + ")", StringComparison.Ordinal))
+                if (!sql.Contains(typing, StringComparison.Ordinal))
                     throw new Exception("Packed binary collection root lost its provider carrier: " + sql);
                 if (sql.Split("UNION ALL SELECT", StringSplitOptions.None).Length - 1 != Math.Max(0, input.Length - 1)
                     || sql.Contains("WHERE 1 = 0", StringComparison.Ordinal) != (input.Length == 0))
                     throw new Exception("Packed binary collection root lost its current values or row shape.");
             }
             var empty = context.Set<Row>().Select(row => new byte[][] { }.Count(value => row.Id > 0)).ToQueryString();
-            if (!empty.Contains("CAST(NULL AS " + target + ")", StringComparison.Ordinal)
+            if (!empty.Contains(mode == OceanBaseCompatibilityMode.MySql ? "CAST(NULL AS BINARY)" : "TO_BLOB(NULL)", StringComparison.Ordinal)
                 || !empty.Contains("WHERE 1 = 0", StringComparison.Ordinal))
                 throw new Exception("Packed binary collection root lost its typed empty relation: " + empty);
         }
@@ -1368,6 +1368,7 @@ namespace PackageConsumer
                 values = input;
                 var sql = query.ToQueryString();
                 if (!sql.Contains(" AS " + target + ")", StringComparison.Ordinal)
+                    || System.Text.RegularExpressions.Regex.Matches(sql, @"CAST\(").Count != (mode == OceanBaseCompatibilityMode.Oracle ? Math.Max(1, input.Length) : 1)
                     || sql.Split("UNION ALL SELECT", StringSplitOptions.None).Length - 1 != Math.Max(0, input.Length - 1)
                     || sql.Contains("WHERE 1 = 0", StringComparison.Ordinal) != (input.Length == 0))
                     throw new Exception("Packed numeric root lost its provider carrier, row count or empty transition.");
@@ -1389,6 +1390,7 @@ namespace PackageConsumer
                 var sql = query.ToQueryString();
                 var target = mode == OceanBaseCompatibilityMode.Oracle ? "NUMBER" : unsigned ? "UNSIGNED" : "SIGNED";
                 if (!sql.Contains(" AS " + target + ")", StringComparison.Ordinal)
+                    || System.Text.RegularExpressions.Regex.Matches(sql, @"CAST\(").Count != (mode == OceanBaseCompatibilityMode.Oracle ? Math.Max(1, input.Length) : 1)
                     || sql.Split("UNION ALL SELECT", StringSplitOptions.None).Length - 1 != Math.Max(0, input.Length - 1)
                     || sql.Contains("WHERE 1 = 0", StringComparison.Ordinal) != (input.Length == 0))
                     throw new Exception("Packed integer root lost its carrier, current values or zero-row SQL.");

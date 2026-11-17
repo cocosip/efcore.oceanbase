@@ -23,7 +23,7 @@ public sealed class BinaryCollectionRootTests
         byte[] first = [1, 2, 3];
         byte[]?[] values = [first, null];
         return Run(mode, async,
-            context => context.Rows.SelectMany(row => values.Where(value => value != row.Payload)),
+            context => context.Rows.SelectMany(row => values.Where(value => row.Id > 0)),
             () => values = [], first);
     }
 
@@ -47,7 +47,7 @@ public sealed class BinaryCollectionRootTests
         var sql = Assert.Single(capture.Sql);
         Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? "BINARY" : "BLOB", sql,
             StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("UNION ALL SELECT NULL", sql, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? "UNION ALL SELECT NULL" : "UNION ALL SELECT TO_BLOB(NULL)", sql, StringComparison.OrdinalIgnoreCase);
         Assert.NotEmpty(capture.Inputs);
         Assert.All(capture.Inputs, parameter => Assert.Equal(DbType.Binary, parameter.DbType));
         Assert.Contains(capture.Inputs, parameter => parameter.Value is byte[] bytes && bytes.SequenceEqual(expected));

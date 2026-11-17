@@ -19,31 +19,36 @@ public sealed class BinaryCollectionRootQueryTests
     {
         using var context = CreateContext(mode);
         byte[][] values = [new byte[] { 1, 2 }, new byte[] { 3, 4 }];
-        var query = context.Rows.SelectMany(row => values.Where(value => value != row.Payload));
+        var query = context.Rows.SelectMany(row => values.Where(value => row.Id > 0));
 
         var sql = query.ToQueryString();
 
         Assert.Contains("UNION ALL", sql, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("CAST(", sql, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? "CAST(" : "TO_BLOB(", sql, StringComparison.OrdinalIgnoreCase);
         Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? "BINARY" : "BLOB", sql,
             StringComparison.OrdinalIgnoreCase);
+        if (mode == OceanBaseCompatibilityMode.Oracle)
+        {
+            Assert.Contains("TO_BLOB(", sql);
+            Assert.DoesNotContain(" AS BLOB)", sql);
+        }
         Assert.Equal(mode == OceanBaseCompatibilityMode.Oracle,
             sql.Contains("FROM DUAL", StringComparison.OrdinalIgnoreCase));
     }
 
     [Theory]
-    [InlineData(OceanBaseCompatibilityMode.MySql, "BINARY")]
-    [InlineData(OceanBaseCompatibilityMode.Oracle, "BLOB")]
+    [InlineData(OceanBaseCompatibilityMode.MySql, "CAST(NULL AS BINARY)")]
+    [InlineData(OceanBaseCompatibilityMode.Oracle, "TO_BLOB(NULL)")]
     public void Originally_empty_inline_binary_roots_keep_typed_zero_row_sql(
         OceanBaseCompatibilityMode mode, string castType)
     {
         using var context = CreateContext(mode);
-        var query = context.Rows.SelectMany(row => new byte[][] { }.Where(value => value != row.Payload));
+        var query = context.Rows.SelectMany(row => new byte[][] { }.Where(value => row.Id > 0));
 
         var sql = query.ToQueryString();
 
         Assert.Contains("WHERE 1 = 0", sql, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains($"CAST(NULL AS {castType})", sql, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(castType, sql, StringComparison.OrdinalIgnoreCase);
     }
 
     [Theory]
@@ -78,6 +83,11 @@ public sealed class BinaryCollectionRootQueryTests
         foreach (var input in new byte[]?[][] { values, [new byte[] { 7 }], [] })
         {
             values = input;
+            if (mode == OceanBaseCompatibilityMode.Oracle && input.Length > 0)
+            {
+                Assert.Contains("BLOB", Assert.Throws<NotSupportedException>(() => query.ToQueryString()).Message);
+                continue;
+            }
             var sql = query.ToQueryString();
             Assert.DoesNotContain("JSON", sql, StringComparison.OrdinalIgnoreCase);
             Assert.DoesNotContain("IN ()", sql, StringComparison.OrdinalIgnoreCase);
@@ -86,16 +96,35 @@ public sealed class BinaryCollectionRootQueryTests
         }
     }
 
+    [Fact]
+    public void Oracle_BLOB_equality_and_membership_reject_but_NULL_tests_remain_supported()
+    {
+        using var context = CreateContext(OceanBaseCompatibilityMode.Oracle);
+        byte[] value = [1, 2];
+        byte[][] values = [value, [3, 4]];
+        var rows = context.Rows;
+        foreach (var query in new[] { rows.Where(row => row.Payload == value), rows.Where(row => row.Payload != value),
+            rows.Where(row => values.Contains(row.Payload)), rows.Where(row => rows.Select(other => other.Payload).Contains(row.Payload)),
+            rows.Where(row => rows.Select(other => other.Payload).Contains(row.Bounded)) })
+            Assert.Contains("BLOB", Assert.Throws<NotSupportedException>(() => query.ToQueryString()).Message);
+        Assert.Contains("IS NULL", rows.Where(row => row.Payload == null).ToQueryString());
+        Assert.Contains("IS NOT NULL", rows.Where(row => row.Payload != null).ToQueryString());
+        using var relational = CreateContext(OceanBaseCompatibilityMode.Oracle, relationalNulls: true);
+        Assert.Contains("BLOB", Assert.Throws<NotSupportedException>(() => relational.Rows.Where(row =>
+            relational.Rows.Select(other => other.Payload).Contains(row.Bounded)).ToQueryString()).Message);
+    }
+
     private static TestContext CreateContext(OceanBaseCompatibilityMode mode,
-        ParameterTranslationMode? translation = null)
+        ParameterTranslationMode? translation = null, bool relationalNulls = false)
     {
         var builder = new DbContextOptionsBuilder<TestContext>()
             .UseOceanBase("Server=localhost;Database=binary_roots", mode)
             .EnableServiceProviderCaching(false);
-        if (translation.HasValue)
+        if (translation.HasValue || relationalNulls)
         {
             var extension = builder.Options.Extensions.OfType<RelationalOptionsExtension>().Single()
-                .WithUseParameterizedCollectionMode(translation.Value);
+                .WithUseRelationalNulls(relationalNulls);
+            if (translation.HasValue) extension = extension.WithUseParameterizedCollectionMode(translation.Value);
             ((IDbContextOptionsBuilderInfrastructure)builder).AddOrUpdateExtension(extension);
         }
 
@@ -105,11 +134,14 @@ public sealed class BinaryCollectionRootQueryTests
     private sealed class TestContext(DbContextOptions<TestContext> options) : DbContext(options)
     {
         public DbSet<Row> Rows => Set<Row>();
+        protected override void OnModelCreating(ModelBuilder modelBuilder)
+            => modelBuilder.Entity<Row>().Property(row => row.Bounded).HasMaxLength(32);
     }
 
     private sealed class Row
     {
         public int Id { get; set; }
-        public byte[] Payload { get; set; } = [];
+        public byte[]? Payload { get; set; }
+        public byte[]? Bounded { get; set; }
     }
 }

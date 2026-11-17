@@ -43,6 +43,10 @@ namespace OceanBase.EntityFrameworkCore.Query
                         && conversion.Type == conversion.Operand.Type
                         && ReferenceEquals(conversion.TypeMapping, conversion.Operand.TypeMapping))
                         GenerateCollectionCast(conversion.Operand);
+                    // Oracle UNION branches need common parameter types/charsets (1790/12704).
+                    else if (_mode == OceanBaseCompatibilityMode.Oracle
+                        && expression is SqlParameterExpression or SqlConstantExpression)
+                        GenerateCollectionCast(expression);
                     else Visit(expression);
                     if (row == 0)
                         Sql.Append(AliasSeparator).Append(Dependencies.SqlGenerationHelper.DelimitIdentifier(valuesExpression.ColumnNames[column]));
@@ -57,6 +61,25 @@ namespace OceanBase.EntityFrameworkCore.Query
             if (expression.TypeMapping is not { } mapping
                 || !OceanBaseCollectionParameterExpandingVisitor.IsSupportedCollectionElement(mapping))
                 throw new NotSupportedException("Collection typing casts require supported numeric, Boolean, text, binary or temporal elements with non-null-converting storage carriers.");
+            if (_mode == OceanBaseCompatibilityMode.Oracle && mapping.StoreTypeNameBase.Equals("BLOB", StringComparison.OrdinalIgnoreCase))
+            {
+                Sql.Append("TO_BLOB(");
+                Visit(expression);
+                Sql.Append(")");
+                return;
+            }
+            if (_mode == OceanBaseCompatibilityMode.Oracle
+                && OceanBaseCollectionParameterExpandingVisitor.IsSupportedText(mapping)
+                && mapping.StoreTypeNameBase.ToUpperInvariant() is "CHAR" or "NCHAR" or "VARCHAR2" or "NVARCHAR2")
+            {
+                if (mapping.IsFixedLength)
+                    throw new NotSupportedException("Oracle collection roots with fixed-length text storage are not supported. Use variable-length text storage for collection comparisons.");
+                // Query values can exceed a contextual column's length; CAST would silently truncate them.
+                Sql.Append(mapping.IsUnicode ? "TO_NCHAR(" : "TO_CHAR(");
+                Visit(expression);
+                Sql.Append(")");
+                return;
+            }
             Sql.Append("CAST(");
             Visit(expression);
             if (OceanBaseCollectionParameterExpandingVisitor.IsSupportedBoolean(mapping))
@@ -100,6 +123,13 @@ namespace OceanBase.EntityFrameworkCore.Query
 
         protected override Expression VisitSqlBinary(SqlBinaryExpression sqlBinaryExpression)
         {
+            if (sqlBinaryExpression.OperatorType is ExpressionType.Equal or ExpressionType.NotEqual
+                or ExpressionType.LessThan or ExpressionType.LessThanOrEqual
+                or ExpressionType.GreaterThan or ExpressionType.GreaterThanOrEqual)
+            {
+                ValidateBlobComparison(sqlBinaryExpression.Left);
+                ValidateBlobComparison(sqlBinaryExpression.Right);
+            }
             if (sqlBinaryExpression.OperatorType == ExpressionType.ExclusiveOr && sqlBinaryExpression.Type == typeof(bool))
             {
                 Sql.Append("(");
@@ -172,6 +202,27 @@ namespace OceanBase.EntityFrameworkCore.Query
             }
 
             return base.VisitSqlBinary(sqlBinaryExpression);
+        }
+
+        protected override void GenerateIn(InExpression inExpression, bool negated)
+        {
+            ValidateBlobComparison(inExpression.Item);
+            if (inExpression.Subquery is { } subquery)
+            {
+                foreach (var projection in subquery.Projection) ValidateBlobComparison(projection.Expression);
+            }
+            if (inExpression.Values is { } values)
+            {
+                foreach (var value in values) ValidateBlobComparison(value);
+            }
+            base.GenerateIn(inExpression, negated);
+        }
+
+        private void ValidateBlobComparison(SqlExpression expression)
+        {
+            if (_mode == OceanBaseCompatibilityMode.Oracle
+                && expression.TypeMapping?.StoreTypeNameBase.Equals("BLOB", StringComparison.OrdinalIgnoreCase) == true)
+                throw new NotSupportedException("Oracle BLOB equality and membership are not supported. Use explicitly bounded RAW storage for comparable binary values.");
         }
 
         protected override string GetOperator(SqlBinaryExpression binaryExpression)
