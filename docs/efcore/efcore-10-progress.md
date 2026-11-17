@@ -6,14 +6,14 @@
 
 | 项目 | 结果 |
 | --- | --- |
-| 分支 / 提交 | `efcore/10.0`；Numeric query 模块，基线 `be0b795` |
+| 分支 / 提交 | `efcore/10.0`；Temporal query 模块，基线 `8791a87` |
 | 工作区 | Provider、测试和文档一并本地提交；凭据仅从 User Secrets 读取；不推送/发布 |
-| 最新模块 | 两模式数值查询模块验收；SIGN 零值、双曲函数、Single 结果传输及 nullable converter 修复；见 [模块记录](efcore-10-numeric-query-plan.md) |
-| Required 状态 | MySQL：12 Done / 41 In progress；Oracle：13 Done / 40 In progress。QRY-07 数值域补齐但整项仍开放；每模式总数53 |
-| Local Release | EF10.0.0、隔离 EF10.0.14 各6665 pass /16 existing specification skip |
-| Package | `10.0.0-numeric-query-r2-20261117` 内容/依赖及两模式两 patch 消费者通过；源/包/消费者 DLL、README identity audit 通过；未发布 |
-| Native | 普通直连4.4.2.2；两 patch 最终串行全套各395/395（385 live、10 offline），包含新增64个数值用例、Round 邻值/极值和整数 converter 回归；两模式诊断表最终残留0。原失败及夹具修正见模块记录 |
-| Review | 独立走查0 Critical/1 Important/0 Minor：整数 converter Asinh 中间乘法溢出；已实库1690与本地 RED 复现并修复，定向725项与最终全套通过。凭据/LF/空白/snapshot/包 identity 审计通过；QRY-07 仍未关闭 |
+| 最新模块 | 两模式 temporal query：Ticks/纳秒/Seconds/Double totals、Oracle 本地偏移与 UTC 精度、DATE metadata 和五类型 nullable converter；见 [模块记录](efcore-10-temporal-query-plan.md) |
+| Required 状态 | MySQL：12 Done / 41 In progress；Oracle：13 Done / 40 In progress。QRY-07 已实现的数值/日期 profile 已补 native；默认 MySQL Decimal scalar 和更宽组合使整项仍开放；每模式总数53 |
+| Local Release | EF10.0.0、隔离 EF10.0.14 各6679 pass /16 existing specification skip；走查后仅修正 synthetic fixture，两 patch 定向各16/16 |
+| Package | `10.0.0-temporal-query-r1-20261117` 内容/依赖及两模式两 patch 消费者通过；源/包/消费者 DLL、README identity audit 通过；未发布 |
+| Native | 普通直连4.4.2.2；两 patch 串行全套各467/467（457 live、10 offline），含72 temporal；root 最新 endpoint/Kind 定向8/8，compat 全套包含最新断言；两模式诊断表最终残留0 |
+| Review | 独立走查0 Critical/0 Important/1 Minor：既有 synthetic DateTimeOffset fixture 分量错误，已 CLR oracle RED4/GREEN 修正；两 patch 定向16/16。凭据/LF/空白/snapshot/包 identity 审计通过；QRY-07 仍未关闭 |
 
 
 ## 固定开发顺序
@@ -43,6 +43,7 @@
 
 | 日期 | 模块 | 提交 / 证据 | 未关闭边界 |
 | --- | --- | --- | --- |
+| 2026-11-17 | Temporal query | 基线 `8791a87` 后本模块；两 patch 本地各6679 pass/16 skip；两 patch live各467/467，root 后补 endpoint/Kind8/8；r1包/消费者通过；独立走查1 Minor已修正；见 [模块记录](efcore-10-temporal-query-plan.md) | 已实现的成员、epoch/fractions、duration totals、calendar、offset/UTC、clocks、NULL和五类型converter profile；SQL DateTime Kind.Unspecified。命名时区/DST/非Gregorian/更宽组合与默认 MySQL Decimal scalar 保持开放；两模式最终诊断表残留0 |
 | 2026-11-17 | Numeric query | 基线 `be0b795` 后本模块；两 patch 各6665 pass/16 skip、LiveTests 各395/395（含64 numeric）；r2 包及两 patch 两模式消费者通过；独立走查1 Important 已修复；见 [模块记录](efcore-10-numeric-query-plan.md) | Oracle SIGN(0)、不可用双曲函数、MySQL Single 结果传输、nullable converter 和整数中间运算修复；MySQL 默认 Decimal scalar LEAST/GREATEST 仍在公开 reader metadata 边界失败，QRY-07 日期及更宽范围仍开放 |
 | 2026-11-17 | String query | 基线 `d5e8d25` 后本模块；两 patch 各6655 pass/16 skip；root live330/331后定向16/16、compat331/331；r1包及消费者通过；独立走查无阻塞问题 | 关闭两模式 QRY-06；支持窄原生语义域：字符长度/范围、空格、padding、collation、converter、CLOB/LONGTEXT；NCLOB、全容量、其他部署与任意 converter 不自动完成 |
 | 2026-11-17 | Aggregate / grouped query | 基线 `f8532df` 后的本模块；两 patch 各 6652 pass/16 skip、LiveTests 各 267/267；r1 包和消费者通过；独立走查 0 Critical/0 Important/1 deferred Minor；见 [模块记录](efcore-10-aggregate-query-plan.md) | 修复 nullable Single converter marker，关闭 Oracle QRY-04；MySQL 默认 Decimal SUM/AVG 仍在公开 reader metadata 边界失败。复合键 fixture 的 Tag 依赖 Bucket，尚不能检测仅遗漏第二键的回归；更宽映射/部署留在原矩阵 |

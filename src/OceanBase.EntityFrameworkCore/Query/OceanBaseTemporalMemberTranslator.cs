@@ -122,6 +122,7 @@ namespace OceanBase.EntityFrameworkCore.Query
                     mode == OceanBaseCompatibilityMode.MySql ? "DATETIME(0)" : "DATE")!;
                 if (member == DateTimeDate && dateMapping.Converter is { } converter)
                     resultMapping = (RelationalTypeMapping)resultMapping.WithComposedConverter(converter);
+                instance = LocalOffsetDateTime(instance, member.DeclaringType!);
                 return factory.Function(mode == OceanBaseCompatibilityMode.MySql ? "DATE" : "TRUNC", [instance],
                     nullable: true, argumentsPropagateNullability: [false], typeof(DateTime), resultMapping);
             }
@@ -135,6 +136,7 @@ namespace OceanBase.EntityFrameworkCore.Query
                     || dateMapping.Converter?.ConvertsNulls == true)
                     return null;
 
+                instance = LocalOffsetDateTime(instance, member.DeclaringType!);
                 return factory.Function(TimeOfDayMarker, [instance], nullable: true,
                     argumentsPropagateNullability: [false], typeof(TimeSpan), mappingSource.FindMapping(typeof(TimeSpan)));
             }
@@ -299,7 +301,7 @@ namespace OceanBase.EntityFrameworkCore.Query
             {
                 instance = factory.ApplyDefaultTypeMapping(instance);
                 return instance.TypeMapping is { } calendarMapping && SupportsCarrier(member.DeclaringType!, calendarMapping)
-                    ? TranslateCalendarPart(instance, weekday)
+                    ? TranslateCalendarPart(LocalOffsetDateTime(instance, member.DeclaringType!), weekday)
                     : null;
             }
 
@@ -327,6 +329,7 @@ namespace OceanBase.EntityFrameworkCore.Query
                 return null;
 
             var intMapping = mappingSource.FindMapping(typeof(int))!;
+            instance = LocalOffsetDateTime(instance, part.Receiver);
             if (part.Receiver == typeof(TimeSpan))
             {
                 return factory.Function(ExtractMarker, [factory.Fragment(part.Unit), instance], nullable: true,
@@ -337,7 +340,7 @@ namespace OceanBase.EntityFrameworkCore.Query
                 return factory.Function(part.MySqlFunction, [instance], nullable: true,
                     argumentsPropagateNullability: [false], typeof(int), intMapping);
 
-            if (part.Receiver == typeof(DateTime) && part.Unit is "HOUR" or "MINUTE" or "SECOND"
+            if (part.Receiver == typeof(DateTime) && part.Unit is "HOUR" or "MINUTE" or "SECOND" or "MILLISECOND" or "MICROSECOND" or "NANOSECOND"
                 && mapping.StoreTypeNameBase.Trim().Equals("DATE", StringComparison.OrdinalIgnoreCase))
                 instance = factory.Convert(instance, typeof(DateTime), mappingSource.FindMapping(typeof(DateTime)));
 
@@ -350,6 +353,11 @@ namespace OceanBase.EntityFrameworkCore.Query
                     argumentsPropagateNullability: [false], typeof(int), intMapping)
                 : extracted;
         }
+
+        private SqlExpression LocalOffsetDateTime(SqlExpression instance, Type receiver)
+            // Oracle EXTRACT on zoned timestamps uses UTC; CLR components use the stored offset's wall clock.
+            => mode == OceanBaseCompatibilityMode.Oracle && receiver == typeof(DateTimeOffset)
+                ? factory.Convert(instance, typeof(DateTime), mappingSource.FindMapping(typeof(DateTime))) : instance;
 
         private SqlExpression TranslateCalendarPart(SqlExpression instance, bool weekday)
         {
@@ -376,6 +384,7 @@ namespace OceanBase.EntityFrameworkCore.Query
         {
             var store = mapping.StoreTypeNameBase.Trim().ToUpperInvariant();
             var providerType = mapping.Converter?.ProviderClrType ?? receiver;
+            providerType = Nullable.GetUnderlyingType(providerType) ?? providerType;
             return receiver == typeof(DateTime)
                 ? providerType == typeof(DateTime) && (mode == OceanBaseCompatibilityMode.MySql
                     ? store == "DATETIME" : store is "DATE" or "TIMESTAMP")
@@ -394,6 +403,7 @@ namespace OceanBase.EntityFrameworkCore.Query
         {
             var store = mapping.StoreTypeNameBase.Trim().ToUpperInvariant();
             var providerType = mapping.Converter?.ProviderClrType ?? mapping.ClrType;
+            providerType = Nullable.GetUnderlyingType(providerType) ?? providerType;
             return receiver == typeof(DateTime)
                 ? providerType == typeof(DateTime) && (store is "DATE" or "DATETIME" or "TIMESTAMP")
                 : receiver == typeof(DateTimeOffset) && (mode == OceanBaseCompatibilityMode.MySql

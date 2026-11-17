@@ -30,7 +30,10 @@ Numeric QRY-07 acceptance is in progress: [module record](efcore-10-numeric-quer
 The tested default MySQL Decimal scalar LEAST/GREATEST result is also rejected by public
 Connector readers. Explicit(18,6) only establishes that domain; no default precision
 narrowing or text-result workaround is used. This scalar boundary does not contradict
-the separately accepted aggregate MIN/MAX profile. Temporal query acceptance remains open.
+the separately accepted aggregate MIN/MAX profile. The implemented temporal profile has native member/calendar/duration/offset/clock
+coverage and evidence-driven fixes; see [module record](efcore-10-temporal-query-plan.md).
+Named zones/DST, non-Gregorian sessions, additional methods, wider converter and
+coercion combinations remain outside that accepted profile; QRY-07 remains open.
 
 ## C. Connector 责任，不在 EF Provider 内实现
 

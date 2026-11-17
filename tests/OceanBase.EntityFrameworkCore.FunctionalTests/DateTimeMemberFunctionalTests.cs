@@ -91,7 +91,7 @@ public sealed class DateTimeMemberFunctionalTests
         Assert.DoesNotContain("__oceanbase_internal", sql);
         Assert.Contains(mode == OceanBaseCompatibilityMode.MySql
             ? "UTC_TIMESTAMP(6)"
-            : "CAST(SYS_EXTRACT_UTC(SYSTIMESTAMP) AS TIMESTAMP)", sql);
+            : "CAST(SYS_EXTRACT_UTC(SYSTIMESTAMP) AS TIMESTAMP(7))", sql);
     }
 
     [Theory]
@@ -107,10 +107,12 @@ public sealed class DateTimeMemberFunctionalTests
         table.Columns.Add("UtcDateTime", typeof(object));
         foreach (var name in new[] { "Year", "Month", "Day", "Hour", "Minute", "Second", "Millisecond", "Microsecond", "Nanosecond", "DayOfYear" })
             table.Columns.Add(name, typeof(int));
-        var timeOfDay = new TimeSpan(10, 20, 30).Add(TimeSpan.FromTicks(1234560));
-        table.Rows.Add(new DateTime(2026, 11, 16), mode == OceanBaseCompatibilityMode.Oracle
+        var expected = new DateTimeOffset(2026, 11, 16, 10, 20, 30, TimeSpan.FromHours(8)).AddTicks(1234560);
+        var timeOfDay = expected.TimeOfDay;
+        table.Rows.Add(expected.Date, mode == OceanBaseCompatibilityMode.Oracle
             ? new OceanBaseIntervalDayToSecond(false, 0, 10, 20, 30, 123456000, 9, 6)
-            : timeOfDay, new DateTime(2026, 11, 16, 2, 20, 30), 2026, 11, 16, 10, 20, 30, 123, 123456, 123456700, 320);
+            : timeOfDay, expected.UtcDateTime, expected.Year, expected.Month, expected.Day, expected.Hour, expected.Minute,
+            expected.Second, expected.Millisecond, expected.Microsecond, expected.Nanosecond, expected.DayOfYear);
         var capture = new Capture(table);
         await using var context = Create(mode, capture);
         var query = context.Rows.Where(row => row.Zoned.UtcDateTime > new DateTime(2026, 1, 1)).Select(row => new
@@ -131,13 +133,13 @@ public sealed class DateTimeMemberFunctionalTests
         });
 
         var result = Assert.Single(async ? await query.ToListAsync() : query.ToList());
-        Assert.Equal(new DateTime(2026, 11, 16), result.Date);
+        Assert.Equal(expected.Date, result.Date);
         Assert.Equal(timeOfDay, result.TimeOfDay);
-        Assert.Equal(new DateTime(2026, 11, 16, 2, 20, 30), result.UtcDateTime);
-        Assert.Equal(2026, result.Year);
-        Assert.Equal(123456, result.Microsecond);
-        Assert.Equal(123456700, result.Nanosecond);
-        Assert.Equal(320, result.DayOfYear);
+        Assert.Equal(expected.UtcDateTime, result.UtcDateTime);
+        Assert.Equal(expected.Year, result.Year);
+        Assert.Equal(expected.Microsecond, result.Microsecond);
+        Assert.Equal(expected.Nanosecond, result.Nanosecond);
+        Assert.Equal(expected.DayOfYear, result.DayOfYear);
         var sql = Assert.Single(capture.Sql);
         Assert.DoesNotContain("__oceanbase_internal", sql);
         if (mode == OceanBaseCompatibilityMode.MySql)

@@ -95,7 +95,20 @@ writes: on the tested server, direct out-of-range TIME parameters such as `838:5
 store `838:59:59.000000`, while equivalent typed literals return 1525. The provider previously
 allowed those extra fractions; the narrower validation prevents that loss. Raw SQL using
 caller-owned parameters bypasses mapping validation. Numeric-offset session tests do not
-establish named timezone/DST, other deployments or full temporal query acceptance.
+establish named timezone/DST or other deployments.
+
+The temporal query profile additionally covers implemented calendar/fractional members,
+Date/TimeOfDay/Ticks/DayNumber, signed TimeSpan components and Double totals, DateOnly
+AddDays/AddMonths/AddYears and DateTime AddMonths/AddYears. Oracle calendar arithmetic
+requires a Gregorian session; month ends clamp without losing timestamp fractions.
+Oracle DateTimeOffset components use the stored offset's local wall clock; UTC members
+use UTC extraction. MySQL components use the normalized UTC storage, and offset-local
+Offset/TotalOffsetMinutes/Ticks/DateTime members reject in predicates. SQL DateTime
+results, including UTC-valued projections and clocks, have Kind.Unspecified; callers
+must assign a Kind explicitly when constructing zoned application values. Same-carrier
+converter expressions operate in stored space; temporal-valued mapped results apply the
+inverse converter once. Other temporal methods and wider coercion/calendar combinations
+are not implied by this profile; QRY-07 remains open for its separate numeric gaps.
 
 Ordinary ordered queries have native coverage for OrderBy/ThenBy in both directions,
 Distinct, nonnegative Skip/Take, offset-only and empty pages. Use a final unique key

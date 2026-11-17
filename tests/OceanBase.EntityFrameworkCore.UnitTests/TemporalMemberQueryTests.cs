@@ -18,6 +18,134 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
     public sealed class TemporalMemberQueryTests
     {
         [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle)]
+        public void Tick_expressions_balance_delimiters_in_projection_and_predicate(OceanBaseCompatibilityMode mode)
+        {
+            using var context = CreateContext(mode);
+            IQueryable[] queries = [context.Rows.Where(row => row.Duration.Ticks == 0).Select(row => row.Duration.Ticks),
+                context.Rows.Where(row => row.Clock.Ticks == 0).Select(row => row.Clock.Ticks),
+                context.Rows.Where(row => row.Stamp.Ticks > 0).Select(row => row.Stamp.Ticks),
+                context.Rows.Where(row => row.DateStamp.Ticks > 0).Select(row => row.DateStamp.Ticks),
+                context.Rows.Select(row => row.Zoned.UtcTicks)];
+            foreach (var query in queries)
+            {
+                var sql = query.ToQueryString();
+                Assert.Equal(sql.Count(value => value == '('), sql.Count(value => value == ')'));
+            }
+        }
+
+        [Fact]
+        public void MySql_nanosecond_remainder_scales_microseconds_before_modulo()
+        {
+            using var context = CreateContext(OceanBaseCompatibilityMode.MySql);
+            var sql = context.Rows.Select(row => new { row.Stamp.Nanosecond, Clock = row.Clock.Nanosecond,
+                Zoned = row.Zoned.Nanosecond, Duration = row.Duration.Nanoseconds }).ToQueryString();
+            foreach (var field in new[] { "Stamp", "Clock", "Zoned" })
+                Assert.Contains($"MOD(MICROSECOND(`r`.`{field}`) * 1000, 1000)", sql);
+            Assert.Contains("MOD(ABS(MICROSECOND(`r`.`Duration`)) * 1000, 1000)", sql);
+        }
+
+        [Fact]
+        public void Oracle_duration_seconds_truncate_fraction_in_the_predicate()
+        {
+            using var context = CreateContext(OceanBaseCompatibilityMode.Oracle);
+            var sql = context.Rows.Where(row => row.Duration.Seconds == 0).Select(row => row.Duration.Seconds).ToQueryString();
+            Assert.Contains("WHERE TRUNC(EXTRACT(SECOND FROM \"r\".\"Duration\")) = 0", sql);
+        }
+
+        [Fact]
+        public void Oracle_DateOnly_arithmetic_retains_explicit_DATE_result_metadata()
+        {
+            using var context = CreateContext(OceanBaseCompatibilityMode.Oracle);
+            var amount = -13;
+            var sql = context.Rows.Select(row => new { Days = row.Date.AddDays(amount), Months = row.Date.AddMonths(amount),
+                Years = row.Date.AddYears(amount) }).ToQueryString();
+            Assert.Contains("CAST((\"r\".\"Date\" + :amount) AS DATE)", sql);
+            Assert.Equal(3, sql.Split(" AS DATE)").Length - 1);
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle)]
+        public void Duration_totals_use_native_Double_arithmetic_before_fractional_division(OceanBaseCompatibilityMode mode)
+        {
+            using var context = CreateContext(mode);
+            var sql = context.Rows.Select(row => new { row.Duration.TotalDays, row.Duration.TotalSeconds }).ToQueryString();
+            Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? "/ 1e6" : "* 1D", sql);
+            Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? "/ 86400e0" : "/ 86400D", sql);
+            Assert.Equal(sql.Count(value => value == '('), sql.Count(value => value == ')'));
+            if (mode == OceanBaseCompatibilityMode.Oracle) Assert.Contains("* 1D) / 86400D", sql);
+        }
+
+        [Fact]
+        public void Oracle_offset_local_parts_drop_the_zone_before_extraction_and_subtraction()
+        {
+            using var context = CreateContext(OceanBaseCompatibilityMode.Oracle);
+            var sql = context.Rows.Select(row => new { row.Zoned.Year, row.Zoned.Hour, row.Zoned.TimeOfDay }).ToQueryString();
+            Assert.Contains("EXTRACT(YEAR FROM CAST(\"r\".\"Zoned\" AS TIMESTAMP(7)))", sql);
+            Assert.Contains("EXTRACT(HOUR FROM CAST(\"r\".\"Zoned\" AS TIMESTAMP(7)))", sql);
+            Assert.Contains("(CAST(\"r\".\"Zoned\" AS TIMESTAMP(7)) - CAST(TRUNC(CAST(\"r\".\"Zoned\" AS TIMESTAMP(7))) AS TIMESTAMP))", sql);
+        }
+
+        [Fact]
+        public void Oracle_DATE_fractional_parts_extract_from_a_timestamp_cast()
+        {
+            using var context = CreateContext(OceanBaseCompatibilityMode.Oracle);
+            var sql = context.Rows.Select(row => new { row.DateStamp.Millisecond, row.DateStamp.Microsecond, row.DateStamp.Nanosecond }).ToQueryString();
+            Assert.Equal(3, sql.Split("EXTRACT(SECOND FROM CAST(\"r\".\"DateStamp\" AS TIMESTAMP(7)))").Length - 1);
+        }
+
+        [Fact]
+        public void Oracle_UTC_and_clock_casts_preserve_the_mapped_seven_digit_precision()
+        {
+            using var context = CreateContext(OceanBaseCompatibilityMode.Oracle);
+            var sql = context.Rows.Select(row => new { row.Zoned.UtcDateTime, row.Zoned.UtcTicks,
+                Now = DateTime.Now, Utc = DateTime.UtcNow, OffsetUtc = DateTimeOffset.UtcNow }).ToQueryString();
+            Assert.Contains("CAST(SYS_EXTRACT_UTC(\"r\".\"Zoned\") AS TIMESTAMP(7))", sql);
+            Assert.Contains("CAST(CURRENT_TIMESTAMP AS TIMESTAMP(7))", sql);
+            Assert.Contains("CAST(SYS_EXTRACT_UTC(SYSTIMESTAMP) AS TIMESTAMP(7))", sql);
+        }
+
+        [Fact]
+        public void Oracle_total_offset_minutes_balances_its_arithmetic_group()
+        {
+            using var context = CreateContext(OceanBaseCompatibilityMode.Oracle);
+            var sql = context.Rows.Where(row => row.Zoned.TotalOffsetMinutes < 0).Select(row => row.Zoned.TotalOffsetMinutes).ToQueryString();
+            Assert.Equal(sql.Count(value => value == '('), sql.Count(value => value == ')'));
+        }
+
+        [Fact]
+        public void Oracle_nullable_offset_converter_keeps_the_zoned_marker_carrier()
+        {
+            using var context = CreateContext(OceanBaseCompatibilityMode.Oracle);
+            var sql = context.Rows.Where(row => row.ConvertedZoned!.Value.TotalOffsetMinutes < 0)
+                .Select(row => row.ConvertedZoned!.Value.Offset).ToQueryString();
+            Assert.Contains("TIMEZONE_MINUTE", sql);
+            Assert.Contains("NUMTODSINTERVAL", sql);
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle)]
+        public void Nullable_same_carrier_converters_translate_temporal_members_and_calendar_results(OceanBaseCompatibilityMode mode)
+        {
+            using var context = CreateContext(mode);
+            IQueryable[] queries = [
+                context.Rows.Where(row => row.ConvertedStamp!.Value.Year > 0).Select(row => row.ConvertedStamp!.Value.Year),
+                context.Rows.Where(row => row.ConvertedStamp!.Value.Ticks > 0).Select(row => row.ConvertedStamp!.Value.Ticks),
+                context.Rows.Where(row => row.ConvertedStamp!.Value.Date > new DateTime(1900, 1, 1)).Select(row => row.ConvertedStamp!.Value.Date),
+                context.Rows.Where(row => row.ConvertedStamp!.Value.TimeOfDay > TimeSpan.Zero).Select(row => row.ConvertedStamp!.Value.TimeOfDay),
+                context.Rows.Where(row => row.ConvertedStamp!.Value.AddMonths(1).Year > 0).Select(row => row.ConvertedStamp!.Value.AddMonths(1)),
+                context.Rows.Where(row => row.ConvertedDay!.Value.DayNumber > 0).Select(row => row.ConvertedDay!.Value.DayNumber),
+                context.Rows.Where(row => row.ConvertedDay!.Value.AddYears(1).Year > 0).Select(row => row.ConvertedDay!.Value.AddYears(1)),
+                context.Rows.Where(row => row.ConvertedDuration!.Value.Seconds > 0).Select(row => row.ConvertedDuration!.Value.Seconds),
+                context.Rows.Where(row => row.ConvertedDuration!.Value.Ticks > 0).Select(row => row.ConvertedDuration!.Value.Ticks),
+                context.Rows.Where(row => row.ConvertedDuration!.Value.TotalDays > 0).Select(row => row.ConvertedDuration!.Value.TotalDays)];
+            foreach (var query in queries) Assert.DoesNotContain("__oceanbase_internal", query.ToQueryString());
+        }
+
+        [Theory]
         [InlineData(OceanBaseCompatibilityMode.MySql, false)]
         [InlineData(OceanBaseCompatibilityMode.MySql, true)]
         [InlineData(OceanBaseCompatibilityMode.Oracle, false)]
@@ -73,8 +201,8 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             }
             else
             {
-                Assert.Contains("CAST(CURRENT_TIMESTAMP AS TIMESTAMP)", sql);
-                Assert.Contains("CAST(SYS_EXTRACT_UTC(SYSTIMESTAMP) AS TIMESTAMP)", sql);
+                Assert.Contains("CAST(CURRENT_TIMESTAMP AS TIMESTAMP(7))", sql);
+                Assert.Contains("CAST(SYS_EXTRACT_UTC(SYSTIMESTAMP) AS TIMESTAMP(7))", sql);
                 Assert.Contains("TRUNC(CURRENT_DATE)", sql);
             }
         }
@@ -91,7 +219,7 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             Assert.DoesNotContain("__oceanbase_internal", sql);
             Assert.Contains(mode == OceanBaseCompatibilityMode.MySql
                 ? "UTC_TIMESTAMP(6)"
-                : "CAST(SYS_EXTRACT_UTC(SYSTIMESTAMP) AS TIMESTAMP)", sql);
+                : "CAST(SYS_EXTRACT_UTC(SYSTIMESTAMP) AS TIMESTAMP(7))", sql);
         }
 
         [Theory]
@@ -482,7 +610,7 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
 
             Assert.DoesNotContain("__oceanbase_internal", sql);
             Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? "YEAR(`r`.`Zoned`)" : "EXTRACT(YEAR FROM", sql);
-            Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? "DAYOFYEAR(`r`.`Zoned`)" : "TRUNC(\"r\".\"Zoned\"", sql);
+            Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? "DAYOFYEAR(`r`.`Zoned`)" : "TRUNC(CAST(\"r\".\"Zoned\" AS TIMESTAMP(7))", sql);
             Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? "MICROSECOND(`r`.`Zoned`)" : "EXTRACT(SECOND FROM", sql);
         }
 
@@ -495,10 +623,10 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             var sql = context.Rows.Select(row => new { row.Zoned.Date, row.Zoned.TimeOfDay }).ToQueryString();
 
             Assert.DoesNotContain("__oceanbase_internal", sql);
-            Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? "DATE(`r`.`Zoned`)" : "TRUNC(\"r\".\"Zoned\")", sql);
+            Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? "DATE(`r`.`Zoned`)" : "TRUNC(CAST(\"r\".\"Zoned\" AS TIMESTAMP(7)))", sql);
             Assert.Contains(mode == OceanBaseCompatibilityMode.MySql
                 ? "TIME(`r`.`Zoned`)"
-                : "(\"r\".\"Zoned\" - CAST(TRUNC(\"r\".\"Zoned\") AS TIMESTAMP))", sql);
+                : "(CAST(\"r\".\"Zoned\" AS TIMESTAMP(7)) - CAST(TRUNC(CAST(\"r\".\"Zoned\" AS TIMESTAMP(7))) AS TIMESTAMP))", sql);
         }
 
         [Theory]
@@ -1471,6 +1599,14 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
                     value => value.ToString("O"), value => DateOnly.Parse(value));
                 modelBuilder.Entity<Row>().Property(row => row.TextClock).HasConversion(
                     value => value.ToString("O"), value => TimeOnly.Parse(value));
+                modelBuilder.Entity<Row>().Property(row => row.ConvertedStamp).HasConversion(
+                    value => value.HasValue ? value.Value.AddDays(7) : value, value => value.HasValue ? value.Value.AddDays(-7) : value);
+                modelBuilder.Entity<Row>().Property(row => row.ConvertedDay).HasConversion(
+                    value => value.HasValue ? value.Value.AddDays(2) : value, value => value.HasValue ? value.Value.AddDays(-2) : value);
+                modelBuilder.Entity<Row>().Property(row => row.ConvertedDuration).HasConversion(
+                    value => value.HasValue ? value.Value.Negate() : value, value => value.HasValue ? value.Value.Negate() : value);
+                modelBuilder.Entity<Row>().Property(row => row.ConvertedZoned).HasConversion(
+                    value => value.HasValue ? value.Value.AddMinutes(30) : value, value => value.HasValue ? value.Value.AddMinutes(-30) : value);
             }
         }
 
@@ -1497,6 +1633,10 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             public TimeOnly TextClock { get; set; }
             public DateTimeOffset Zoned { get; set; }
             public TimeSpan Duration { get; set; }
+            public DateTime? ConvertedStamp { get; set; }
+            public DateOnly? ConvertedDay { get; set; }
+            public TimeSpan? ConvertedDuration { get; set; }
+            public DateTimeOffset? ConvertedZoned { get; set; }
         }
     }
 }

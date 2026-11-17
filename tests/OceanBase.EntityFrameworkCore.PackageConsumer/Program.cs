@@ -483,7 +483,7 @@ namespace PackageConsumer
                 var offsetParts = mode == OceanBaseCompatibilityMode.MySql
                     ? new[] { "YEAR(`r`.`OffsetAt`)", "DAYOFYEAR(`r`.`OffsetAt`)", "DATE(`r`.`OffsetAt`)",
                         "TIME(`r`.`OffsetAt`)", "MICROSECOND(`r`.`OffsetAt`)" }
-                    : new[] { "EXTRACT(YEAR FROM", "'YYYY'", "TRUNC(\"r\".\"OffsetAt\")",
+                    : new[] { "EXTRACT(YEAR FROM", "'YYYY'", "TRUNC(CAST(\"r\".\"OffsetAt\" AS TIMESTAMP(7)))",
                         "EXTRACT(SECOND FROM" };
                 if (offsetParts.Any(part => !offsetPartsSql.Contains(part, StringComparison.Ordinal))
                     || (mode == OceanBaseCompatibilityMode.Oracle
@@ -509,7 +509,7 @@ namespace PackageConsumer
                     .Select(_ => DateTimeOffset.UtcNow).ToQueryString();
                 if ((mode == OceanBaseCompatibilityMode.MySql
                         ? !offsetClockSql.Contains("UTC_TIMESTAMP(6)", StringComparison.Ordinal)
-                        : !offsetClockSql.Contains("CAST(SYS_EXTRACT_UTC(SYSTIMESTAMP) AS TIMESTAMP)", StringComparison.Ordinal))
+                        : !offsetClockSql.Contains("CAST(SYS_EXTRACT_UTC(SYSTIMESTAMP) AS TIMESTAMP(7))", StringComparison.Ordinal))
                     || offsetClockSql.Contains("__oceanbase_internal_", StringComparison.Ordinal))
                     throw new Exception("Packed provider did not translate DateTimeOffset.UtcNow.");
                 if (mode == OceanBaseCompatibilityMode.MySql)
@@ -642,8 +642,8 @@ namespace PackageConsumer
                 }).ToQueryString();
                 var clockFunctions = mode == OceanBaseCompatibilityMode.MySql
                     ? new[] { "CURRENT_TIMESTAMP(6)", "UTC_TIMESTAMP(6)", "CURDATE()" }
-                    : new[] { "CAST(CURRENT_TIMESTAMP AS TIMESTAMP)",
-                        "CAST(SYS_EXTRACT_UTC(SYSTIMESTAMP) AS TIMESTAMP)", "TRUNC(CURRENT_DATE)" };
+                    : new[] { "CAST(CURRENT_TIMESTAMP AS TIMESTAMP(7))",
+                        "CAST(SYS_EXTRACT_UTC(SYSTIMESTAMP) AS TIMESTAMP(7))", "TRUNC(CURRENT_DATE)" };
                 if (clockFunctions.Any(function => !clockSql.Contains(function, StringComparison.Ordinal))
                     || clockSql.Contains("__oceanbase_internal_", StringComparison.Ordinal))
                     throw new Exception("Packed provider did not translate DateTime server clock members.");

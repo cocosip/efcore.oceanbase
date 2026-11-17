@@ -53,8 +53,9 @@ namespace OceanBase.EntityFrameworkCore.Query
 
         internal static bool IsDateTimeCalendarMapping(RelationalTypeMapping mapping, OceanBaseCompatibilityMode mode)
         {
-            if (mapping.ClrType != typeof(DateTime) || mapping.Converter?.ConvertsNulls == true
-                || (mapping.Converter?.ProviderClrType ?? mapping.ClrType) != typeof(DateTime))
+            var providerType = mapping.Converter?.ProviderClrType ?? mapping.ClrType;
+            if ((Nullable.GetUnderlyingType(mapping.ClrType) ?? mapping.ClrType) != typeof(DateTime) || mapping.Converter?.ConvertsNulls == true
+                || (Nullable.GetUnderlyingType(providerType) ?? providerType) != typeof(DateTime))
                 return false;
 
             var store = mapping.StoreTypeNameBase.Trim().ToUpperInvariant();
@@ -65,8 +66,9 @@ namespace OceanBase.EntityFrameworkCore.Query
 
         private bool IsDateOnlyMapping(RelationalTypeMapping mapping)
         {
-            if (mapping.Converter?.ConvertsNulls == true || mapping.ClrType != typeof(DateOnly)) return false;
+            if (mapping.Converter?.ConvertsNulls == true || (Nullable.GetUnderlyingType(mapping.ClrType) ?? mapping.ClrType) != typeof(DateOnly)) return false;
             var providerType = mapping.Converter?.ProviderClrType ?? mapping.ClrType;
+            providerType = Nullable.GetUnderlyingType(providerType) ?? providerType;
             return providerType == typeof(DateTime)
                 && mapping.StoreTypeNameBase.Trim().Equals("DATE", StringComparison.OrdinalIgnoreCase);
         }
