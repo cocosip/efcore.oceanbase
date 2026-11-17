@@ -6,19 +6,18 @@
 
 | 项目 | 结果 |
 | --- | --- |
-| 分支 / 提交 | `efcore/10.0`；Temporal storage 模块，基线 `941190a` |
-| 工作区 | 本模块源码、测试和文档一并提交；凭据仅从 User Secrets 读取 |
-| 最新模块 | 五种 CLR Temporal 实库存储/精度/会话/回读；MySQL TIME 上界校验修正，防止额外小数丢失；见 [模块记录](efcore-10-temporal-storage-plan.md) |
-| Required 状态 | 每个模式 9 Done / 44 In progress |
-| Local Release | 本模块两 patch 各 6645 pass / 16 existing skip；Temporal mapping/query 定向 131 pass；生产改动仅共享 TIME 上界 |
-| Package | `10.0.0-temporal-storage-r1-20261117` 内容/依赖及两模式两 patch 消费者、打包时 DLL/README identity 通过；未发布 |
-| Native | 4.4.2.2 普通直连；两 patch 各 119 LiveTests（109 live、10 offline）通过；新增 26 个 Temporal 用例；已知错误 characterization 不代表无损 Double 参数绑定或越界 TIME 支持 |
+| 分支 / 提交 | `efcore/10.0`；Ordered/cardinality 模块，基线 `1a4d129` |
+| 工作区 | 本模块测试和文档一并提交，生产 C# 未改；凭据仅从 User Secrets 读取 |
+| 最新模块 | 排序/Distinct/分页、First/Single 基数和普通实体 identity 的两模式同步/异步实库验收；见 [模块记录](efcore-10-ordered-cardinality-plan.md) |
+| Required 状态 | 每个模式 11 Done / 42 In progress；本模块关闭 `QRY-02/05`，总数仍为 53 |
+| Local Release | 生产和 offline 测试自 `1a4d129` 未改，沿用该检查点两 patch 各 6645 pass / 16 existing skip 的既有证据，本模块未重跑 offline 全套 |
+| Package | `10.0.0-ordered-cardinality-r1-20261117` 内容/依赖及两模式两 patch 消费者、打包时 DLL/README identity 通过；未发布 |
+| Native | 4.4.2.2 普通直连；两 patch 各 135 LiveTests（125 live、10 offline）通过；新增 16 个排序/基数用例，最终强化异常断言后各 16 定向通过；已知 Double characterization 不代表无损参数绑定 |
 
 ## 固定开发顺序
 
 | 顺序 | 模块 | ID | 下一步交付物 |
 | --- | --- | --- | --- |
-| 2026-11-17 | Temporal 真实存储与 TIME 上界 | 两 patch 各 6645 pass/16 skip、119 LiveTests；r1 包及消费者通过；走查无阻塞发现 | 五类型 NULL/端点/精度/default/seed/generated/converter/update、比较/原值和 numeric-offset 会话已验收；命名时区/DST/更宽查询仍开放；一处即时生成值 Kind 测试缺口见模块记录 |
 | 0 | EF 连接路径和诊断 | `CFG-04`, `CON-02..05`, `DIA-01..02`, `SQL-01` | 对照 Connector 普通直连契约；只修有证据的 Provider 差异；补同步/异步 lease 回归 |
 | 1 | 真实只读验收 | `TST-02`, `REL-01` | 两模式 SELECT、身份、版本和现有查询 profile 已通过；更宽错误分类和写入/事务/Schema 待验收 |
 | 2 | 映射剩余边界 | `MOD-01..03`, `MAP-01..07` | 精度/长度/LOB/Guid/时区/转换器边界和必要 live round-trip |
@@ -42,6 +41,8 @@
 
 | 日期 | 模块 | 提交 / 证据 | 未关闭边界 |
 | --- | --- | --- | --- |
+| 2026-11-17 | 排序、分页和 First/Single 基数 | 两 patch 各 135 LiveTests；最终审查修正后各 16 定向通过；r1 包及消费者通过；生产 C# 未改，关闭 QRY-02/05 | 原有 SingleOrDefault 拒绝探针可能被多行错误误满足，已改空源并完成敏感性 RED/GREEN；负分页/comparer/显式 default overload 不在支持契约，字符串 collation、图/raw/runtime、其他部署与取消另行验收 |
+| 2026-11-17 | Temporal 真实存储与 TIME 上界 | 两 patch 各 6645 pass/16 skip、119 LiveTests；r1 包及消费者通过；走查无阻塞发现 | 五类型 NULL/端点/精度/default/seed/generated/converter/update、比较/原值和 numeric-offset 会话已验收；命名时区/DST/更宽查询仍开放；一处即时生成值 Kind 测试缺口见模块记录 |
 | 2026-11-17 | Oracle Double 声明与精度回归 | 新增 8 个用例；两 patch 各 93 LiveTests；[对照记录](efcore-10-oracle-double-declarations-plan.md) | NUMBER(18,6) 的舍入与原生参数丢失已区分；显式 BINARY_DOUBLE/Precision17 未改善已测边界；Connector/server 根因和完整范围仍未验收 |
 | 2026-11-17 | Binary/Guid 真实存储与空 BLOB | 两 patch 各 6645 pass/16 skip、85 LiveTests；r1 包/消费者通过；独立走查无发现 | RAW 空值拒绝；目标 MySQL LOB DEFAULT 1067；完整 LOB 容量/API、比较、index/concurrency 和 temporal 等仍开放 |
 | 2026-11-17 | 数值真实存储与 Oracle Single 字面量 | 本模块；两 patch 各 6644 pass/16 skip；各 59 LiveTests；r1 包及两 patch 两模式消费者通过 | Oracle Double 参数极值 1426、测试微小值变零，direct/显式 Prepare 同样复现；完整 Double 绑定未验收；Binary/Guid/temporal 和宽映射仍待推进 |

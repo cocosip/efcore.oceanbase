@@ -76,6 +76,20 @@ allowed those extra fractions; the narrower validation prevents that loss. Raw S
 caller-owned parameters bypasses mapping validation. Numeric-offset session tests do not
 establish named timezone/DST, other deployments or full temporal query acceptance.
 
+Ordinary ordered queries have native coverage for OrderBy/ThenBy in both directions,
+Distinct, nonnegative Skip/Take, offset-only and empty pages. Use a final unique key
+when paging duplicate sort values. Native NULL ordering follows the dialect: the
+tested MySQL mode sorts NULL first ascending and Oracle sorts NULL last ascending;
+descending reverses those positions. Use explicit null-rank/coalesce expressions
+when portable placement is required; this does not configure string collation.
+
+First/FirstOrDefault/Single/SingleOrDefault and ordinary predicate overloads have
+sync/async native coverage for empty, one and multiple rows with entity, scalar,
+nullable, converter and reference projections. Comparer and explicit default-value
+overloads are excluded. Ordinary duplicate-entity queries separately verify tracked,
+untracked and identity-resolution behavior. Graph Include and broader official
+runtime families retain their own acceptance requirements.
+
 Parameterless `DefaultIfEmpty` has local coverage for ordinary scalar/converter defaults, anonymous
 objects, DTOs, constructed mapped CLR types and boxed scalar projections, including per-parent paging.
 A missing source returns null for reference projections; a present row with NULL members remains an
