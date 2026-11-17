@@ -11,27 +11,29 @@
 | 分支 / 提交 | `efcore/10.0`；Connection lifecycle 模块，基线 `5f73ef9`，本模块本地提交 |
 | 工作区 | Provider 修复 supplied connection 重开丢失凭据、提前释放健康 reader 后会话 Broken；测试仅在进程内按用户授权关闭 TLS；不改 Connector/User Secrets；不推送/发布 |
 | 最新模块 | 两模式同步/异步连接所有权、嵌套 lease、模式拒绝、真实错误、partial reader、opened callback、timeout/cancel、显式重开；见 [模块记录](efcore-10-connection-lifecycle-plan.md) |
-| Required 状态 | MySQL：17 Done / 36 In progress；Oracle：18 Done / 35 In progress；每模式53。CON-02/03/04关闭普通直连profile；CON-05写入取消及更宽facade/diagnostics/事务/Schema仍开放；数量不是未实现功能数 |
+| Required 状态 | MySQL：19 Done / 34 In progress；Oracle：20 Done / 33 In progress；每模式53。CON-02/03/04及QRY-10/DIA-01关闭声明的普通直连profile；CON-05写入取消及更宽facade/diagnostics/事务/Schema仍开放；数量不是未实现功能数 |
 | Local Release | 隔离 EF10.0.0、EF10.0.14 各6690 pass /16 existing specification skip；两套均从当前源码构建；Unit2663、Functional2487、Specification1538+16skip、Consumer2 |
 | Package | `10.0.0-connection-lifecycle-r1-20261117` 内容/依赖及两模式两 patch 消费者通过；源/包/消费者 DLL、README identity audit 通过；未发布 |
-| Native | 普通直连4.4.2.2；EF10.0.0、EF10.0.14 串行全套各590/590（577 live、13 offline）；新增56 lifecycle+1 offline TLS配置；root先行定向56/56；最终两模式诊断表残留0 |
+| Native | 普通直连4.4.2.2；EF10.0.0、EF10.0.14 Raw/diagnostics后全套各618/618（605 native、13 offline）；本批新增28项native验收，未新增功能；最终两模式诊断表残留0 |
 | Review | 独立只读走查1 Important：reader provider-specific APIs未转发，已RED/GREEN修复；supplied connection修复的后续走查0 Critical/0 Important；11个cleanup单元测试通过 |
-| 后续 | 按用户恢复后的持续目标推进；连接关闭后补 raw/diagnostics、写入/并发、事务、Schema 和最终发布门禁。完整 EF10 目标尚未完成 |
+| 后续 | 缺失功能开发优先，首先补 DateTime 时间运算翻译；写入/并发、事务、Schema 等已有实现的验收独立排队。完整 EF10 目标尚未完成 |
 
-## 固定开发顺序
+## 开发优先队列与独立验收队列
 
-| 顺序 | 模块 | ID | 下一步交付物 |
-| --- | --- | --- | --- |
-| 0 | EF 连接路径和诊断 | `CFG-04`, `CON-02..05`, `DIA-01..02`, `SQL-01` | 对照 Connector 普通直连契约；只修有证据的 Provider 差异；补同步/异步 lease 回归 |
-| 1 | 真实只读验收 | `TST-02`, `REL-01` | 两模式 SELECT、身份、版本和现有查询 profile 已通过；更宽错误分类和写入/事务/Schema 待验收 |
-| 2 | 映射剩余边界 | `MOD-01..03`, `MAP-01..07` | 精度/长度/LOB/Guid/时区/转换器边界和必要 live round-trip |
-| 3 | 查询翻译和物化 | `QRY-01..11` | 剩余 overload、组合、runtime specifications 和真实结果 |
-| 4 | 写入和并发 | `UPD-01..05` | 真实 DML、生成值回读、并发冲突和约束 |
-| 5 | 事务恢复 | `TXN-01..03`, `DEF-09` | 真实 commit/rollback/savepoint/取消原子性 |
-| 6 | Schema 生命周期 | `SCH-01..03` | 隔离目标上的 DDL、权限、删除、锁和清理 |
-| 7 | 规格和发布 | `TST-01`, `REL-02`, `PKG-01..04` | 关系 runtime families、最终 revision 和包矩阵 |
+优先实现明确缺失的 API，不再按验收矩阵逐行补证据来代替功能开发。
 
-按顺序完成各模块的本地实现、RED/green、同步/异步、两模式、代码走查、适用的 full/package 检查和本地 commit。外部连接不可用时，保留对应 live 验收缺口并继续下一模块的本地工作；不得将缺少 live 证据的行改为 Done，也不得因此冻结全部 Provider 开发。
+| 优先级 | 功能开发 | 完成交付 |
+| --- | --- | --- |
+| 1 | DateTime 时间运算缺失翻译 | 先实现 Add(TimeSpan)/Subtract(TimeSpan)，覆盖正负、小数、NULL、参数刷新及两模式结果；AddDays/AddHours(double) 的精度合同单独处理 |
+| 2 | 其他已确认的 temporal/string overload | 逐 API 记录缺失、实现和边界，不把已有功能重新计为新增 |
+| 3 | 生成键及 DDL/scaffolding 部分形状 | 按 [实现缺口](efcore-10-implementation-gaps.md) 核实 Provider 可实现范围；Connector/server 边界单列 |
+
+每个功能模块先 RED，再实现、针对性测试、适用的回归和独立走查，通过后本地提交。
+四组明确延期功能仍按 DEF-04/05/06/10 管理，不自动扩展当前范围。
+
+发布前验收另行保留：已实现的写入/并发、事务恢复、Schema 生命周期、完整 runtime
+specifications、其他部署及最终包/revision 检查。它们未通过不等于功能代码尚未开发，
+也不得因等待这些证据停止明确缺失功能的开发。
 
 ## Connector 能力边界
 
@@ -45,6 +47,7 @@
 
 | 日期 | 模块 | 提交 / 证据 | 未关闭边界 |
 | --- | --- | --- | --- |
+| 2026-11-17 | Raw SQL / diagnostics（验收补充） | 两 patch 全套各618/618、0 fail/skip；28项新增 native cases；独立走查无剩余阻塞；见 [记录](efcore-10-raw-diagnostics-plan.md) | 未改生产代码，不计新增功能。关闭QRY-10/DIA-01声明profile；Oracle embedded-double-quote、其他日志源及更宽runtime仍开放；最终残留0 |
 | 2026-11-17 | Connection lifecycle | 基线 `5f73ef9` 后本模块；两 patch 本地各6690 pass/16 skip；全套LiveTests各590/590；r1包/两模式两patch消费者通过；review 1 Important已修复、后续0阻塞；见 [模块记录](efcore-10-connection-lifecycle-plan.md) | 关闭CON-02/03/04普通直连profile；修复supplied连接凭据回写和健康reader提前释放破坏会话；SaveChanges取消、事务、Schema及TLS/pool/其他部署独立开放 |
 | 2026-11-17 | Graph query / EF10 named filters | 基线 `c2c9b65` 后本模块；两 patch 本地各6679 pass/16 skip；全套 LiveTests 各533/533；r1包/消费者通过；独立走查0阻塞/2 Minor；见 [模块记录](efcore-10-graph-query-plan.md) | QRY-08/09 声明普通 profile 关闭；现有 Provider 查询 C# 未改。多表夹具按声明依赖逆序清理 CREATE-confirmed 表，partial CREATE 和反向 CREATE 顺序已回归。两个测试增强点及更宽图/继承/lazy/AOT/隔离/失败恢复范围保持单独记录；最终残留0 |
 | 2026-11-17 | Temporal query | 基线 `8791a87` 后本模块；两 patch 本地各6679 pass/16 skip；两 patch live各467/467，root 后补 endpoint/Kind8/8；r1包/消费者通过；独立走查1 Minor已修正；见 [模块记录](efcore-10-temporal-query-plan.md) | 已实现的成员、epoch/fractions、duration totals、calendar、offset/UTC、clocks、NULL和五类型converter profile；SQL DateTime Kind.Unspecified。命名时区/DST/非Gregorian/更宽组合与默认 MySQL Decimal scalar 保持开放；两模式最终诊断表残留0 |
