@@ -242,7 +242,20 @@ Text and temporal `Min/Max` support scalar/selector and nullable forms using nat
 the original mappings/readers. Supported temporal families are DateTime, DateTimeOffset, DateOnly,
 TimeOnly and TimeSpan. Filters, grouping and empty/null shaping use EF's relational pipeline.
 Null-converting converters, custom/cross-family carriers and Oracle CLOB/NCLOB extrema reject.
-Converters use stored-value ordering; native collation, temporal ordering and results remain unverified.
+Converters use stored-value ordering. Native bounded lowercase ASCII text and the five temporal
+families now have nullable/required extrema and empty/all-null result coverage on OceanBase 4.4.2.2;
+wider collation, named-zone and converter combinations remain unverified.
+
+Aggregate acceptance includes native numeric extrema, integral AVG promotion, checked SUM results,
+nullable/composite/converted group keys, filtered/distinct aggregates, HAVING/paging and ordered
+group collections/first entities in both modes. Converter aggregates operate on stored values and
+apply the result converter once; arbitrary converters need not preserve arithmetic or ordering.
+With Connector 0.3.0 on OceanBase 4.4.2.2 MySQL mode, **default `DECIMAL(65,28)` SUM/AVG results
+are not accepted**: populated results fail with `NotSupportedException` for decimal metadata;
+compensated SUM also fails for empty/all-null inputs. Direct public Connector reader APIs reproduce
+the rejection, while a text diagnostic projection confirms the server result. Explicit `(18,4)`
+aggregate tests pass for their declared domain; this does not change the default mapping or provide
+a full-range workaround. Oracle default NUMBER aggregates pass the tested result domain.
 
 Integer `&`, `|`, `^`, `~`, `<<` and `>>` have per-mode SQL translations, including nullable values and
 C# small-integer promotions. Bitwise enum storage must be numeric. Shift counts use C# width masking,

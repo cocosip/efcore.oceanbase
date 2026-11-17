@@ -384,7 +384,7 @@ namespace OceanBase.EntityFrameworkCore.Query
                 if (sqlFunctionExpression is not { IsBuiltIn: true, Instance: null, Schema: null, Arguments.Count: 1,
                         IsNullable: true, ArgumentsPropagateNullability: [false] }
                     || mapping is null || mapping.Converter?.ConvertsNulls == true
-                    || sqlFunctionExpression.Type != mapping.ClrType
+                    || sqlFunctionExpression.Type != (Nullable.GetUnderlyingType(mapping.ClrType) ?? mapping.ClrType)
                     || !OceanBaseMathTranslator.IsNumeric(sqlFunctionExpression.Type)
                     || (Nullable.GetUnderlyingType(carrier!) ?? carrier) != typeof(float)
                     || sqlFunctionExpression.Arguments[0].Type != typeof(double)
