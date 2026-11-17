@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using OceanBase.EntityFrameworkCore;
+using OceanBaseConnector;
 using Xunit;
 
 namespace OceanBase.EntityFrameworkCore.LiveTests;
@@ -39,7 +40,7 @@ public sealed class LiveConnectionTests
             await using var command = context.Database.GetDbConnection().CreateCommand();
             command.CommandText = sql;
             var result = await command.ExecuteScalarAsync();
-            Assert.Equal(1, Convert.ToInt32(result));
+            Assert.Equal(1m, result is OceanBaseDecimal number ? number.ToDecimal() : Convert.ToDecimal(result));
 
             if (mode == OceanBaseCompatibilityMode.MySql)
             {

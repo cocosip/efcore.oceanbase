@@ -2,6 +2,7 @@ using System;
 using System.Buffers;
 using System.Data;
 using System.Data.Common;
+using System.Globalization;
 using System.Text;
 using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore.Storage;
@@ -43,6 +44,20 @@ namespace OceanBase.EntityFrameworkCore.Storage
                     if (character == '\\' || char.IsControl(character))
                     {
                         return $"CONVERT(X'{Convert.ToHexString(Encoding.UTF8.GetBytes(text))}' USING utf8mb4)";
+                    }
+                }
+            }
+            else if (IsUnicode)
+            {
+                foreach (var character in text)
+                {
+                    if (character > 127 || character == '\\' || char.IsControl(character))
+                    {
+                        // Match Connector national literals without depending on the ordinary client encoding.
+                        var literal = new StringBuilder("u'");
+                        foreach (var unit in text)
+                            literal.Append('\\').Append(((int)unit).ToString("x4", CultureInfo.InvariantCulture));
+                        return literal.Append('\'').ToString();
                     }
                 }
             }

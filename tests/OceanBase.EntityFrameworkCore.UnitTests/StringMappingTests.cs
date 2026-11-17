@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
@@ -14,6 +15,40 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
 {
     public sealed class StringMappingTests
     {
+        public static IEnumerable<object?[]> NationalLiteralCases()
+        {
+            foreach (var declaration in new[] { "NCHAR(20)", "NVARCHAR2(20)", "NCLOB" })
+            foreach (var (value, sql) in new (string?, string)[]
+            {
+                (null, "NULL"), ("", "N''"), ("Ready's", "N'Ready''s'"),
+                ("海", @"u'\6d77'"), ("海🌊", @"u'\6d77\d83c\df0a'"),
+                (@"\6d77", @"u'\005c\0036\0064\0037\0037'"),
+                ("' OR 1=1--\n\0", @"u'\0027\0020\004f\0052\0020\0031\003d\0031\002d\002d\000a\0000'"),
+                ("\u007f\u0085", @"u'\007f\0085'")
+            }) yield return [declaration, value, sql];
+        }
+
+        [Theory]
+        [MemberData(nameof(NationalLiteralCases))]
+        public void Oracle_national_literals_preserve_text_without_client_encoding(
+            string declaration, string? value, string expected)
+        {
+            using var context = CreateContext(OceanBaseCompatibilityMode.Oracle);
+            var mapping = Source(context).FindMapping(typeof(string), declaration)!;
+            Assert.Equal(expected, mapping.GenerateSqlLiteral(value));
+        }
+
+        [Theory]
+        [InlineData("CHAR(20)")]
+        [InlineData("VARCHAR2(20)")]
+        [InlineData("CLOB")]
+        public void Oracle_ordinary_literals_keep_their_character_set_contract(string declaration)
+        {
+            using var context = CreateContext(OceanBaseCompatibilityMode.Oracle);
+            var mapping = Source(context).FindMapping(typeof(string), declaration)!;
+            Assert.Equal("'海🌊\\''\n'", mapping.GenerateSqlLiteral("海🌊\\'\n"));
+        }
+
         [Theory]
         [InlineData(OceanBaseCompatibilityMode.MySql, "CHAR", 1, true, true)]
         [InlineData(OceanBaseCompatibilityMode.MySql, " char ( 4 ) ", 4, true, true)]
@@ -108,7 +143,9 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             var parameter = mapping.CreateParameter(command, "text", "longer🌊query");
             Assert.Equal("longer🌊query", parameter.Value);
             Assert.Equal("longer🌊query".Length, parameter.Size);
-            Assert.Contains("longer🌊query", mapping.GenerateSqlLiteral("longer🌊query"));
+            Assert.Equal(mode == OceanBaseCompatibilityMode.Oracle
+                ? @"u'\006c\006f\006e\0067\0065\0072\d83c\df0a\0071\0075\0065\0072\0079'"
+                : "'longer🌊query'", mapping.GenerateSqlLiteral("longer🌊query"));
             var converted = (RelationalTypeMapping)mapping.WithStoreTypeAndSize(
                 mode == OceanBaseCompatibilityMode.Oracle ? "NVARCHAR2(4)" : "VARCHAR(4)", 4)
                 .WithComposedConverter(new ValueConverter<Caption, string>(value => value.Value + "!", value => new Caption(value)));
@@ -116,6 +153,9 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             convertedValidation.ValidateWriteValue(new Caption("海🌊洋"));
             Assert.Throws<ArgumentException>(() => convertedValidation.ValidateWriteValue(new Caption("海🌊洋河")));
             Assert.Equal("海🌊洋!", converted.CreateParameter(command, "text", new Caption("海🌊洋")).Value);
+            Assert.Equal(mode == OceanBaseCompatibilityMode.Oracle
+                ? @"u'\6d77\d83c\df0a\6d0b\0021'" : "'海🌊洋!'",
+                converted.GenerateSqlLiteral(new Caption("海🌊洋")));
             Assert.ThrowsAny<ArgumentException>(() => mapping.WithPrecisionAndScale(3, null));
             Assert.ThrowsAny<ArgumentException>(() => mapping.WithStoreTypeAndSize("CHAR(2) ignored", 2));
             var lob = Source(context).FindMapping(typeof(string), mode == OceanBaseCompatibilityMode.Oracle ? "NCLOB" : "LONGTEXT", size: 2)!;

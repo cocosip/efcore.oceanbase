@@ -8,10 +8,10 @@
 
 | ID | 缺失项 | 责任 | 当前事实 | 完成条件 |
 | --- | --- | --- | --- | --- |
-| `CFG-04`, `CON-02..05` | EF 连接对象、所有权、mode recheck、超时/取消后的租约恢复 | Provider + Driver evidence | Provider 有本地回归；2026-11-17 两模式的原配置 Connector、EF 等价配置 Connector 和 EF 共六次均在初始 greeting 读取时 packet closure，ServerErrorCode=0；EF 仅增加 ExpectedMode，DLL 与 0.3.0 还原包一致 | direct 成功而 EF 失败时修 Provider；当前只阻塞普通直连 live 验收，继续本地 Provider 工作，不新增 proxy/OB20 要求 |
+| `CFG-04`, `CON-02..05` | EF 连接对象、所有权、mode recheck、超时/取消后的租约恢复 | Provider + Driver evidence | 2026-11-17 服务器恢复后，同一 User Secrets 下两模式的原 Connector、EF 等价 Connector 和 EF 六条路径 SELECT 1 均通过；握手阻塞已解除 | 继续物理 close/reuse、真实 timeout/cancel 和恢复验收；不新增 proxy/OB20 要求 |
 | `DIA-01..02`, `SQL-01` | 错误保留、日志脱敏、完整标识符/服务 facade 生命周期 | Provider | 本地命令和异常测试已有；live correlation/DDL 未完成 | 两模式同步/异步测试、走查、真实错误分类和 release 记录 |
-| `TST-02` | 真实查询、写入、事务、Schema、标量 round-trip | Server/live + Provider | 2026-11-17 TCP 端口可达但 EF 与 direct Connector 两模式均在初始握手前失败，SQL/DDL/reader 均为 0 | 先完成只读 SELECT/身份/版本，再扩展写入、事务和 Schema；两模式各有结果 |
-| `REL-01` | 普通直连支持环境、tenant、server、TLS/transport 记录 | Server/live | User Secrets、endpoint、TLS Disabled、OB20/压缩/Pooling 关闭已记录；当前服务端版本未确认，Connector 历史 4.4.2.2 证据不能替代 EF live | 两模式成功的普通直连非破坏探针 + 脱敏环境记录；扩展部署不作为前置条件 |
+| `TST-02` | 真实查询、写入、事务、Schema、标量 round-trip | Server/live + Provider | 两模式身份探针和现有只读查询 profile 各 72 条 EF reader 命令通过；national 字面量 UTF8MB4/Oracle latin1 同步/异步往返通过 | 更宽标量/查询及隔离目标上的 DML、事务、Schema 仍待真实验收 |
+| `REL-01` | 普通直连支持环境、tenant、server、TLS/transport 记录 | Server/live | 同一 User Secrets 普通直连成功；两模式服务端均报告 4.4.2.2，当前库/Schema 与配置一致；TLS Disabled、OB20/压缩/Pooling 关闭 | 当前只读环境证据已有，后续 DML/事务/DDL 需记录各自权限和部署证据；扩展部署不作为前置条件 |
 | `REL-02`, `TST-01` | 关系型 runtime specification 和最终 revision 审核 | Provider + Release | 已有模型/非关系/服务/写 SQL/并发 profile；16 个 skip 已解释 | 补剩余关系型 families，在最终 revision 重跑全套 package/consumer/review |
 
 ## B. Provider 仍有开发或本地验收缺口
@@ -19,7 +19,7 @@
 | ID | 功能 | 缺口 | 责任 |
 | --- | --- | --- | --- |
 | `MOD-01..03` | 模型约定、关系、生成/默认/计算值 | 更宽模型、生成值和 Schema 组合仍需覆盖 | Provider |
-| `MAP-01..07` | 整数/Boolean、Decimal/Float、文本、Binary/Guid、Temporal、facet/converter | 精度、长度、LOB、Guid 字节序、时区、reader carrier、转换器组合仍需补齐 | Provider；native 结果另需 Server/live |
+| `MAP-01..07` | 整数/Boolean、Decimal/Float、文本、Binary/Guid、Temporal、facet/converter | Oracle national 字面量已用 ASCII UTF-16 escapes 修复，默认/HasData/converter 本地测试及 UTF8MB4/latin1 只读往返通过；精度、列容量/padding/LOB、Guid 字节序、时区及更宽转换组合仍需补齐 | Provider + Server/live；见 [national literals](efcore-10-national-literals-plan.md) |
 | `QRY-01..11` | 查询翻译和物化 | 剩余 overload、复杂组合、官方 runtime specification、真实排序/聚合/集合结果仍需补齐 | Provider + Server/live |
 | `UPD-01..05` | INSERT/UPDATE/DELETE、生成值、并发、图保存 | 本地 SQL/double 已有，真实生成值、约束、冲突和提交结果未完成 | Provider + Server/live |
 | `TXN-01..03` | transaction、savepoint、原子性、取消恢复 | 本地恢复路径已有，真实 commit/rollback/savepoint 未完成 | Provider + Server/live；句柄由 Connector 提供 |
@@ -36,7 +36,7 @@
 | 原生 transaction 句柄 | Provider 负责 EF transaction/savepoint 编排 | Connector 负责 `DbTransaction` 的 commit/rollback/dispose 行为 |
 | 服务端 SQL、类型、权限、DDL、生成值 | Provider 生成/绑定 SQL 并记录预期；不模拟服务端 | OceanBase 版本/模式/权限/执行结果的真实矩阵 |
 
-当前 packet closure 不足以判断 Connector 缺陷。先做 direct Connector 与 EF Provider 的同参数对比：direct 成功而 EF 失败，归 Provider；两者都失败，记录为环境/服务端或 Connector 待分类，不在 EF 内绕过驱动。
+先前 packet closure 在用户修复服务器后已解除，不是已证实的 Connector 缺陷。后续仍按同参数对比归责：direct 成功而 EF 失败才查 Provider 差异；两者都失败先保留分类证据，不在 EF 内绕过驱动。
 
 连接不可用只保留依赖 live 的验收缺口；按开发队列继续本地实现和测试。Connector 未支持、排除或冻结的能力不转化为 EF 缺陷，也不成为所有 Provider 开发的停止条件。
 

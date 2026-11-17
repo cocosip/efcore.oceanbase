@@ -68,6 +68,12 @@ namespace PackageConsumer
                     .UseOceanBase("Server=localhost;Database=package_smoke", mode).Options;
                 using var context = new ConsumerContext(options, mode);
                 if (!context.Database.IsOceanBase()) throw new Exception("Provider registration failed.");
+                var textMapping = context.GetService<IRelationalTypeMappingSource>().FindMapping(typeof(string))!;
+                var nationalLiteral = textMapping.GenerateSqlLiteral("海🌊\\'\n");
+                var expectedLiteral = mode == OceanBaseCompatibilityMode.Oracle
+                    ? @"u'\6d77\d83c\df0a\005c\0027\000a'"
+                    : "CONVERT(X'E6B5B7F09F8C8A5C270A' USING utf8mb4)";
+                if (nationalLiteral != expectedLiteral) throw new Exception("Packed provider lost literal text.");
                 var updateGenerator = context.GetService<IUpdateSqlGenerator>();
                 var sequenceBuilder = new StringBuilder("existing command");
                 Action[] sequenceOperations =
