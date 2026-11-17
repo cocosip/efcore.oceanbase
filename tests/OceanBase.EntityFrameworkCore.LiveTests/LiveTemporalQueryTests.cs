@@ -262,6 +262,48 @@ namespace OceanBase.EntityFrameworkCore.LiveTests
                 Assert.Equal(Seed(mode).Length, async ? await rows.CountAsync() : rows.Count());
             });
 
+        [Theory]
+        [MemberData(nameof(Cases))]
+        public Task DateTime_duration_arithmetic_preserves_fractional_results_and_NULLs(
+            OceanBaseCompatibilityMode mode, bool async, bool nulls)
+            => WithTable(mode, async, nulls, async (context, stage) =>
+            {
+                stage("DateTime Add/Subtract duration column and DATE promotion");
+                await Check(context, async, row => (DateTime?)row.Stamp!.Value.Add(row.Duration!.Value),
+                    row => row.Stamp.HasValue && row.Duration.HasValue ? row.Stamp.Value.Add(row.Duration.Value) : null);
+                await Check(context, async, row => (DateTime?)row.Stamp!.Value.Subtract(row.Duration!.Value),
+                    row => row.Stamp.HasValue && row.Duration.HasValue ? row.Stamp.Value.Subtract(row.Duration.Value) : null);
+                await Check(context, async, row => (DateTime?)row.DateStamp!.Value.Add(row.Duration!.Value),
+                    row => row.DateStamp.HasValue && row.Duration.HasValue ? row.DateStamp.Value.Add(row.Duration.Value) : null);
+                await Check(context, async, row => (DateTime?)row.DateStamp!.Value.Subtract(row.Duration!.Value),
+                    row => row.DateStamp.HasValue && row.Duration.HasValue ? row.DateStamp.Value.Subtract(row.Duration.Value) : null);
+                await Check(context, async, row => (DateTime?)row.Stamp!.Value.Add((row.Id == 2 ? (TimeSpan?)null : row.Duration)!.Value),
+                    row => row.Id != 2 && row.Stamp.HasValue && row.Duration.HasValue ? row.Stamp.Value.Add(row.Duration.Value) : null);
+                var tick = mode == OceanBaseCompatibilityMode.MySql ? 10 : 1;
+                var amount = new TimeSpan(1, 2, 3, 4).Add(TimeSpan.FromTicks(tick));
+                var query = context.Set<Row>().Where(row => row.Stamp!.Value.Add(amount) > new DateTime(2000, 1, 1))
+                    .OrderBy(row => row.Id).Select(row => (DateTime?)row.Stamp!.Value.Add(amount));
+                string? initialSql = null;
+                foreach (var value in new[] { amount, -amount, TimeSpan.Zero, TimeSpan.FromTicks(-tick) })
+                {
+                    stage("DateTime duration parameter refresh");
+                    amount = value;
+                    var sql = query.ToQueryString();
+                    // ToQueryString parameter declarations contain the current values.
+                    var body = sql[sql.IndexOf("SELECT", StringComparison.Ordinal)..];
+                    if (initialSql is not null) Assert.Equal(initialSql, body);
+                    initialSql = body;
+                    Assert.Equal(Seed(mode).Where(row => row.Stamp?.Add(amount) > new DateTime(2000, 1, 1))
+                        .Select(row => row.Stamp?.Add(amount)), await Read(query, async));
+                    await Check(context, async, row => (DateTime?)row.Stamp!.Value.Subtract(amount), row => row.Stamp?.Subtract(amount));
+                    await Check(context, async, row => (int?)row.DateStamp!.Value.Add(amount).Nanosecond,
+                        row => row.DateStamp?.Add(amount).Nanosecond);
+                }
+                stage("DateTime converted carrier result ownership");
+                await Check(context, async, row => (DateTime?)row.ConvertedStamp!.Value.Add(amount), row => row.ConvertedStamp?.Add(amount));
+                await Check(context, async, row => (DateTime?)row.ConvertedStamp!.Value.Subtract(amount), row => row.ConvertedStamp?.Subtract(amount));
+            });
+
         private static Task SetZone(Context context, bool async, string zone)
         {
             var sql = (context.Mode == OceanBaseCompatibilityMode.MySql ? "SET SESSION time_zone = '" : "ALTER SESSION SET TIME_ZONE = '")

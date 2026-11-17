@@ -451,6 +451,14 @@ namespace PackageConsumer
                 if (!dayNumberSql.Contains(dayNumberFunction, StringComparison.Ordinal)
                     || dayNumberSql.Contains("__oceanbase_internal_", StringComparison.Ordinal))
                     throw new Exception("Packed provider did not translate DateOnly.DayNumber.");
+                var durationSql = context.Set<Row>().Where(row => row.OccurredAt.Add(row.Duration) > new DateTime(2000, 1, 1))
+                    .Select(row => row.LegacyStamp.Subtract(TimeSpan.FromTicks(mode == OceanBaseCompatibilityMode.MySql ? 10 : 1)))
+                    .ToQueryString();
+                if (!durationSql.Contains(mode == OceanBaseCompatibilityMode.MySql ? "TIMESTAMPADD(MICROSECOND" : " AS TIMESTAMP(7)) - (", StringComparison.Ordinal)
+                    || mode == OceanBaseCompatibilityMode.MySql && !durationSql.Contains("-(TIME_TO_SEC(", StringComparison.Ordinal)
+                    || durationSql.Contains("__oceanbase_internal_", StringComparison.Ordinal))
+                    throw new Exception("Packed provider did not translate DateTime duration arithmetic.");
+
                 var ticksSql = context.Set<Row>().Where(row => row.Duration.Ticks != 0)
                     .Select(row => row.Duration.Ticks).ToQueryString();
                 if (!ticksSql.Contains(mode == OceanBaseCompatibilityMode.MySql ? "TIME_TO_SEC" : "EXTRACT(DAY FROM",

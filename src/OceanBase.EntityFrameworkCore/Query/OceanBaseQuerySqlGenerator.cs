@@ -585,6 +585,10 @@ namespace OceanBase.EntityFrameworkCore.Query
                 or OceanBaseTemporalMethodTranslator.DateTimeAddYearsMarker)
                 return GenerateDateTimeCalendarAdd(sqlFunctionExpression);
 
+            if (sqlFunctionExpression.Name is OceanBaseTemporalMethodTranslator.DateTimeAddDurationMarker
+                or OceanBaseTemporalMethodTranslator.DateTimeSubtractDurationMarker)
+                return GenerateDateTimeDurationAdd(sqlFunctionExpression);
+
             if (sqlFunctionExpression.Name == OceanBaseTemporalMethodTranslator.DateOnlyAddDaysMarker)
             {
                 if (sqlFunctionExpression is not { IsBuiltIn: true, Schema: null, Instance: null, Arguments.Count: 2,

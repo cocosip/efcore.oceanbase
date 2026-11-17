@@ -103,7 +103,13 @@ establish named timezone/DST or other deployments.
 
 The temporal query profile additionally covers implemented calendar/fractional members,
 Date/TimeOfDay/Ticks/DayNumber, signed TimeSpan components and Double totals, DateOnly
-AddDays/AddMonths/AddYears and DateTime AddMonths/AddYears. Oracle calendar arithmetic
+AddDays/AddMonths/AddYears and DateTime AddMonths/AddYears. DateTime.Add(TimeSpan) and
+Subtract(TimeSpan) translate for unzoned timestamps, duration columns, constants and
+parameters, preserving NULLs. Results promote to DATETIME(6)/TIMESTAMP(7), including
+Oracle DATE inputs. MySQL duration inputs retain the existing TIME range and microsecond
+validation; Oracle retains 100ns values. Out-of-range results follow server error/NULL
+semantics rather than reproducing CLR exceptions per row. AddDays/AddHours(double) remain
+unsupported. Oracle calendar arithmetic
 requires a Gregorian session; month ends clamp without losing timestamp fractions.
 Oracle DateTimeOffset components use the stored offset's local wall clock; UTC members
 use UTC extraction. MySQL components use the normalized UTC storage, and offset-local

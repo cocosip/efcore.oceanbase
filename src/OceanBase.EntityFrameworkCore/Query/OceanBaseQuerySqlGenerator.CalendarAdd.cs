@@ -6,6 +6,47 @@ namespace OceanBase.EntityFrameworkCore.Query
 {
     internal sealed partial class OceanBaseQuerySqlGenerator
     {
+        private Expression GenerateDateTimeDurationAdd(SqlFunctionExpression expression)
+        {
+            if (expression is not { IsBuiltIn: true, Schema: null, Instance: null, Arguments.Count: 2,
+                    IsNullable: true, ArgumentsPropagateNullability: [false, false], Type: var resultType,
+                    TypeMapping: { } resultMapping }
+                || resultType != typeof(DateTime)
+                || !OceanBaseTemporalMethodTranslator.IsDateTimeCalendarMapping(resultMapping, _mode)
+                || expression.Arguments[0] is not { Type: var inputType, TypeMapping: { } inputMapping }
+                || inputType != typeof(DateTime)
+                || !OceanBaseTemporalMethodTranslator.IsDateTimeCalendarMapping(inputMapping, _mode)
+                || expression.Arguments[1] is not { Type: var amountType, TypeMapping: { } amountMapping }
+                || amountType != typeof(TimeSpan) || !OceanBaseTemporalMethodTranslator.IsDurationMapping(amountMapping, _mode))
+                throw new InvalidOperationException("Invalid internal DateTime duration-add expression.");
+
+            var subtract = expression.Name == OceanBaseTemporalMethodTranslator.DateTimeSubtractDurationMarker;
+            if (_mode == OceanBaseCompatibilityMode.MySql)
+            {
+                Sql.Append("CAST(TIMESTAMPADD(MICROSECOND, ");
+                if (subtract) Sql.Append("-");
+                Sql.Append("(TIME_TO_SEC(");
+                Visit(expression.Arguments[1]);
+                // OceanBase TIME_TO_SEC omits fractions; restore their sign even below one second.
+                Sql.Append(") * 1000000 + ");
+                AppendMySqlTimeSpanSign(expression.Arguments[1]);
+                Sql.Append(" * ABS(MICROSECOND(");
+                Visit(expression.Arguments[1]);
+                Sql.Append("))), ");
+                Visit(expression.Arguments[0]);
+                Sql.Append(") AS DATETIME(6))");
+            }
+            else
+            {
+                Sql.Append("CAST((CAST(");
+                Visit(expression.Arguments[0]);
+                Sql.Append(subtract ? " AS TIMESTAMP(7)) - (" : " AS TIMESTAMP(7)) + (");
+                Visit(expression.Arguments[1]);
+                Sql.Append(")) AS TIMESTAMP(7))");
+            }
+            return expression;
+        }
+
         private Expression GenerateDateTimeCalendarAdd(SqlFunctionExpression expression)
         {
             if (expression is not { IsBuiltIn: true, Schema: null, Instance: null, Arguments.Count: 2,
