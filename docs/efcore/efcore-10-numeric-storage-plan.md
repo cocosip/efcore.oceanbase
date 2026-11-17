@@ -90,3 +90,15 @@ is the final closeout step; no push or publication.
 Evidence: ignored artifacts/numeric-storage, including fixture/initial/isolate,
 unit-red.log, boundaries-red, direct probe-paths.log, live-final/compat-live-final,
 release-final/compat-release-final, package/consumers.log and cleanup-verification.log.
+
+## Declaration/precision follow-up
+
+The user's proposed explicit-type/precision control now has a separate
+[regression record](efcore-10-oracle-double-declarations-plan.md). Catalog and
+actual writes distinguish intentional NUMBER(18,6) rounding from native
+BINARY_DOUBLE parameter loss. Default/explicit native columns both retain the
+tested extremes/tiny D-literal inserts, but fail/lose the corresponding parameters;
+parameter Precision17 does not change the measured boundary. The same ordinary
+native value keeps its fractional digits. Deliberate decimal conversion is tested
+only in its restricted representable domain, with exact-write scale validation.
+No Connector/server root-cause ownership or full-range Double acceptance is claimed.

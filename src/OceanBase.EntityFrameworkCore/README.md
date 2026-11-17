@@ -33,6 +33,22 @@ values and D-suffixed SQL literals have separate passing coverage; that does not
 Double parameter storage. This remains a Connector/server boundary requiring resolution before
 applications rely on those values; the provider does not silently substitute another carrier.
 
+Oracle CLR Double already defaults to `BINARY_DOUBLE`. Explicit `HasColumnType("BINARY_DOUBLE")`
+has the same tested parameter boundary; adding decimal precision is not a remedy for this native
+binary type. On the tested server, both declarations retain extrema and tiny values when written
+as D-suffixed literals, while Double parameters fail at extrema or lose tested values such as
+`1E-131` and `double.Epsilon`. Direct `DbType.Double` parameters with Precision 0 or 17 behave
+the same. These controls distinguish the parameter path from column scale without identifying
+whether the underlying cause belongs to the Connector or server.
+
+For a restricted decimal business domain, explicitly use a decimal property or a deliberate
+`HasConversion<decimal>().HasPrecision(18, 6)` mapping. The latter is tested for representable
+values, with excess-scale writes rejected before DML. Raw SQL into `NUMBER(18,6)` rounds
+`123.456789123` to `123.456789`, as expected from the declared scale. Double-to-decimal conversion
+does not preserve the full Double range/precision and can underflow or overflow. Direct CLR
+Double-to-NUMBER mapping and precision facets on native Oracle binary floating types remain
+unsupported by this provider.
+
 Guid defaults use canonical 36-character text in MySQL and RAW(16) in Oracle. Binary Guid mappings
 use EF's `GuidToBytesConverter` / .NET `Guid.ToByteArray()` mixed-endian layout: the UUID
 `00112233-4455-6677-8899-aabbccddeeff` stores `33221100554477668899AABBCCDDEEFF`, rather than

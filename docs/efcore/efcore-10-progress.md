@@ -6,13 +6,13 @@
 
 | 项目 | 结果 |
 | --- | --- |
-| 分支 / 提交 | `efcore/10.0`；Binary/Guid storage 模块，基线 `b9eb987` |
+| 分支 / 提交 | `efcore/10.0`；Double 声明/精度回归，基线 `3f60765`（Binary/Guid 已提交） |
 | 工作区 | 本模块源码、测试和文档一并提交；凭据仅从 User Secrets 读取 |
-| 最新模块 | Binary/Guid 实库存储及服务端字节序；Oracle 空 BLOB 参数/字面量保真；见 [模块记录](efcore-10-binary-guid-storage-plan.md)；Double 声明/精度另行回归 |
+| 最新模块 | Oracle Double 默认/显式声明与 NUMBER(18,6) 精度对照；仅回归和文档，生产绑定策略未改；见 [模块记录](efcore-10-oracle-double-declarations-plan.md) |
 | Required 状态 | 每个模式 9 Done / 44 In progress |
-| Local Release | EF10.0.0、隔离 10.0.14 各 6645 pass / 16 existing skip；本模块生产改动仅共享 byte-array mapping |
-| Package | `10.0.0-binary-guid-r1-20261117` 内容/依赖和两模式两 patch 消费者通过；打包时与源码 DLL identity 验证通过，未发布 |
-| Native | 4.4.2.2 普通直连；两 patch 各 85 LiveTests（75 live、10 offline）通过；含 26 个 Binary/Guid 用例；不能据已知错误 characterization 通过宣称无损 Double 参数绑定 |
+| Local Release | 最近一次两 patch 各 6645 pass / 16 existing skip（Binary/Guid）；本次只增 live 回归和文档，生产源码未变，不重复完整套件 |
+| Package | `10.0.0-double-declarations-r1-20261117` 内容/依赖及两模式两 patch 消费者、DLL/README identity 通过；未发布 |
+| Native | 4.4.2.2 普通直连；两 patch 各 93 LiveTests（83 live、10 offline）通过；新增 8 个 Double 声明/精度对照；已知错误 characterization 不代表无损 Double 参数绑定 |
 
 ## 固定开发顺序
 
@@ -41,6 +41,7 @@
 
 | 日期 | 模块 | 提交 / 证据 | 未关闭边界 |
 | --- | --- | --- | --- |
+| 2026-11-17 | Oracle Double 声明与精度回归 | 新增 8 个用例；两 patch 各 93 LiveTests；[对照记录](efcore-10-oracle-double-declarations-plan.md) | NUMBER(18,6) 的舍入与原生参数丢失已区分；显式 BINARY_DOUBLE/Precision17 未改善已测边界；Connector/server 根因和完整范围仍未验收 |
 | 2026-11-17 | Binary/Guid 真实存储与空 BLOB | 两 patch 各 6645 pass/16 skip、85 LiveTests；r1 包/消费者通过；独立走查无发现 | RAW 空值拒绝；目标 MySQL LOB DEFAULT 1067；完整 LOB 容量/API、比较、index/concurrency 和 temporal 等仍开放 |
 | 2026-11-17 | 数值真实存储与 Oracle Single 字面量 | 本模块；两 patch 各 6644 pass/16 skip；各 59 LiveTests；r1 包及两 patch 两模式消费者通过 | Oracle Double 参数极值 1426、测试微小值变零，direct/显式 Prepare 同样复现；完整 Double 绑定未验收；Binary/Guid/temporal 和宽映射仍待推进 |
 | 2026-11-17 | Large text / BYTE 真实存储 | 本模块；EF10.0.0、10.0.14 各 33 LiveTests（23 live、10 offline）；复用原 owned-table 夹具，生产源码未变 | NCLOB 在目标 4.4.2.2 上返回 902；更大容量/其他 charset/版本、LOB locator API、numeric/Binary/Guid/temporal 仍按矩阵推进 |
@@ -76,7 +77,9 @@ Large-text 后续验收补充 CLOB/LONGTEXT 的 NULL/空串、4001/32768 ASCII�
 
 数值模块复用 owned-table 生命周期并保留原 14 个文本测试，再补 26 个数值用例。两模式整数八类型 nullable 端点、enum query/update、Boolean 九组逻辑、默认 Decimal 极值/scale-28、显式 (5,2)/converter 和拒绝舍入、Single 参数端点/次正规值已通过。Oracle Single 的最短 F 字面量触发 1426，direct 对照证明展开到精确 Double 文本再加 F 可成功；只修共同 formatter。完整两 patch 回归更新了一处 Round guard 的旧字面量断言，查询翻译逻辑未变。
 
-MySQL Double 参数端点通过；Oracle Double 普通值通过，但参数 MinValue/MaxValue 返回 1426，测试 Epsilon/最小正 normal 变零。direct Connector 0.3.0 的 PrepareExecute 开/关与显式 Prepare 对照同样观察到极值错误和 Epsilon 丢失；D 字面量查询可保真。当前仅归为 Connector/服务端 carrier 待分类，不修改 Connector、不静默换文本 carrier，也不把负向 characterization 的通过写成 Double 完整支持。风险已进入包 README/功能矩阵/缺失矩阵；后续先推进 Binary/Guid 等既定映射，Double 绑定需要对应层证据和修复后再验收。
+MySQL Double 参数端点通过；Oracle Double 普通值通过，但参数 MinValue/MaxValue 返回 1426，测试 Epsilon/最小正 normal 变零。direct Connector 0.3.0 的 PrepareExecute 开/关与显式 Prepare 对照同样观察到极值错误和 Epsilon 丢失；D 字面量查询可保真。当前仅归为 Connector/服务端 carrier 待分类，不修改 Connector、不静默换文本 carrier，也不把负向 characterization 的通过写成 Double 完整支持。风险已进入包 README/功能矩阵/缺失矩阵；Binary/Guid 后续验收已记录于上方，Double 绑定需要对应层证据和修复后再验收。
+
+用户提出字段类型/精度后，另补真实目录和列写入对照：CLR Double 默认即 BINARY_DOUBLE，显式声明相同；两者目录 precision/scale 均为 NULL，普通 123.456789123 保真。两列的 D 字面量 INSERT 能保留 Min/Max、正负 Epsilon、正负 1E-131；相同 EF 参数极值 1426、微小值变零，1E-120 保留。直接 DbType.Double 参数 Precision0/17 结果相同，不能归结为字段 scale，也未定位 Connector/server 根因。NUMBER(18,6) 对 123.456789123D 舍入至 123.456789，符合声明；显式 decimal converter 的精确域写入通过，超 scale 在 DML 前拒绝。converter 不能覆盖完整 Double 范围，当前 Provider 直接 Double→NUMBER 和原生浮点 HasPrecision 仍明确拒绝。
 
 ## 模块完成规则
 
