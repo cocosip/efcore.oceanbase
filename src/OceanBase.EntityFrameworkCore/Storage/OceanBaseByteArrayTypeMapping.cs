@@ -53,15 +53,18 @@ namespace OceanBase.EntityFrameworkCore.Storage
                 throw new NotSupportedException("Oracle binary literals above 2,000 bytes require a parameter.");
             }
 
+            if (_mode == OceanBaseCompatibilityMode.Oracle && bytes.Length == 0) return "EMPTY_BLOB()";
+
             return _mode == OceanBaseCompatibilityMode.Oracle
                 ? $"HEXTORAW('{Convert.ToHexString(bytes)}')" : base.GenerateNonNullSqlLiteral(value);
         }
 
         private void ValidateTransportValue(byte[] value)
         {
-            if (_mode == OceanBaseCompatibilityMode.Oracle && value.Length == 0)
+            if (_mode == OceanBaseCompatibilityMode.Oracle && value.Length == 0
+                && !StoreTypeNameBase.Equals("BLOB", StringComparison.OrdinalIgnoreCase))
             {
-                throw new NotSupportedException("Non-null empty Oracle binary inputs require a tested empty-BLOB transport.");
+                throw new NotSupportedException("Oracle RAW storage cannot preserve a non-null empty binary value. Use BLOB storage.");
             }
         }
 

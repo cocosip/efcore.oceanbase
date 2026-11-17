@@ -206,10 +206,9 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             Assert.Contains(" IN (", binarySql);
             Assert.DoesNotContain("IS NULL", binarySql);
             binary = ["", "0A"];
+            Assert.Contains(" IN (", context.Rows.Where(row => binary.Contains(row.Binary)).ToQueryString());
             if (mode == OceanBaseCompatibilityMode.Oracle)
-                Assert.Contains("empty Oracle binary inputs", Assert.Throws<NotSupportedException>(() => context.Rows
-                    .Where(row => binary.Contains(row.Binary)).ToQueryString()).Message);
-            else Assert.Contains(" IN (", context.Rows.Where(row => binary.Contains(row.Binary)).ToQueryString());
+                Assert.Contains("EMPTY_BLOB()", context.Rows.Where(row => EF.Constant(binary).Contains(row.Binary)).ToQueryString());
             Assert.Contains(" IN (", context.Rows.Where(row => values.Contains(row.Preserved)).ToQueryString());
         }
 

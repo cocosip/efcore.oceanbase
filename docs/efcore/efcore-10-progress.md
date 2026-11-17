@@ -6,13 +6,13 @@
 
 | 项目 | 结果 |
 | --- | --- |
-| 分支 / 提交 | `efcore/10.0`；numeric storage 模块，基线 `a31cbf9` |
+| 分支 / 提交 | `efcore/10.0`；Binary/Guid storage 模块，基线 `b9eb987` |
 | 工作区 | 本模块源码、测试和文档一并提交；凭据仅从 User Secrets 读取 |
-| 最新模块 | 整数/Boolean/Decimal/native floating 实库存储；Oracle Single 字面量精确边界修复；Double 参数风险保留；见 [模块记录](efcore-10-numeric-storage-plan.md) |
+| 最新模块 | Binary/Guid 实库存储及服务端字节序；Oracle 空 BLOB 参数/字面量保真；见 [模块记录](efcore-10-binary-guid-storage-plan.md)；Double 声明/精度另行回归 |
 | Required 状态 | 每个模式 9 Done / 44 In progress |
-| Local Release | EF10.0.0、隔离 10.0.14 各 6644 pass / 16 existing skip；生产改动仅 shared Single literal formatter |
-| Package | `10.0.0-numeric-storage-r1-20261117` 内容/依赖和两模式两 patch 消费者通过；打包时与源码 DLL identity 验证通过，未发布 |
-| Native | 4.4.2.2 普通直连；两 patch 各 59 LiveTests（49 live、10 offline）通过；包含 Oracle Double 已知错误 characterization，不能据通过数宣称无损 Double 参数绑定 |
+| Local Release | EF10.0.0、隔离 10.0.14 各 6645 pass / 16 existing skip；本模块生产改动仅共享 byte-array mapping |
+| Package | `10.0.0-binary-guid-r1-20261117` 内容/依赖和两模式两 patch 消费者通过；打包时与源码 DLL identity 验证通过，未发布 |
+| Native | 4.4.2.2 普通直连；两 patch 各 85 LiveTests（75 live、10 offline）通过；含 26 个 Binary/Guid 用例；不能据已知错误 characterization 通过宣称无损 Double 参数绑定 |
 
 ## 固定开发顺序
 
@@ -41,6 +41,7 @@
 
 | 日期 | 模块 | 提交 / 证据 | 未关闭边界 |
 | --- | --- | --- | --- |
+| 2026-11-17 | Binary/Guid 真实存储与空 BLOB | 两 patch 各 6645 pass/16 skip、85 LiveTests；r1 包/消费者通过；独立走查无发现 | RAW 空值拒绝；目标 MySQL LOB DEFAULT 1067；完整 LOB 容量/API、比较、index/concurrency 和 temporal 等仍开放 |
 | 2026-11-17 | 数值真实存储与 Oracle Single 字面量 | 本模块；两 patch 各 6644 pass/16 skip；各 59 LiveTests；r1 包及两 patch 两模式消费者通过 | Oracle Double 参数极值 1426、测试微小值变零，direct/显式 Prepare 同样复现；完整 Double 绑定未验收；Binary/Guid/temporal 和宽映射仍待推进 |
 | 2026-11-17 | Large text / BYTE 真实存储 | 本模块；EF10.0.0、10.0.14 各 33 LiveTests（23 live、10 offline）；复用原 owned-table 夹具，生产源码未变 | NCLOB 在目标 4.4.2.2 上返回 902；更大容量/其他 charset/版本、LOB locator API、numeric/Binary/Guid/temporal 仍按矩阵推进 |
 | 2026-11-17 | 真实 bounded text storage、MySQL DEFAULT 和生成值回读 | 本模块；两 patch 本地各 6640 通过/16 skip；两 patch 串行 LiveTests 各 25 通过（15 live、10 offline）；包消费者通过 | 32 scalar variable text、8 字符 fixed、NULL/空串/converter/default/seed/DML 已验收；LOB/BYTE/更宽容量、索引、事务失败恢复仍待补齐 |

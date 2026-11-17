@@ -76,6 +76,11 @@ namespace PackageConsumer
                 if (nationalLiteral != expectedLiteral) throw new Exception("Packed provider lost literal text.");
                 if (mode == OceanBaseCompatibilityMode.Oracle)
                 {
+                    var blob = context.GetService<IRelationalTypeMappingSource>().FindMapping(typeof(byte[]), "BLOB")!;
+                    using var emptyBlobCommand = new OceanBaseCommand();
+                    if (blob.GenerateSqlLiteral(Array.Empty<byte>()) != "EMPTY_BLOB()"
+                        || blob.CreateParameter(emptyBlobCommand, "data", Array.Empty<byte>()).Value is not byte[] { Length: 0 })
+                        throw new Exception("Packed provider lost the distinction between empty BLOB and NULL.");
                     var single = context.GetService<IRelationalTypeMappingSource>().FindMapping(typeof(float))!;
                     if (single.GenerateSqlLiteral(float.MaxValue) != "3.4028234663852886E+38F"
                         || single.GenerateSqlLiteral(float.Epsilon) != "1.401298464324817E-45F")

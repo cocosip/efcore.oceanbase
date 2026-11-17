@@ -33,6 +33,16 @@ values and D-suffixed SQL literals have separate passing coverage; that does not
 Double parameter storage. This remains a Connector/server boundary requiring resolution before
 applications rely on those values; the provider does not silently substitute another carrier.
 
+Guid defaults use canonical 36-character text in MySQL and RAW(16) in Oracle. Binary Guid mappings
+use EF's `GuidToBytesConverter` / .NET `Guid.ToByteArray()` mixed-endian layout: the UUID
+`00112233-4455-6677-8899-aabbccddeeff` stores `33221100554477668899AABBCCDDEEFF`, rather than
+RFC/network byte order. Select compatible text or 16-byte binary declarations when sharing data.
+Oracle BLOB byte arrays preserve NULL and non-null empty values separately; empty BLOB literals
+use `EMPTY_BLOB()`. Oracle RAW rejects empty arrays because it cannot preserve that distinction.
+The tested MySQL 4.4.2.2 target rejects BLOB/LONGBLOB defaults with 1067; bounded VARBINARY defaults
+and BLOB/LONGBLOB seed/parameter writes have separate acceptance. Other versions and LOB APIs
+remain outside this storage profile.
+
 Parameterless `DefaultIfEmpty` has local coverage for ordinary scalar/converter defaults, anonymous
 objects, DTOs, constructed mapped CLR types and boxed scalar projections, including per-parent paging.
 A missing source returns null for reference projections; a present row with NULL members remains an
