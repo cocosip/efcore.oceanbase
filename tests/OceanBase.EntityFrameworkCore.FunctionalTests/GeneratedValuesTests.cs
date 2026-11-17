@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Data;
 using System.Data.Common;
@@ -15,6 +16,50 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
 {
     public sealed class GeneratedValuesTests
     {
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public async Task MySql_generated_readback_drains_results_before_releasing_the_reader(bool async)
+        {
+            var commands = new Capture { WithTrailingResults = true };
+            await using var context = Create(OceanBaseCompatibilityMode.MySql, commands);
+            context.Add(new Row { TenantId = 7, Input = "input" });
+            using var source = new CancellationTokenSource();
+            Assert.Equal(1, async ? await context.SaveChangesAsync(source.Token) : context.SaveChanges());
+            Assert.True(commands.Reader!.AllResultsRead);
+            Assert.Equal(4, commands.Reader.RowsRead);
+            Assert.Equal(3, commands.Reader.ResultSetsRead);
+            Assert.True(commands.Reader.Disposed);
+            Assert.Equal(async ? source.Token : default, commands.Reader.DrainToken);
+        }
+
+        [Theory]
+        [InlineData(false, false)]
+        [InlineData(true, false)]
+        [InlineData(false, true)]
+        [InlineData(true, true)]
+        public async Task MySql_generated_readback_drain_failure_keeps_the_entry_pending(bool async, bool cancel)
+        {
+            using var source = new CancellationTokenSource();
+            Exception failure = cancel ? new OperationCanceledException(source.Token) : new System.IO.IOException("readback tail failed");
+            var commands = new Capture { DrainFailure = failure, WithTrailingResults = true };
+            await using var context = Create(OceanBaseCompatibilityMode.MySql, commands);
+            var row = new Row { TenantId = 7, Input = "input" };
+            context.Add(row);
+            var actual = await Record.ExceptionAsync(async () =>
+            {
+                if (async) await context.SaveChangesAsync(source.Token);
+                else context.SaveChanges();
+            });
+            if (cancel) Assert.Same(failure, actual);
+            else Assert.Same(failure, Assert.IsType<DbUpdateException>(actual).InnerException);
+            Assert.True(commands.Reader!.Disposed);
+            Assert.Equal(async ? source.Token : default, commands.Reader.DrainToken);
+            Assert.Equal(EntityState.Added, context.Entry(row).State);
+            Assert.Equal(0, row.Id);
+            Assert.Null(row.DefaultText);
+        }
+
         public static IEnumerable<object[]> Modes()
         {
             foreach (var mode in Enum.GetValues<OceanBaseCompatibilityMode>())
@@ -265,6 +310,9 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
             public string[] ReadColumns { get; private set; } = [];
             public int AffectedRows { get; init; } = 1;
             public bool MissingRow { get; init; }
+            public Exception? DrainFailure { get; init; }
+            public bool WithTrailingResults { get; init; }
+            public DrainReader? Reader { get; private set; }
             public override InterceptionResult ConnectionOpening(DbConnection connection, ConnectionEventData eventData, InterceptionResult result)
                 => InterceptionResult.Suppress();
             public override ValueTask<InterceptionResult> ConnectionOpeningAsync(DbConnection connection, ConnectionEventData eventData,
@@ -311,7 +359,17 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
                 var table = new DataTable();
                 foreach (var column in ReadColumns) table.Columns.Add(column, typeof(object));
                 if (!MissingRow) table.Rows.Add(ReadColumns.Select(column => Values[column] ?? DBNull.Value).ToArray());
-                return InterceptionResult<DbDataReader>.SuppressWithResult(table.CreateDataReader());
+                if (WithTrailingResults)
+                {
+                    table.Rows.Add(ReadColumns.Select(column => Values[column] ?? DBNull.Value).ToArray());
+                    var tail = new DataTable();
+                    tail.Columns.Add("Tail", typeof(string));
+                    tail.Rows.Add("later row one");
+                    tail.Rows.Add("later row two");
+                    Reader = new DrainReader(new DataTableReader([table, tail, tail.Clone()]), DrainFailure);
+                }
+                else Reader = new DrainReader(table.CreateDataReader(), DrainFailure);
+                return InterceptionResult<DbDataReader>.SuppressWithResult(Reader);
             }
             public InterceptionResult<int> NonQueryExecuting(DbCommand command, CommandEventData eventData, InterceptionResult<int> result)
                 => Write(command, false, default);
@@ -321,6 +379,75 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
                 => Read(command, false, default);
             public ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(DbCommand command, CommandEventData eventData,
                 InterceptionResult<DbDataReader> result, CancellationToken cancellationToken = default) => ValueTask.FromResult(Read(command, true, cancellationToken));
+        }
+
+        private sealed class DrainReader(DbDataReader inner, Exception? failure) : DbDataReader
+        {
+            public bool AllResultsRead { get; private set; }
+            public bool Disposed { get; private set; }
+            public CancellationToken DrainToken { get; private set; }
+            public int RowsRead { get; private set; }
+            public int ResultSetsRead { get; private set; }
+            private int _resultIndex;
+            private bool _exhausted;
+            public override bool Read()
+            {
+                if (_resultIndex > 0 && failure is not null) throw failure;
+                var read = inner.Read();
+                if (read) RowsRead++;
+                else if (!_exhausted) { _exhausted = true; ResultSetsRead++; }
+                return read;
+            }
+            public override Task<bool> ReadAsync(CancellationToken token)
+            {
+                DrainToken = token;
+                return Task.FromResult(Read());
+            }
+            public override bool NextResult()
+            {
+                if (!_exhausted) throw new InvalidOperationException("The previous result was not fully consumed.");
+                var next = inner.NextResult();
+                if (next) { _resultIndex++; _exhausted = false; }
+                AllResultsRead = !next;
+                return next;
+            }
+            public override Task<bool> NextResultAsync(CancellationToken token)
+            {
+                DrainToken = token;
+                return Task.FromResult(NextResult());
+            }
+            protected override void Dispose(bool disposing) { if (disposing) { Disposed = true; inner.Dispose(); } base.Dispose(disposing); }
+            public override ValueTask DisposeAsync() { Dispose(); return ValueTask.CompletedTask; }
+            public override void Close() => inner.Close();
+            public override int Depth => inner.Depth;
+            public override int FieldCount => inner.FieldCount;
+            public override bool HasRows => inner.HasRows;
+            public override bool IsClosed => inner.IsClosed;
+            public override int RecordsAffected => inner.RecordsAffected;
+            public override object this[int ordinal] => inner[ordinal];
+            public override object this[string name] => inner[name];
+            public override string GetName(int ordinal) => inner.GetName(ordinal);
+            public override string GetDataTypeName(int ordinal) => inner.GetDataTypeName(ordinal);
+            public override Type GetFieldType(int ordinal) => inner.GetFieldType(ordinal);
+            public override object GetValue(int ordinal) => inner.GetValue(ordinal);
+            public override int GetValues(object[] values) => inner.GetValues(values);
+            public override int GetOrdinal(string name) => inner.GetOrdinal(name);
+            public override bool GetBoolean(int ordinal) => inner.GetBoolean(ordinal);
+            public override byte GetByte(int ordinal) => inner.GetByte(ordinal);
+            public override long GetBytes(int ordinal, long offset, byte[]? buffer, int bufferOffset, int length) => inner.GetBytes(ordinal, offset, buffer, bufferOffset, length);
+            public override char GetChar(int ordinal) => inner.GetChar(ordinal);
+            public override long GetChars(int ordinal, long offset, char[]? buffer, int bufferOffset, int length) => inner.GetChars(ordinal, offset, buffer, bufferOffset, length);
+            public override Guid GetGuid(int ordinal) => inner.GetGuid(ordinal);
+            public override short GetInt16(int ordinal) => inner.GetInt16(ordinal);
+            public override int GetInt32(int ordinal) => inner.GetInt32(ordinal);
+            public override long GetInt64(int ordinal) => inner.GetInt64(ordinal);
+            public override float GetFloat(int ordinal) => inner.GetFloat(ordinal);
+            public override double GetDouble(int ordinal) => inner.GetDouble(ordinal);
+            public override string GetString(int ordinal) => inner.GetString(ordinal);
+            public override decimal GetDecimal(int ordinal) => inner.GetDecimal(ordinal);
+            public override DateTime GetDateTime(int ordinal) => inner.GetDateTime(ordinal);
+            public override bool IsDBNull(int ordinal) => inner.IsDBNull(ordinal);
+            public override IEnumerator GetEnumerator() => ((IEnumerable)inner).GetEnumerator();
         }
     }
 }

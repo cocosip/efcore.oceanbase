@@ -174,7 +174,7 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             Assert.Contains("O''Reilly!", literal);
             Assert.Contains(mode == OceanBaseCompatibilityMode.Oracle ? "N'!'" : "'!'", literal);
             Assert.DoesNotContain(mode == OceanBaseCompatibilityMode.MySql ? "@values" : ":values", literal);
-            if (mode == OceanBaseCompatibilityMode.MySql) Assert.Contains("CONVERT(X'", literal);
+            if (mode == OceanBaseCompatibilityMode.MySql) Assert.Contains("_utf8mb4 X'", literal);
             using var constants = CreateContext(mode, relationalNulls, ParameterTranslationMode.Constant);
             Assert.Contains("O''Reilly!", constants.Rows.Where(row => values.Contains(row.Suffix)).ToQueryString());
             using var parameters = CreateContext(mode, relationalNulls, ParameterTranslationMode.Parameter);

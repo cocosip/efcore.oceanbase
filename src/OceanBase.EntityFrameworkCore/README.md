@@ -15,9 +15,14 @@ optionsBuilder.UseOceanBase(connectionString, OceanBaseCompatibilityMode.MySql);
 Load the connection string from application configuration or a secret store. The selected mode must match the
 tenant. Driver protocol, authentication, connection pooling and transport settings belong to OceanBaseConnector.
 
+Oracle generated-value writes use `RETURNING INTO`. Explicitly configure the Connector connection string
+with `Use Oracle Prepare Execute=true` for those writes; the Connector default is disabled. The provider
+does not silently enable that protocol option. Ordinary input-only writes do not need this option.
+
 This is a development provider. Local tests cover model/type mappings, SQL generation, intercepted query/write
-pipelines and package consumption. Real OceanBase query, write, transaction and schema acceptance is still open
-for both modes. Passing local tests does not establish server compatibility or release readiness.
+pipelines and package consumption. OceanBase 4.4.2.2 direct connections have narrow live query and bounded
+text/default/HasData/tracked-write coverage in both modes. Wider mapping, transaction and schema acceptance
+remains open. Passing these profiles does not establish release readiness or other deployments.
 
 Parameterless `DefaultIfEmpty` has local coverage for ordinary scalar/converter defaults, anonymous
 objects, DTOs, constructed mapped CLR types and boxed scalar projections, including per-parent paging.

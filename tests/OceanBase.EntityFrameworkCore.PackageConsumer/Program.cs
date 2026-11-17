@@ -72,7 +72,7 @@ namespace PackageConsumer
                 var nationalLiteral = textMapping.GenerateSqlLiteral("海🌊\\'\n");
                 var expectedLiteral = mode == OceanBaseCompatibilityMode.Oracle
                     ? @"u'\6d77\d83c\df0a\005c\0027\000a'"
-                    : "CONVERT(X'E6B5B7F09F8C8A5C270A' USING utf8mb4)";
+                    : "_utf8mb4 X'E6B5B7F09F8C8A5C270A'";
                 if (nationalLiteral != expectedLiteral) throw new Exception("Packed provider lost literal text.");
                 if (mode == OceanBaseCompatibilityMode.Oracle)
                 {

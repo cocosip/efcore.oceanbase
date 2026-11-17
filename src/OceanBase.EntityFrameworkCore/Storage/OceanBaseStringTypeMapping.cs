@@ -44,7 +44,8 @@ namespace OceanBase.EntityFrameworkCore.Storage
                 {
                     if (character == '\\' || char.IsControl(character))
                     {
-                        return $"CONVERT(X'{Convert.ToHexString(Encoding.UTF8.GetBytes(text))}' USING utf8mb4)";
+                        // A character literal also works in DEFAULT clauses that reject CONVERT expressions.
+                        return $"_utf8mb4 X'{Convert.ToHexString(Encoding.UTF8.GetBytes(text))}'";
                     }
                 }
             }

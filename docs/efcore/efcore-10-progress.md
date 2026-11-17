@@ -6,13 +6,13 @@
 
 | 项目 | 结果 |
 | --- | --- |
-| 分支 / 提交 | `efcore/10.0`；ordinary newline literals 模块，基线 `764e8cc` |
+| 分支 / 提交 | `efcore/10.0`；真实 bounded text storage 模块，基线 `a47602c` |
 | 工作区 | 本模块源码、测试和文档一并提交；凭据仅从 User Secrets 读取 |
-| 最新模块 | Oracle 普通字符串换行字面量；见 [模块记录](efcore-10-ordinary-literals-plan.md) |
+| 最新模块 | 两模式真实文本列、默认值/HasData 和 tracked DML；修复 MySQL 字面量 DEFAULT 与生成值回读；见 [模块记录](efcore-10-text-storage-plan.md) |
 | Required 状态 | 每个模式 9 Done / 44 In progress |
-| Local Release | EF10.0.0 和隔离 EF10.0.14 各通过 Unit 2607、Functional 2481、Specification 1538、Consumer 2；16 个既有映射 skip |
-| Package | ordinary-literals 包内容检查和两个 patch 的两模式消费者通过；消费 DLL 与已测试源码 DLL 哈希相同 |
-| Native | 两模式 direct Connector / EF 等价 Connector / EF 六条连接路径均成功；身份与 4.4.2.2 版本已验证；只读查询每模式 72 条 reader 命令通过；字面量 UTF8MB4/Oracle latin1 往返通过，未执行 DDL/DML |
+| Local Release | EF10.0.0 和隔离 EF10.0.14 各通过 Unit 2613、Functional 2487、Specification 1538、Consumer 2；16 个既有映射 skip |
+| Package | text-storage 包内容检查和两个 patch 的两模式消费者通过；消费 DLL 与已测试源码 DLL 哈希相同 |
+| Native | 4.4.2.2 普通直连；此前的两模式连接/只读查询/字面量通过；本模块已执行唯一自建表的 DDL、HasData、默认值、参数写入/读取、tracked update/delete 和清理；Oracle 生成值测试显式开启 Connector PrepareExecute |
 
 ## 固定开发顺序
 
@@ -41,6 +41,7 @@
 
 | 日期 | 模块 | 提交 / 证据 | 未关闭边界 |
 | --- | --- | --- | --- |
+| 2026-11-17 | 真实 bounded text storage、MySQL DEFAULT 和生成值回读 | 本模块；两 patch 本地各 6640 通过/16 skip；两 patch 串行 LiveTests 各 25 通过（15 live、10 offline）；包消费者通过 | 32 scalar variable text、8 字符 fixed、NULL/空串/converter/default/seed/DML 已验收；LOB/BYTE/更宽容量、索引、事务失败恢复仍待补齐 |
 | 2026-11-17 | Oracle 普通字符串 CR/LF/CRLF 字面量 | 本模块；Unit 定向 108、Functional 12；完整两 patch 各 6628 通过/16 skip；LiveTests 两 patch 各 19 通过（9 live、10 offline）；r2 打包消费者通过 | 4000 字符值含全换行/重复 CRLF 和 CHAR 空格补齐比较已有证据；真实列写入、LOB、Schema 默认值/HasData 待验收 |
 | 2026-11-17 | Oracle national literals、连接恢复 | 本模块；Unit 定向 74、Functional 6；完整两 patch 各 6588 通过/16 skip；打包消费者通过；LiveTests 两 patch 各 17 通过（7 个真实测试、10 个离线 profile 测试） | national SQL/literal 往返仅验证只读表达式；真实列容量、padding、LOB 和 Schema/DML 尚未验收 |
 | 2026-11-16 | `DateTimeOffset.DateTime` | `c44f008`；Unit 3/3、Functional 3/3、Package 2/2 | Oracle native timezone/session 和 MySQL live rejection |
@@ -63,6 +64,10 @@
 普通 Oracle CR/LF 字面量还复现了 EF 格式化把 LF 改成 CRLF 的数据变化。现在使用显式 CHAR(1) 的 CHR 片段拼接，保持配置的普通客户端编码和 CHAR 比较语义；裸 CHR 拼接会改变固定字段的空格补齐比较，未采用。UTF8MB4/latin1 只读测试涵盖 CR/LF/CRLF、Unicode/引号/反斜杠、4000 字符查询值及 CHAR(20) 比较；latin1 无法编码的普通 Unicode 值仍明确失败。
 
 独立走查后补充的 4000 个 LF / 2000 组 CRLF 测试发现线性拼接触发服务端 600；direct Connector 对照证明同样的 CHAR 片段改成平衡分组即可成功。最终实现按相邻片段成对合并，避免线性表达式深度，并覆盖奇数片段保序。上述版本/包记录均指补充修复后的完整回归结果。
+
+真实列验收使用普通账号和唯一 `EFT_` 表，仅在观察到 CREATE 成功后清理对应表；未使用管理员账号或创建/删除 namespace。MySQL 的 CONVERT 文本 DEFAULT 返回 5023，改为 `_utf8mb4 X'...'` 字符字面量后，默认值、HasData 和查询可共享同一表示。MySQL 生成值 SELECT 的 reader 现在消费至最终结果再释放，避免提前 Close 使 Connector 会话 Broken 后无法 commit。两处问题均有 RED/GREEN 和 direct Connector 对照，未修改 Connector 源码。
+
+Oracle 的 RETURNING INTO 依赖 Connector 明确支持、默认关闭的 `Use Oracle Prepare Execute=true`；测试 profile 显式开启，未更改 User Secrets 或 Provider 全局连接策略。MySQL 同步/异步另覆盖 NO_BACKSLASH_ESCAPES 会话。第一次并行 live run 为 23/25，两项在握手阶段中断，其中一次是清理连接；已通过独立连接清理该自建表，随后串行运行 25/25。该瞬时连接结果不被归为 Provider 功能缺陷。
 
 ## 模块完成规则
 

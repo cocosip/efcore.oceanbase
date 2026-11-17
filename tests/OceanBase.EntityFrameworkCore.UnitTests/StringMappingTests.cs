@@ -15,6 +15,29 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
 {
     public sealed class StringMappingTests
     {
+        [Theory]
+        [InlineData("CHAR(32)")]
+        [InlineData("VARCHAR(32)")]
+        [InlineData("TINYTEXT")]
+        [InlineData("TEXT")]
+        [InlineData("MEDIUMTEXT")]
+        [InlineData("LONGTEXT")]
+        public void MySql_control_text_uses_a_character_literal_valid_in_column_defaults(string declaration)
+        {
+            using var context = CreateContext(OceanBaseCompatibilityMode.MySql);
+            var mapping = Source(context).FindMapping(typeof(string), declaration)!;
+            foreach (var text in new[] { "a\\'b", "海🌊\r\n", "\t\0", "' OR 1=1--\n" })
+                Assert.Equal("_utf8mb4 X'" + Convert.ToHexString(System.Text.Encoding.UTF8.GetBytes(text)) + "'",
+                    mapping.GenerateSqlLiteral(text));
+            Assert.Equal("NULL", mapping.GenerateSqlLiteral(null));
+            Assert.Equal("''", mapping.GenerateSqlLiteral(""));
+            Assert.Equal("'Ready''s'", mapping.GenerateSqlLiteral("Ready's"));
+            Assert.Throws<ArgumentException>(() => mapping.GenerateSqlLiteral("\ud800\n"));
+            var converted = (RelationalTypeMapping)mapping.WithComposedConverter(
+                new ValueConverter<Caption, string>(value => value.Value + "\n", value => new Caption(value)));
+            Assert.Equal("_utf8mb4 X'610A'", converted.GenerateSqlLiteral(new Caption("a")));
+        }
+
         public static IEnumerable<object?[]> NationalLiteralCases()
         {
             foreach (var declaration in new[] { "NCHAR(20)", "NVARCHAR2(20)", "NCLOB" })

@@ -14,7 +14,7 @@ public sealed class StringLiteralFunctionalTests
 {
     private const string Text = "海🌊\\'\n";
     private const string OracleLiteral = @"u'\6d77\d83c\df0a\005c\0027\000a'";
-    private const string MySqlLiteral = "CONVERT(X'E6B5B7F09F8C8A5C270A' USING utf8mb4)";
+    private const string MySqlLiteral = "_utf8mb4 X'E6B5B7F09F8C8A5C270A'";
     private const string OracleOrdinaryLiteral = @"('海🌊\''' || CAST(CHR(10) AS CHAR(1)))";
 
     [Theory]

@@ -203,7 +203,7 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
         }
 
         [Theory]
-        [InlineData(OceanBaseCompatibilityMode.MySql, "CONVERT(X'615C2762' USING utf8mb4)")]
+        [InlineData(OceanBaseCompatibilityMode.MySql, "_utf8mb4 X'615C2762'")]
         [InlineData(OceanBaseCompatibilityMode.Oracle, @"u'\0061\005c\0027\0062'")]
         public void String_literals_preserve_backslash_and_quote(OceanBaseCompatibilityMode mode, string expected)
         {

@@ -10,8 +10,8 @@
 | --- | --- | --- | --- | --- |
 | `CFG-04`, `CON-02..05` | EF 连接对象、所有权、mode recheck、超时/取消后的租约恢复 | Provider + Driver evidence | 2026-11-17 服务器恢复后，同一 User Secrets 下两模式的原 Connector、EF 等价 Connector 和 EF 六条路径 SELECT 1 均通过；握手阻塞已解除 | 继续物理 close/reuse、真实 timeout/cancel 和恢复验收；不新增 proxy/OB20 要求 |
 | `DIA-01..02`, `SQL-01` | 错误保留、日志脱敏、完整标识符/服务 facade 生命周期 | Provider | 本地命令和异常测试已有；live correlation/DDL 未完成 | 两模式同步/异步测试、走查、真实错误分类和 release 记录 |
-| `TST-02` | 真实查询、写入、事务、Schema、标量 round-trip | Server/live + Provider | 两模式身份探针和现有只读查询 profile 各 72 条 EF reader 命令通过；national 字面量 UTF8MB4/Oracle latin1 同步/异步往返通过 | 更宽标量/查询及隔离目标上的 DML、事务、Schema 仍待真实验收 |
-| `REL-01` | 普通直连支持环境、tenant、server、TLS/transport 记录 | Server/live | 同一 User Secrets 普通直连成功；两模式服务端均报告 4.4.2.2，当前库/Schema 与配置一致；TLS Disabled、OB20/压缩/Pooling 关闭 | 当前只读环境证据已有，后续 DML/事务/DDL 需记录各自权限和部署证据；扩展部署不作为前置条件 |
+| `TST-02` | 真实查询、写入、事务、Schema、标量 round-trip | Server/live + Provider | 两模式身份探针和现有只读查询 profile 各 72 条 EF reader 命令通过；national 字面量 UTF8MB4/Oracle latin1 同步/异步往返通过 | 已补两模式唯一表的 bounded text/default/seed/tracked DML/清理；更宽标量/查询、事务失败恢复和 Schema 生命周期仍待验收 |
+| `REL-01` | 普通直连支持环境、tenant、server、TLS/transport 记录 | Server/live | 同一 User Secrets 普通直连成功；两模式服务端均报告 4.4.2.2，当前库/Schema 与配置一致；TLS Disabled、OB20/压缩/Pooling 关闭 | 当前连接/只读和唯一文本表 DML/DDL 证据已有；更宽事务/Schema profile 仍需各自权限和部署证据；扩展部署不作为前置条件 |
 | `REL-02`, `TST-01` | 关系型 runtime specification 和最终 revision 审核 | Provider + Release | 已有模型/非关系/服务/写 SQL/并发 profile；16 个 skip 已解释 | 补剩余关系型 families，在最终 revision 重跑全套 package/consumer/review |
 
 ## B. Provider 仍有开发或本地验收缺口
@@ -19,11 +19,11 @@
 | ID | 功能 | 缺口 | 责任 |
 | --- | --- | --- | --- |
 | `MOD-01..03` | 模型约定、关系、生成/默认/计算值 | 更宽模型、生成值和 Schema 组合仍需覆盖 | Provider |
-| `MAP-01..07` | 整数/Boolean、Decimal/Float、文本、Binary/Guid、Temporal、facet/converter | Oracle national 字面量及普通字面量 CR/LF 保真已修复，default/HasData/converter 本地测试和 UTF8MB4/latin1 只读往返通过；普通值 4000 字符、CHAR 比较及不可编码值拒绝已有证据。精度、真实列容量/padding/LOB、Guid 字节序、时区和更宽转换组合仍需补齐 | Provider + Server/live；见 [national](efcore-10-national-literals-plan.md) / [ordinary](efcore-10-ordinary-literals-plan.md) literals |
+| `MAP-01..07` | 整数/Boolean、Decimal/Float、文本、Binary/Guid、Temporal、facet/converter | Oracle national 字面量及普通字面量 CR/LF 保真已修复，default/HasData/converter 本地测试和 UTF8MB4/latin1 只读往返通过；普通值 4000 字符、CHAR 比较及不可编码值拒绝已有证据。真实 bounded text 参数写入、NULL/空串、padding/converter/default/seed 已验收，MySQL DEFAULT 字面量与生成值 reader 消费已修复；精度、BYTE/full capacity/LOB、Guid 字节序、时区和更宽转换组合仍需补齐 | Provider + Server/live；见 [national](efcore-10-national-literals-plan.md) / [ordinary](efcore-10-ordinary-literals-plan.md) literals |
 | `QRY-01..11` | 查询翻译和物化 | 剩余 overload、复杂组合、官方 runtime specification、真实排序/聚合/集合结果仍需补齐 | Provider + Server/live |
-| `UPD-01..05` | INSERT/UPDATE/DELETE、生成值、并发、图保存 | 本地 SQL/double 已有，真实生成值、约束、冲突和提交结果未完成 | Provider + Server/live |
-| `TXN-01..03` | transaction、savepoint、原子性、取消恢复 | 本地恢复路径已有，真实 commit/rollback/savepoint 未完成 | Provider + Server/live；句柄由 Connector 提供 |
-| `SCH-01..03` | EnsureCreated/Deleted、权限、命名空间、DDL 清理 | 本地脚本和 ownership profile 已有，真实权限/DDL/锁/删除未完成 | Provider + Server/live |
+| `UPD-01..05` | INSERT/UPDATE/DELETE、生成值、并发、图保存 | 两模式 bounded text 的 tracked insert/update/delete、默认值回读已通过；MySQL 回读完整消费后 commit 成功，Oracle 显式开启 Connector PrepareExecute。更宽生成值/约束/冲突/图保存未完成 | Provider + Server/live |
+| `TXN-01..03` | transaction、savepoint、原子性、取消恢复 | 本地恢复路径已有，MySQL 文本默认值回读的 owned commit 已通过；更宽 commit、rollback/savepoint/失败恢复仍待验收 | Provider + Server/live；句柄由 Connector 提供 |
+| `SCH-01..03` | EnsureCreated/Deleted、权限、命名空间、DDL 清理 | 唯一自建表的 CreateTables、HasData 和精确清理已有 native 证据；更宽权限/namespace/锁/删除仍未完成 | Provider + Server/live |
 
 ## C. Connector 责任，不在 EF Provider 内实现
 

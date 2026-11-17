@@ -185,6 +185,8 @@ namespace OceanBase.EntityFrameworkCore.Update
                         return;
                     }
                     _commands[0].PropagateResults(reader);
+                    // Connector releases the operation only after the complete readback response is consumed.
+                    do { while (reader.Read()) { } } while (reader.DbDataReader.NextResult());
                 }
 
                 PropagateOutputs();
@@ -219,6 +221,8 @@ namespace OceanBase.EntityFrameworkCore.Update
                     }
 
                     _commands[0].PropagateResults(reader);
+                    do { while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false)) { } }
+                    while (await reader.DbDataReader.NextResultAsync(cancellationToken).ConfigureAwait(false));
                 }
 
                 PropagateOutputs();
