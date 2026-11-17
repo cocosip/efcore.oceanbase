@@ -74,6 +74,26 @@ namespace PackageConsumer
                     ? @"u'\6d77\d83c\df0a\005c\0027\000a'"
                     : "_utf8mb4 X'E6B5B7F09F8C8A5C270A'";
                 if (nationalLiteral != expectedLiteral) throw new Exception("Packed provider lost literal text.");
+                if (mode == OceanBaseCompatibilityMode.MySql)
+                {
+                    var time = context.GetService<IRelationalTypeMappingSource>().FindMapping(typeof(TimeSpan))!;
+                    using var timeCommand = new OceanBaseCommand();
+                    var bound = new TimeSpan(0, 838, 59, 59);
+                    foreach (var sign in new[] { 1, -1 })
+                    {
+                        if (time.CreateParameter(timeCommand, "time", bound * sign).Value is not TimeSpan accepted || accepted != bound * sign)
+                            throw new Exception("Packed provider lost the exact TIME endpoint.");
+                        var invalid = (bound + TimeSpan.FromTicks(10)) * sign;
+                        Action[] operations = [() => time.CreateParameter(timeCommand, "time", invalid), () => time.GenerateSqlLiteral(invalid)];
+                        foreach (var operation in operations)
+                        {
+                            var rejected = false;
+                            try { operation(); }
+                            catch (ArgumentOutOfRangeException) { rejected = true; }
+                            if (!rejected) throw new Exception("Packed provider accepted an out-of-range TIME fraction.");
+                        }
+                    }
+                }
                 if (mode == OceanBaseCompatibilityMode.Oracle)
                 {
                     var blob = context.GetService<IRelationalTypeMappingSource>().FindMapping(typeof(byte[]), "BLOB")!;

@@ -384,10 +384,18 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             using var context = CreateContext(OceanBaseCompatibilityMode.MySql);
             var mapping = context.GetService<IRelationalTypeMappingSource>().FindMapping(typeof(TimeSpan))!;
             using var command = new OceanBaseCommand();
-            var maximum = new TimeSpan(0, 838, 59, 59).Add(TimeSpan.FromTicks(9999990));
+            var maximum = new TimeSpan(0, 838, 59, 59);
 
             Assert.Equal(maximum, mapping.CreateParameter(command, "duration", maximum).Value);
-            Assert.Throws<ArgumentOutOfRangeException>(() => mapping.CreateParameter(command, "duration", maximum.Add(TimeSpan.FromTicks(10))));
+            Assert.Equal(-maximum, mapping.CreateParameter(command, "duration", -maximum).Value);
+            foreach (var excess in new[] { TimeSpan.FromTicks(10), TimeSpan.FromTicks(9999990), TimeSpan.FromSeconds(1) })
+            foreach (var sign in new[] { 1, -1 })
+            {
+                var value = (maximum + excess) * sign;
+                Assert.Throws<ArgumentOutOfRangeException>(() => mapping.CreateParameter(command, "duration", value));
+                Assert.Throws<ArgumentOutOfRangeException>(() => mapping.GenerateSqlLiteral(value));
+                Assert.Throws<ArgumentOutOfRangeException>(() => Assert.IsAssignableFrom<IOceanBaseWriteValidation>(mapping).ValidateWriteValue(value));
+            }
             Assert.Throws<ArgumentException>(() => mapping.GenerateSqlLiteral(TimeSpan.FromTicks(1)));
         }
 

@@ -59,6 +59,23 @@ The tested MySQL 4.4.2.2 target rejects BLOB/LONGBLOB defaults with 1067; bounde
 and BLOB/LONGBLOB seed/parameter writes have separate acceptance. Other versions and LOB APIs
 remain outside this storage profile.
 
+Temporal storage has narrow live coverage for all five CLR types, NULLs, facets,
+converters, defaults/HasData/generated readback and tracked updates on OceanBase 4.4.2.2.
+Unzoned DateTime requires `DateTimeKind.Unspecified`. Oracle DateTimeOffset retains numeric
+offsets; MySQL stores UTC in DATETIME and reads a zero-offset value. Fractional write values
+must fit the declared precision exactly; MySQL supports microseconds, Oracle CLR values
+retain 100ns ticks. Query comparands and original concurrency values keep transport precision
+independently of column write facets. Oracle exact native results with subtick fractions,
+out-of-range durations or invalid clock/date-only values reject rather than silently truncate.
+
+MySQL TIME accepts signed durations through exactly `838:59:59`, with fractional seconds
+below that endpoint. The provider rejects larger magnitudes for parameters, literals and
+writes: on the tested server, direct out-of-range TIME parameters such as `838:59:59.000001`
+store `838:59:59.000000`, while equivalent typed literals return 1525. The provider previously
+allowed those extra fractions; the narrower validation prevents that loss. Raw SQL using
+caller-owned parameters bypasses mapping validation. Numeric-offset session tests do not
+establish named timezone/DST, other deployments or full temporal query acceptance.
+
 Parameterless `DefaultIfEmpty` has local coverage for ordinary scalar/converter defaults, anonymous
 objects, DTOs, constructed mapped CLR types and boxed scalar projections, including per-parent paging.
 A missing source returns null for reference projections; a present row with NULL members remains an

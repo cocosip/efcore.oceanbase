@@ -6,18 +6,19 @@
 
 | 项目 | 结果 |
 | --- | --- |
-| 分支 / 提交 | `efcore/10.0`；Double 声明/精度回归，基线 `3f60765`（Binary/Guid 已提交） |
+| 分支 / 提交 | `efcore/10.0`；Temporal storage 模块，基线 `941190a` |
 | 工作区 | 本模块源码、测试和文档一并提交；凭据仅从 User Secrets 读取 |
-| 最新模块 | Oracle Double 默认/显式声明与 NUMBER(18,6) 精度对照；仅回归和文档，生产绑定策略未改；见 [模块记录](efcore-10-oracle-double-declarations-plan.md) |
+| 最新模块 | 五种 CLR Temporal 实库存储/精度/会话/回读；MySQL TIME 上界校验修正，防止额外小数丢失；见 [模块记录](efcore-10-temporal-storage-plan.md) |
 | Required 状态 | 每个模式 9 Done / 44 In progress |
-| Local Release | 最近一次两 patch 各 6645 pass / 16 existing skip（Binary/Guid）；本次只增 live 回归和文档，生产源码未变，不重复完整套件 |
-| Package | `10.0.0-double-declarations-r1-20261117` 内容/依赖及两模式两 patch 消费者、DLL/README identity 通过；未发布 |
-| Native | 4.4.2.2 普通直连；两 patch 各 93 LiveTests（83 live、10 offline）通过；新增 8 个 Double 声明/精度对照；已知错误 characterization 不代表无损 Double 参数绑定 |
+| Local Release | 本模块两 patch 各 6645 pass / 16 existing skip；Temporal mapping/query 定向 131 pass；生产改动仅共享 TIME 上界 |
+| Package | `10.0.0-temporal-storage-r1-20261117` 内容/依赖及两模式两 patch 消费者、打包时 DLL/README identity 通过；未发布 |
+| Native | 4.4.2.2 普通直连；两 patch 各 119 LiveTests（109 live、10 offline）通过；新增 26 个 Temporal 用例；已知错误 characterization 不代表无损 Double 参数绑定或越界 TIME 支持 |
 
 ## 固定开发顺序
 
 | 顺序 | 模块 | ID | 下一步交付物 |
 | --- | --- | --- | --- |
+| 2026-11-17 | Temporal 真实存储与 TIME 上界 | 两 patch 各 6645 pass/16 skip、119 LiveTests；r1 包及消费者通过；走查无阻塞发现 | 五类型 NULL/端点/精度/default/seed/generated/converter/update、比较/原值和 numeric-offset 会话已验收；命名时区/DST/更宽查询仍开放；一处即时生成值 Kind 测试缺口见模块记录 |
 | 0 | EF 连接路径和诊断 | `CFG-04`, `CON-02..05`, `DIA-01..02`, `SQL-01` | 对照 Connector 普通直连契约；只修有证据的 Provider 差异；补同步/异步 lease 回归 |
 | 1 | 真实只读验收 | `TST-02`, `REL-01` | 两模式 SELECT、身份、版本和现有查询 profile 已通过；更宽错误分类和写入/事务/Schema 待验收 |
 | 2 | 映射剩余边界 | `MOD-01..03`, `MAP-01..07` | 精度/长度/LOB/Guid/时区/转换器边界和必要 live round-trip |
@@ -80,6 +81,8 @@ Large-text 后续验收补充 CLOB/LONGTEXT 的 NULL/空串、4001/32768 ASCII�
 MySQL Double 参数端点通过；Oracle Double 普通值通过，但参数 MinValue/MaxValue 返回 1426，测试 Epsilon/最小正 normal 变零。direct Connector 0.3.0 的 PrepareExecute 开/关与显式 Prepare 对照同样观察到极值错误和 Epsilon 丢失；D 字面量查询可保真。当前仅归为 Connector/服务端 carrier 待分类，不修改 Connector、不静默换文本 carrier，也不把负向 characterization 的通过写成 Double 完整支持。风险已进入包 README/功能矩阵/缺失矩阵；Binary/Guid 后续验收已记录于上方，Double 绑定需要对应层证据和修复后再验收。
 
 用户提出字段类型/精度后，另补真实目录和列写入对照：CLR Double 默认即 BINARY_DOUBLE，显式声明相同；两者目录 precision/scale 均为 NULL，普通 123.456789123 保真。两列的 D 字面量 INSERT 能保留 Min/Max、正负 Epsilon、正负 1E-131；相同 EF 参数极值 1426、微小值变零，1E-120 保留。直接 DbType.Double 参数 Precision0/17 结果相同，不能归结为字段 scale，也未定位 Connector/server 根因。NUMBER(18,6) 对 123.456789123D 舍入至 123.456789，符合声明；显式 decimal converter 的精确域写入通过，超 scale 在 DML 前拒绝。converter 不能覆盖完整 Double 范围，当前 Provider 直接 Double→NUMBER 和原生浮点 HasPrecision 仍明确拒绝。
+
+Temporal 模块随后补齐五 CLR 类型的 narrow live storage。Oracle DateTimeOffset 保留已测 numeric offset，MySQL DATETIME 存 UTC 并返回零偏移；切换 +05:45/-03:30 session 后保持该语义。默认值/HasData/生成回读/converter/tracked update 与 precision/Kind 拒绝、fractional comparands/CASE/原值冲突恢复通过；Oracle DATE 保留整秒时间，DateOnly 非午夜和 native exact wrapper 的 subtick/CLR 超界读取明确失败。MySQL TIME 原先允许到 ±838:59:59.999999，直接参数对照确认超出整秒端点会丢失小数、对应 typed literal 1525；共享 guard 已收紧到精确 ±838:59:59，前一微秒仍保真，非法映射写入在 DML 前拒绝。命名时区/DST/更宽 calendar/LINQ 与其他部署不因这些结果自动完成。
 
 ## 模块完成规则
 

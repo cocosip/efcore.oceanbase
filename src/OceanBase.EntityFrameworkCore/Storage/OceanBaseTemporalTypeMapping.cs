@@ -13,7 +13,7 @@ namespace OceanBase.EntityFrameworkCore.Storage
 {
     internal sealed class OceanBaseTemporalTypeMapping<T> : RelationalTypeMapping, IOceanBaseWriteValidation where T : struct
     {
-        private const long MaximumMySqlTimeTicks = (838 * 3600L + 59 * 60 + 59) * TimeSpan.TicksPerSecond + 9999990;
+        private const long MaximumMySqlTimeTicks = (838 * 3600L + 59 * 60 + 59) * TimeSpan.TicksPerSecond;
         private readonly OceanBaseCompatibilityMode _mode;
         public OceanBaseCompatibilityMode CompatibilityMode => _mode;
         private readonly byte _leadingPrecision;
@@ -161,7 +161,7 @@ namespace OceanBase.EntityFrameworkCore.Storage
                 case TimeSpan time:
                     if (_mode == OceanBaseCompatibilityMode.MySql && (time.Ticks < -MaximumMySqlTimeTicks || time.Ticks > MaximumMySqlTimeTicks))
                     {
-                        throw new ArgumentOutOfRangeException(nameof(value), "TIME exceeds 838:59:59.999999.");
+                        throw new ArgumentOutOfRangeException(nameof(value), "TIME exceeds 838:59:59.");
                     }
 
                     ticks = time.Ticks;
