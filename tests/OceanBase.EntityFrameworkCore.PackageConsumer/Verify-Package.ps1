@@ -2,7 +2,8 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory)][ValidateNotNullOrEmpty()][string]$PackagePath,
-    [Parameter(Mandatory)][ValidateNotNullOrEmpty()][string]$ExpectedVersion
+    [Parameter(Mandatory)][ValidateNotNullOrEmpty()][string]$ExpectedVersion,
+    [ValidatePattern('^[0-9a-f]{40}$')][string]$ExpectedSourceRevision
 )
 
 $ErrorActionPreference = 'Stop'
@@ -20,6 +21,18 @@ try {
 
     $assembly = @($archive.Entries | Where-Object FullName -CEQ 'lib/net10.0/OceanBase.EntityFrameworkCore.dll')
     if ($assembly.Count -ne 1 -or $assembly[0].Length -eq 0) { throw 'Expected a nonempty net10.0 provider assembly.' }
+    if ($ExpectedSourceRevision) {
+        $assemblyFile = [System.IO.Path]::GetTempFileName()
+        try {
+            [System.IO.Compression.ZipFileExtensions]::ExtractToFile($assembly[0], $assemblyFile, $true)
+            $productVersion = [System.Diagnostics.FileVersionInfo]::GetVersionInfo($assemblyFile).ProductVersion
+            if (!$productVersion -or !$productVersion.EndsWith("+$ExpectedSourceRevision", [StringComparison]::OrdinalIgnoreCase)) {
+                throw "Packaged provider revision does not match $ExpectedSourceRevision. Assembly product version is '$productVersion'."
+            }
+        } finally {
+            [System.IO.File]::Delete($assemblyFile)
+        }
+    }
     $groups = @($metadata.dependencies.group)
     if ($groups.Count -ne 1 -or $groups[0].targetFramework -cne 'net10.0') {
         throw 'Expected one net10.0 dependency group.'

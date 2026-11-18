@@ -43,3 +43,4 @@ jobs:
           ./tests/OceanBase.EntityFrameworkCore.PackageConsumer/Verify-Package.ps1
           -PackagePath "artifacts/ci/OceanBase.EntityFrameworkCore.$env:CI_PACKAGE_VERSION.nupkg"
           -ExpectedVersion $env:CI_PACKAGE_VERSION
+          -ExpectedSourceRevision $env:GITHUB_SHA
