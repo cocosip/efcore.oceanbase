@@ -10,6 +10,21 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
 {
     public sealed class SchemaScriptTests
     {
+        [Fact]
+        public void Owned_MySql_database_collation_is_set_before_table_creation()
+        {
+            var options = new DbContextOptionsBuilder<SchemaContext>()
+                .UseOceanBase("Server=offline;Database=owned", OceanBaseCompatibilityMode.MySql)
+                .EnableOceanBaseDatabaseManagement("owned")
+                .ReplaceService<IModelCacheKeyFactory, ShapeCacheKey>()
+                .AddInterceptors(new RejectConnection());
+            using var context = new SchemaContext(options.Options, "model-collation", OceanBaseCompatibilityMode.MySql);
+            var script = context.Database.GenerateCreateScript();
+
+            Assert.StartsWith("ALTER DATABASE `owned` DEFAULT COLLATE utf8mb4_bin;", script);
+            Assert.Contains("CREATE TABLE", script);
+        }
+
         [Theory]
         [InlineData(OceanBaseCompatibilityMode.MySql)]
         [InlineData(OceanBaseCompatibilityMode.Oracle)]

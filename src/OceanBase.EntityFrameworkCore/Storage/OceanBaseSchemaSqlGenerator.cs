@@ -13,16 +13,18 @@ namespace OceanBase.EntityFrameworkCore.Storage
     {
         private bool Oracle => mode == OceanBaseCompatibilityMode.Oracle;
 
-        public IReadOnlyList<string> Generate(IModel model)
+        public IReadOnlyList<string> Generate(IModel model, string? ownedMySqlDatabase)
         {
-            if (model.GetSequences().Any() || model.GetCollation() is not null)
+            if (model.GetSequences().Any())
             {
-                throw Unsupported("model sequences or database collations");
+                throw Unsupported("model sequences");
             }
             ValidateTpcKeyGeneration(model.GetEntityTypes());
             var tables = model.GetRelationalModel().Tables.Where(t => !t.IsExcludedFromMigrations)
                 .OrderBy(t => t.Schema, StringComparer.Ordinal).ThenBy(t => t.Name, StringComparer.Ordinal).ToArray();
             var commands = new List<string>();
+            if (model.GetCollation() is { } collation)
+                commands.Add(DatabaseCollationStatement(sql, ownedMySqlDatabase, collation));
             foreach (var table in tables)
             {
                 var identities = table.Columns.Where(IsIdentity).ToArray();
@@ -85,6 +87,21 @@ namespace OceanBase.EntityFrameworkCore.Storage
                 }
             }
             return commands;
+        }
+
+        internal static string DatabaseCollationStatement(ISqlGenerationHelper sql, string? ownedMySqlDatabase, string? collation)
+        {
+            if (ownedMySqlDatabase is null)
+                throw new NotSupportedException("Database collation changes require an explicitly owned MySQL database.");
+            return "ALTER DATABASE " + sql.DelimitIdentifier(ownedMySqlDatabase) + " DEFAULT COLLATE " + ValidateDatabaseCollation(collation);
+        }
+
+        internal static string ValidateDatabaseCollation(string? collation)
+        {
+            if (string.IsNullOrEmpty(collation) || !char.IsAsciiLetter(collation[0])
+                || collation.Any(character => !char.IsAsciiLetterOrDigit(character) && character != '_'))
+                throw new NotSupportedException("Database collation changes require valid names for the target and any previous default.");
+            return collation;
         }
 
         private string Column(IColumn column)

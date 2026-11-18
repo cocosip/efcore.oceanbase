@@ -539,6 +539,16 @@ EnsureCreated-managed tables with migrations. Caller/ambient/enlisted transactio
 strategies reject before migration work because DDL commits implicitly. Inspect partial schema changes before
 manual recovery. Configure the matching sync/async seeding callback; the opposite-only callback rejects early.
 
+With `EnableOceanBaseDatabaseManagement`, MySQL model-level `UseCollation` sets the owned database's
+default before schema creation or during a migration. The database must grant permission to change its
+default. `EnsureCreated` skips the change when tables already exist, and `CreateTables` requires an empty
+database when a model default is configured. The DDL leaves existing column definitions and data intact.
+An evolved migration needs both the prior and target collation. When the old model omitted it, explicitly
+supply the known previous collation in the migration's `Up` and `Down` operations. A generated downgrade
+of the initial migration drops its tables and leaves the new default in place. Oracle and table-only
+ownership reject this database-level setting. SQL generation and schema orchestration have local coverage. Native catalog
+behavior and script execution await acceptance on the target server.
+
 Runtime migrations serialize through an owner row in `__EFMigrationsHistoryLock`. Cleanup never removes another
 owner's row. A process crash or failed cleanup can leave a stale row: verify that no migrator is active before
 administrative removal. Generated scripts require external serialization and stop-on-error execution. Oracle

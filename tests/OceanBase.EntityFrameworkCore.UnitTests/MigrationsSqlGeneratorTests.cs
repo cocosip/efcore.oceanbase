@@ -14,8 +14,60 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
 {
     public sealed class MigrationsSqlGeneratorTests
     {
+        [Fact]
+        public void Database_collation_migrations_are_explicit_and_reversible_in_an_owned_MySql_database()
+        {
+            var options = new DbContextOptionsBuilder().UseOceanBase("Server=offline;Database=app", OceanBaseCompatibilityMode.MySql)
+                .EnableOceanBaseDatabaseManagement("app");
+            using var owned = new DbContext(options.Options);
+            using var existing = Create(OceanBaseCompatibilityMode.MySql, scoped: true);
+            using var oracle = Create(OceanBaseCompatibilityMode.Oracle, scoped: true);
+            var upgrade = new AlterDatabaseOperation { Collation = "utf8mb4_bin", OldDatabase = { Collation = "utf8mb4_general_ci" } };
+            var rollback = new AlterDatabaseOperation { Collation = "utf8mb4_general_ci", OldDatabase = { Collation = "utf8mb4_bin" } };
+
+            Assert.Contains("ALTER DATABASE `app` DEFAULT COLLATE utf8mb4_bin;", Sql(owned, [upgrade]));
+            Assert.Contains("ALTER DATABASE `app` DEFAULT COLLATE utf8mb4_general_ci;", Sql(owned, [rollback]));
+            Assert.True(Assert.Single(owned.GetService<IMigrationsSqlGenerator>().Generate([upgrade])).TransactionSuppressed);
+            Assert.Throws<NotSupportedException>(() => Sql(existing, [upgrade]));
+            Assert.Throws<NotSupportedException>(() => Sql(oracle, [upgrade]));
+            Assert.Throws<NotSupportedException>(() => Sql(owned, [new AlterDatabaseOperation { OldDatabase = { Collation = "utf8mb4_bin" } }]));
+            Assert.Throws<NotSupportedException>(() => Sql(owned, [new AlterDatabaseOperation { Collation = "utf8mb4_bin;SELECT" }]));
+            Assert.Throws<NotSupportedException>(() => Sql(owned, [new AlterDatabaseOperation
+                { Collation = "utf8mb4_bin", OldDatabase = { Collation = "bad collation" } }]));
+        }
+
         public static IEnumerable<object[]> Modes()
             => Enum.GetValues<OceanBaseCompatibilityMode>().Select(mode => new object[] { mode });
+
+        [Fact]
+        public void Database_collation_model_differences_generate_initial_upgrade_and_explicit_rollback_sql()
+        {
+            var options = new DbContextOptionsBuilder().UseOceanBase("Server=offline;Database=app", OceanBaseCompatibilityMode.MySql)
+                .EnableOceanBaseDatabaseManagement("app");
+            using var context = new DbContext(options.Options);
+            var implicitDefault = Model(context, evolved: false);
+            var original = Model(context, evolved: false, collation: "utf8mb4_general_ci");
+            var changed = Model(context, evolved: false, collation: "utf8mb4_bin");
+            var differ = context.GetService<IMigrationsModelDiffer>();
+            var generator = context.GetService<IMigrationsSqlGenerator>();
+
+            var initial = generator.Generate(differ.GetDifferences(null, changed.GetRelationalModel()), changed, MigrationsSqlGenerationOptions.Script);
+            Assert.StartsWith("ALTER DATABASE `app` DEFAULT COLLATE utf8mb4_bin;", initial[0].CommandText);
+            Assert.Contains(initial, command => command.CommandText.StartsWith("CREATE TABLE", StringComparison.Ordinal));
+            var initialDown = generator.Generate(differ.GetDifferences(changed.GetRelationalModel(), null), options: MigrationsSqlGenerationOptions.Script);
+            Assert.StartsWith("DROP TABLE", Assert.Single(initialDown).CommandText);
+
+            var up = generator.Generate(differ.GetDifferences(original.GetRelationalModel(), changed.GetRelationalModel()), changed, MigrationsSqlGenerationOptions.Script);
+            Assert.StartsWith("ALTER DATABASE `app` DEFAULT COLLATE utf8mb4_bin;", Assert.Single(up).CommandText);
+            var down = generator.Generate(differ.GetDifferences(changed.GetRelationalModel(), original.GetRelationalModel()), original, MigrationsSqlGenerationOptions.Script);
+            Assert.StartsWith("ALTER DATABASE `app` DEFAULT COLLATE utf8mb4_general_ci;", Assert.Single(down).CommandText);
+            Assert.Throws<NotSupportedException>(() => generator.Generate(
+                differ.GetDifferences(implicitDefault.GetRelationalModel(), changed.GetRelationalModel()), changed,
+                MigrationsSqlGenerationOptions.Script));
+            Assert.Throws<NotSupportedException>(() => generator.Generate(
+                differ.GetDifferences(changed.GetRelationalModel(), implicitDefault.GetRelationalModel()), implicitDefault,
+                MigrationsSqlGenerationOptions.Script));
+        }
 
         [Theory]
         [MemberData(nameof(Modes))]
@@ -429,9 +481,10 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
                 Assert.Contains("'one\\two'", Sql(context, [operation]));
         }
 
-        private static IModel Model(DbContext context, bool evolved, string? comment = null)
+        private static IModel Model(DbContext context, bool evolved, string? comment = null, string? collation = null)
         {
             var builder = new ModelBuilder(context.GetService<IConventionSetBuilder>().CreateConventionSet());
+            if (collation is not null) builder.UseCollation(collation);
             var row = builder.Entity<Row>();
             row.ToTable("Rows");
             row.Property(r => r.Code).HasMaxLength(evolved ? 64 : 32).HasDefaultValue("can't");

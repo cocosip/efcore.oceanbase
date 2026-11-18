@@ -193,7 +193,11 @@ namespace OceanBase.EntityFrameworkCore.Storage
             try
             {
                 ValidateCurrentScope(ScopeProbe().ExecuteScalar(Parameters()));
-                if (onlyIfEmpty && HasTables()) return false;
+                if ((onlyIfEmpty || plan.ChangesDatabaseCollation) && HasTables())
+                {
+                    if (onlyIfEmpty) return false;
+                    throw DatabaseCollationRequiresEmptyDatabase();
+                }
                 foreach (var statement in plan.Schema) commands.Build(statement).ExecuteNonQuery(Parameters());
                 ApplyModelData(plan.Data);
                 return true;
@@ -223,7 +227,11 @@ namespace OceanBase.EntityFrameworkCore.Storage
             try
             {
                 ValidateCurrentScope(await ScopeProbe().ExecuteScalarAsync(Parameters(), cancellationToken).ConfigureAwait(false));
-                if (onlyIfEmpty && await HasTablesAsync(cancellationToken).ConfigureAwait(false)) return false;
+                if ((onlyIfEmpty || plan.ChangesDatabaseCollation) && await HasTablesAsync(cancellationToken).ConfigureAwait(false))
+                {
+                    if (onlyIfEmpty) return false;
+                    throw DatabaseCollationRequiresEmptyDatabase();
+                }
                 foreach (var statement in plan.Schema)
                 {
                     await commands.Build(statement).ExecuteNonQueryAsync(Parameters(), cancellationToken).ConfigureAwait(false);
@@ -245,6 +253,9 @@ namespace OceanBase.EntityFrameworkCore.Storage
                 }
             }
         }
+
+        private static NotSupportedException DatabaseCollationRequiresEmptyDatabase()
+            => new("Creating tables with a database default collation requires an empty owned database.");
 
         public bool EnsureDeleted() => ManageDatabase(delete: true, checkExists: true);
         public Task<bool> EnsureDeletedAsync(CancellationToken cancellationToken = default)

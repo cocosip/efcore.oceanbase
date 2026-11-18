@@ -15,6 +15,13 @@ namespace OceanBase.EntityFrameworkCore.Metadata
         internal const string IdentityAnnotation = "OceanBase:Identity";
         internal const string OnUpdateSqlAnnotation = "OceanBase:OnUpdateSql";
         internal const string IndexPrefixLengthsAnnotation = "OceanBase:IndexPrefixLengths";
+        internal const string DatabaseCollationAnnotation = "OceanBase:DatabaseCollation";
+
+        public override IEnumerable<IAnnotation> For(IRelationalModel model, bool designTime)
+        {
+            if (designTime && model.Collation is { } collation)
+                yield return new Annotation(DatabaseCollationAnnotation, collation);
+        }
 
         internal static int[]? IndexPrefixLengths(object? annotation, int columnCount, bool oracle)
         {

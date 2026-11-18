@@ -83,8 +83,15 @@ namespace OceanBase.EntityFrameworkCore.Migrations
                 case CreateSequenceOperation or AlterSequenceOperation or RestartSequenceOperation or RenameSequenceOperation
                     or DropSequenceOperation or DropSchemaOperation:
                     throw Unsupported("sequence strategies or namespace creation/deletion");
-                case AlterDatabaseOperation database when database.Collation is not null || database.OldDatabase.Collation is not null:
-                    throw Unsupported("database collations");
+                case AlterDatabaseOperation database when database.Collation is not null || database.OldDatabase.Collation is not null
+                    || database[DatabaseCollationAnnotation] is not null || database.OldDatabase[DatabaseCollationAnnotation] is not null:
+                    var ownedDatabase = !Oracle && _options.DatabaseManagementEnabled ? _options.SchemaManagementScope : null;
+                    if (database.Collation is not null)
+                        OceanBaseSchemaSqlGenerator.ValidateDatabaseCollation(database.OldDatabase.Collation);
+                    builder.Append(OceanBaseSchemaSqlGenerator.DatabaseCollationStatement(Dependencies.SqlGenerationHelper,
+                        ownedDatabase, database.Collation ?? (string?)database[DatabaseCollationAnnotation]));
+                    Finish(builder);
+                    return;
                 case CreateTableOperation table:
                     foreach (var column in table.Columns) ValidateColumn(column);
                     if (table.PrimaryKey is { } primary) ValidateAnnotations(primary);
@@ -141,6 +148,7 @@ namespace OceanBase.EntityFrameworkCore.Migrations
                     IdentityAnnotation => operation is not ColumnOperation || annotation.Value is not bool,
                     OnUpdateSqlAnnotation => operation is not ColumnOperation || annotation.Value is not string,
                     IndexPrefixLengthsAnnotation => operation is not CreateIndexOperation || annotation.Value is not int[],
+                    DatabaseCollationAnnotation => operation is not AlterDatabaseOperation || annotation.Value is not string,
                     _ => true
                 }))
                 throw Unsupported("unrecognized migration annotations");
