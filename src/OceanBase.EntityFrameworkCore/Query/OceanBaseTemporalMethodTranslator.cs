@@ -56,6 +56,10 @@ namespace OceanBase.EntityFrameworkCore.Query
             .GetMethod(nameof(DateTimeOffset.Subtract), [typeof(DateTimeOffset)])!;
         private static readonly MethodInfo DateTimeOffsetAddTicks = typeof(DateTimeOffset)
             .GetMethod(nameof(DateTimeOffset.AddTicks), [typeof(long)])!;
+        private static readonly MethodInfo DateTimeOffsetAddDuration = typeof(DateTimeOffset)
+            .GetMethod(nameof(DateTimeOffset.Add), [typeof(TimeSpan)])!;
+        private static readonly MethodInfo DateTimeOffsetSubtractDuration = typeof(DateTimeOffset)
+            .GetMethod(nameof(DateTimeOffset.Subtract), [typeof(TimeSpan)])!;
         private static readonly TimeSpanToTicksConverter DurationTicksConverter = new();
         private static readonly MethodInfo DateTimeAddDays = typeof(DateTime).GetMethod(nameof(DateTime.AddDays), [typeof(double)])!;
         private static readonly MethodInfo DateTimeAddHours = typeof(DateTime).GetMethod(nameof(DateTime.AddHours), [typeof(double)])!;
@@ -75,7 +79,12 @@ namespace OceanBase.EntityFrameworkCore.Query
         {
             if (TranslateConversion(instance, method, arguments) is { } conversion) return conversion;
             if (instance is not null && method == DateTimeOffsetAddTicks && arguments.Count == 1)
-                return TranslateOffsetTickAddition(instance, arguments[0]);
+                return TranslateOffsetTickAddition(instance, arguments[0], subtract: false);
+            if (instance is not null && arguments.Count == 1
+                && (method == DateTimeOffsetAddDuration || method == DateTimeOffsetSubtractDuration))
+                return TranslateDurationTicks(arguments[0]) is { } durationTicks
+                    ? TranslateOffsetTickAddition(instance, durationTicks, method == DateTimeOffsetSubtractDuration)
+                    : null;
 
             if (instance is not null && arguments.Count == 1
                 && (method == TimeOnlyAdd || method == TimeOnlyAddHours || method == TimeOnlyAddMinutes))
@@ -87,21 +96,8 @@ namespace OceanBase.EntityFrameworkCore.Query
                 SqlExpression offset;
                 if (method == TimeOnlyAdd)
                 {
-                    // Scalar durations use ticks so the clock operation does not inherit TIME storage limits.
-                    var ticksMapping = (RelationalTypeMapping)integer.WithComposedConverter(DurationTicksConverter);
-                    if (amount is SqlParameterExpression parameter) amount = parameter.ApplyTypeMapping(ticksMapping);
-                    else if (amount is SqlConstantExpression constant) amount = constant.ApplyTypeMapping(ticksMapping);
-                    if (IsTickDurationMapping(amount.TypeMapping)) offset = sqlExpressionFactory.Convert(amount, typeof(long), integer);
-                    else if (amount.TypeMapping is { } durationMapping && IsDurationMapping(durationMapping, mode))
-                    {
-                        var expected = mappingSource.FindMapping(typeof(TimeSpan), durationMapping.StoreType)?.Converter;
-                        if (!ExpressionEqualityComparer.Instance.Equals(durationMapping.Converter?.ConvertToProviderExpression, expected?.ConvertToProviderExpression)
-                            || !ExpressionEqualityComparer.Instance.Equals(durationMapping.Converter?.ConvertFromProviderExpression, expected?.ConvertFromProviderExpression))
-                            throw new NotSupportedException("TimeOnly addition cannot use custom converted native duration carriers.");
-                        offset = sqlExpressionFactory.Function(OceanBaseTemporalMemberTranslator.TicksMarker, [amount],
-                            nullable: true, argumentsPropagateNullability: [false], typeof(long), integer);
-                    }
-                    else return null;
+                    if (TranslateDurationTicks(amount) is not { } offsetTicks) return null;
+                    offset = offsetTicks;
                 }
                 else
                 {
@@ -240,7 +236,28 @@ namespace OceanBase.EntityFrameworkCore.Query
                 argumentsPropagateNullability: [false, false], instance.Type, dateMapping);
         }
 
-        private SqlExpression? TranslateOffsetTickAddition(SqlExpression instance, SqlExpression amount)
+        private SqlExpression? TranslateDurationTicks(SqlExpression duration)
+        {
+            var factory = sqlExpressionFactory;
+            var integer = mappingSource.FindMapping(typeof(long))!;
+            var scalarMapping = (RelationalTypeMapping)integer.WithComposedConverter(DurationTicksConverter);
+            duration = duration switch
+            {
+                SqlConstantExpression constant => constant.ApplyTypeMapping(scalarMapping),
+                SqlParameterExpression parameter => parameter.ApplyTypeMapping(scalarMapping),
+                _ => factory.ApplyDefaultTypeMapping(duration)
+            };
+            if (IsTickDurationMapping(duration.TypeMapping)) return factory.Convert(duration, typeof(long), integer);
+            if (duration.TypeMapping is not { } mapping || !IsDurationMapping(mapping, mode)) return null;
+            var expected = mappingSource.FindMapping(typeof(TimeSpan), mapping.StoreType)?.Converter;
+            if (!ExpressionEqualityComparer.Instance.Equals(mapping.Converter?.ConvertToProviderExpression, expected?.ConvertToProviderExpression)
+                || !ExpressionEqualityComparer.Instance.Equals(mapping.Converter?.ConvertFromProviderExpression, expected?.ConvertFromProviderExpression))
+                throw new NotSupportedException("Temporal arithmetic cannot use custom converted native duration carriers.");
+            return factory.Function(OceanBaseTemporalMemberTranslator.TicksMarker, [duration], nullable: true,
+                argumentsPropagateNullability: [false], typeof(long), integer);
+        }
+
+        private SqlExpression? TranslateOffsetTickAddition(SqlExpression instance, SqlExpression amount, bool subtract)
         {
             var factory = sqlExpressionFactory;
             instance = factory.ApplyDefaultTypeMapping(instance);
@@ -258,7 +275,8 @@ namespace OceanBase.EntityFrameworkCore.Query
             var valid = InRange(utc);
             if (oracle) valid = factory.AndAlso(valid, InRange(local));
 
-            var adjusted = factory.Function(DateTimeAddTicksMarker, [local, amount], nullable: true,
+            var offsetTicks = subtract ? factory.Negate(amount) : amount;
+            var adjusted = factory.Function(DateTimeAddTicksMarker, [local, offsetTicks], nullable: true,
                 argumentsPropagateNullability: [false, false], typeof(DateTime), timestamp);
             var resultMapping = mapping.WithPrecisionAndScale(oracle ? 7 : 6, null);
             SqlExpression result;
@@ -278,8 +296,11 @@ namespace OceanBase.EntityFrameworkCore.Query
             {
                 var ticks = factory.Function(OceanBaseTemporalMemberTranslator.DateTimeTicksMarker, [stamp], nullable: true,
                     argumentsPropagateNullability: [false], typeof(long), integer);
-                return factory.AndAlso(factory.GreaterThanOrEqual(amount, factory.Negate(ticks)),
-                    factory.LessThanOrEqual(amount, factory.Subtract(maximum, ticks)));
+                return subtract
+                    ? factory.AndAlso(factory.GreaterThanOrEqual(amount, factory.Subtract(ticks, maximum)),
+                        factory.LessThanOrEqual(amount, ticks))
+                    : factory.AndAlso(factory.GreaterThanOrEqual(amount, factory.Negate(ticks)),
+                        factory.LessThanOrEqual(amount, factory.Subtract(maximum, ticks)));
             }
         }
 

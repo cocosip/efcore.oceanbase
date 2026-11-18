@@ -114,6 +114,37 @@ public sealed class DateTimeCalendarAddFunctionalTests
     [InlineData(OceanBaseCompatibilityMode.MySql, true)]
     [InlineData(OceanBaseCompatibilityMode.Oracle, false)]
     [InlineData(OceanBaseCompatibilityMode.Oracle, true)]
+    public async Task DateTimeOffset_duration_arithmetic_binds_full_range_ticks(OceanBaseCompatibilityMode mode, bool async)
+    {
+        var oracle = mode == OceanBaseCompatibilityMode.Oracle;
+        var expected = new DateTimeOffset(2024, 3, 1, 2, 3, 4, oracle ? TimeSpan.FromMinutes(-30) : TimeSpan.Zero);
+        using var table = new DataTable();
+        table.Columns.Add("Value", oracle ? typeof(OceanBaseTimestampWithTimeZone) : typeof(DateTime));
+        table.Rows.Add(oracle ? (object)new OceanBaseTimestampWithTimeZone(expected) : expected.UtcDateTime);
+        table.Rows.Add(DBNull.Value);
+        var capture = new Capture(table);
+        await using var context = Create(mode, capture);
+        var duration = TimeSpan.FromTicks(9_007_199_254_740_990L);
+        var query = context.Rows.Where(row => row.Zoned!.Value.Add(duration).UtcTicks > 0)
+            .OrderBy(row => row.Id).Select(row => (DateTimeOffset?)row.Zoned!.Value.Subtract(duration));
+
+        foreach (var ticks in new[] { duration.Ticks, long.MinValue })
+        {
+            duration = TimeSpan.FromTicks(ticks);
+            var result = async ? await query.ToListAsync() : query.ToList();
+            Assert.Equal(2, result.Count);
+            Assert.True(result[0]?.EqualsExact(expected));
+            Assert.Null(result[1]);
+            Assert.All(capture.Parameters[^1], value => Assert.Equal(ticks, value));
+        }
+        Assert.Equal(capture.Sql[0], capture.Sql[1]);
+    }
+
+    [Theory]
+    [InlineData(OceanBaseCompatibilityMode.MySql, false)]
+    [InlineData(OceanBaseCompatibilityMode.MySql, true)]
+    [InlineData(OceanBaseCompatibilityMode.Oracle, false)]
+    [InlineData(OceanBaseCompatibilityMode.Oracle, true)]
     public async Task DateTimeOffset_AddTicks_materializes_timezone_and_null(OceanBaseCompatibilityMode mode, bool async)
     {
         var oracle = mode == OceanBaseCompatibilityMode.Oracle;

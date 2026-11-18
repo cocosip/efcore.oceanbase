@@ -162,8 +162,10 @@ are not implied by this profile. DateTimeOffset.Subtract(DateTimeOffset) returns
 difference between stored UTC instants as a tick-backed TimeSpan, with SQL NULL propagation
 and the precision of the stored operands. Scalar operands use the other operand's converter
 at full temporal precision. Operands with mismatched converters are rejected.
-DateTimeOffset.AddTicks(long) preserves the stored numeric offset on Oracle and returns UTC
-on MySQL. Out-of-range results and MySQL adjustments finer than one microsecond return SQL NULL.
+DateTimeOffset.AddTicks(long), Add(TimeSpan) and Subtract(TimeSpan) preserve the stored numeric
+offset on Oracle and return UTC on MySQL. Out-of-range results and MySQL adjustments finer than
+one microsecond return SQL NULL. Duration operands use exact scalar ticks, ordinary native
+TIME or INTERVAL columns, and tick-backed query results. Custom native duration converters reject.
 The remaining DateTimeOffset arithmetic methods are not covered by this profile.
 
 `Math.Acosh(double)` and `MathF.Acosh(float)` translate in both modes. They calculate in Double

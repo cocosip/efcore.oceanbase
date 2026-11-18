@@ -20,6 +20,27 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
         [Theory]
         [InlineData(OceanBaseCompatibilityMode.MySql)]
         [InlineData(OceanBaseCompatibilityMode.Oracle)]
+        public void DateTimeOffset_duration_arithmetic_uses_exact_scalars_and_native_duration_columns(OceanBaseCompatibilityMode mode)
+        {
+            using var context = CreateContext(mode);
+            var duration = TimeSpan.FromTicks(9_007_199_254_740_990L);
+            var minimum = TimeSpan.MinValue;
+            var sql = context.Rows.Where(row => row.Zoned.Add(EF.Constant(duration)).UtcTicks > 0
+                    || row.Zoned.Subtract(EF.Constant(minimum)).UtcTicks > 0)
+                .Select(row => (DateTimeOffset?)row.Zoned.Subtract(row.Duration)).ToQueryString();
+
+            Assert.Contains("9007199254740990", sql);
+            Assert.Contains("-9223372036854775808", sql);
+            Assert.Contains("Duration", sql);
+            Assert.DoesNotContain("__oceanbase_internal", sql);
+            Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? "TIMESTAMPADD(MICROSECOND" : "FROM_TZ", sql);
+            Assert.Throws<NotSupportedException>(() => context.Rows
+                .Where(row => row.Zoned.Add(row.ConvertedDuration!.Value).UtcTicks > 0).ToQueryString());
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle)]
         public void DateTimeOffset_AddTicks_guards_timestamp_range_and_preserves_native_offset(OceanBaseCompatibilityMode mode)
         {
             using var context = CreateContext(mode);

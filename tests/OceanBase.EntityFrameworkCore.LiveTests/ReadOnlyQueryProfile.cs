@@ -176,12 +176,23 @@ namespace OceanBase.EntityFrameworkCore.LiveTests
 
             var adjustment = 0L;
             var adjusted = rows.OrderBy(row => row.Id).Select(row => (DateTimeOffset?)row.Zoned!.Value.AddTicks(adjustment));
+            var duration = TimeSpan.Zero;
+            var added = rows.OrderBy(row => row.Id).Select(row => (DateTimeOffset?)row.Zoned!.Value.Add(duration));
+            var subtracted = rows.OrderBy(row => row.Id).Select(row => (DateTimeOffset?)row.Zoned!.Value.Subtract(duration));
             var step = oracle ? 1L : 10L;
-            foreach (var ticks in new[] { -20L, -step, 0L, step, 20L, 1L, long.MinValue, long.MaxValue })
+            foreach (var ticks in new[] { -20L, -step, 0L, step, 20L, 1L, 9_007_199_254_740_990L, long.MinValue, long.MaxValue })
             {
                 adjustment = ticks;
+                duration = TimeSpan.FromTicks(ticks);
+                await VerifyValues(adjusted, ticks);
+                await VerifyValues(added, ticks);
+                await VerifyValues(subtracted, -(decimal)ticks);
+            }
+
+            async Task VerifyValues(IQueryable<DateTimeOffset?> query, decimal ticks)
+            {
                 var expected = values.Select(value => Expected(value, ticks));
-                var actual = await List(adjusted, async, token);
+                var actual = await List(query, async, token);
                 Assert.Equal(values.Length, actual.Count);
                 foreach (var (wanted, found) in expected.Zip(actual))
                     if (wanted.HasValue) Assert.True(found?.EqualsExact(wanted.Value));
@@ -191,14 +202,14 @@ namespace OceanBase.EntityFrameworkCore.LiveTests
             Assert.Null(Assert.Single(await List(rows.Where(row => row.Id == 0)
                 .Select(row => (DateTimeOffset?)row.Zoned!.Value.AddTicks((row.Id == 0 ? (long?)null : row.Id)!.Value)), async, token)));
 
-            DateTimeOffset? Expected(DateTimeOffset? value, long ticks)
+            DateTimeOffset? Expected(DateTimeOffset? value, decimal ticks)
             {
                 if (!value.HasValue || ticks % step != 0) return null;
                 var stamp = oracle ? value.Value : value.Value.ToUniversalTime();
                 if ((decimal)stamp.UtcTicks + ticks < 0 || (decimal)stamp.UtcTicks + ticks > maximum.UtcTicks
                     || (decimal)stamp.Ticks + ticks < 0 || (decimal)stamp.Ticks + ticks > maximum.Ticks)
                     return null;
-                return stamp.AddTicks(ticks);
+                return stamp.AddTicks((long)ticks);
             }
         }
 
