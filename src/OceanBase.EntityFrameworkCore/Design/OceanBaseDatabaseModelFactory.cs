@@ -200,6 +200,8 @@ namespace OceanBase.EntityFrameworkCore.Design
         {
             using var keys = Schema(connection, "Constraints", schema, mode);
             using var columns = Schema(connection, "ConstraintColumns", schema, mode);
+            using var indexes = Schema(connection, "Indexes", schema, mode);
+            using var indexColumns = Schema(connection, "IndexColumns", schema, mode);
             foreach (DataRow row in keys.Rows)
             {
                 if (!tables.TryGetValue((schema, Text(row, "TABLE_NAME")!), out var table) || table is DatabaseView) continue;
@@ -207,6 +209,11 @@ namespace OceanBase.EntityFrameworkCore.Design
                 var kind = Text(row, "CONSTRAINT_TYPE");
                 if (kind == "CHECK") { _logger.LogWarning("CHECK constraint {Constraint} on {Table} is not represented by EF reverse engineering.", name, table.Name); continue; }
                 if (kind is not ("PRIMARY KEY" or "UNIQUE")) continue;
+                if (kind == "UNIQUE" && mode == OceanBaseCompatibilityMode.MySql
+                    && indexes.Rows.Cast<DataRow>().Any(index => Text(index, "TABLE_NAME") == table.Name
+                        && Text(index, "INDEX_NAME") == name && Text(index, "IS_UNIQUE") == "YES")
+                    && Ordered(indexColumns, "INDEX_NAME", name, table.Name).Any(member => !member.IsNull("PREFIX_LENGTH")))
+                    continue;
                 var keyColumns = Ordered(columns, "CONSTRAINT_NAME", name, table.Name).Select(r => Column(table, Text(r, "COLUMN_NAME")!)).ToArray();
                 if (keyColumns.Length == 0) throw Unsupported("key without visible columns");
                 if (kind == "PRIMARY KEY")
@@ -222,8 +229,6 @@ namespace OceanBase.EntityFrameworkCore.Design
                     table.UniqueConstraints.Add(key);
                 }
             }
-            using var indexes = Schema(connection, "Indexes", schema, mode);
-            using var indexColumns = Schema(connection, "IndexColumns", schema, mode);
             foreach (DataRow row in indexes.Rows)
             {
                 if (!tables.TryGetValue((schema, Text(row, "TABLE_NAME")!), out var table) || table is DatabaseView) continue;
@@ -231,14 +236,29 @@ namespace OceanBase.EntityFrameworkCore.Design
                 var kind = Text(row, "INDEX_TYPE");
                 if (kind is not ("BTREE" or "NORMAL")) throw Unsupported("index type " + kind);
                 var members = Ordered(indexColumns, "INDEX_NAME", name, table.Name).ToArray();
-                if (members.Length == 0 || members.Any(r => Text(r, "COLUMN_NAME") is null || Text(r, "PREFIX_LENGTH") is not null))
-                    throw Unsupported("empty, expression or prefix index " + name);
+                if (members.Length == 0 || members.Any(r => Text(r, "COLUMN_NAME") is null))
+                    throw Unsupported("empty or expression index " + name);
                 var mapped = members.Select(r => Column(table, Text(r, "COLUMN_NAME")!)).ToArray();
                 var unique = Text(row, "IS_UNIQUE") switch { "YES" => true, "NO" => false, _ => throw Unsupported("unknown index uniqueness") };
+                var lengths = new int[members.Length];
+                for (var position = 0; position < members.Length; position++)
+                {
+                    if (members[position].IsNull("PREFIX_LENGTH")) continue;
+                    if (mode != OceanBaseCompatibilityMode.MySql || members[position]["PREFIX_LENGTH"] is not long length
+                        || length is <= 0 or > int.MaxValue || mapped[position]["ClrType"] is not Type clr
+                        || clr != typeof(string) && clr != typeof(byte[]))
+                        throw Unsupported("invalid index prefix length for " + name + "." + mapped[position].Name);
+                    lengths[position] = (int)length;
+                }
+                var prefixed = lengths.Any(length => length > 0);
+                if (prefixed && table.PrimaryKey is { } primaryKey
+                    && (primaryKey.Name == name || name == "PRIMARY"))
+                    throw Unsupported("prefix lengths on primary key " + name);
                 if (unique && (table.PrimaryKey is { } primary && primary.Columns.SequenceEqual(mapped)
                         && (primary.Name == name || mode == OceanBaseCompatibilityMode.MySql && name == "PRIMARY")
                     || table.UniqueConstraints.Any(k => k.Name == name && k.Columns.SequenceEqual(mapped)))) continue;
                 var index = new DatabaseIndex { Table = table, Name = name, IsUnique = unique };
+                if (prefixed) index[IndexPrefixLengthsAnnotation] = lengths;
                 foreach (var column in mapped) index.Columns.Add(column);
                 foreach (var member in members)
                 {

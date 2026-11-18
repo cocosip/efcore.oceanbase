@@ -62,7 +62,8 @@ namespace OceanBase.EntityFrameworkCore.Storage
                 foreach (var index in table.Indexes.OrderBy(i => i.Name, StringComparer.Ordinal))
                 {
                     if (index.Filter is not null) throw Unsupported("filtered indexes");
-                    var columns = index.Columns.Select((column, i) => Q(column.Name)
+                    var lengths = IndexPrefixLengths(index[IndexPrefixLengthsAnnotation], index.Columns.Count, Oracle);
+                    var columns = index.Columns.Select((column, i) => Q(column.Name) + IndexPrefixSql(lengths, i)
                         + (index.IsDescending is { } descending && (descending.Count == 0 || descending[i]) ? " DESC" : ""));
                     commands.Add("CREATE " + (index.IsUnique ? "UNIQUE " : "") + "INDEX "
                         + (Oracle ? sql.DelimitIdentifier(index.Name, table.Schema) : Q(index.Name))

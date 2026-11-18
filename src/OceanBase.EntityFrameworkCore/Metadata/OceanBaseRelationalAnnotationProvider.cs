@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
@@ -13,6 +14,19 @@ namespace OceanBase.EntityFrameworkCore.Metadata
     {
         internal const string IdentityAnnotation = "OceanBase:Identity";
         internal const string OnUpdateSqlAnnotation = "OceanBase:OnUpdateSql";
+        internal const string IndexPrefixLengthsAnnotation = "OceanBase:IndexPrefixLengths";
+
+        internal static int[]? IndexPrefixLengths(object? annotation, int columnCount, bool oracle)
+        {
+            if (annotation is null) return null;
+            if (oracle || annotation is not int[] lengths || lengths.Length != columnCount
+                || lengths.Any(length => length < 0) || !lengths.Any(length => length > 0))
+                throw new NotSupportedException("OceanBase index prefix lengths require a MySQL index and a nonnegative length per column.");
+            return lengths;
+        }
+
+        internal static string IndexPrefixSql(int[]? lengths, int position)
+            => lengths is not null && lengths[position] > 0 ? "(" + lengths[position].ToString(CultureInfo.InvariantCulture) + ")" : "";
 
         internal static bool IsSupportedOnUpdate(string? sql, string? storeType, string? defaultSql)
         {
@@ -56,6 +70,17 @@ namespace OceanBase.EntityFrameworkCore.Metadata
                 throw new NotSupportedException("Conflicting OceanBase ON UPDATE clauses for column " + column.Name + ".");
             if (updates.Length == 1)
                 yield return new Annotation(OnUpdateSqlAnnotation, updates[0]);
+        }
+
+        public override IEnumerable<IAnnotation> For(ITableIndex index, bool designTime)
+        {
+            if (!designTime) yield break;
+            var lengths = index.MappedIndexes.Select(mapped => mapped[IndexPrefixLengthsAnnotation]).ToArray();
+            var declared = lengths.FirstOrDefault(value => value is not null);
+            if (declared is null) yield break;
+            if (lengths.Any(value => !System.Collections.StructuralComparisons.StructuralEqualityComparer.Equals(value, declared)))
+                throw new NotSupportedException("Conflicting OceanBase prefix lengths for index " + index.Name + ".");
+            yield return new Annotation(IndexPrefixLengthsAnnotation, declared);
         }
 
         internal static bool IsIdentity(IColumn column)

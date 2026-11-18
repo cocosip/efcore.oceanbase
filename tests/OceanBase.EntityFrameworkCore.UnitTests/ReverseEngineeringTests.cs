@@ -223,7 +223,7 @@ public sealed class ReverseEngineeringTests
     [InlineData("ForeignKeyColumns", "ORDINAL_POSITION", 7)]
     [InlineData("Indexes", "IS_UNIQUE", "UNKNOWN")]
     [InlineData("IndexColumns", "SORT_ORDER", "UNKNOWN")]
-    [InlineData("IndexColumns", "PREFIX_LENGTH", 4)]
+    [InlineData("IndexColumns", "PREFIX_LENGTH", -1)]
     [InlineData("ForeignKeys", "UPDATE_RULE", "CASCADE")]
     public void Inconsistent_or_unrepresentable_selected_catalog_cannot_silently_generate_a_model(string collection, string field, object value)
     {
@@ -253,6 +253,52 @@ public sealed class ReverseEngineeringTests
         };
         var database = services.GetRequiredService<IDatabaseModelFactory>().Create(connection, new DatabaseModelFactoryOptions());
         Assert.Equal("IX_SeparateName", Assert.Single(database.Tables.Single(t => t.Name == "Parents").Indexes).Name);
+    }
+
+    [Fact]
+    public void MySql_prefix_index_survives_catalog_order_and_CSharp_generation()
+    {
+        using var services = Services();
+        using var connection = new CatalogConnection(OceanBaseCompatibilityMode.MySql)
+        {
+            Rewrite = (name, rows) =>
+            {
+                if (name == "IndexColumns") rows.Rows[^1]["PREFIX_LENGTH"] = 9L;
+            }
+        };
+        var database = services.GetRequiredService<IDatabaseModelFactory>().Create(connection, new DatabaseModelFactoryOptions());
+        var model = services.GetRequiredService<IScaffoldingModelFactory>().Create(database,
+            new ModelReverseEngineerOptions { UseDatabaseNames = true, NoPluralize = true });
+        var index = Assert.Single(model.GetEntityTypes().Single(entity => entity.GetTableName() == "Children").GetIndexes());
+        Assert.Equal(new[] { "Note", "Seq" }, index.Properties.Select(property => property.Name));
+        Assert.Equal(new[] { true, false }, index.IsDescending);
+        Assert.Equal(new[] { 9, 0 }, Assert.IsType<int[]>(index["OceanBase:IndexPrefixLengths"]));
+        var generation = new ModelCodeGenerationOptions { Language = "C#", ContextName = "PrefixContext", ConnectionString = connection.ConnectionString };
+        var code = services.GetRequiredService<IModelCodeGeneratorSelector>().Select(generation).GenerateModel(model, generation);
+        Assert.Contains(".HasAnnotation(\"OceanBase:IndexPrefixLengths\", new[] { 9, 0 })", code.ContextFile.Code);
+    }
+
+    [Fact]
+    public void MySql_unique_prefix_index_uses_public_index_members_instead_of_hidden_constraint_columns()
+    {
+        using var services = Services();
+        using var connection = new CatalogConnection(OceanBaseCompatibilityMode.MySql)
+        {
+            Rewrite = (name, rows) =>
+            {
+                if (name == "ConstraintColumns")
+                    rows.Rows.Cast<DataRow>().Single(row => Equals(row["CONSTRAINT_NAME"], "UQ_Name"))["COLUMN_NAME"] = "__substr_name";
+                if (name == "IndexColumns")
+                    rows.Rows.Cast<DataRow>().Single(row => Equals(row["INDEX_NAME"], "UQ_Name"))["PREFIX_LENGTH"] = 9L;
+            }
+        };
+        var database = services.GetRequiredService<IDatabaseModelFactory>().Create(connection, new DatabaseModelFactoryOptions());
+        var table = database.Tables.Single(table => table.Name == "Parents");
+        Assert.Empty(table.UniqueConstraints);
+        var index = Assert.Single(table.Indexes);
+        Assert.True(index.IsUnique);
+        Assert.Equal("Name", Assert.Single(index.Columns).Name);
+        Assert.Equal(new[] { 9 }, Assert.IsType<int[]>(index["OceanBase:IndexPrefixLengths"]));
     }
 
     [Theory]

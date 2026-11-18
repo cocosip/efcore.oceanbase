@@ -173,6 +173,41 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
         }
 
         [Theory]
+        [InlineData(false, false)]
+        [InlineData(true, false)]
+        [InlineData(true, true)]
+        public void Model_diff_detects_prefix_length_changes_and_rejects_unsafe_unique_replacement(bool unique, bool rename)
+        {
+            using var context = Create(OceanBaseCompatibilityMode.MySql);
+            IModel Build(int length, string name = "IX_Code")
+            {
+                var builder = new ModelBuilder(context.GetService<IConventionSetBuilder>().CreateConventionSet());
+                var row = builder.Entity("Rows");
+                row.Property<int>("Id");
+                row.HasKey("Id");
+                row.Property<string>("Code").HasMaxLength(64);
+                row.HasIndex("Code", "Id").HasDatabaseName(name).IsUnique(unique).IsDescending(true, false)
+                    .HasAnnotation("OceanBase:IndexPrefixLengths", new[] { length, 0 });
+                return context.GetService<IModelRuntimeInitializer>().Initialize(builder.FinalizeModel(), designTime: true);
+            }
+            var from = Build(12);
+            var to = Build(9, rename ? "IX_NewCode" : "IX_Code");
+            var differ = context.GetService<IMigrationsModelDiffer>();
+            Assert.Empty(differ.GetDifferences(from.GetRelationalModel(), Build(12).GetRelationalModel()));
+            var operations = differ.GetDifferences(from.GetRelationalModel(), to.GetRelationalModel());
+            Assert.Collection(operations, operation => Assert.IsType<DropIndexOperation>(operation), operation => Assert.IsType<CreateIndexOperation>(operation));
+            if (unique)
+                Assert.Contains("unique prefix indexes", Assert.Throws<NotSupportedException>(() => Sql(context, operations)).Message);
+            else
+                Assert.Contains("(`Code`(9) DESC, `Id`)", Sql(context, operations));
+            if (rename)
+                Assert.Contains("CREATE UNIQUE INDEX `IX_NewCode`", Sql(context, operations.Reverse().ToArray()));
+            using var script = new DbContext(new DbContextOptionsBuilder().UseOceanBase("Server=offline;Database=app", OceanBaseCompatibilityMode.MySql)
+                .UseModel(to).Options);
+            Assert.Contains("(`Code`(9) DESC, `Id`)", script.Database.GenerateCreateScript());
+        }
+
+        [Theory]
         [MemberData(nameof(Modes))]
         public void Computed_columns_and_hostile_identifiers_are_quoted(OceanBaseCompatibilityMode mode)
         {

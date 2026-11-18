@@ -360,8 +360,13 @@ Supported scalar columns, keys, ordinary indexes, relationships and keyless view
 Unavailable behavior metadata produces design-time warnings requiring configuration review before writes or
 schema recreation. Known defaults with unavailable SQL use EF's `HasDefaultValue()` marker; unknown identity
 is not guessed from a key or sequence-looking default. This is a usable model scaffold, not a lossless DDL
-backup. Unsupported types and expression/prefix indexes reject explicitly. Oracle identity mode/options
-remain unverified.
+backup. Unsupported types and expression indexes reject explicitly. Oracle identity mode/options
+remain unverified. Known MySQL BTREE prefix indexes keep their member lengths, order and uniqueness
+through scaffolded C# and DDL. The `OceanBase:IndexPrefixLengths` annotation stores the lengths in
+index column order. A zero entry denotes a full column. Sort direction follows the catalog. OceanBase
+4.4.2.2 reports `ASC` for the tested prefix columns declared as `DESC`. A generated migration batch
+rejects creating a unique prefix index after dropping an index on the same table. Create the
+replacement first with a distinct name or use reviewed SQL that preserves uniqueness on failure.
 
 On MySQL, scaffolding preserves known `ON UPDATE CURRENT_TIMESTAMP` clauses on non-key `DATETIME`
 columns with matching fractional precision. EF reads these values back after updates and ignores

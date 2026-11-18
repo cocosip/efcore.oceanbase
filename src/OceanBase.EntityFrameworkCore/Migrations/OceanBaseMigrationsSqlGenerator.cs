@@ -27,6 +27,19 @@ namespace OceanBase.EntityFrameworkCore.Migrations
         public override IReadOnlyList<MigrationCommand> Generate(IReadOnlyList<MigrationOperation> operations, IModel? model = null,
             MigrationsSqlGenerationOptions options = MigrationsSqlGenerationOptions.Default)
         {
+            if (!Oracle)
+            {
+                var tablesWithDroppedIndexes = new HashSet<(string? Schema, string Table)>();
+                foreach (var operation in operations)
+                {
+                    if (operation is DropIndexOperation { Table: { } table } drop)
+                        tablesWithDroppedIndexes.Add((drop.Schema ?? _options.SchemaManagementScope, table));
+                    if (operation is CreateIndexOperation { IsUnique: true } create
+                        && create[IndexPrefixLengthsAnnotation] is not null
+                        && tablesWithDroppedIndexes.Contains((create.Schema ?? _options.SchemaManagementScope, create.Table)))
+                        throw Unsupported("creating unique prefix indexes after an index drop on the same table. Create the replacement first with a distinct name or use reviewed SQL that preserves uniqueness on failure");
+                }
+            }
             if (model is not null)
             {
                 OceanBaseRelationalAnnotationProvider.ValidateTpcKeyGeneration(model.GetEntityTypes());
@@ -123,11 +136,11 @@ namespace OceanBase.EntityFrameworkCore.Migrations
 
         private static void ValidateAnnotations(MigrationOperation operation)
         {
-            if (operation.GetAnnotations().Any(annotation => operation is not ColumnOperation
-                || annotation.Name switch
+            if (operation.GetAnnotations().Any(annotation => annotation.Name switch
                 {
-                    IdentityAnnotation => annotation.Value is not bool,
-                    OnUpdateSqlAnnotation => annotation.Value is not string,
+                    IdentityAnnotation => operation is not ColumnOperation || annotation.Value is not bool,
+                    OnUpdateSqlAnnotation => operation is not ColumnOperation || annotation.Value is not string,
+                    IndexPrefixLengthsAnnotation => operation is not CreateIndexOperation || annotation.Value is not int[],
                     _ => true
                 }))
                 throw Unsupported("unrecognized migration annotations");
@@ -315,10 +328,17 @@ namespace OceanBase.EntityFrameworkCore.Migrations
 
         protected override void Generate(CreateIndexOperation operation, IModel? model, MigrationCommandListBuilder builder, bool terminate = true)
         {
+            var lengths = IndexPrefixLengths(operation[IndexPrefixLengthsAnnotation], operation.Columns.Length, Oracle);
             builder.Append(operation.IsUnique ? "CREATE UNIQUE INDEX " : "CREATE INDEX ")
                 .Append(Q(operation.Name, Oracle ? operation.Schema : null)).Append(" ON ")
                 .Append(Q(operation.Table, operation.Schema)).Append(" (");
-            GenerateIndexColumnList(operation, model, builder);
+            if (lengths is null) GenerateIndexColumnList(operation, model, builder);
+            else
+            {
+                var columns = operation.Columns.Select((column, position) => Q(column) + IndexPrefixSql(lengths, position)
+                    + (operation.IsDescending is { } descending && (descending.Length == 0 || descending[position]) ? " DESC" : ""));
+                builder.Append(string.Join(", ", columns));
+            }
             builder.Append(")");
             if (terminate) Finish(builder);
         }
