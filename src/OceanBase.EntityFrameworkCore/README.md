@@ -549,6 +549,12 @@ of the initial migration drops its tables and leaves the new default in place. O
 ownership reject this database-level setting. SQL generation and schema orchestration have local coverage. Native catalog
 behavior and script execution await acceptance on the target server.
 
+MySQL migration model diffs can toggle `AUTO_INCREMENT` on an unchanged, non-null signed `INT` or
+`BIGINT` sole primary key. The target model must match the column definition. Table renames and
+primary-key replacements need separate migrations. Other identity transitions and changes to computed
+expressions or storage require an explicit data-preserving migration. Native execution, generated-key
+allocation and rollback of the toggle await acceptance on the target server.
+
 Runtime migrations serialize through an owner row in `__EFMigrationsHistoryLock`. Cleanup never removes another
 owner's row. A process crash or failed cleanup can leave a stale row: verify that no migrator is active before
 administrative removal. Generated scripts require external serialization and stop-on-error execution. Oracle

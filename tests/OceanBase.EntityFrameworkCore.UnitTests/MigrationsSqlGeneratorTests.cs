@@ -39,6 +39,40 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
         public static IEnumerable<object[]> Modes()
             => Enum.GetValues<OceanBaseCompatibilityMode>().Select(mode => new object[] { mode });
 
+        [Theory]
+        [MemberData(nameof(Modes))]
+        public void Identity_toggle_requires_an_unchanged_single_integer_primary_key_in_MySql(OceanBaseCompatibilityMode mode)
+        {
+            using var context = Create(mode, scoped: true);
+            var assigned = Model(context, evolved: false, assignedKey: true);
+            var generated = Model(context, evolved: false);
+            var differ = context.GetService<IMigrationsModelDiffer>();
+            var generator = context.GetService<IMigrationsSqlGenerator>();
+            var up = Assert.IsType<AlterColumnOperation>(Assert.Single(differ.GetDifferences(assigned.GetRelationalModel(), generated.GetRelationalModel())));
+            var down = Assert.IsType<AlterColumnOperation>(Assert.Single(differ.GetDifferences(generated.GetRelationalModel(), assigned.GetRelationalModel())));
+            if (mode == OceanBaseCompatibilityMode.Oracle)
+            {
+                Assert.Throws<NotSupportedException>(() => generator.Generate([up], generated));
+                Assert.Throws<NotSupportedException>(() => generator.Generate([down], assigned));
+                return;
+            }
+
+            Assert.Contains("MODIFY COLUMN `Id` INT NOT NULL AUTO_INCREMENT", Assert.Single(generator.Generate([up], generated)).CommandText);
+            Assert.Contains("MODIFY COLUMN `Id` INT NOT NULL;", Assert.Single(generator.Generate([down], assigned)).CommandText);
+            Assert.Throws<NotSupportedException>(() => generator.Generate([up]));
+            Assert.Throws<NotSupportedException>(() => generator.Generate([up], Model(context, evolved: false, compositeKey: true)));
+            Assert.Throws<NotSupportedException>(() => generator.Generate(
+                [new DropPrimaryKeyOperation { Table = "Rows", Schema = "app", Name = "PK_Rows" }, up], generated));
+            Assert.Throws<NotSupportedException>(() => generator.Generate(
+                [new RenameTableOperation { Name = "PreviousRows", NewName = "Rows" }, up], generated));
+            Assert.Throws<NotSupportedException>(() => generator.Generate([up], assigned));
+            using var unscoped = Create(mode);
+            Assert.Throws<NotSupportedException>(() => unscoped.GetService<IMigrationsSqlGenerator>().Generate(
+                [new DropPrimaryKeyOperation { Table = "Rows", Schema = "app", Name = "PK_Rows" }, up], generated));
+            up.OldColumn.ColumnType = "BIGINT";
+            Assert.Throws<NotSupportedException>(() => generator.Generate([up], generated));
+        }
+
         [Fact]
         public void Database_collation_model_differences_generate_initial_upgrade_and_explicit_rollback_sql()
         {
@@ -481,12 +515,15 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
                 Assert.Contains("'one\\two'", Sql(context, [operation]));
         }
 
-        private static IModel Model(DbContext context, bool evolved, string? comment = null, string? collation = null)
+        private static IModel Model(DbContext context, bool evolved, string? comment = null, string? collation = null,
+            bool assignedKey = false, bool compositeKey = false)
         {
             var builder = new ModelBuilder(context.GetService<IConventionSetBuilder>().CreateConventionSet());
             if (collation is not null) builder.UseCollation(collation);
             var row = builder.Entity<Row>();
             row.ToTable("Rows");
+            if (assignedKey) row.Property(entity => entity.Id).ValueGeneratedNever();
+            if (compositeKey) row.HasKey(entity => new { entity.Id, entity.Code });
             row.Property(r => r.Code).HasMaxLength(evolved ? 64 : 32).HasDefaultValue("can't");
             if (comment is not null)
             {

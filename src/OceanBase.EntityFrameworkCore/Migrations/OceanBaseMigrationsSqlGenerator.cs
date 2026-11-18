@@ -32,6 +32,9 @@ namespace OceanBase.EntityFrameworkCore.Migrations
                 var tablesWithDroppedIndexes = new HashSet<(string? Schema, string Table)>();
                 foreach (var operation in operations)
                 {
+                    if (operation is AlterColumnOperation column && IsIdentity(column) != IsIdentity(column.OldColumn)
+                        && operations.Any(candidate => ConflictsWithIdentityToggle(candidate, column.Table)))
+                        throw Unsupported("renaming a table or changing its primary key in the same migration as its AUTO_INCREMENT attribute");
                     if (operation is DropIndexOperation { Table: { } table } drop)
                         tablesWithDroppedIndexes.Add((drop.Schema ?? _options.SchemaManagementScope, table));
                     if (operation is CreateIndexOperation { IsUnique: true } create
@@ -272,7 +275,9 @@ namespace OceanBase.EntityFrameworkCore.Migrations
             var old = operation.OldColumn;
             if (old.IsNullable) ValidateOnUpdateBackfill(operation);
             var commentChanged = operation.Comment != old.Comment;
-            var commentOnly = commentChanged && SameColumnDefinition(operation, old);
+            var identityChanged = IsIdentity(operation) != IsIdentity(old);
+            var sameDefinition = SameColumnDefinition(operation, old);
+            var commentOnly = commentChanged && !identityChanged && sameDefinition;
             if (Oracle && commentOnly)
             {
                 OracleComment(builder, operation.Table, operation.Schema, operation.Name, operation.Comment);
@@ -280,8 +285,12 @@ namespace OceanBase.EntityFrameworkCore.Migrations
             }
 
             if (!commentOnly && (operation.ComputedColumnSql is not null || old.ComputedColumnSql is not null
-                || IsIdentity(operation) != IsIdentity(old) || IsIdentity(operation)))
-                throw Unsupported("altering computed or identity columns; use an explicit data-preserving migration");
+                || identityChanged || IsIdentity(operation)))
+            {
+                if (Oracle || !identityChanged || !sameDefinition || commentChanged || !IsMySqlIdentityToggle(operation, model))
+                    throw Unsupported("altering computed or identity columns; use an explicit data-preserving migration");
+                ValidateColumn(old);
+            }
             builder.Append("ALTER TABLE ").Append(Q(operation.Table, operation.Schema))
                 .Append(Oracle ? " MODIFY (" : " MODIFY COLUMN ");
             ColumnDefinition(operation.Schema, operation.Table, operation.Name, operation, model, builder);
@@ -289,6 +298,35 @@ namespace OceanBase.EntityFrameworkCore.Migrations
             Finish(builder);
             if (Oracle && commentChanged)
                 OracleComment(builder, operation.Table, operation.Schema, operation.Name, operation.Comment);
+        }
+
+        private static bool ConflictsWithIdentityToggle(MigrationOperation operation, string table)
+        {
+            bool Matches(string? name) => string.Equals(name, table, StringComparison.OrdinalIgnoreCase);
+            return operation switch
+            {
+                AddPrimaryKeyOperation add => Matches(add.Table),
+                DropPrimaryKeyOperation drop => Matches(drop.Table),
+                RenameTableOperation rename => Matches(rename.Name) || Matches(rename.NewName),
+                _ => false
+            };
+        }
+
+        private static bool IsMySqlIdentityToggle(AlterColumnOperation column, IModel? model)
+        {
+            var expectedType = column.ClrType == typeof(int) ? "INT" : column.ClrType == typeof(long) ? "BIGINT" : null;
+            if (expectedType is null || !string.Equals(column.ColumnType, expectedType, StringComparison.OrdinalIgnoreCase)
+                || column.IsNullable || column.DefaultValue is not null || column.DefaultValueSql is not null
+                || column.ComputedColumnSql is not null || column.Collation is not null || column[OnUpdateSqlAnnotation] is not null)
+                return false;
+
+            var table = model?.GetRelationalModel().FindTable(column.Table, column.Schema);
+            return table?.PrimaryKey?.Columns is [var key] && key.Name == column.Name
+                && string.Equals(key.StoreType, expectedType, StringComparison.OrdinalIgnoreCase) && !key.IsNullable
+                && key.DefaultValue is null && key.DefaultValueSql is null && key.ComputedColumnSql is null
+                && key.Collation is null && key[OnUpdateSqlAnnotation] is null && key.Comment == column.Comment
+                && OceanBaseRelationalAnnotationProvider.IsIdentity(key) == IsIdentity(column)
+                && table.Columns.All(member => member == key || !OceanBaseRelationalAnnotationProvider.IsIdentity(member));
         }
 
         private static bool SameColumnDefinition(ColumnOperation column, ColumnOperation old)
@@ -299,8 +337,7 @@ namespace OceanBase.EntityFrameworkCore.Migrations
                 && column.Collation == old.Collation && column.DefaultValueSql == old.DefaultValueSql
                 && StructuralComparisons.StructuralEqualityComparer.Equals(column.DefaultValue, old.DefaultValue)
                 && column.ComputedColumnSql == old.ComputedColumnSql && column.IsStored == old.IsStored
-                && Equals(column[OnUpdateSqlAnnotation], old[OnUpdateSqlAnnotation])
-                && IsIdentity(column) == IsIdentity(old);
+                && Equals(column[OnUpdateSqlAnnotation], old[OnUpdateSqlAnnotation]);
 
         private static void ValidateOnUpdateBackfill(ColumnOperation operation)
         {
