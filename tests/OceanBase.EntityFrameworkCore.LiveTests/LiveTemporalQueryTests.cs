@@ -6,6 +6,7 @@ using System.Reflection;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Query;
 using Microsoft.EntityFrameworkCore.Storage;
 using Xunit;
 
@@ -444,6 +445,76 @@ namespace OceanBase.EntityFrameworkCore.LiveTests
                 DateTime? ExpectedTicks(long? value)
                     => !value.HasValue || value < -DateTime.MaxValue.Ticks || value > DateTime.MaxValue.Ticks
                         || mode == OceanBaseCompatibilityMode.MySql && value % 10 != 0 ? null : anchor.AddTicks(value.Value);
+            });
+
+        [Theory]
+        [MemberData(nameof(Cases))]
+        public Task DateTime_date_differences_retain_signed_long_durations_and_composition(
+            OceanBaseCompatibilityMode mode, bool async, bool nulls)
+            => WithTable(mode, async, nulls, async (context, stage) =>
+            {
+                var anchor = new DateTime(2000, 1, 1);
+                foreach (var value in new[] { anchor, new DateTime(1900, 1, 1), new DateTime(5000, 1, 1) })
+                {
+                    anchor = value;
+                    stage("date difference long signed values and refreshed timestamp");
+                    await Check(context, async, row => (TimeSpan?)row.Stamp!.Value.Subtract(anchor), row => row.Stamp?.Subtract(anchor));
+                }
+                stage("date difference signed subsecond values and DATE operands");
+                var fractionalAnchor = new DateTime(2000, 1, 1).AddTicks(mode == OceanBaseCompatibilityMode.MySql ? 10 : 1);
+                await Check(context, async, row => (TimeSpan?)row.DateStamp!.Value.Subtract(fractionalAnchor),
+                    row => row.DateStamp?.Subtract(fractionalAnchor));
+                await Check(context, async, row => (TimeSpan?)row.Stamp!.Value.Subtract(row.DateStamp!.Value),
+                    row => row.Stamp.HasValue && row.DateStamp.HasValue ? row.Stamp.Value.Subtract(row.DateStamp.Value) : null);
+                await Check(context, async, row => (TimeSpan?)row.DateStamp!.Value.Subtract(row.Stamp!.Value),
+                    row => row.Stamp.HasValue && row.DateStamp.HasValue ? row.DateStamp.Value.Subtract(row.Stamp.Value) : null);
+                foreach (var name in new[] { "Days", "Hours", "Minutes", "Seconds", "Milliseconds", "Microseconds", "Nanoseconds", "Ticks",
+                    "TotalDays", "TotalHours", "TotalMinutes", "TotalSeconds", "TotalMilliseconds", "TotalMicroseconds", "TotalNanoseconds" })
+                {
+                    stage("date difference member " + name);
+                    var row = Expression.Parameter(typeof(Row), "row");
+                    Expression<Func<Row, TimeSpan>> difference = value => value.Stamp!.Value.Subtract(anchor);
+                    var body = Expression.Property(ReplacingExpressionVisitor.Replace(difference.Parameters[0], row, difference.Body), name);
+                    var member = typeof(TimeSpan).GetProperty(name)!;
+                    if (member.PropertyType == typeof(long))
+                        await Check(context, async, Expression.Lambda<Func<Row, long?>>(Expression.Convert(body, typeof(long?)), row),
+                            value => value.Stamp.HasValue ? (long?)member.GetValue(value.Stamp.Value.Subtract(anchor)) : null);
+                    else if (member.PropertyType == typeof(double))
+                        await Check(context, async, Expression.Lambda<Func<Row, double?>>(Expression.Convert(body, typeof(double?)), row),
+                            value => value.Stamp.HasValue ? (double?)member.GetValue(value.Stamp.Value.Subtract(anchor)) : null);
+                    else
+                        await Check(context, async, Expression.Lambda<Func<Row, int?>>(Expression.Convert(body, typeof(int?)), row),
+                            value => value.Stamp.HasValue ? (int?)member.GetValue(value.Stamp.Value.Subtract(anchor)) : null);
+                }
+                stage("date differences compose with timestamp addition and subtraction");
+                await Check(context, async, row => (DateTime?)anchor.Add(row.Stamp!.Value.Subtract(anchor)), row => row.Stamp);
+                await Check(context, async, row => (DateTime?)row.Stamp!.Value.Subtract(row.Stamp.Value.Subtract(anchor)),
+                    row => row.Stamp.HasValue ? anchor : null);
+                stage("date differences normalize mixed duration comparisons, CASE and COALESCE");
+                var expected = Seed(mode).Where(row => row.Stamp.HasValue && row.Duration.HasValue
+                    && row.Stamp.Value.Subtract(anchor) > row.Duration.Value).Select(row => row.Id);
+                Assert.Equal(expected, await Read(context.Set<Row>().Where(row => row.Stamp!.Value.Subtract(anchor) > row.Duration!.Value)
+                    .OrderBy(row => row.Id).Select(row => row.Id), async));
+                await Check(context, async, row => (TimeSpan?)row.Stamp!.Value.Subtract(anchor) ?? row.Duration,
+                    row => row.Stamp?.Subtract(anchor) ?? row.Duration);
+                await Check(context, async, row => row.Id == 2 ? row.Duration : (TimeSpan?)row.Stamp!.Value.Subtract(anchor),
+                    row => row.Id == 2 ? row.Duration : row.Stamp?.Subtract(anchor));
+                stage("date differences preserve scalar DateTime converter ownership");
+                await Check(context, async, row => (TimeSpan?)row.ConvertedStamp!.Value.Subtract(anchor),
+                    row => row.ConvertedStamp?.Subtract(anchor));
+                await Check(context, async, row => (TimeSpan?)anchor.Subtract(row.ConvertedStamp!.Value),
+                    row => row.ConvertedStamp.HasValue ? anchor.Subtract(row.ConvertedStamp.Value) : null);
+                stage("mixed duration Compare and CompareTo normalize units");
+                await Check(context, async, row => (int?)row.Stamp!.Value.Subtract(anchor).CompareTo(row.Duration!.Value),
+                    row => row.Stamp.HasValue && row.Duration.HasValue ? row.Stamp.Value.Subtract(anchor).CompareTo(row.Duration.Value) : null);
+                await Check(context, async, row => (int?)TimeSpan.Compare(row.Duration!.Value, row.Stamp!.Value.Subtract(anchor)),
+                    row => row.Stamp.HasValue && row.Duration.HasValue ? TimeSpan.Compare(row.Duration.Value, row.Stamp.Value.Subtract(anchor)) : null);
+                stage("date difference endpoints retain all representable ticks");
+                var minimum = new DateTime(mode == OceanBaseCompatibilityMode.MySql ? 1000 : 1, 1, 1);
+                var maximum = new DateTime(DateTime.MaxValue.Ticks - (mode == OceanBaseCompatibilityMode.MySql ? 9 : 0));
+                var endpoints = context.Set<Row>().Where(row => row.Id == 2)
+                    .Select(row => maximum.AddTicks(row.Amount).Subtract(minimum));
+                Assert.Equal(maximum - minimum, Assert.Single(await Read(endpoints, async)));
             });
 
         private static Task SetZone(Context context, bool async, string zone)

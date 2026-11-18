@@ -109,6 +109,10 @@ namespace OceanBase.EntityFrameworkCore.Query
         public SqlExpression? Translate(SqlExpression? instance, MemberInfo member, Type returnType,
             IDiagnosticsLogger<DbLoggerCategory.Query> logger)
         {
+            if (instance is not null && member.DeclaringType == typeof(TimeSpan)
+                && OceanBaseTemporalMethodTranslator.IsTickDurationMapping(instance.TypeMapping))
+                return TranslateTickDurationMember(instance, member, returnType);
+
             if (instance is not null && (member == DateTimeDate || member == DateTimeOffsetDate)
                 && returnType == typeof(DateTime))
             {
@@ -352,6 +356,45 @@ namespace OceanBase.EntityFrameworkCore.Query
                 ? factory.Function("TRUNC", [extracted], nullable: true,
                     argumentsPropagateNullability: [false], typeof(int), intMapping)
                 : extracted;
+        }
+
+        private SqlExpression? TranslateTickDurationMember(SqlExpression instance, MemberInfo member, Type returnType)
+        {
+            var integer = mappingSource.FindMapping(typeof(long))!;
+            var ticks = factory.Convert(instance, typeof(long), integer);
+            if (member == TimeSpanTicks && returnType == typeof(long)) return ticks;
+            var total = TotalMembers.TryGetValue(member, out var unit);
+            if (total ? returnType != typeof(double) : returnType != typeof(int) || !Parts.TryGetValue(member, out _))
+                return null;
+            if (!total) unit = Parts[member].Unit;
+            var scale = unit switch
+            {
+                "DAY" => TimeSpan.TicksPerDay,
+                "HOUR" => TimeSpan.TicksPerHour,
+                "MINUTE" => TimeSpan.TicksPerMinute,
+                "SECOND" => TimeSpan.TicksPerSecond,
+                "MILLISECOND" => TimeSpan.TicksPerMillisecond,
+                _ => TimeSpan.TicksPerMicrosecond
+            };
+            if (total)
+            {
+                var floating = mappingSource.FindMapping(typeof(double))!;
+                var value = factory.Convert(ticks, typeof(double), floating);
+                return unit == "NANOSECOND" ? factory.Multiply(value, factory.Constant(100.0, floating), floating)
+                    : factory.Divide(value, factory.Constant((double)scale, floating), floating);
+            }
+            SqlExpression result;
+            if (unit == "NANOSECOND")
+                result = factory.Multiply(factory.Modulo(ticks, factory.Constant(10L, integer)), factory.Constant(100L, integer), integer);
+            else
+            {
+                var divisor = factory.Constant(scale, integer);
+                // Remove the remainder first so SQL division cannot round across an integer boundary.
+                result = factory.Divide(factory.Subtract(ticks, factory.Modulo(ticks, divisor), integer), divisor, integer);
+                if (unit != "DAY") result = factory.Modulo(result,
+                    factory.Constant(unit == "HOUR" ? 24L : unit is "MINUTE" or "SECOND" ? 60L : 1000L, integer), integer);
+            }
+            return factory.Convert(result, typeof(int), mappingSource.FindMapping(typeof(int)));
         }
 
         private SqlExpression LocalOffsetDateTime(SqlExpression instance, Type receiver)

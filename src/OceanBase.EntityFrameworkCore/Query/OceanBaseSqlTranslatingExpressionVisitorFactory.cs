@@ -193,12 +193,33 @@ namespace OceanBase.EntityFrameworkCore.Query
                     ifTrue = BooleanOperand(ifTrue);
                     ifFalse = BooleanOperand(ifFalse);
                 }
+                if (Unwrap(expression.Type) == typeof(TimeSpan)) NormalizeDurations(ref ifTrue, ref ifFalse);
                 return Dependencies.SqlExpressionFactory.Case(
                     [new CaseWhenClause(BooleanOperand(test), ifTrue)], ifFalse);
             }
 
             protected override Expression VisitBinary(BinaryExpression expression)
             {
+                if (Unwrap(expression.Left.Type) == typeof(TimeSpan) && Unwrap(expression.Right.Type) == typeof(TimeSpan)
+                    && expression.NodeType is ExpressionType.Add or ExpressionType.Subtract)
+                {
+                    if (Visit(expression.Left) is SqlExpression left && Visit(expression.Right) is SqlExpression right
+                        && (OceanBaseTemporalMethodTranslator.IsTickDurationMapping(left.TypeMapping)
+                            || OceanBaseTemporalMethodTranslator.IsTickDurationMapping(right.TypeMapping)))
+                        throw new NotSupportedException("Binary duration arithmetic on date differences is not supported; use DateTime.Add/Subtract with the duration.");
+                }
+                if (Unwrap(expression.Left.Type) == typeof(TimeSpan) && Unwrap(expression.Right.Type) == typeof(TimeSpan)
+                    && expression.NodeType is ExpressionType.Equal or ExpressionType.NotEqual or ExpressionType.LessThan
+                        or ExpressionType.LessThanOrEqual or ExpressionType.GreaterThan or ExpressionType.GreaterThanOrEqual
+                        or ExpressionType.Coalesce)
+                {
+                    if (Visit(expression.Left) is not SqlExpression left || Visit(expression.Right) is not SqlExpression right)
+                        return QueryCompilationContext.NotTranslatedExpression;
+                    if (NormalizeDurations(ref left, ref right))
+                        return expression.NodeType == ExpressionType.Coalesce
+                            ? Dependencies.SqlExpressionFactory.Coalesce(left, right, left.TypeMapping)
+                            : Dependencies.SqlExpressionFactory.MakeBinary(expression.NodeType, left, right, typeMapping: null)!;
+                }
                 if (expression.NodeType is ExpressionType.Equal or ExpressionType.NotEqual)
                 {
                     var candidate = expression.Right is ConstantExpression { Value: null } ? expression.Left
@@ -259,6 +280,23 @@ namespace OceanBase.EntityFrameworkCore.Query
 
             protected override Expression VisitMethodCall(MethodCallExpression call)
             {
+                if (call.Method.DeclaringType == typeof(TimeSpan) && call.Method.Name is nameof(TimeSpan.Compare) or nameof(TimeSpan.CompareTo))
+                {
+                    var first = Unbox(call.Object ?? call.Arguments[0]);
+                    var second = Unbox(call.Arguments[call.Object is null ? 1 : 0]);
+                    if (Unwrap(first.Type) == typeof(TimeSpan) && Unwrap(second.Type) == typeof(TimeSpan)
+                        && Visit(first) is SqlExpression left && Visit(second) is SqlExpression right
+                        && NormalizeDurations(ref left, ref right))
+                    {
+                        var factory = Dependencies.SqlExpressionFactory;
+                        return factory.Case([
+                            new CaseWhenClause(factory.OrElse(factory.IsNull(left), factory.IsNull(right)),
+                                new SqlConstantExpression(null, typeof(int), Dependencies.TypeMappingSource.FindMapping(typeof(int)))),
+                            new CaseWhenClause(factory.Equal(left, right), factory.Constant(0)),
+                            new CaseWhenClause(factory.GreaterThan(left, right), factory.Constant(1)),
+                            new CaseWhenClause(factory.LessThan(left, right), factory.Constant(-1))], elseResult: null);
+                    }
+                }
                 if (call.Method == BooleanCompare || call.Method == BooleanObjectCompare)
                 {
                     if (Visit(call.Object) is not SqlExpression instance)
@@ -339,7 +377,17 @@ namespace OceanBase.EntityFrameworkCore.Query
 
                 function = GetVariadicFunction(call.Method);
                 if (function is null)
-                    return base.VisitMethodCall(call);
+                {
+                    var translated = base.VisitMethodCall(call);
+                    if (translated is SqlBinaryExpression binary && binary.Type == typeof(bool)
+                        && binary.Left.Type == typeof(TimeSpan) && binary.Right.Type == typeof(TimeSpan))
+                    {
+                        var left = binary.Left;
+                        var right = binary.Right;
+                        if (NormalizeDurations(ref left, ref right)) return binary.Update(left, right);
+                    }
+                    return translated;
+                }
                 if (!OceanBaseMathTranslator.IsNumeric(call.Type))
                     return QueryCompilationContext.NotTranslatedExpression;
 
@@ -353,6 +401,34 @@ namespace OceanBase.EntityFrameworkCore.Query
                 for (var i = 0; i < operands.Length; i++)
                     operands[i] = new SqlConstantExpression(values.GetValue(i), type, typeMapping: null);
                 return Build(function, type, operands) ?? QueryCompilationContext.NotTranslatedExpression;
+            }
+
+            private bool NormalizeDurations(ref SqlExpression left, ref SqlExpression right)
+            {
+                var target = OceanBaseTemporalMethodTranslator.IsTickDurationMapping(left.TypeMapping) ? left.TypeMapping
+                    : OceanBaseTemporalMethodTranslator.IsTickDurationMapping(right.TypeMapping) ? right.TypeMapping : null;
+                if (target is null) return false;
+                left = Normalize(left);
+                right = Normalize(right);
+                return true;
+
+                SqlExpression Normalize(SqlExpression value)
+                {
+                    if (OceanBaseTemporalMethodTranslator.IsTickDurationMapping(value.TypeMapping)) return value;
+                    if (value is SqlConstantExpression constant) return constant.ApplyTypeMapping(target);
+                    if (value is SqlParameterExpression parameter) return parameter.ApplyTypeMapping(target);
+                    var mode = ((OceanBaseIntegerTypeMapping<long>)target).CompatibilityMode;
+                    if (value.TypeMapping is not { } mapping || !OceanBaseTemporalMethodTranslator.IsDurationMapping(mapping, mode))
+                        throw new NotSupportedException("Date differences require compatible duration carriers.");
+                    var expected = Dependencies.TypeMappingSource.FindMapping(typeof(TimeSpan), mapping.StoreType)?.Converter;
+                    if (!ExpressionEqualityComparer.Instance.Equals(mapping.Converter?.ConvertToProviderExpression, expected?.ConvertToProviderExpression)
+                        || !ExpressionEqualityComparer.Instance.Equals(mapping.Converter?.ConvertFromProviderExpression, expected?.ConvertFromProviderExpression))
+                        throw new NotSupportedException("Date differences cannot combine with custom converted native duration carriers.");
+                    var factory = Dependencies.SqlExpressionFactory;
+                    var ticks = factory.Function(OceanBaseTemporalMemberTranslator.TicksMarker, [value], nullable: true,
+                        argumentsPropagateNullability: [false], typeof(long), Dependencies.TypeMappingSource.FindMapping(typeof(long)));
+                    return factory.Convert(ticks, typeof(TimeSpan), target);
+                }
             }
 
             private static Expression Unbox(Expression expression)

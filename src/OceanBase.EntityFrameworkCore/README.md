@@ -119,6 +119,15 @@ DateTime.AddTicks(long) uses exact signed integer offsets without conversion to 
 values above 2^53. It supports constants, refreshed parameters, columns and NULLs with the same
 result promotion and MySQL precision policy. Offsets outside +/-DateTime.MaxValue.Ticks return
 SQL NULL, including Int64.MinValue/MaxValue; calendar result overflow follows server error/NULL behavior.
+DateTime.Subtract(DateTime) returns a TimeSpan carried as exact signed integer ticks in queries,
+so results can span the full supported DateTime range without using MySQL TIME storage. NULLs,
+duration components/totals, scalar comparisons, Compare/CompareTo, CASE/COALESCE with ordinary
+duration columns and composition into DateTime.Add/Subtract(TimeSpan) are supported. Scalar date
+operands adopt the other operand's converter; two date expressions must have matching converters,
+and their difference operates in stored calendar space. Custom converted native durations cannot
+be combined with tick-carried results because their inverse is not generally expressible in SQL.
+Binary TimeSpan Add/Subtract on date differences, mixed native/tick duration set projections and
+mixed-carrier membership are explicitly rejected. Stored TIME/INTERVAL mappings are unchanged.
 Oracle calendar arithmetic
 requires a Gregorian session; month ends clamp without losing timestamp fractions.
 Oracle DateTimeOffset components use the stored offset's local wall clock; UTC members

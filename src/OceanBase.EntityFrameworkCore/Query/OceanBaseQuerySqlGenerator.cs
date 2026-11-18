@@ -129,6 +129,11 @@ namespace OceanBase.EntityFrameworkCore.Query
             {
                 ValidateBlobComparison(sqlBinaryExpression.Left);
                 ValidateBlobComparison(sqlBinaryExpression.Right);
+                // Null processing can rewrite mixed-carrier IN subqueries into EXISTS comparisons.
+                if (sqlBinaryExpression.Left.Type == typeof(TimeSpan) && sqlBinaryExpression.Right.Type == typeof(TimeSpan)
+                    && OceanBaseTemporalMethodTranslator.IsTickDurationMapping(sqlBinaryExpression.Left.TypeMapping)
+                        != OceanBaseTemporalMethodTranslator.IsTickDurationMapping(sqlBinaryExpression.Right.TypeMapping))
+                    throw new NotSupportedException("Comparisons mixing tick-based date differences and stored duration carriers require normalization.");
             }
             if (sqlBinaryExpression.OperatorType == ExpressionType.ExclusiveOr && sqlBinaryExpression.Type == typeof(bool))
             {
@@ -209,13 +214,29 @@ namespace OceanBase.EntityFrameworkCore.Query
             ValidateBlobComparison(inExpression.Item);
             if (inExpression.Subquery is { } subquery)
             {
-                foreach (var projection in subquery.Projection) ValidateBlobComparison(projection.Expression);
+                foreach (var projection in subquery.Projection)
+                {
+                    ValidateBlobComparison(projection.Expression);
+                    ValidateDurationMembership(projection.Expression);
+                }
             }
             if (inExpression.Values is { } values)
             {
-                foreach (var value in values) ValidateBlobComparison(value);
+                foreach (var value in values)
+                {
+                    ValidateBlobComparison(value);
+                    ValidateDurationMembership(value);
+                }
             }
             base.GenerateIn(inExpression, negated);
+
+            void ValidateDurationMembership(SqlExpression value)
+            {
+                if (inExpression.Item.Type == typeof(TimeSpan) && value.Type == typeof(TimeSpan)
+                    && OceanBaseTemporalMethodTranslator.IsTickDurationMapping(inExpression.Item.TypeMapping)
+                        != OceanBaseTemporalMethodTranslator.IsTickDurationMapping(value.TypeMapping))
+                    throw new NotSupportedException("Membership mixing tick-based date differences and stored duration carriers is not supported.");
+            }
         }
 
         private void ValidateBlobComparison(SqlExpression expression)

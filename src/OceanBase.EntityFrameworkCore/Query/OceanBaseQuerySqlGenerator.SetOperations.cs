@@ -9,6 +9,15 @@ namespace OceanBase.EntityFrameworkCore.Query
     {
         protected override void GenerateSetOperation(SetOperationBase setOperation)
         {
+            for (var index = 0; index < setOperation.Source1.Projection.Count; index++)
+            {
+                var left = setOperation.Source1.Projection[index].Expression;
+                var right = setOperation.Source2.Projection[index].Expression;
+                if (left.Type == typeof(TimeSpan) && right.Type == typeof(TimeSpan)
+                    && OceanBaseTemporalMethodTranslator.IsTickDurationMapping(left.TypeMapping)
+                        != OceanBaseTemporalMethodTranslator.IsTickDurationMapping(right.TypeMapping))
+                    throw new NotSupportedException("Set operations mixing tick-based date differences and stored duration carriers are not supported.");
+            }
             if (_mode == OceanBaseCompatibilityMode.Oracle)
             {
                 if (!setOperation.IsDistinct && setOperation is ExceptExpression or IntersectExpression)

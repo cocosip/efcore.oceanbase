@@ -1,11 +1,13 @@
 using System;
 using System.Collections.Generic;
+using System.Linq.Expressions;
 using System.Reflection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Query;
 using Microsoft.EntityFrameworkCore.Query.SqlExpressions;
 using Microsoft.EntityFrameworkCore.Storage;
+using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using OceanBaseConnector;
 using OceanBase.EntityFrameworkCore.Storage;
 
@@ -36,6 +38,8 @@ namespace OceanBase.EntityFrameworkCore.Query
         private static readonly MethodInfo DateTimeAddYears = typeof(DateTime).GetMethod(nameof(DateTime.AddYears), [typeof(int)])!;
         private static readonly MethodInfo DateTimeAddDuration = typeof(DateTime).GetMethod(nameof(DateTime.Add), [typeof(TimeSpan)])!;
         private static readonly MethodInfo DateTimeSubtractDuration = typeof(DateTime).GetMethod(nameof(DateTime.Subtract), [typeof(TimeSpan)])!;
+        private static readonly MethodInfo DateTimeSubtractDateTime = typeof(DateTime).GetMethod(nameof(DateTime.Subtract), [typeof(DateTime)])!;
+        private static readonly TimeSpanToTicksConverter DurationTicksConverter = new();
         private static readonly MethodInfo DateTimeAddDays = typeof(DateTime).GetMethod(nameof(DateTime.AddDays), [typeof(double)])!;
         private static readonly MethodInfo DateTimeAddHours = typeof(DateTime).GetMethod(nameof(DateTime.AddHours), [typeof(double)])!;
         private static readonly Dictionary<MethodInfo, string> NumericAddMarkers = new()
@@ -52,12 +56,53 @@ namespace OceanBase.EntityFrameworkCore.Query
         public SqlExpression? Translate(SqlExpression? instance, MethodInfo method, IReadOnlyList<SqlExpression> arguments,
             IDiagnosticsLogger<DbLoggerCategory.Query> logger)
         {
+            if (instance is not null && method == DateTimeSubtractDateTime && arguments.Count == 1)
+            {
+                var left = sqlExpressionFactory.ApplyDefaultTypeMapping(instance);
+                var right = sqlExpressionFactory.ApplyDefaultTypeMapping(arguments[0]);
+                left = MapScalar(left, right.TypeMapping);
+                right = MapScalar(right, left.TypeMapping);
+                if (left.TypeMapping is not { } leftMapping || right.TypeMapping is not { } rightMapping
+                    || !IsDateTimeCalendarMapping(leftMapping, mode) || !IsDateTimeCalendarMapping(rightMapping, mode))
+                    return null;
+                if (!Equals(leftMapping.Converter, rightMapping.Converter))
+                    throw new NotSupportedException("Date differences require matching DateTime converters.");
+                var integer = mappingSource.FindMapping(typeof(long))!;
+                var result = (RelationalTypeMapping)integer.WithComposedConverter(DurationTicksConverter);
+                // Subtract exact calendar ticks, avoiding the MySQL TIME storage limit for query results.
+                return new SqlBinaryExpression(ExpressionType.Subtract,
+                    CalendarTicks(left), CalendarTicks(right), typeof(TimeSpan), result);
+
+                SqlExpression CalendarTicks(SqlExpression date)
+                    => sqlExpressionFactory.Function(OceanBaseTemporalMemberTranslator.DateTimeTicksMarker,
+                        [date], nullable: true, argumentsPropagateNullability: [false], typeof(long), integer);
+
+                SqlExpression MapScalar(SqlExpression value, RelationalTypeMapping? owner)
+                {
+                    if (value is not (SqlConstantExpression or SqlParameterExpression) || owner is null
+                        || !IsDateTimeCalendarMapping(owner, mode)) return value;
+                    // Contextual converters must not narrow a fractional scalar to a DATE column's precision.
+                    var mapping = mappingSource.FindMapping(typeof(DateTime),
+                        mode == OceanBaseCompatibilityMode.MySql ? "DATETIME(6)" : "TIMESTAMP(7)")!;
+                    if (owner.Converter is { } converter) mapping = (RelationalTypeMapping)mapping.WithComposedConverter(converter);
+                    return value is SqlConstantExpression constant ? constant.ApplyTypeMapping(mapping)
+                        : ((SqlParameterExpression)value).ApplyTypeMapping(mapping);
+                }
+            }
+
             var numericAdd = NumericAddMarkers.TryGetValue(method, out var numericMarker);
             var ticks = numericMarker == DateTimeAddTicksMarker;
             if (instance is not null && arguments.Count == 1 && (numericAdd || method == DateTimeAddDuration || method == DateTimeSubtractDuration))
             {
                 instance = sqlExpressionFactory.ApplyDefaultTypeMapping(instance);
                 var duration = sqlExpressionFactory.ApplyDefaultTypeMapping(arguments[0]);
+                if (!numericAdd && IsTickDurationMapping(duration.TypeMapping))
+                {
+                    duration = sqlExpressionFactory.Convert(duration, typeof(long), mappingSource.FindMapping(typeof(long)));
+                    if (method == DateTimeSubtractDuration) duration = sqlExpressionFactory.Negate(duration);
+                    numericAdd = ticks = true;
+                    numericMarker = DateTimeAddTicksMarker;
+                }
                 if (instance.Type != typeof(DateTime) || instance.TypeMapping is not { } stampMapping
                     || !IsDateTimeCalendarMapping(stampMapping, mode)
                     || duration.TypeMapping is not { } durationMapping
@@ -137,6 +182,10 @@ namespace OceanBase.EntityFrameworkCore.Query
             => mapping is OceanBaseIntegerTypeMapping<long> integer && integer.CompatibilityMode == mode
                 && mapping.ClrType == typeof(long) && mapping.Converter?.ConvertsNulls != true
                 && (mapping.Converter?.ProviderClrType ?? mapping.ClrType) == typeof(long);
+
+        internal static bool IsTickDurationMapping(RelationalTypeMapping? mapping)
+            => mapping is OceanBaseIntegerTypeMapping<long>
+                && mapping.ClrType == typeof(TimeSpan) && mapping.Converter is TimeSpanToTicksConverter;
 
         private bool IsDateOnlyMapping(RelationalTypeMapping mapping)
         {

@@ -109,6 +109,34 @@ public sealed class DateTimeCalendarAddFunctionalTests
         Assert.DoesNotContain("__oceanbase_internal", capture.Sql[0]);
     }
 
+    [Theory]
+    [InlineData(OceanBaseCompatibilityMode.MySql, false)]
+    [InlineData(OceanBaseCompatibilityMode.MySql, true)]
+    [InlineData(OceanBaseCompatibilityMode.Oracle, false)]
+    [InlineData(OceanBaseCompatibilityMode.Oracle, true)]
+    public async Task Date_differences_materialize_exact_long_durations_and_refresh_parameters(
+        OceanBaseCompatibilityMode mode, bool async)
+    {
+        using var table = new DataTable();
+        table.Columns.Add("Value", typeof(object));
+        const long ticks = 3155378975999999990L;
+        table.Rows.Add(mode == OceanBaseCompatibilityMode.MySql ? (object)ticks : (decimal)ticks);
+        table.Rows.Add(DBNull.Value);
+        var capture = new Capture(table);
+        await using var context = Create(mode, capture);
+        var anchor = new DateTime(2000, 1, 1);
+        var minimum = TimeSpan.FromDays(1000);
+        var query = context.Rows.Where(row => row.Stamp.Subtract(anchor) > minimum)
+            .OrderBy(row => row.Id).Select(row => (TimeSpan?)row.OptionalStamp!.Value.Subtract(anchor));
+        Assert.Equal([TimeSpan.FromTicks(ticks), null], async ? await query.ToListAsync() : query.ToList());
+        Assert.Contains((object)minimum.Ticks, capture.Parameters[0]);
+        anchor = new DateTime(1900, 1, 1);
+        minimum = -minimum;
+        Assert.Equal([TimeSpan.FromTicks(ticks), null], async ? await query.ToListAsync() : query.ToList());
+        Assert.Contains((object)minimum.Ticks, capture.Parameters[1]);
+        Assert.Equal(capture.Sql[0], capture.Sql[1]);
+    }
+
     private static async Task Run(OceanBaseCompatibilityMode mode, bool async, bool years)
     {
         using var table = new DataTable();

@@ -20,6 +20,126 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
         [Theory]
         [InlineData(OceanBaseCompatibilityMode.MySql)]
         [InlineData(OceanBaseCompatibilityMode.Oracle)]
+        public void Date_difference_translates_long_durations_members_and_composition(OceanBaseCompatibilityMode mode)
+        {
+            using var context = Create(mode);
+            var anchor = new DateTime(2000, 1, 1);
+            var duration = TimeSpan.FromDays(1000);
+            var query = context.Rows.Where(row => row.Stamp.Subtract(anchor) > duration)
+                .OrderBy(row => row.OptionalStamp!.Value.Subtract(row.Stamp).Ticks)
+                .Select(row => new
+                {
+                    Difference = (TimeSpan?)row.OptionalStamp!.Value.Subtract(anchor),
+                    Days = row.Stamp.Subtract(anchor).Days,
+                    Hours = row.Stamp.Subtract(anchor).Hours,
+                    Nanoseconds = row.Stamp.Subtract(anchor).Nanoseconds,
+                    TotalDays = row.Stamp.Subtract(anchor).TotalDays,
+                    Recombined = anchor.Add(row.Stamp.Subtract(anchor)),
+                    Inverse = row.Stamp.Subtract(row.Stamp.Subtract(anchor))
+                });
+            var sql = query.ToQueryString();
+            Assert.DoesNotContain("__oceanbase_internal", sql);
+            Assert.DoesNotContain("SEC_TO_TIME", sql);
+            Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? "DATEDIFF(" : "EXTRACT(SECOND FROM", sql);
+            anchor = new DateTime(1900, 1, 1);
+            Assert.Contains("1900", query.ToQueryString());
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle)]
+        public void Date_difference_normalizes_mixed_duration_carriers(OceanBaseCompatibilityMode mode)
+        {
+            using var context = Create(mode);
+            var anchor = new DateTime(2000, 1, 1);
+            var query = context.Rows.Where(row => row.Stamp.Subtract(anchor) > row.Duration!.Value)
+                .Select(row => new
+                {
+                    Coalesced = (TimeSpan?)row.OptionalStamp!.Value.Subtract(anchor) ?? row.Duration,
+                    Conditional = row.Id == 1 ? row.Duration : (TimeSpan?)row.Stamp.Subtract(anchor)
+                });
+            var sql = query.ToQueryString();
+            Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? "TIME_TO_SEC(" : "EXTRACT(DAY FROM", sql);
+            Assert.DoesNotContain("__oceanbase_internal", sql);
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle)]
+        public void Date_difference_rejects_set_operations_with_native_duration_carriers(OceanBaseCompatibilityMode mode)
+        {
+            using var context = Create(mode);
+            var anchor = new DateTime(2000, 1, 1);
+            var query = context.Rows.Select(row => row.Stamp.Subtract(anchor))
+                .Union(context.Rows.Select(row => row.Duration!.Value));
+            Assert.Contains("duration", Assert.Throws<NotSupportedException>(() => query.ToQueryString()).Message);
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle)]
+        public void Date_difference_contextualizes_scalar_converters_and_rejects_incompatible_columns(OceanBaseCompatibilityMode mode)
+        {
+            using var context = Create(mode);
+            var anchor = new DateTime(2000, 1, 1);
+            var query = context.Rows.Where(row => row.ConvertedStamp.Subtract(anchor) > TimeSpan.Zero);
+            Assert.Contains("2000-01-08", query.ToQueryString());
+            Assert.Throws<NotSupportedException>(() => context.Rows.Where(row => row.ConvertedStamp.Subtract(row.Stamp) > TimeSpan.Zero).ToQueryString());
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true)]
+        public void Date_difference_rejects_duration_operators_and_custom_native_converters(OceanBaseCompatibilityMode mode, bool converted)
+        {
+            using var context = Create(mode);
+            var anchor = new DateTime(2000, 1, 1);
+            if (converted)
+                Assert.Throws<NotSupportedException>(() => context.Rows.Select(row => row.Id == 1
+                    ? row.ConvertedDuration : row.Stamp.Subtract(anchor)).ToQueryString());
+            else
+                Assert.Throws<NotSupportedException>(() => context.Rows.Where(row => row.Stamp.Subtract(anchor) + row.Duration!.Value > TimeSpan.Zero).ToQueryString());
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle)]
+        public void Date_difference_normalizes_CompareTo_and_rejects_mixed_membership(OceanBaseCompatibilityMode mode)
+        {
+            using var context = Create(mode);
+            var anchor = new DateTime(2000, 1, 1);
+            var sql = context.Rows.Select(row => row.Stamp.Subtract(anchor).CompareTo(row.Duration!.Value)).ToQueryString();
+            Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? "TIME_TO_SEC(`r`.`Duration`)" : "EXTRACT(DAY FROM \"r\".\"Duration\")", sql);
+            Assert.Contains("THEN NULL", sql);
+            Assert.Throws<NotSupportedException>(() => context.Rows.Where(row => context.Rows.Select(value => value.Duration!.Value)
+                .Contains(row.Stamp.Subtract(anchor))).ToQueryString());
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle)]
+        public void Date_difference_preserves_fractional_scalars_against_whole_second_columns(OceanBaseCompatibilityMode mode)
+        {
+            using var context = Create(mode);
+            var anchor = new DateTime(2000, 1, 1).AddTicks(mode == OceanBaseCompatibilityMode.MySql ? 10 : 1);
+            var source = context.GetService<IRelationalTypeMappingSource>();
+            var methods = context.GetService<IMethodCallTranslatorProvider>();
+            var factory = context.GetService<ISqlExpressionFactory>();
+            var narrow = source.FindMapping(typeof(DateTime), mode == OceanBaseCompatibilityMode.MySql ? "DATETIME(0)" : "DATE")!;
+            var result = Assert.IsType<SqlBinaryExpression>(methods.Translate(context.Model,
+                new ColumnExpression("DateStamp", "r", typeof(DateTime), narrow, true),
+                typeof(DateTime).GetMethod(nameof(DateTime.Subtract), [typeof(DateTime)])!,
+                [factory.Constant(anchor, source.FindMapping(typeof(DateTime)))],
+                context.GetService<IDiagnosticsLogger<DbLoggerCategory.Query>>()));
+            Assert.Equal(mode == OceanBaseCompatibilityMode.MySql ? "DATETIME(6)" : "TIMESTAMP(7)",
+                Assert.IsType<SqlFunctionExpression>(result.Right).Arguments![0].TypeMapping!.StoreType);
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle)]
         public void Minute_through_tick_additions_translate_server_side(OceanBaseCompatibilityMode mode)
         {
             using var context = Create(mode);
@@ -258,6 +378,11 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
         private sealed class Context(DbContextOptions<Context> options) : DbContext(options)
         {
             public DbSet<Row> Rows => Set<Row>();
+            protected override void OnModelCreating(ModelBuilder model)
+            {
+                model.Entity<Row>().Property(row => row.ConvertedStamp).HasConversion(value => value.AddDays(7), value => value.AddDays(-7));
+                model.Entity<Row>().Property(row => row.ConvertedDuration).HasConversion(value => value.Negate(), value => value.Negate());
+            }
         }
 
         private sealed class Row
@@ -267,6 +392,9 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             public DateTime? OptionalStamp { get; set; }
             public double Amount { get; set; }
             public long TickAmount { get; set; }
+            public TimeSpan? Duration { get; set; }
+            public TimeSpan ConvertedDuration { get; set; }
+            public DateTime ConvertedStamp { get; set; }
         }
     }
 }
