@@ -14,7 +14,7 @@ explicitly unsupported features, dependencies, and capabilities to confirm. Pre-
 - The current known unavailable/rejected capabilities are based on the code and package README. Supporting every BCL method is not an implicit Provider commitment.
   Add newly discovered valid requirements to their owning row or give them a new stable ID. Rejection of invalid inputs or malformed models/catalogs is validation, not a missing feature.
 
-Current counts: 49 G records (7 Not started, 0 In development, 21 Implemented, 19 Unsupported, 2 Deferred). Also retained are 2 Implemented F records, 9 external dependency B records, 4 To confirm C records, and 4 Deferred D groups.
+Current counts: 50 G records (6 Not started, 0 In development, 22 Implemented, 20 Unsupported, 2 Deferred). Also retained are 2 Implemented F records, 9 external dependency B records, 4 To confirm C records, and 4 Deferred D groups.
 
 ## Development order
 
@@ -37,7 +37,8 @@ Prioritize missing Provider functionality before the pre-release acceptance camp
 6. G-18 implements the six IndexOf signatures with native character positions and guarded ranges.
    G-47 implements ordinary string and char Replace. G-48 implements guarded Insert. G-49 implements
    non-truncating character padding. G-30 implements table and column comment DDL, and G-29
-   accepts model trigger metadata. Next, evaluate scaffold fidelity candidates (G-36/G-37),
+   accepts model trigger metadata. G-37 preserves the MySQL DATETIME update clause in scaffolded
+   models and DDL. Next, evaluate index scaffold fidelity (G-36),
    selected by application value and Provider feasibility rather than a commitment to every BCL method.
    Investigate C items before classifying them as missing code;
    retain Unsupported/Deferred contracts and resolve B dependencies at their owning layer.
@@ -87,7 +88,7 @@ Acceptance requirements remain in the [release checklist](efcore-10-release-chec
 | G-34 | DEF-01 | Automatic alteration of identity/computed columns | Not started | Extension | Both modes / Provider | Provide a safe rebuild/migration approach that prevents data loss; do not silently discard changes | [Migrations][migrations] |
 | G-35 | DEF-01 | Table migration across namespaces | Unsupported | Current scope limitation | Both modes / Provider | Establish explicit permission/ownership and data migration contracts; ordinary rename is implemented | [Migrations][migrations] |
 | G-36 | DEF-02 | Reverse engineering of expression/prefix and other non-ordinary indexes | Not started | Extension | Both modes / Provider + Connector metadata | Public GetSchema must supply enough facts for the generated model to preserve semantics; do not guess missing facts | [Reverse engineering][scaffold] |
-| G-37 | DEF-02 | Reverse engineering of known ON UPDATE column behavior | Not started | Extension | Both modes / Provider | Carry behavior metadata into a model that writes correctly; HAS_ON_UPDATE=true is currently explicitly rejected | [Reverse engineering][scaffold] |
+| G-37 | DEF-02 | Reverse engineering of known ON UPDATE column behavior for supported mappings | Implemented | Extension | MySQL / Provider | Preserve catalog `ON UPDATE CURRENT_TIMESTAMP[(p)]` on non-key DATETIME columns in scaffolded C#, write readback, and DDL. Use update-only generation unless the catalog establishes an insert default. Required additions without an insert default require an explicit backfill. Oracle metadata is unknown for this behavior. See G-50 for MySQL TIMESTAMP | [Reverse engineering][scaffold], [DDL][schema] |
 | G-38 | DEF-02 | Reverse engineering of foreign key ON UPDATE actions | Unsupported | Current scope limitation | Both modes / Provider + Server | Establish a contract expressible by the EF model and target OB version; currently only NO ACTION/RESTRICT are accepted | [Reverse engineering][scaffold] |
 | G-39 | QRY-07 | Math/MathF.Acosh | Not started | Extension | Both modes / Provider | Define numerical domains/NULL/precision for both signatures; do not infer Acosh support from Asinh/Atanh | [Math methods][math] |
 | G-40 | TXN-01/DEF-09 | Provider guarantees for ambient/distributed transactions | Unsupported | Current scope limitation | Both modes / Provider + Connector | Establish public driver enlist/XA capabilities together with EF orchestration; native transactions do not imply distributed support | [Transactions][transactions] |
@@ -100,6 +101,7 @@ Acceptance requirements remain in the [release checklist](efcore-10-release-chec
 | G-47 | QRY-06 | Replace(string,string), Replace(char,char) | Implemented | Extension | Both modes / Provider | Native literal replacement in stored text. NULL source or invalid old token returns SQL NULL. NULL/empty new string deletes matches and NULL char operands propagate. Variable national/LOB result families retain the receiver inverse once. Expanded strings and LOBs, captured tokens, nullable columns and composition are covered | [Strings][strings] |
 | G-48 | QRY-06 | Insert(int,string) | Implemented | Extension | Both modes / Provider | Insert at a native character boundary in [0,length] with wide arithmetic. NULL input or an invalid index yields SQL NULL. Known empty scalar values leave the source intact, including in Oracle. Plain contextual values and variable national/LOB results preserve stored text behavior and the receiver inverse | [Strings][strings] |
 | G-49 | QRY-06 | PadLeft(int/int,char), PadRight(int/int,char) | Implemented | Extension | Both modes / Provider | Width counts native characters, with no truncation. Negative or NULL width, NULL source and NULL char operands yield SQL NULL. Oracle generates single-width spaces before substituting the requested char and concatenating with the source. Variable national/LOB mappings retain the receiver inverse | [Strings][strings] |
+| G-50 | MAP-05/DEF-02 | MySQL TIMESTAMP mapping and scaffolding | Unsupported | Current scope limitation | MySQL / Provider | The MySQL DateTime mapping accepts DATETIME and rejects TIMESTAMP. Establish session time zone conversion, native range and precision, and tracked write/readback behavior before enabling the mapping and extending G-37 to TIMESTAMP | [Temporal mapping][temporalmap] |
 
 ## Implemented entries
 

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
@@ -11,6 +12,19 @@ namespace OceanBase.EntityFrameworkCore.Metadata
         : RelationalAnnotationProvider(dependencies)
     {
         internal const string IdentityAnnotation = "OceanBase:Identity";
+        internal const string OnUpdateSqlAnnotation = "OceanBase:OnUpdateSql";
+
+        internal static bool IsSupportedOnUpdate(string? sql, string? storeType, string? defaultSql)
+        {
+            const string precision = @"(?:\((?<precision>[0-6])\))?\z";
+            const string timestamp = @"\ACURRENT_TIMESTAMP" + precision;
+            var update = Regex.Match(sql ?? "", timestamp, RegexOptions.CultureInvariant);
+            var store = Regex.Match(storeType ?? "", @"\ADATETIME" + precision, RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
+            var defaultTimestamp = Regex.Match(defaultSql?.Trim() ?? "", timestamp, RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
+            static string Precision(Match match) => match.Groups["precision"].Success ? match.Groups["precision"].Value : "0";
+            return update.Success && store.Success && Precision(update) == Precision(store)
+                && (!defaultTimestamp.Success || Precision(defaultTimestamp) == Precision(store));
+        }
 
         internal static void ValidateTpcKeyGeneration(IEnumerable<IEntityType> entityTypes)
         {
@@ -33,8 +47,15 @@ namespace OceanBase.EntityFrameworkCore.Metadata
 
         public override IEnumerable<IAnnotation> For(IColumn column, bool designTime)
         {
-            if (designTime && IsIdentity(column))
+            if (!designTime) yield break;
+            if (IsIdentity(column))
                 yield return new Annotation(IdentityAnnotation, true);
+            var updates = column.PropertyMappings.Select(mapping => mapping.Property[OnUpdateSqlAnnotation])
+                .Where(value => value is not null).Distinct().ToArray();
+            if (updates.Length > 1)
+                throw new NotSupportedException("Conflicting OceanBase ON UPDATE clauses for column " + column.Name + ".");
+            if (updates.Length == 1)
+                yield return new Annotation(OnUpdateSqlAnnotation, updates[0]);
         }
 
         internal static bool IsIdentity(IColumn column)

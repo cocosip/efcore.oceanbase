@@ -119,6 +119,60 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
         }
 
         [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql, "CURRENT_TIMESTAMP(6)", null, true)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, "CURRENT_TIMESTAMP(3)", null, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, "CURRENT_TIMESTAMP(6)", "current_timestamp(3)", false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, "CURRENT_TIMESTAMP(6); SELECT 1", null, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, "CURRENT_TIMESTAMP(6)", null, false)]
+        public void Alter_column_preserves_only_supported_on_update_clauses(OceanBaseCompatibilityMode mode, string expression,
+            string? defaultSql, bool supported)
+        {
+            using var context = Create(mode);
+            var operation = new AlterColumnOperation
+            {
+                Name = "Updated", Table = "Rows", ClrType = typeof(DateTime), ColumnType = "DATETIME(6)", IsNullable = true, DefaultValueSql = defaultSql,
+                OldColumn = new AddColumnOperation { ClrType = typeof(DateTime), ColumnType = "DATETIME(6)", IsNullable = true }
+            };
+            operation["OceanBase:OnUpdateSql"] = expression;
+            if (!supported)
+            {
+                Assert.Throws<NotSupportedException>(() => Sql(context, new[] { operation }));
+                return;
+            }
+            Assert.Contains("MODIFY COLUMN `Updated` DATETIME(6) NULL ON UPDATE CURRENT_TIMESTAMP(6)", Sql(context, new[] { operation }));
+            operation.OldColumn["OceanBase:OnUpdateSql"] = expression;
+            operation.RemoveAnnotation("OceanBase:OnUpdateSql");
+            Assert.DoesNotContain("ON UPDATE", Sql(context, new[] { operation }));
+        }
+
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public void Requiring_an_update_only_column_does_not_invent_an_insert_default(bool alter)
+        {
+            using var context = Create(OceanBaseCompatibilityMode.MySql);
+            IModel Build(bool includeColumn, bool required)
+            {
+                var builder = new ModelBuilder(context.GetService<IConventionSetBuilder>().CreateConventionSet());
+                var row = builder.Entity("Rows");
+                row.Property<int>("Id");
+                row.HasKey("Id");
+                if (includeColumn)
+                    row.Property<DateTime?>("Updated").IsRequired(required).HasColumnType("DATETIME(6)").ValueGeneratedOnUpdate()
+                        .HasAnnotation("OceanBase:OnUpdateSql", "CURRENT_TIMESTAMP(6)");
+                return context.GetService<IModelRuntimeInitializer>().Initialize(builder.FinalizeModel(), designTime: true);
+            }
+            var from = Build(alter, required: false);
+            var to = Build(true, required: true);
+            var operations = context.GetService<IMigrationsModelDiffer>().GetDifferences(from.GetRelationalModel(), to.GetRelationalModel());
+            var operation = Assert.IsAssignableFrom<ColumnOperation>(Assert.Single(operations));
+            Assert.Equal(alter ? typeof(AlterColumnOperation) : typeof(AddColumnOperation), operation.GetType());
+            Assert.Equal(DateTime.MinValue, operation.DefaultValue);
+            var error = Assert.Throws<NotSupportedException>(() => context.GetService<IMigrationsSqlGenerator>().Generate(operations, to));
+            Assert.Contains("backfill", error.Message);
+        }
+
+        [Theory]
         [MemberData(nameof(Modes))]
         public void Computed_columns_and_hostile_identifiers_are_quoted(OceanBaseCompatibilityMode mode)
         {

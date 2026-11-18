@@ -307,6 +307,66 @@ public sealed class ReverseEngineeringTests
     }
 
     [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void MySql_on_update_timestamp_survives_scaffolding_and_codegen(bool hasDefault)
+    {
+        using var services = Services();
+        using var connection = new CatalogConnection(OceanBaseCompatibilityMode.MySql)
+        {
+            Rewrite = (name, rows) =>
+            {
+                if (name != "Columns") return;
+                var row = rows.Rows.Cast<DataRow>().Single(r => Equals(r["TABLE_NAME"], "Children") && Equals(r["COLUMN_NAME"], "Note"));
+                row["TYPE_DECLARATION"] = "datetime(6)";
+                row["DATA_TYPE"] = "datetime";
+                row["COLLATION_NAME"] = DBNull.Value;
+                row["HAS_DEFAULT"] = hasDefault ? true : DBNull.Value;
+                row["DEFAULT_VALUE_SQL"] = hasDefault ? "CURRENT_TIMESTAMP(6)" : DBNull.Value;
+                row["HAS_ON_UPDATE"] = true;
+                row["ON_UPDATE_SQL"] = "CURRENT_TIMESTAMP(6)";
+            }
+        };
+        var database = services.GetRequiredService<IDatabaseModelFactory>().Create(connection, new DatabaseModelFactoryOptions());
+        var column = database.Tables.Single(t => t.Name == "Children").Columns.Single(c => c.Name == "Note");
+        var generation = hasDefault ? ValueGenerated.OnAddOrUpdate : ValueGenerated.OnUpdate;
+        Assert.Equal(generation, column.ValueGenerated);
+        var model = services.GetRequiredService<IScaffoldingModelFactory>().Create(database, new ModelReverseEngineerOptions());
+        var property = model.GetEntityTypes().Single(e => e.GetTableName() == "Children").FindProperty("Note")!;
+        Assert.Equal(generation, property.ValueGenerated);
+        Assert.Equal("CURRENT_TIMESTAMP(6)", property["OceanBase:OnUpdateSql"]);
+        var code = services.GetRequiredService<IModelCodeGeneratorSelector>().Select(new ModelCodeGenerationOptions { Language = "C#" })
+            .GenerateModel(model, new ModelCodeGenerationOptions { Language = "C#", ContextName = "OnUpdateContext", ConnectionString = connection.ConnectionString });
+        Assert.Contains(hasDefault ? ".ValueGeneratedOnAddOrUpdate()" : ".ValueGeneratedOnUpdate()", code.ContextFile.Code);
+        Assert.Contains(".HasAnnotation(\"OceanBase:OnUpdateSql\", \"CURRENT_TIMESTAMP(6)\")", code.ContextFile.Code);
+    }
+
+    [Fact]
+    public void Rejects_an_on_update_column_that_would_become_a_principal_key()
+    {
+        using var services = Services();
+        using var connection = new CatalogConnection(OceanBaseCompatibilityMode.MySql)
+        {
+            Rewrite = (name, rows) =>
+            {
+                if (name == "ForeignKeyColumns") rows.Rows[0]["REFERENCED_COLUMN_NAME"] = "Name";
+                if (name != "Columns") return;
+                var row = rows.Rows[1];
+                row["TYPE_DECLARATION"] = "datetime(6)";
+                row["DATA_TYPE"] = "datetime";
+                row["COLLATION_NAME"] = DBNull.Value;
+                row["DEFAULT_VALUE_SQL"] = "CURRENT_TIMESTAMP(6)";
+                row["HAS_ON_UPDATE"] = true;
+                row["ON_UPDATE_SQL"] = "CURRENT_TIMESTAMP(6)";
+            }
+        };
+        var error = Assert.Throws<NotSupportedException>(() => services.GetRequiredService<IDatabaseModelFactory>()
+            .Create(connection, new DatabaseModelFactoryOptions()));
+        Assert.Contains("FK_Parent", error.Message);
+        Assert.Contains("Parents.Name", error.Message);
+    }
+
+    [Theory]
     [InlineData("TYPE_DECLARATION", null)]
     [InlineData("IS_COMPUTED", false)]
     [InlineData("HAS_DEFAULT", true)]

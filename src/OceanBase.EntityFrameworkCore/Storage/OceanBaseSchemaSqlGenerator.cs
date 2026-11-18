@@ -95,6 +95,10 @@ namespace OceanBase.EntityFrameworkCore.Storage
             var comment = !Oracle && column.Comment is not null
                 ? " COMMENT " + OceanBaseCommentSql.Literal(column.Comment, oracle: false) : "";
             var collationSql = column.Collation is { } collation ? " COLLATE " + Q(collation) : "";
+            var update = column[OnUpdateSqlAnnotation];
+            if (update is not null && (Oracle || column.ComputedColumnSql is not null || IsIdentity(column)
+                || !IsSupportedOnUpdate(update as string, column.StoreType, column.DefaultValueSql)))
+                throw Unsupported("this ON UPDATE clause");
             if (column.ComputedColumnSql is { } computed)
             {
                 if (string.IsNullOrWhiteSpace(computed) || Oracle && column.IsStored == true)
@@ -111,6 +115,7 @@ namespace OceanBase.EntityFrameworkCore.Storage
                 var property = mapping.Property;
                 if (property.ValueGenerated is not (ValueGenerated.Never or ValueGenerated.OnUpdateSometimes)
                     && column.DefaultValue is null && column.DefaultValueSql is null
+                    && !(update is not null && property.ValueGenerated == ValueGenerated.OnUpdate)
                     && !identity && !IsKeyPropagation(mapping) && !(property.IsPrimaryKey() && property.ClrType == typeof(Guid)))
                 {
                     throw Unsupported("generated columns without an identity, default or computed expression");
@@ -131,6 +136,7 @@ namespace OceanBase.EntityFrameworkCore.Storage
             }
             definition += column.IsNullable ? " NULL" : " NOT NULL";
             if (identity && !Oracle) definition += " AUTO_INCREMENT";
+            if (update is string updateSql) definition += " ON UPDATE " + updateSql;
             return definition + comment;
         }
 

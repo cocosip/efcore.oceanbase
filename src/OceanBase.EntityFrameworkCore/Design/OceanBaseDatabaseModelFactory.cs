@@ -12,6 +12,7 @@ using Microsoft.EntityFrameworkCore.Scaffolding.Metadata;
 using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.Logging;
 using OceanBaseConnector;
+using static OceanBase.EntityFrameworkCore.Metadata.OceanBaseRelationalAnnotationProvider;
 
 namespace OceanBase.EntityFrameworkCore.Design
 {
@@ -102,6 +103,9 @@ namespace OceanBase.EntityFrameworkCore.Design
                 ReadColumns(connection, mode, schema, tables);
                 ReadKeysAndIndexes(connection, mode, schema, tables);
             }
+            foreach (var table in tables.Values)
+                if (table.PrimaryKey?.Columns.Any(column => column[OnUpdateSqlAnnotation] is not null) == true)
+                    throw Unsupported("HAS_ON_UPDATE on a primary key of " + table.Name);
             foreach (var schema in namespaces.OrderBy(s => s, StringComparer.Ordinal)) ReadForeignKeys(connection, mode, schema, tables);
             return database;
         }
@@ -131,8 +135,10 @@ namespace OceanBase.EntityFrameworkCore.Design
                     var hasUpdate = Flag(row, "HAS_ON_UPDATE", table.Name, name);
                     var expression = BehaviorSql(row, "IS_COMPUTED", "COMPUTED_EXPRESSION", computed, table.Name, name);
                     var defaultSql = BehaviorSql(row, "HAS_DEFAULT", "DEFAULT_VALUE_SQL", hasDefault, table.Name, name);
-                    _ = BehaviorSql(row, "HAS_ON_UPDATE", "ON_UPDATE_SQL", hasUpdate, table.Name, name);
-                    if (hasUpdate == true) throw Unsupported("HAS_ON_UPDATE on " + table.Name + "." + name);
+                    var updateSql = BehaviorSql(row, "HAS_ON_UPDATE", "ON_UPDATE_SQL", hasUpdate, table.Name, name)?.ToUpperInvariant();
+                    if (hasUpdate == true && (mode != OceanBaseCompatibilityMode.MySql || identity != false || computed != false
+                        || !IsSupportedOnUpdate(updateSql, store, defaultSql)))
+                        throw Unsupported("HAS_ON_UPDATE on " + table.Name + "." + name);
                     if (computed == true && (identity == true || hasDefault == true))
                         throw Unsupported("inconsistent IS_IDENTITY/IS_COMPUTED/HAS_DEFAULT for " + table.Name + "." + name);
                     if (identity == true && clr != typeof(int) && clr != typeof(long))
@@ -152,11 +158,14 @@ namespace OceanBase.EntityFrameworkCore.Design
                         },
                         ComputedColumnSql = expression, IsStored = stored, DefaultValueSql = defaultSql,
                         DefaultValue = hasDefault == true && defaultSql is null ? DBNull.Value : null,
-                        ValueGenerated = computed == true ? ValueGenerated.OnAddOrUpdate : identity == true ? ValueGenerated.OnAdd : null,
+                        ValueGenerated = updateSql is not null
+                            ? (hasDefault == true ? ValueGenerated.OnAddOrUpdate : ValueGenerated.OnUpdate)
+                            : computed == true ? ValueGenerated.OnAddOrUpdate : identity == true ? ValueGenerated.OnAdd : null,
                         Comment = Text(row, "COLUMN_COMMENT") is { Length: > 0 } comment ? comment : null,
                         Collation = Text(row, "COLLATION_NAME")
                     };
                     column["ClrType"] = clr;
+                    if (updateSql is not null) column[OnUpdateSqlAnnotation] = updateSql;
                     table.Columns.Add(column);
                 }
             }
@@ -271,7 +280,11 @@ namespace OceanBase.EntityFrameworkCore.Design
                         || Text(member, mode == OceanBaseCompatibilityMode.MySql ? "REFERENCED_TABLE_CATALOG" : "REFERENCED_TABLE_SCHEMA") != principalSchema)
                         throw Unsupported("inconsistent foreign-key targets");
                     key.Columns.Add(Column(table, Text(member, "COLUMN_NAME")!));
-                    key.PrincipalColumns.Add(Column(principal, Text(member, "REFERENCED_COLUMN_NAME")!));
+                    var principalColumn = Column(principal, Text(member, "REFERENCED_COLUMN_NAME")!);
+                    if (principalColumn[OnUpdateSqlAnnotation] is not null)
+                        throw Unsupported("HAS_ON_UPDATE on principal column " + principal.Name + "." + principalColumn.Name
+                            + " of foreign key " + name);
+                    key.PrincipalColumns.Add(principalColumn);
                 }
                 if (key.Columns.Count == 0) throw Unsupported("foreign key without visible columns");
                 table.ForeignKeys.Add(key);

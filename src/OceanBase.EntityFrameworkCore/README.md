@@ -360,8 +360,17 @@ Supported scalar columns, keys, ordinary indexes, relationships and keyless view
 Unavailable behavior metadata produces design-time warnings requiring configuration review before writes or
 schema recreation. Known defaults with unavailable SQL use EF's `HasDefaultValue()` marker; unknown identity
 is not guessed from a key or sequence-looking default. This is a usable model scaffold, not a lossless DDL
-backup. Unsupported types, expression/prefix indexes and known `ON UPDATE` behavior reject explicitly.
-Oracle identity mode/options and native catalog/generated-context execution remain unverified.
+backup. Unsupported types and expression/prefix indexes reject explicitly. Oracle identity mode/options
+remain unverified.
+
+On MySQL, scaffolding preserves known `ON UPDATE CURRENT_TIMESTAMP` clauses on non-key `DATETIME`
+columns with matching fractional precision. EF reads these values back after updates and ignores
+explicit assignments on update. A known insert default enables insert readback and also makes EF ignore
+explicit insert assignments. With no known default, the generated model writes the supplied insert value.
+Create scripts and migrations preserve the clause through the `OceanBase:OnUpdateSql` annotation.
+Schema recreation requires the SQL or value of any known default. Adding or making an update-only column
+required in an existing table requires an explicit backfill migration. MySQL `TIMESTAMP` is outside the current
+DateTime mapping. Oracle's catalog does not expose this behavior.
 
 General query collection roots support all eight CLR integer types, decimal, Single, Double, nullable
 forms and integer-backed enums through scalar parameters or constants and SELECT/UNION ALL. Empty
