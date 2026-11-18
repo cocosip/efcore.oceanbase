@@ -25,7 +25,6 @@ namespace OceanBase.EntityFrameworkCore.Storage
             var commands = new List<string>();
             foreach (var table in tables)
             {
-                if (table.Triggers.Any()) throw Unsupported("table triggers");
                 var identities = table.Columns.Where(IsIdentity).ToArray();
                 if (identities.Length > 1 || identities.Length == 1
                     && (table.PrimaryKey is null || !table.PrimaryKey.Columns.Contains(identities[0])

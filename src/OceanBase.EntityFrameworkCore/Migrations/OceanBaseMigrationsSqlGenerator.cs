@@ -31,7 +31,6 @@ namespace OceanBase.EntityFrameworkCore.Migrations
                 OceanBaseRelationalAnnotationProvider.ValidateTpcKeyGeneration(model.GetEntityTypes());
                 foreach (var table in model.GetRelationalModel().Tables.Where(t => !t.IsExcludedFromMigrations))
                 {
-                    if (table.Triggers.Any()) throw Unsupported("model triggers; author their SQL explicitly");
                     foreach (var column in table.Columns)
                         if (column.DefaultValue is null && column.DefaultValueSql is null && column.ComputedColumnSql is null
                             && column.PropertyMappings.Any(m => m.Property.ValueGenerated is not (ValueGenerated.Never or ValueGenerated.OnUpdateSometimes)

@@ -2,6 +2,8 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Xunit;
 
 namespace OceanBase.EntityFrameworkCore.UnitTests
@@ -76,8 +78,30 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
         }
 
         [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle)]
+        public void Trigger_metadata_is_preserved_without_synthesizing_trigger_bodies(OceanBaseCompatibilityMode mode)
+        {
+            using var context = Create(mode, "trigger");
+            using var baseline = Create(mode, "baseline");
+            var model = context.GetService<IDesignTimeModel>().Model;
+            var relational = model.GetRelationalModel();
+            var withoutTrigger = baseline.GetService<IDesignTimeModel>().Model.GetRelationalModel();
+            Assert.Equal("Trigger", Assert.Single(Assert.Single(relational.Tables).Triggers).ModelName);
+            Assert.Empty(Assert.Single(withoutTrigger.Tables).Triggers);
+            Assert.DoesNotContain("CREATE TRIGGER", context.Database.GenerateCreateScript());
+            var differ = context.GetService<IMigrationsModelDiffer>();
+            Assert.Empty(differ.GetDifferences(withoutTrigger, relational));
+            Assert.Empty(differ.GetDifferences(relational, withoutTrigger));
+            var generator = context.GetService<IMigrationsSqlGenerator>();
+            var commands = generator.Generate(differ.GetDifferences(null, relational), model);
+            var createTable = Assert.Single(commands);
+            Assert.StartsWith("CREATE TABLE", createTable.CommandText);
+            Assert.DoesNotContain("CREATE TRIGGER", createTable.CommandText);
+        }
+
+        [Theory]
         [InlineData("sequence")]
-        [InlineData("trigger")]
         [InlineData("filter")]
         [InlineData("unknown-default")]
         [InlineData("unknown-computed")]
@@ -217,6 +241,7 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
                     case "sequence": modelBuilder.HasSequence<int>("Extra"); break;
                     case "seed": row.HasData(new Generated { Id = 1, Caption = "seed" }); break;
                     case "trigger": row.ToTable(t => t.HasTrigger("Trigger")); break;
+                    case "baseline": break;
                     case "filter": row.HasIndex(r => r.BaseValue).HasFilter("BaseValue > 0"); break;
                     case "comment":
                         row.ToTable(table => table.HasComment("table's description"));

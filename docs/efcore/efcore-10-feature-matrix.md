@@ -31,7 +31,7 @@ For gaps and development status, see the [Gap Matrix](efcore-10-gap-matrix.md). 
 | DIA-02 | DbUpdateException inner errors/entries, concurrency events and unwrapped cancellation | Implemented | Implemented | [Writes][writes] | — |
 | MOD-01 | Tables, primary/composite/alternate keys, foreign keys, indexes and relationship conventions | Implemented | Implemented | [Model][conventions] | G-44; SET DEFAULT delete actions are rejected |
 | MOD-02 | Required/optional relationships, owned references/collections, shadow FKs and relationship fixup | Implemented | Implemented | [Model][conventions] | — |
-| MOD-03 | Identity/default/computed metadata, names and namespaces | Partial | Partial | [DDL][schema] | G-26..35/G-43/45 |
+| MOD-03 | Identity/default/computed metadata, model triggers, names and namespaces | Partial | Partial | [DDL][schema] | `HasTrigger` is metadata only. See G-26..35/G-43/45 |
 | MAP-01 | Boolean, eight signed/unsigned integer types, nullable values and range validation | Implemented | Implemented | [Mappings][mappings] | — |
 | MAP-02 | Decimal, Single and Double mappings, parameters, literals and readers | Implemented | Implemented | [Mappings][mappings] | B-01..03; driver/server boundaries |
 | MAP-03 | Unicode/plain text, fixed/variable length, bounded/LOB storage and character lengths | Implemented | Implemented | [Mappings][mappings] | B-05/06; server boundaries |
@@ -61,9 +61,9 @@ For gaps and development status, see the [Gap Matrix](efcore-10-gap-matrix.md). 
 | TXN-02 | Multi-command SaveChanges, generated-value readback and failure/cancellation rollback orchestration | Implemented | Implemented | [Batch execution][batch] | Actual atomicity/interruption evidence belongs to acceptance |
 | TXN-03 | Savepoints, SaveChanges within an existing transaction and recoverable failures | Implemented | Implemented | [Transactions][transactions] | Oracle uses a logical release; this is not a server RELEASE |
 | SCH-01 | CanConnect/existence checks, distinguishing absence from authentication/permission/network failures | Implemented | Implemented | [Database lifecycle][creator] | — |
-| SCH-02 | GenerateCreateScript/EnsureCreated/CreateTables, table/column comments and explicit schema management | Partial | Partial | [DDL][schema] | G-29/G-31..35/G-43..45; DDL implicitly commits and must not be retried automatically |
+| SCH-02 | GenerateCreateScript/EnsureCreated/CreateTables, table/column comments and explicit schema management | Partial | Partial | [DDL][schema] | G-29 accepts trigger metadata. G-31..35/G-43..45. DDL implicitly commits and must not be retried automatically |
 | SCH-03 | Explicit namespace creation/deletion, management factories and scope/ownership validation | Implemented | Implemented | [Namespace][namespace] | Custom native connections use an explicit management factory |
-| DEF-01 | Migrations/model differ including table/column comments, history/locking, upgrade/rollback/idempotent scripts and CLI/bundles | Partial | Partial | [Migrations][migrations] | G-29/G-31..35/G-43..45; see DEF-06 for sequences |
+| DEF-01 | Migrations/model differ including table/column comments, history/locking, upgrade/rollback/idempotent scripts and CLI/bundles | Partial | Partial | [Migrations][migrations] | G-29 requires explicit trigger SQL. See G-31..35/G-43..45 and DEF-06 for sequences |
 | DEF-02 | GetSchema reverse engineering, tables/views/keys/relationships/ordinary indexes, design-time services and C# generation | Partial | Partial | [Reverse engineering][scaffold] | G-36..38; see DEF-05 for special types |
 | DEF-03 | ExecuteUpdate/Delete, EF10 setter lambdas, joined/paged bulk operations and snapshot rewrites | Partial | Partial | [Bulk][bulk] | G-25; see DEF-04 for JSON |
 | DEF-04 | Mapping/query/update for JSON, mapped primitive collections/arrays and complex/JSON-owned types | Deferred | Deferred | [Queries][roots] | D-04; distinct from captured collection parameters |

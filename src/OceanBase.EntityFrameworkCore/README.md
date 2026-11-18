@@ -482,6 +482,19 @@ When running Oracle create scripts in SQL*Plus or a compatible client, use
 `SET DEFINE OFF` to preserve text containing ampersands. Oracle migration scripts
 already include this command.
 
+`HasTrigger` describes a table trigger in the EF model. Create scripts and migrations accept the
+metadata without generating trigger bodies, and metadata-only changes emit no SQL. Provision triggers
+externally or author their creation and removal with `migrationBuilder.Sql`. For Oracle direct migration
+execution with Connector 0.3.0, wrap row-trigger DDL in `BEGIN EXECUTE IMMEDIATE '…'; END;` and
+escape any single quotes within the DDL. Quoting the statement keeps `:NEW` and `:OLD` out of Connector
+bind-parameter discovery.
+
+To read back trigger-modified values during `SaveChanges`, configure the affected properties for store
+generation. For a non-key value generated on insert and update, use a supported database default with
+`ValueGeneratedOnAddOrUpdate`. MySQL reads by key on the same connection and Oracle uses `RETURNING INTO`
+with the existing Oracle write profile. `HasTrigger` alone leaves property generation and refresh behavior
+unchanged.
+
 `Database.Migrate()` / `MigrateAsync()` now provide a locally tested migrations core for both modes under
 the same schema opt-in. It supports table/column/index/constraint changes, seed data, identity/default/computed
 metadata, history, upgrade/downgrade and idempotent scripts. Provision the namespace first; do not mix
@@ -495,8 +508,8 @@ administrative removal. Generated scripts require external serialization and sto
 scripts target SQL*Plus-style clients, disable variable substitution, exit on SQL errors and commit the final
 history changes; rollback cannot undo DDL. MySQL scripts require autocommit. Raw migration SQL is trusted,
 single-statement server input; client directives and multi-statement raw batches are outside this contract.
-Native DDL/locking, script-client execution, sequence/HiLo
-and model trigger scaffolding remain unverified or unsupported.
+Native DDL/locking beyond the documented checks, script-client execution, sequence/HiLo and reverse
+engineering of triggers remain outside the verified scope.
 
 TPT (`UseTptMappingStrategy`, with a table for each mapped type) has a locally tested schema/query/write
 workflow in both modes. The root table generates an int/long identity once; intermediate and leaf tables store
