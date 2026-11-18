@@ -109,13 +109,14 @@ namespace ToolingConsumer
 
     internal static class ToolingOptions
     {
-        internal static DbContextOptions<T> Create<T>(OceanBaseCompatibilityMode mode) where T : DbContext
+        internal static DbContextOptions<T> Create<T>(OceanBaseCompatibilityMode mode, bool proxies = false) where T : DbContext
         {
             var builder = new DbContextOptionsBuilder<T>()
                 .UseOceanBase("Server=offline.invalid;Database=tooling", mode, options => options
                     .MigrationsAssembly(typeof(T).Assembly.GetName().Name)
                     .MigrationsHistoryTable("__ToolingHistory"))
                 .AddInterceptors(new NoNetwork());
+            if (proxies) builder.UseLazyLoadingProxies().UseChangeTrackingProxies();
             if (mode == OceanBaseCompatibilityMode.MySql) builder.EnableOceanBaseDatabaseManagement("tooling");
             else builder.EnableOceanBaseSchemaManagement("tooling");
             return builder.Options;

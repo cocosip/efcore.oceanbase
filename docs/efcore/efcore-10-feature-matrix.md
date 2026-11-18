@@ -70,7 +70,7 @@ For gaps and development status, see the [Gap Matrix](efcore-10-gap-matrix.md). 
 | DEF-05 | Provider integration for Spatial/XML/native enums/OBJECT, LOB locators and REF CURSOR | Deferred | Deferred | [Mappings][mappings] | D-05; ordinary enum converters/scalar LOBs are implemented |
 | DEF-06 | Stored-procedure INSERT/UPDATE/DELETE mappings and sequences/HiLo | Deferred | Deferred | [Writes][writes] | D-06; ordinary SQL/identity support is not deferred |
 | DEF-07 | TPH/TPT/TPC, entity/table splitting and many-to-many skip navigations | Partial | Partial | [Inherited generated values][annotations] | G-28; ordinary models/CRUD are implemented |
-| DEF-08 | Split-query buffering, ordinary compiled models and lazy proxies/ILazyLoader | Implemented | Implemented | [Compiled model][compiled] | Streaming nested lazy loading is unsupported; see C-01/C-04 for extended capabilities |
+| DEF-08 | Split-query buffering, compiled models, lazy proxies/ILazyLoader, and compiled models generated with both lazy-loading and change-tracking proxies | Implemented | Implemented | [Compiled model][compiled] | Enable the proxy options during model generation and at runtime. Streaming nested lazy loading is unsupported. See C-01/C-04 for extended capabilities |
 | DEF-09 | HasData, sync/async seeding callbacks and retry/recovery orchestration for known outcomes | Partial | Partial | [Retry][retry] | G-40; unknown outcomes, commits and cleanup are not replayed |
 | DEF-10 | Full-text/vector/search functions and advanced batching optimizations | Deferred | Deferred | [SQL][sqlgenerator] | D-10 |
 

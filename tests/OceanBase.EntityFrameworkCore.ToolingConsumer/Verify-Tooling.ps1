@@ -72,7 +72,8 @@ if (@($toolingAssets.libraries.PSObject.Properties | Where-Object { $_.Value.typ
 if (-not $toolingAssets.libraries."Microsoft.EntityFrameworkCore.Design/$EfCoreVersion") { throw 'Wrong EF Design patch.' }
 if (-not $toolingAssets.libraries."OceanBase.EntityFrameworkCore/$ProviderVersion" -or
     -not $toolingAssets.libraries."Microsoft.EntityFrameworkCore/$EfCoreVersion" -or
-    -not $toolingAssets.libraries."Microsoft.EntityFrameworkCore.Relational/$EfCoreVersion") {
+    -not $toolingAssets.libraries."Microsoft.EntityFrameworkCore.Relational/$EfCoreVersion" -or
+    -not $toolingAssets.libraries."Microsoft.EntityFrameworkCore.Proxies/$EfCoreVersion") {
     throw 'Wrong provider or EF runtime package version.'
 }
 $toolingCachedDll = Join-Path $toolingRoot "artifacts/tooling-packages/oceanbase.entityframeworkcore/$ProviderVersion/lib/net10.0/OceanBase.EntityFrameworkCore.dll"
@@ -88,6 +89,10 @@ $null = Invoke-ToolingDotNet 'verify-catalog' @('run', '--project', $toolingProj
 foreach ($toolingMode in @('MySql', 'Oracle')) {
     $null = Invoke-ToolingDotNet "$toolingMode-optimize" @('ef', 'dbcontext', 'optimize', '--project', $toolingProject,
         '--context', "Compiled${toolingMode}Context", '--no-build', '--output-dir', "Compiled/$toolingMode", '--namespace', "ToolingConsumer.Compiled.$toolingMode")
+    Build-ToolingProject
+    $null = Invoke-ToolingDotNet "$toolingMode-optimize-proxies" @('ef', 'dbcontext', 'optimize', '--project', $toolingProject,
+        '--context', "Compiled${toolingMode}Context", '--no-build', '--output-dir', "CompiledProxies/$toolingMode",
+        '--namespace', "ToolingConsumer.CompiledProxies.$toolingMode", '--', '--proxies')
     Build-ToolingProject
 }
 $null = Invoke-ToolingDotNet 'verify-compiled' @('run', '--project', $toolingProject, '--no-build', '--', '--verify-compiled')

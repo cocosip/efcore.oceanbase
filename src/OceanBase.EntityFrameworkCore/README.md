@@ -356,10 +356,11 @@ needed. Untracked entities can still lazy-load while their originating context i
 `ChangeTracker.LazyLoadingEnabled = false` when needed; disposed or explicitly detached entities cannot
 start new loads. Each unloaded navigation can issue another query (N+1).
 
-Materialize the root query before accessing unloaded navigations: OceanBase supports one active native
-reader per connection, so nested lazy queries while streaming roots are outside this profile. Avoid
-concurrent use of a DbContext. Lazy-loading proxies with compiled models and change-tracking proxies are
-not covered by this module. Native results, consistency and performance remain unverified.
+Materialize the root query before accessing unloaded navigations. OceanBase supports one active native
+reader per connection. Avoid concurrent use of a DbContext. The generated-model smoke test enables both
+`UseLazyLoadingProxies()` and `UseChangeTrackingProxies()` before `dbcontext optimize` and again at runtime
+with `UseModel`. Change-tracking proxy entities also require virtual mapped properties and collection
+navigations that notify on changes, such as `ObservableCollection<T>`. Native acceptance remains pending.
 
 Ordinary EF compiled models support both compatibility modes, including provider scalar mappings and
 converters with or without mapping hints. Generate a model using the matching mode's design-time context:

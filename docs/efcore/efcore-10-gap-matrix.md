@@ -139,7 +139,7 @@ After investigation, record the result under Provider gaps, Connector/server dep
 | --- | --- | --- | --- |
 | C-01 | DEF-08 | To confirm | NativeAOT/precompiled queries: separately check EF10 generation/runtime restrictions and Provider entry points; do not infer support from ordinary compiled model results |
 | C-02 | MAP-05/QRY-07 | To confirm | Named timezones/DST/non-Gregorian calendars and TIMESTAMP WITH LOCAL TIME ZONE: first check mapping/semantic contracts; numeric offset evidence is insufficient to determine completeness |
-| C-04 | DEF-08/QRY-08 | To confirm | Check whether change-tracking proxies, lazy proxies with compiled models, and broader inheritance combinations have dedicated rejections or missing adaptations; nested lazy loading within ordinary streaming roots is explicitly excluded by the single active reader, so do not infer implementation gaps from missing tests |
+| C-04 | DEF-08/QRY-08 | To confirm | Generated models support the tested combination of lazy-loading and change-tracking proxies when both options match at design time and runtime. Native execution belongs to release acceptance. Investigate broader proxy and inheritance combinations before extending the support scope. Nested lazy loading within streaming roots remains outside the single-active-reader contract |
 
 ## Four groups explicitly deferred for the current release
 
