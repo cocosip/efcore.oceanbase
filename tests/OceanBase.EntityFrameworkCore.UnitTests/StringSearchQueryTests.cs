@@ -224,14 +224,15 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             using var context = CreateContext(mode);
             IQueryable[] unsupported =
             [
-                context.Rows.Where(row => row.Required.Contains('x')),
                 context.Rows.Where(row => row.Required.StartsWith("x", StringComparison.Ordinal)),
-                context.Rows.Where(row => row.Required.EndsWith('x')),
+                context.Rows.Where(row => row.Required.Contains('x', StringComparison.Ordinal)),
+                context.Rows.Where(row => row.Required.Contains(row.NumericCharacter)),
+                context.Rows.Where(row => row.BinaryConverted.Contains('x')),
                 context.Rows.Where(row => row.BinaryConverted.Contains("x"))
             ];
             foreach (var query in unsupported)
                 Assert.Contains("could not be translated", Assert.Throws<InvalidOperationException>(() => query.ToQueryString()).Message);
-            Assert.Contains("Required", context.Rows.Select(row => row.Required.Contains('x')).ToQueryString());
+            Assert.Contains("INSTR(", context.Rows.Select(row => row.Required.Contains('x')).ToQueryString());
             Assert.Contains("Required", context.Rows.Select(row => row.Required.EndsWith("x", StringComparison.Ordinal)).ToQueryString());
             var nativeSql = context.Rows.Where(row => NativeInstr(row.Required, row.Optional!) > 0).ToQueryString();
             Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? "`INSTR`(" : "\"INSTR\"(", nativeSql);
@@ -239,6 +240,52 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
         }
 
         private static int NativeInstr(string source, string needle) => throw new NotSupportedException();
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true)]
+        public void Character_search_uses_text_carriers_and_total_native_booleans(OceanBaseCompatibilityMode mode, bool relationalNulls)
+        {
+            using var context = CreateContext(mode, relationalNulls);
+            var needle = '海';
+            var query = context.Rows.Where(row => row.Optional!.Contains(needle)
+                && !row.Required.StartsWith(row.Character!.Value)
+                && row.Converted.EndsWith('x')
+                && row.Large!.EndsWith(row.Character!.Value));
+            foreach (var value in new[] { '海', '%', '_', '\\', '\'', ' ' })
+            {
+                needle = value;
+                var sql = query.ToQueryString();
+                Assert.Contains("INSTR(", sql);
+                Assert.Contains("IS NOT NULL", sql);
+                Assert.Contains("CASE", sql);
+                Assert.Contains("ELSE", sql);
+                Assert.Contains("x!", sql);
+                Assert.DoesNotContain("LIKE", sql);
+                Assert.DoesNotContain("__oceanbase_internal", sql);
+            }
+            var literal = context.Rows.Where(row => row.Required.Contains('海')
+                && row.Required.StartsWith('%') && row.Required.EndsWith('_')).ToQueryString();
+            Assert.Contains(mode == OceanBaseCompatibilityMode.Oracle ? "u'\\6d77'" : "海", literal);
+            Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? "RIGHT(" : "SUBSTR(", literal);
+            var composed = context.Rows.Where(row => (row.Optional ?? row.Required).ToUpper()
+                .Contains(row.Character ?? 'x')).ToQueryString();
+            Assert.Contains("COALESCE(", composed);
+            Assert.Contains("UPPER(", composed);
+            Assert.Contains("INSTR(", composed);
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle)]
+        public void Character_search_rejects_surrogate_literals(OceanBaseCompatibilityMode mode)
+        {
+            using var context = CreateContext(mode);
+            var error = Assert.Throws<ArgumentException>(() => context.Rows.Where(row => row.Required.Contains('\ud800')).ToQueryString());
+            Assert.Contains("well-formed UTF-16", error.Message);
+        }
 
         [Theory]
         [InlineData(false)]
@@ -294,6 +341,8 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
                     .HasConversion(value => value + "!", value => value.Substring(0, value.Length - 1));
                 modelBuilder.Entity<Row>().Property(row => row.BinaryConverted)
                     .HasConversion(value => Encoding.UTF8.GetBytes(value), value => Encoding.UTF8.GetString(value));
+                modelBuilder.Entity<Row>().Property(row => row.Character).HasConversion<string>();
+                modelBuilder.Entity<Row>().Property(row => row.NumericCharacter).HasConversion<int>();
                 modelBuilder.HasDbFunction(typeof(StringSearchQueryTests).GetMethod(nameof(NativeInstr),
                     BindingFlags.NonPublic | BindingFlags.Static)!).HasName("INSTR");
             }
@@ -308,6 +357,8 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             public string? Large { get; set; }
             public string Converted { get; set; } = "";
             public string BinaryConverted { get; set; } = "";
+            public char? Character { get; set; }
+            public char NumericCharacter { get; set; }
         }
     }
 }

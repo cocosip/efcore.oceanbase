@@ -95,6 +95,57 @@ namespace OceanBase.EntityFrameworkCore.LiveTests
 
         [Theory]
         [MemberData(nameof(Cases))]
+        public async Task Character_searches_preserve_text_parameters_columns_and_native_comparisons(
+            OceanBaseCompatibilityMode mode, bool async, bool nulls)
+            => await WithTable(mode, async, nulls, async (context, seed, stage) =>
+            {
+                var rows = context.Set<Row>();
+                var needle = '海';
+                var query = rows.OrderBy(row => row.Id).Select(row => new
+                {
+                    row.Id, Contains = row.Plain!.Contains(needle), Starts = row.Plain!.StartsWith(needle),
+                    Ends = row.Plain!.EndsWith(needle), Negated = !row.Plain!.Contains(needle),
+                    National = row.National!.Contains(needle), Fixed = row.Fixed!.EndsWith(needle),
+                    NationalFixed = row.NationalFixed!.StartsWith(needle), Lob = row.Large!.EndsWith(needle),
+                    Converted = row.Converted!.EndsWith(needle)
+                });
+                var filtered = rows.Where(row => !row.Plain!.EndsWith(needle)).OrderBy(row => row.Id).Select(row => row.Id);
+                foreach (var value in new[] { '海', '%', '_', '\\', '\'', 'A', ' ', 'd', '海' })
+                {
+                    needle = value;
+                    stage("char scalar parameter refresh and native text families");
+                    var text = needle.ToString();
+                    Assert.Equal(seed.Select(row => new
+                    {
+                        row.Id, Contains = Match(row.Plain, text, 0, context), Starts = Match(row.Plain, text, 1, context),
+                        Ends = Match(row.Plain, text, 2, context), Negated = !Match(row.Plain, text, 0, context),
+                        National = Match(row.National, text, 0, context), Fixed = Match(row.Fixed, text, 2, context),
+                        NationalFixed = Match(row.NationalFixed, text, 1, context), Lob = Match(row.Large, text, 2, context),
+                        Converted = Match(Encode(row.Converted), Encode(text), 2, context)
+                    }), await Read(query, async));
+                    Assert.Equal(seed.Where(row => !Match(row.Plain, text, 2, context)).Select(row => row.Id), await Read(filtered, async));
+                }
+                stage("nullable char columns, computed chars and literals");
+                var columns = rows.OrderBy(row => row.Id).Select(row => new
+                {
+                    row.Id, Contains = row.Plain!.Contains(row.Character!.Value), Starts = row.Plain!.StartsWith(row.Character!.Value),
+                    Ends = row.Plain!.EndsWith(row.Character!.Value), Negated = !row.Plain!.EndsWith(row.Character!.Value),
+                    Converted = row.Converted!.Contains(row.Character!.Value), Lob = row.Large!.EndsWith(row.Character!.Value),
+                    Computed = (row.Plain ?? row.Required).ToUpper().Contains(row.Character ?? 'X'),
+                    Literal = row.Plain!.Contains('海') || row.Plain!.StartsWith('%') || row.Plain!.EndsWith('_')
+                });
+                Assert.Equal(seed.Select(row => new
+                {
+                    row.Id, Contains = Match(row.Plain, row.Character?.ToString(), 0, context), Starts = Match(row.Plain, row.Character?.ToString(), 1, context),
+                    Ends = Match(row.Plain, row.Character?.ToString(), 2, context), Negated = !Match(row.Plain, row.Character?.ToString(), 2, context),
+                    Converted = Match(Encode(row.Converted), row.Character?.ToString(), 0, context), Lob = Match(row.Large, row.Character?.ToString(), 2, context),
+                    Computed = Match((row.Plain ?? row.Required).ToUpperInvariant(), (row.Character ?? 'X').ToString(), 0, context),
+                    Literal = Match(row.Plain, "海", 0, context) || Match(row.Plain, "%", 1, context) || Match(row.Plain, "_", 2, context)
+                }), await Read(columns, async));
+            });
+
+        [Theory]
+        [MemberData(nameof(Cases))]
         public async Task Equality_concat_and_coalesce_preserve_native_comparisons_and_empty_normalization(
             OceanBaseCompatibilityMode mode, bool async, bool nulls)
             => await WithTable(mode, async, nulls, async (context, seed, stage) =>
@@ -263,7 +314,7 @@ namespace OceanBase.EntityFrameworkCore.LiveTests
                     rows.Where(row => row.Required.Contains("a", StringComparison.Ordinal)),
                     rows.Where(row => row.Required.StartsWith("a", StringComparison.OrdinalIgnoreCase)),
                     rows.Where(row => row.Required.EndsWith("a", StringComparison.Ordinal)),
-                    rows.Where(row => row.Required.Contains('a')),
+                    rows.Where(row => row.Required.Contains('a', StringComparison.Ordinal)),
                     rows.Where(row => row.Required.ToLowerInvariant() == "a"),
                     rows.Where(row => row.Required.ToUpper(CultureInfo.InvariantCulture) == "a"),
                     rows.Where(row => row.Required.Trim(' ') == "a"),
@@ -450,11 +501,13 @@ namespace OceanBase.EntityFrameworkCore.LiveTests
             string?[] texts = [" AbC%_\\'海🌊 ", null, "", "    ", "\tAbC\r\n\u00a0\u2003", "AbC", "abc ", "海🌊海end"];
             string?[] needles = ["%_\\'", null, "", " ", "\t", "Ab", "abc ", "海🌊"];
             string?[] fixedTexts = ["AbC", null, "", "X ", " ab", "abc", "abc ", "海🌊"];
+            char?[] characters = ['%', 'A', null, ' ', '\t', 'A', ' ', '海'];
             return texts.Select((text, index) => new Row
             {
                 Id = index + 1, Plain = text, Required = string.IsNullOrEmpty(text) ? " " : text, National = text,
                 Fixed = fixedTexts[index], NationalFixed = fixedTexts[index], Needle = needles[index], Other = index % 2 == 0 ? "tail" : null,
-                Converted = text, BinaryConverted = text == "" ? "binary" : text, Large = text, Start = index - 2, Length = index % 4 - 1
+                Converted = text, BinaryConverted = text == "" ? "binary" : text, Large = text, Start = index - 2, Length = index % 4 - 1,
+                Character = characters[index]
             }).ToArray();
         }
 
@@ -478,6 +531,7 @@ namespace OceanBase.EntityFrameworkCore.LiveTests
                 row.Property(value => value.Converted).HasConversion(value => value + "!", value => value.Substring(0, value.Length - 1)).IsUnicode(false).HasMaxLength(80);
                 row.Property(value => value.BinaryConverted).HasConversion(value => Encoding.UTF8.GetBytes(value!), value => Encoding.UTF8.GetString(value)).HasMaxLength(128);
                 row.Property(value => value.Large).IsUnicode(false).HasColumnType(mode == OceanBaseCompatibilityMode.MySql ? "LONGTEXT" : "CLOB");
+                row.Property(value => value.Character).HasConversion<string>().IsUnicode(false).HasMaxLength(1);
                 row.HasData(Seed());
             }
         }
@@ -502,6 +556,7 @@ namespace OceanBase.EntityFrameworkCore.LiveTests
             public string? Large { get; set; }
             public int Start { get; set; }
             public int Length { get; set; }
+            public char? Character { get; set; }
         }
     }
 }

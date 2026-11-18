@@ -5,6 +5,7 @@ using System.Data.Common;
 using System.Linq;
 using System.Globalization;
 using System.Numerics;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
@@ -1896,6 +1897,75 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
         [InlineData(OceanBaseCompatibilityMode.Oracle, true, false)]
         [InlineData(OceanBaseCompatibilityMode.Oracle, false, true)]
         [InlineData(OceanBaseCompatibilityMode.Oracle, true, true)]
+        public async Task Character_search_binds_refreshed_text_with_contextual_converters_and_national_types(
+            OceanBaseCompatibilityMode mode, bool async, bool relationalNulls)
+        {
+            using var table = new DataTable();
+            table.Columns.Add("Match", typeof(bool));
+            table.Columns.Add("Negated", typeof(bool));
+            table.Rows.Add(true, false);
+            var commands = new CommandCapture { Results = table };
+            await using var context = CreateContext(mode, commands, relationalNulls);
+            var needle = '海';
+            var query = context.Set<ShortTextRow>()
+                .Where(row => row.Caption!.Contains(needle) && row.Caption.StartsWith(needle)
+                    && !row.Converted.EndsWith(needle))
+                .Select(row => new { Match = row.Caption!.EndsWith(needle), Negated = !row.Converted.Contains(needle) });
+            var national = context.Set<SubstringNationalRow>().Select(row => new
+            {
+                Match = row.Value.Contains(needle), Negated = !row.Value.StartsWith(needle)
+            });
+            var mixedMappings = context.Set<ShortTextRow>().Select(row => new
+            {
+                Match = row.Caption!.Contains(needle), Negated = row.Converted.EndsWith(needle)
+            });
+            commands.Values.Clear();
+            Assert.Single(async ? await mixedMappings.ToListAsync() : mixedMappings.ToList());
+            Assert.Equal(mode == OceanBaseCompatibilityMode.MySql
+                ? new object?[] { "海", "海", "海!", "海!", "海!", "海!" }
+                : new object?[] { "海", "海!" }, commands.Values);
+            if (mode == OceanBaseCompatibilityMode.Oracle)
+            {
+                var convertedParameter = Assert.Single(commands.StringInputs, parameter => Equals(parameter.Value, "海!"));
+                var parameterName = convertedParameter.ParameterName.TrimStart(':', '@');
+                Assert.Equal(3, Regex.Matches(commands.Sql[^1], ":" + Regex.Escape(parameterName) + @"\b").Count);
+            }
+            foreach (var value in new[] { '海', '%', '_', '\\', '\'', ' ', '\0', 'x', '海' })
+            {
+                needle = value;
+                commands.StringInputs.Clear();
+                var row = Assert.Single(async ? await query.ToListAsync() : query.ToList());
+                Assert.True(row.Match);
+                Assert.False(row.Negated);
+                Assert.Contains(commands.StringInputs, parameter => Equals(parameter.Value, value.ToString()));
+                Assert.Contains(commands.StringInputs, parameter => Equals(parameter.Value, value + "!"));
+                Assert.All(commands.StringInputs, parameter => Assert.True(parameter.Size >= ((string)parameter.Value!).Length));
+                commands.StringInputs.Clear();
+                Assert.Single(async ? await national.ToListAsync() : national.ToList());
+                Assert.Contains(commands.StringInputs, parameter => Equals(parameter.Value, value.ToString())
+                    && parameter.OceanBaseDbType == (mode == OceanBaseCompatibilityMode.Oracle ? OceanBaseDbType.NChar : (OceanBaseDbType?)null));
+            }
+            foreach (var invalid in new[] { '\ud800', '\udfff' })
+            {
+                needle = invalid;
+                commands.Sql.Clear();
+                var error = async
+                    ? await Assert.ThrowsAsync<ArgumentException>(() => query.ToListAsync())
+                    : Assert.Throws<ArgumentException>(() => query.ToList());
+                Assert.Contains("well-formed UTF-16", error.Message);
+                Assert.Empty(commands.Sql);
+            }
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false, true)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true, true)]
         public async Task Unary_string_commands_bind_inputs_and_read_synthetic_function_results(
             OceanBaseCompatibilityMode mode, bool async, bool relationalNulls)
         {
@@ -2051,10 +2121,10 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
                 }
                 else
                 {
-                    // EF retains separate native/converted/nullable mapping-specific named parameters.
-                    Assert.Equal(5, commands.Values.Count);
+                    // Equivalent repeated mappings reuse names; native and converted carriers remain distinct.
+                    Assert.Equal(4, commands.Values.Count);
                     Assert.Single(commands.Values, value => Convert.ToDecimal(value) == wideMask);
-                    Assert.Equal(4, commands.Values.Count(value => Convert.ToDecimal(value) == mask));
+                    Assert.Equal(3, commands.Values.Count(value => Convert.ToDecimal(value) == mask));
                     Assert.Contains("TRUNC(", sql);
                     Assert.Contains("MOD(", sql);
                 }

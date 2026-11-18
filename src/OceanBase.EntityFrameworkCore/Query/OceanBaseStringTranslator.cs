@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Query;
 using Microsoft.EntityFrameworkCore.Query.SqlExpressions;
 using Microsoft.EntityFrameworkCore.Storage;
+using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 namespace OceanBase.EntityFrameworkCore.Query
 {
@@ -30,7 +31,10 @@ namespace OceanBase.EntityFrameworkCore.Query
         {
             [typeof(string).GetMethod(nameof(string.Contains), [typeof(string)])!] = ContainsSearch,
             [typeof(string).GetMethod(nameof(string.StartsWith), [typeof(string)])!] = StartsWithSearch,
-            [typeof(string).GetMethod(nameof(string.EndsWith), [typeof(string)])!] = EndsWithSearch
+            [typeof(string).GetMethod(nameof(string.EndsWith), [typeof(string)])!] = EndsWithSearch,
+            [typeof(string).GetMethod(nameof(string.Contains), [typeof(char)])!] = ContainsSearch,
+            [typeof(string).GetMethod(nameof(string.StartsWith), [typeof(char)])!] = StartsWithSearch,
+            [typeof(string).GetMethod(nameof(string.EndsWith), [typeof(char)])!] = EndsWithSearch
         };
         private static readonly MethodInfo SubstringStart = typeof(string).GetMethod(nameof(string.Substring), [typeof(int)])!;
         private static readonly MethodInfo SubstringStartLength = typeof(string).GetMethod(nameof(string.Substring), [typeof(int), typeof(int)])!;
@@ -67,7 +71,10 @@ namespace OceanBase.EntityFrameworkCore.Query
 
             if (isSearch)
             {
-                var needle = sqlExpressionFactory.ApplyTypeMapping(arguments[0], mapping);
+                var needleMapping = arguments[0].Type == typeof(char)
+                    ? (RelationalTypeMapping)mapping.WithComposedConverter(new CharToStringConverter())
+                    : mapping;
+                var needle = sqlExpressionFactory.ApplyTypeMapping(arguments[0], needleMapping);
                 if (needle.TypeMapping?.Converter?.ProviderClrType is { } needleProvider && needleProvider != typeof(string))
                     return null;
                 return mode == OceanBaseCompatibilityMode.Oracle

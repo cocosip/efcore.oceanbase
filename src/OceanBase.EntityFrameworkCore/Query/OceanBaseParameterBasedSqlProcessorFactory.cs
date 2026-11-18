@@ -21,7 +21,7 @@ namespace OceanBase.EntityFrameworkCore.Query
             protected override Expression ExpandFromSqlParameter(Expression queryExpression, ParametersCacheDecorator parametersDecorator)
             {
                 var expanded = base.ExpandFromSqlParameter(queryExpression, parametersDecorator);
-                return mode == OceanBaseCompatibilityMode.Oracle ? new ParameterNameVisitor().Visit(expanded) : expanded;
+                return new ParameterNameVisitor().Visit(expanded);
             }
 
             public override Expression Process(Expression queryExpression, ParametersCacheDecorator parametersDecorator)
@@ -61,8 +61,7 @@ namespace OceanBase.EntityFrameworkCore.Query
 
             protected override Expression VisitExtension(Expression node)
             {
-                if (node is not SqlParameterExpression parameter || parameter.InvariantName.Length == 0
-                    || !char.IsDigit(parameter.InvariantName[0]) && !parameter.InvariantName.StartsWith("_ob_", StringComparison.OrdinalIgnoreCase))
+                if (node is not SqlParameterExpression parameter || parameter.InvariantName.Length == 0)
                     return base.VisitExtension(node);
                 if (!_parameters.TryGetValue(parameter.InvariantName, out var existing))
                 {
