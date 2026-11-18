@@ -32,6 +32,19 @@ namespace OceanBase.EntityFrameworkCore.Query
                         return factory.ApplyDefaultTypeMapping(value is "" ? factory.IsNotNull(source) : factory.Constant(false));
                     return factory.ApplyDefaultTypeMapping(OceanBaseStringTranslator.BuildSearch(factory, OceanBaseCompatibilityMode.Oracle,
                         (int)((SqlConstantExpression)args[2]).Value!, source, (SqlExpression)Visit(needle), false));
+                case SqlFunctionExpression { IsBuiltIn: true, Name: OceanBaseStringIndexOfTranslator.OracleMarker,
+                    Arguments: { Count: 4 } indexArgs } index:
+                    var indexNeedle = indexArgs[1];
+                    var indexValue = indexNeedle switch
+                    {
+                        SqlConstantExpression constant => ProviderValue(constant, constant.Value),
+                        SqlParameterExpression parameter => ProviderValue(parameter, parameters.GetAndDisableCaching()[parameter.Name]),
+                        _ => null
+                    };
+                    return OceanBaseStringIndexOfTranslator.Build(factory, OceanBaseCompatibilityMode.Oracle,
+                        (SqlExpression)Visit(indexArgs[0]), (SqlExpression)Visit(indexNeedle),
+                        (SqlExpression)Visit(indexArgs[2]), (SqlExpression)Visit(indexArgs[3]), index.TypeMapping!,
+                        indexValue is "");
                 case SqlConstantExpression constant when IsProviderString(constant):
                     return Normalize(constant, constant.Value);
                 case SqlParameterExpression parameter when IsProviderString(parameter):

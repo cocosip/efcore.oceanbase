@@ -14,7 +14,7 @@ explicitly unsupported features, dependencies, and capabilities to confirm. Pre-
 - The current known unavailable/rejected capabilities are based on the code and package README. Supporting every BCL method is not an implicit Provider commitment.
   Add newly discovered valid requirements to their owning row or give them a new stable ID. Rejection of invalid inputs or malformed models/catalogs is validation, not a missing feature.
 
-Current counts: 46 G records (10 Not started, 0 In development, 15 Implemented, 19 Unsupported, 2 Deferred); also retained are 2 Implemented F records, 9 external dependency B records, 4 To confirm C records, and 4 Deferred D groups.
+Current counts: 47 G records (10 Not started, 0 In development, 16 Implemented, 19 Unsupported, 2 Deferred). Also retained are 2 Implemented F records, 9 external dependency B records, 4 To confirm C records, and 4 Deferred D groups.
 
 ## Development order
 
@@ -34,8 +34,8 @@ Prioritize missing Provider functionality before the pre-release acceptance camp
    Preserve null/empty array whitespace, valid Unicode, refreshed arrays/inline nullable char columns,
    EF.Constant inlining, stored-text converter ownership, case sensitivity and strict regex anchors
    without NULL compensation.
-6. Next: G-18 string method families (QRY-06), selecting IndexOf and Replace signatures first and
-   recording each signature's indexing, NULL, comparison and converter contract before implementation.
+6. G-18 implements the six IndexOf signatures with native character positions and guarded ranges.
+   Next, select Replace signatures from G-47 and define their NULL, comparison and converter contracts.
    DDL metadata/comments and scaffold fidelity remain subsequent Extension candidates,
    selected by application value and Provider feasibility rather than a commitment to every BCL method.
    Investigate C items before classifying them as missing code;
@@ -67,7 +67,7 @@ Acceptance requirements remain in the [release checklist](efcore-10-release-chec
 | G-15 | QRY-06 | Explicit trim char/char[] overloads | Implemented | Extension | Both modes / Provider | OceanBaseExplicitTrimTranslator implements all six signatures as repeated character-set removal in stored text space, independently of the receiver converter. Null/empty arrays use CLR whitespace; parameterless trim retains ordinary spaces. Constants, per-execution captured arrays/in-place mutations, compiled-query array parameters and inline nullable char columns are supported without enabling mapped collections; surrogate and custom/multichar/non-text char carriers reject. Results preserve national/LOB families, variable mapping and the receiver inverse once; NULL chars propagate and Oracle CLOB trim retains native empty LOBs. Oracle uses LTRIM/RTRIM; MySQL uses escaped, case-sensitive strictly anchored regex with native NULL-propagating concatenation. Literal/parameter receivers receive default mappings and supported array shapes retain plugin dispatch. Constant-array cache keys snapshot mutations | [Explicit trim][trim] |
 | G-16 | QRY-06 | Remove(int), Remove(int,int) | Implemented | Extension | Both modes / Provider | OceanBaseStringTranslator uses native character counts and stored text, with start in [0,length] and count in [0,length-start]; invalid/NULL SQL bounds or NULL source return NULL. Guarded substring/concat uses long arithmetic, variable text/national/LOB families and the receiver's inverse converter exactly once. Oracle guarded empty results are NULL, including LOBs; bare Substring retains its separate native contract. Constants/refreshed parameters/independently nullable columns/composition, fixed/national/LOB text and extreme bounds are covered | [Strings][strings] |
 | G-17 | QRY-06 | StringComparison, culture/Invariant overloads | Unsupported | Current scope limitation | Both modes / Provider + Server | Lift only with a per-signature approach that preserves comparison semantics; do not assume equivalence to DB collation | [Strings][strings] |
-| G-18 | QRY-06 | string.IndexOf/Replace/Insert/PadLeft/PadRight method families | Not started | Extension | Both modes / Provider | Split support and tests by method/signature; do not add a generic "full string support" checkbox | [Strings][strings] |
+| G-18 | QRY-06 | IndexOf(string/char), IndexOf(string/char,int), IndexOf(string/char,int,int) | Implemented | Extension | Both modes / Provider | OceanBaseStringIndexOfTranslator uses native character counts/collation, zero-based positions or -1, guarded wide start/count arithmetic, SQL NULL results for NULL inputs or invalid ranges, and contextual needle mappings. Oracle distinguishes known empty scalar needles from NULL. Constants, refreshed parameters, nullable columns and composition are covered. See G-47 for the remaining families | [IndexOf][indexof] |
 | G-19 | QRY-05/03 | FirstOrDefault/SingleOrDefault/DefaultIfEmpty overloads with explicit default values | Not started | Extension | Both modes / Provider | Distinguish an existing source row whose value is NULL from an empty source; support parameterized default values and composition | [Queries][roots] |
 | G-20 | QRY-02/03 | Custom comparers for ordering, joins, membership, and set operations | Unsupported | Current scope limitation | Both modes / Provider + Server | Add support only for specific comparers that can be translated consistently with SQL comparison rules | [Queries][roots] |
 | G-21 | QRY-03/DEF-04 | Primitive collection translation using a single JSON parameter | Deferred | Related to D-04 | Both modes / Provider | Establish a separate JSON SQL/type contract; preserve existing Constant/MultipleParameters support | [Queries][roots] |
@@ -96,6 +96,7 @@ Acceptance requirements remain in the [release checklist](efcore-10-release-chec
 | G-44 | MOD-01/SCH-02/DEF-01 | ON DELETE SET DEFAULT foreign key DDL | Unsupported | Current scope limitation | Both modes / Provider + Server | Lift only when supported by the target OB version and equivalent to EF delete behavior; do not silently downgrade to RESTRICT | [DDL][schema] |
 | G-45 | MOD-03/SCH-02/DEF-01 | Oracle stored computed columns | Unsupported | Current scope limitation | Oracle / Provider + Server | Distinguish supported virtual computed columns from physically stored computed columns; first confirm target OB capabilities | [Migrations][migrations] |
 | G-46 | QRY-04 | Oracle CLOB/NCLOB aggregate Min/Max | Unsupported | Current scope limitation | Oracle / Provider + Server | Establish lossless LOB comparison/return-type contracts; preserve bounded text/temporal extrema | [Aggregates][aggregates] |
+| G-47 | QRY-06 | string.Replace/Insert/PadLeft/PadRight method families | Not started | Extension | Both modes / Provider | Select Replace signatures first. Define per-signature NULL/empty behavior, native comparison or indexing, result mappings and converter ownership before adding translation and regressions | [Strings][strings] |
 
 ## Implemented entries
 
@@ -150,6 +151,7 @@ Do not remove data precision/NULL/ownership validation or intentional rejections
 [sqlgenerator]: ../../src/OceanBase.EntityFrameworkCore/Query/OceanBaseQuerySqlGenerator.cs
 [roots]: ../../src/OceanBase.EntityFrameworkCore/Query/OceanBaseQueryableMethodTranslatingExpressionVisitorFactory.cs
 [strings]: ../../src/OceanBase.EntityFrameworkCore/Query/OceanBaseStringTranslator.cs
+[indexof]: ../../src/OceanBase.EntityFrameworkCore/Query/OceanBaseStringIndexOfTranslator.cs
 [trim]: ../../src/OceanBase.EntityFrameworkCore/Query/OceanBaseExplicitTrimTranslator.cs
 [temporal]: ../../src/OceanBase.EntityFrameworkCore/Query/OceanBaseTemporalMethodTranslator.cs
 [temporalmap]: ../../src/OceanBase.EntityFrameworkCore/Storage/OceanBaseTemporalTypeMapping.cs

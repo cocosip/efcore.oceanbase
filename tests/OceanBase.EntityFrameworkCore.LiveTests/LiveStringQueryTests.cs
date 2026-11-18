@@ -6,6 +6,7 @@ using System.Text;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Storage;
 using Xunit;
 using Xunit.Abstractions;
 
@@ -556,6 +557,114 @@ namespace OceanBase.EntityFrameworkCore.LiveTests
                 Assert.Equal(new string('v', 4001) + "海🌊", last.Lob);
             });
 
+        [Theory]
+        [MemberData(nameof(Cases))]
+        public async Task IndexOf_preserves_native_positions_ranges_nulls_and_contextual_search_converters(
+            OceanBaseCompatibilityMode mode, bool async, bool nulls)
+            => await WithTable(mode, async, nulls, async (context, seed, stage) =>
+            {
+                var rows = context.Set<Row>();
+                string? needle = "Ab";
+                var start = 0;
+                var count = 2;
+                var query = rows.OrderBy(row => row.Id).Select(row => new
+                {
+                    row.Id, All = (int?)row.Plain!.IndexOf(needle!), From = (int?)row.Plain!.IndexOf(needle!, start),
+                    Range = (int?)row.Plain!.IndexOf(needle!, start, count), National = (int?)row.National!.IndexOf(needle!),
+                    Fixed = (int?)row.Fixed!.IndexOf(needle!), NationalFixed = (int?)row.NationalFixed!.IndexOf(needle!),
+                    Lob = (int?)row.Large!.IndexOf(needle!, start, count), Converted = (int?)row.Converted!.IndexOf(needle!, start, count)
+                });
+                var filtered = rows.Where(row => row.Plain!.IndexOf(needle!, start, count) >= 0).OrderBy(row => row.Id).Select(row => row.Id);
+                foreach (var value in new (string? Needle, int Start, int Count)[]
+                {
+                    ("Ab", 0, 5), ("Ab", 0, 1), ("C", 2, 1), ("a", 1, 3), ("%_\\'", 0, 10), ("海🌊", 0, 20),
+                    ("missing", 0, 0), ("<null>", 0, 2),
+                    ("", 0, 0), ("", 3, 0), (null, 0, 2), ("end", 1, 7), (" ", 0, 4),
+                    ("A", -1, 3), ("A", 0, -1), ("", int.MaxValue, int.MaxValue), ("x", int.MinValue, int.MinValue),
+                    ("", 0, 20), ("Ab", 0, 5)
+                })
+                {
+                    (needle, start, count) = value;
+                    stage("IndexOf scalar refresh, ranges, native text families and converters");
+                    Assert.Equal(seed.Select(row => new
+                    {
+                        row.Id, All = Index(row.Plain, needle, 0, null, context), From = Index(row.Plain, needle, start, null, context),
+                        Range = Index(row.Plain, needle, start, count, context), National = Index(row.National, needle, 0, null, context),
+                        Fixed = Index(row.Fixed, needle, 0, null, context), NationalFixed = Index(row.NationalFixed, needle, 0, null, context),
+                        Lob = Index(row.Large, needle, start, count, context), Converted = Index(Encode(row.Converted), Encode(needle), start, count, context)
+                    }), await Read(query, async));
+                    Assert.Equal(seed.Where(row => Index(row.Plain, needle, start, count, context) >= 0).Select(row => row.Id), await Read(filtered, async));
+                }
+                var character = '海';
+                var chars = rows.OrderBy(row => row.Id).Select(row => new
+                {
+                    row.Id, All = (int?)row.Plain!.IndexOf(character), From = (int?)row.Plain!.IndexOf(character, start),
+                    Range = (int?)row.Plain!.IndexOf(character, start, count), Converted = (int?)row.Converted!.IndexOf(character)
+                });
+                start = 1; count = 3;
+                foreach (var value in new[] { '海', '%', '\\', '\'', 'A', ' ', 'd' })
+                {
+                    character = value;
+                    stage("IndexOf all char signatures and contextual char-to-text mappings");
+                    Assert.Equal(seed.Select(row => new
+                    {
+                        row.Id, All = Index(row.Plain, value.ToString(), 0, null, context), From = Index(row.Plain, value.ToString(), start, null, context),
+                        Range = Index(row.Plain, value.ToString(), start, count, context), Converted = Index(Encode(row.Converted), Encode(value.ToString()), 0, null, context)
+                    }), await Read(chars, async));
+                }
+                if (mode == OceanBaseCompatibilityMode.MySql)
+                {
+                    stage("IndexOf NUL character with native INSTR collation weights");
+                    character = '\0';
+                    var table = context.GetService<ISqlGenerationHelper>().DelimitIdentifier(context.Table);
+                    var sql = $"SELECT INSTR(`Plain`, {{0}}) AS `Value` FROM {table} WHERE `Id` = 1";
+                    var native = Assert.Single(await Read(context.Database.SqlQueryRaw<int>(sql, "\0"), async));
+                    Assert.Equal(native == 0 ? -1 : native - 1, Assert.Single(await Read(chars.Where(row => row.Id == 1), async)).All);
+                }
+                stage("IndexOf column needles, independently nullable bounds, composition and empty CLOB windows");
+                var columns = rows.OrderBy(row => row.Id).Select(row => new
+                {
+                    row.Id, Text = (int?)row.Plain!.IndexOf(row.Needle!), Character = (int?)row.Plain!.IndexOf(row.Character!.Value),
+                    Bounds = (int?)row.Plain!.IndexOf(row.Needle!, row.RemoveStart!.Value, row.RemoveCount!.Value),
+                    Nested = (int?)(row.Plain ?? row.Required).ToUpper().IndexOf('A'),
+                    Empty = (int?)row.Large!.Trim().IndexOf(""), Literal = (int?)row.Plain!.IndexOf("", 0, 0),
+                    ConvertedNull = (int?)row.Converted!.IndexOf("<null>")
+                });
+                Assert.Equal(seed.Select(row => new
+                {
+                    row.Id, Text = Index(row.Plain, row.Needle, 0, null, context), Character = Index(row.Plain, row.Character?.ToString(), 0, null, context),
+                    Bounds = row.RemoveStart is null || row.RemoveCount is null ? null : Index(row.Plain, row.Needle, row.RemoveStart.Value, row.RemoveCount, context),
+                    Nested = Index((row.Plain ?? row.Required).ToUpperInvariant(), "A", 0, null, context),
+                    Empty = Index(row.Large?.Trim(' '), "", 0, null, context), Literal = Index(row.Plain, "", 0, 0, context),
+                    ConvertedNull = (int?)null
+                }), await Read(columns, async));
+
+                stage("IndexOf finds supplementary characters beyond scalar text limits");
+                var rowWithLob = Assert.Single(await Read(rows.AsTracking().Where(row => row.Id == 1), async));
+                rowWithLob.Large = new string('v', 4001) + "海🌊end";
+                Assert.Equal(1, async ? await context.SaveChangesAsync() : context.SaveChanges());
+                var lob = Assert.Single(await Read(rows.Where(row => row.Id == 1).Select(row => new
+                {
+                    All = (int?)row.Large!.IndexOf("🌊"),
+                    Range = (int?)row.Large!.IndexOf("🌊end", 1, 4005),
+                    Outside = (int?)row.Large!.IndexOf("🌊end", 1, 4004)
+                }), async));
+                Assert.Equal(4002, lob.All);
+                Assert.Equal(4002, lob.Range);
+                Assert.Equal(-1, lob.Outside);
+            });
+
+        private static int? Index(string? source, string? needle, int start, int? count, QueryContext context)
+        {
+            if (source is null || needle is null) return null;
+            var characters = source.EnumerateRunes().ToArray();
+            var length = count ?? characters.Length - (long)start;
+            if (start < 0 || start > characters.Length || length < 0 || length > characters.Length - (long)start) return null;
+            var window = string.Concat(characters.Skip(start).Take((int)length));
+            var position = window.IndexOf(needle, context.IgnoreCase ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
+            return position < 0 ? -1 : start + window[..position].EnumerateRunes().Count();
+        }
+
         private static bool Match(string? source, string? needle, int operation, QueryContext context)
         {
             if (source is null || needle is null) return false;
@@ -590,7 +699,7 @@ namespace OceanBase.EntityFrameworkCore.LiveTests
         private static string? Normalize(string? value, OceanBaseCompatibilityMode mode)
             => mode == OceanBaseCompatibilityMode.Oracle && value == "" ? null : value;
         private static int? Characters(string? value) => value?.EnumerateRunes().Count();
-        private static string? Encode(string? value) => value is null ? null : value + "!";
+        private static string? Encode(string? value) => value is null or "<null>" ? null : value + "!";
         private static string? Decode(string? value) => value is null ? null : value[..Math.Max(0, value.Length - 1)];
 
         private static string? Remove(string? value, int? start, int? count, OceanBaseCompatibilityMode mode, bool ranged)
@@ -693,7 +802,8 @@ namespace OceanBase.EntityFrameworkCore.LiveTests
                 row.Property(value => value.Other).IsUnicode(false).HasMaxLength(64);
                 row.Property(value => value.Fixed).IsUnicode(false).IsFixedLength().HasMaxLength(8);
                 row.Property(value => value.NationalFixed).IsUnicode().IsFixedLength().HasMaxLength(8);
-                row.Property(value => value.Converted).HasConversion(value => value + "!", value => value.Substring(0, value.Length - 1)).IsUnicode(false).HasMaxLength(80);
+                row.Property(value => value.Converted).HasConversion(value => value == "<null>" ? null : value + "!",
+                    value => value!.Substring(0, value.Length - 1)).IsUnicode(false).HasMaxLength(80);
                 row.Property(value => value.BinaryConverted).HasConversion(value => Encoding.UTF8.GetBytes(value!), value => Encoding.UTF8.GetString(value)).HasMaxLength(128);
                 row.Property(value => value.Large).IsUnicode(false).HasColumnType(mode == OceanBaseCompatibilityMode.MySql ? "LONGTEXT" : "CLOB");
                 row.Property(value => value.Character).HasConversion<string>().IsUnicode(false).HasMaxLength(1);

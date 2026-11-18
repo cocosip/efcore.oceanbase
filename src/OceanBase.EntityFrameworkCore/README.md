@@ -168,14 +168,14 @@ descending reverses those positions. Use explicit null-rank/coalesce expressions
 when portable placement is required; this does not configure string collation.
 
 String translations support ordinary equality, two/three/four-string concat,
-single-string and char Contains/StartsWith/EndsWith, Length, both integer Substring/Remove overloads,
+single-string and char Contains/StartsWith/EndsWith/IndexOf, Length, both integer Substring/Remove overloads,
 parameterless ToLower/ToUpper and Trim/TrimStart/TrimEnd with no argument, char or char[]. Length and
 substring bounds count native characters rather than CLR UTF-16 units. Substring
 uses native negative/out-of-range/zero-length rules; parameterless trim removes ordinary spaces,
 and case conversion follows the database. StringComparison and culture/Invariant overloads are not translated in
 predicates; EF may evaluate permitted final client projections.
 
-Search treats percent, underscore, quotes and backslashes as text. NULL source or
+Contains/StartsWith/EndsWith treat percent, underscore, quotes and backslashes as text. NULL source or
 needle is false; a known empty needle matches a non-NULL source. Oracle computed
 empty scalar text becomes NULL. Suffixes require enough source characters and
 use native equality; Oracle LOB suffixes use a final-position search because
@@ -192,7 +192,15 @@ Char search scalars convert to text with the receiver's mapping and converter;
 text-backed char columns retain their own mappings, including nullable column
 needles. Numeric/binary-backed chars are not translated. Text validation rejects
 lone UTF-16 surrogates rather than searching half of a supplementary character.
-These overloads follow the same native collation and NULL policy as string search.
+Each char overload follows the native collation and NULL policy of its string counterpart.
+
+IndexOf supports string and char needles, optionally with an int start or with
+int start and count. It searches a window of native characters in stored text and
+returns a zero-based position or -1. Start must be in [0,length] and count in
+[0,length-start]. NULL inputs and invalid ranges return SQL NULL, which can be
+projected as int?. A known empty scalar needle returns the valid start, including
+Oracle literals and captured parameters. SQL column and computed needles follow
+native storage semantics. Matching uses the database collation.
 
 Explicit trim repeatedly removes any character in the supplied set at the requested
 ends, using stored text and case-sensitive character matching. Null/empty char[]

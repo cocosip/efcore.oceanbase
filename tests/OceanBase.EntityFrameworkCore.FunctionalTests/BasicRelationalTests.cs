@@ -2023,6 +2023,74 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
         [InlineData(OceanBaseCompatibilityMode.Oracle, true, false)]
         [InlineData(OceanBaseCompatibilityMode.Oracle, false, true)]
         [InlineData(OceanBaseCompatibilityMode.Oracle, true, true)]
+        public async Task IndexOf_commands_refresh_search_mappings_bounds_and_numeric_results(
+            OceanBaseCompatibilityMode mode, bool async, bool relationalNulls)
+        {
+            using var table = new DataTable();
+            table.Columns.Add("Index", typeof(int));
+            table.Columns.Add("Converted", typeof(int));
+            table.Rows.Add(-1, 4);
+            table.Rows.Add(DBNull.Value, DBNull.Value);
+            var commands = new CommandCapture { Results = table };
+            await using var context = CreateContext(mode, commands, relationalNulls);
+            string? needle = "x";
+            var start = 0;
+            var count = 2;
+            var query = context.Set<ShortTextRow>().Select(row => new
+            {
+                Index = (int?)row.Caption!.IndexOf(needle!, start, count),
+                Converted = (int?)row.Converted.IndexOf(needle!, start, count)
+            });
+            foreach (var value in new string?[] { "x", "海", "'\\", "", null, "again", "" })
+            {
+                needle = value;
+                start = start == 0 ? 1 : 0;
+                count = count == 2 ? 1 : 2;
+                commands.StringInputs.Clear();
+                commands.Values.Clear();
+                var result = async ? await query.ToListAsync() : query.ToList();
+                Assert.Equal(-1, result[0].Index);
+                Assert.Equal(4, result[0].Converted);
+                Assert.Null(result[1].Index);
+                Assert.Null(result[1].Converted);
+                if (value is not null)
+                {
+                    if (value.Length != 0 || mode == OceanBaseCompatibilityMode.MySql)
+                        Assert.Contains(commands.StringInputs, parameter => Equals(parameter.Value, value));
+                    Assert.Contains(commands.StringInputs, parameter => Equals(parameter.Value, value + "!"));
+                    Assert.Contains(commands.Values, bound => Equals(bound, start));
+                    Assert.Contains(commands.Values, bound => Equals(bound, count));
+                }
+            }
+            var character = 'x';
+            var chars = context.Set<ShortTextRow>().Select(row => new
+            {
+                Index = (int?)row.Caption!.IndexOf(character), Converted = (int?)row.Converted.IndexOf(character)
+            });
+            foreach (var value in new[] { 'x', '海', '\'', '\\', '\0', ' ' })
+            {
+                character = value;
+                commands.StringInputs.Clear();
+                _ = async ? await chars.ToListAsync() : chars.ToList();
+                Assert.Contains(commands.StringInputs, parameter => Equals(parameter.Value, value.ToString()));
+                Assert.Contains(commands.StringInputs, parameter => Equals(parameter.Value, value + "!"));
+            }
+            character = '\ud800';
+            commands.Sql.Clear();
+            if (async) await Assert.ThrowsAsync<ArgumentException>(() => chars.ToListAsync());
+            else Assert.Throws<ArgumentException>(() => chars.ToList());
+            Assert.Empty(commands.Sql);
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false, true)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true, true)]
         public async Task Explicit_trim_refreshes_mutated_arrays_defaults_and_decodes_results_once(
             OceanBaseCompatibilityMode mode, bool async, bool relationalNulls)
         {
