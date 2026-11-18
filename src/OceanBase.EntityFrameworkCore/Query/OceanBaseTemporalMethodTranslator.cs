@@ -21,6 +21,8 @@ namespace OceanBase.EntityFrameworkCore.Query
         internal const string DateTimeAddYearsMarker = "__oceanbase_internal_datetime_add_years";
         internal const string DateTimeAddDurationMarker = "__oceanbase_internal_datetime_add_duration";
         internal const string DateTimeSubtractDurationMarker = "__oceanbase_internal_datetime_subtract_duration";
+        internal const string DateTimeAddDaysMarker = "__oceanbase_internal_datetime_add_days";
+        internal const string DateTimeAddHoursMarker = "__oceanbase_internal_datetime_add_hours";
         private static readonly MethodInfo DateOnlyAddDays = typeof(DateOnly).GetMethod(nameof(DateOnly.AddDays), [typeof(int)])!;
         private static readonly MethodInfo DateOnlyAddMonths = typeof(DateOnly).GetMethod(nameof(DateOnly.AddMonths), [typeof(int)])!;
         private static readonly MethodInfo DateOnlyAddYears = typeof(DateOnly).GetMethod(nameof(DateOnly.AddYears), [typeof(int)])!;
@@ -28,17 +30,22 @@ namespace OceanBase.EntityFrameworkCore.Query
         private static readonly MethodInfo DateTimeAddYears = typeof(DateTime).GetMethod(nameof(DateTime.AddYears), [typeof(int)])!;
         private static readonly MethodInfo DateTimeAddDuration = typeof(DateTime).GetMethod(nameof(DateTime.Add), [typeof(TimeSpan)])!;
         private static readonly MethodInfo DateTimeSubtractDuration = typeof(DateTime).GetMethod(nameof(DateTime.Subtract), [typeof(TimeSpan)])!;
+        private static readonly MethodInfo DateTimeAddDays = typeof(DateTime).GetMethod(nameof(DateTime.AddDays), [typeof(double)])!;
+        private static readonly MethodInfo DateTimeAddHours = typeof(DateTime).GetMethod(nameof(DateTime.AddHours), [typeof(double)])!;
 
         public SqlExpression? Translate(SqlExpression? instance, MethodInfo method, IReadOnlyList<SqlExpression> arguments,
             IDiagnosticsLogger<DbLoggerCategory.Query> logger)
         {
-            if (instance is not null && arguments.Count == 1 && (method == DateTimeAddDuration || method == DateTimeSubtractDuration))
+            var numericAdd = method == DateTimeAddDays || method == DateTimeAddHours;
+            if (instance is not null && arguments.Count == 1 && (numericAdd || method == DateTimeAddDuration || method == DateTimeSubtractDuration))
             {
                 instance = sqlExpressionFactory.ApplyDefaultTypeMapping(instance);
                 var duration = sqlExpressionFactory.ApplyDefaultTypeMapping(arguments[0]);
                 if (instance.Type != typeof(DateTime) || instance.TypeMapping is not { } stampMapping
-                    || !IsDateTimeCalendarMapping(stampMapping, mode) || duration.Type != typeof(TimeSpan)
-                    || duration.TypeMapping is not { } durationMapping || !IsDurationMapping(durationMapping, mode))
+                    || !IsDateTimeCalendarMapping(stampMapping, mode)
+                    || duration.TypeMapping is not { } durationMapping
+                    || (numericAdd ? duration.Type != typeof(double) || !IsNumericOffsetMapping(durationMapping, mode)
+                        : duration.Type != typeof(TimeSpan) || !IsDurationMapping(durationMapping, mode)))
                     return null;
 
                 // Arithmetic can add fractions finer than the input column, including Oracle DATE.
@@ -46,7 +53,9 @@ namespace OceanBase.EntityFrameworkCore.Query
                     mode == OceanBaseCompatibilityMode.MySql ? "DATETIME(6)" : "TIMESTAMP(7)")!;
                 if (stampMapping.Converter is { } converter)
                     resultMapping = (RelationalTypeMapping)resultMapping.WithComposedConverter(converter);
-                return sqlExpressionFactory.Function(method == DateTimeAddDuration ? DateTimeAddDurationMarker : DateTimeSubtractDurationMarker,
+                var durationMarker = numericAdd ? method == DateTimeAddDays ? DateTimeAddDaysMarker : DateTimeAddHoursMarker
+                    : method == DateTimeAddDuration ? DateTimeAddDurationMarker : DateTimeSubtractDurationMarker;
+                return sqlExpressionFactory.Function(durationMarker,
                     [instance, duration], nullable: true, argumentsPropagateNullability: [false, false], typeof(DateTime), resultMapping);
             }
 
@@ -99,6 +108,12 @@ namespace OceanBase.EntityFrameworkCore.Query
                 ? providerType == typeof(TimeSpan) && store == "TIME"
                 : providerType == typeof(OceanBaseIntervalDayToSecond) && store.StartsWith("INTERVAL DAY", StringComparison.Ordinal);
         }
+
+        internal static bool IsNumericOffsetMapping(RelationalTypeMapping mapping, OceanBaseCompatibilityMode mode)
+            => mapping.ClrType == typeof(double) && mapping.Converter?.ConvertsNulls != true
+                && (mapping.Converter?.ProviderClrType ?? mapping.ClrType) == typeof(double)
+                && mapping.StoreTypeNameBase.Trim().Equals(mode == OceanBaseCompatibilityMode.MySql ? "DOUBLE" : "BINARY_DOUBLE",
+                    StringComparison.OrdinalIgnoreCase);
 
         private bool IsDateOnlyMapping(RelationalTypeMapping mapping)
         {

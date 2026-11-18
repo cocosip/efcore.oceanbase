@@ -304,6 +304,73 @@ namespace OceanBase.EntityFrameworkCore.LiveTests
                 await Check(context, async, row => (DateTime?)row.ConvertedStamp!.Value.Subtract(amount), row => row.ConvertedStamp?.Subtract(amount));
             });
 
+        [Theory]
+        [MemberData(nameof(Cases))]
+        public Task DateTime_numeric_day_hour_addition_matches_CLR_without_TIME_range_limits(
+            OceanBaseCompatibilityMode mode, bool async, bool nulls)
+            => WithTable(mode, async, nulls, async (context, stage) =>
+            {
+                foreach (var amount in new[] { 0.0, 0.5, -1.25, 40.25, -40.25, 900.5 })
+                {
+                    stage("numeric days/hours parameter and promoted DATE");
+                    await Check(context, async, row => (DateTime?)row.Stamp!.Value.AddDays(amount), row => row.Stamp?.AddDays(amount));
+                    await Check(context, async, row => (DateTime?)row.DateStamp!.Value.AddHours(amount), row => row.DateStamp?.AddHours(amount));
+                    await Check(context, async, row => (long?)row.Stamp!.Value.AddHours(amount).Ticks, row => row.Stamp?.AddHours(amount).Ticks);
+                }
+                stage("numeric days/hours column, constant, NULL and converter composition");
+                await Check(context, async, row => (DateTime?)row.Stamp!.Value.AddDays(row.Amount + 0.25), row => row.Stamp?.AddDays(row.Amount + 0.25));
+                await Check(context, async, row => (DateTime?)row.Stamp!.Value.AddHours(row.Amount + 0.5).AddDays(-0.25),
+                    row => row.Stamp?.AddHours(row.Amount + 0.5).AddDays(-0.25));
+                await Check(context, async, row => (DateTime?)row.ConvertedStamp!.Value.AddDays(0.25), row => row.ConvertedStamp?.AddDays(0.25));
+                var tickHour = 1.0 / TimeSpan.TicksPerHour;
+                var query = context.Set<Row>().Where(row => row.Id == 2)
+                    .Select(row => (DateTime?)row.DateStamp!.Value.AddHours(tickHour));
+                stage("numeric sub-microsecond precision policy");
+                Assert.Equal(mode == OceanBaseCompatibilityMode.MySql ? null : Seed(mode)[1].DateStamp?.AddHours(tickHour),
+                    Assert.Single(await Read(query, async)));
+                var anchor = new DateTime(5000, 1, 1);
+                stage("native Double column with fractional and large unit offsets");
+                await Check(context, async, row => (DateTime?)anchor.AddDays(row.NumericAmount!.Value),
+                    row => ExpectedNumeric(row.NumericAmount, hours: false));
+                await Check(context, async, row => (DateTime?)anchor.AddHours(row.NumericAmount!.Value),
+                    row => ExpectedNumeric(row.NumericAmount, hours: true));
+                foreach (var offset in new[] { 1000000.0000000001, -1000000.0000000001 })
+                {
+                    stage("large day offset retains separate fractional ticks");
+                    var large = context.Set<Row>().Where(row => row.Id == 2)
+                        .Select(row => (DateTime?)anchor.AddDays(offset + row.Amount));
+                    Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? "TIMESTAMPADD" : "NUMTODSINTERVAL", large.ToQueryString());
+                    Assert.Equal(anchor.AddDays(offset), Assert.Single(await Read(large, async)));
+                }
+                foreach (var ticks in new[] { -11, -10, -9, -1, 1, 9, 10, 11 })
+                {
+                    stage("signed tick precision and parameter refresh");
+                    var offset = ticks / (double)TimeSpan.TicksPerHour;
+                    var wanted = anchor.AddHours(offset);
+                    var subsecond = context.Set<Row>().Where(row => row.Id == 2)
+                        .Select(row => (DateTime?)anchor.AddHours(offset + row.Amount));
+                    Assert.Equal(mode == OceanBaseCompatibilityMode.MySql && (wanted - anchor).Ticks % 10 != 0 ? null : (DateTime?)wanted,
+                        Assert.Single(await Read(subsecond, async)));
+                }
+                stage("offsets outside CLR unit range return NULL");
+                var invalidDays = DateTime.MaxValue.Ticks / TimeSpan.TicksPerDay + 1.0;
+                var invalidHours = DateTime.MaxValue.Ticks / TimeSpan.TicksPerHour + 1.0;
+                foreach (var sign in new[] { -1, 1 })
+                {
+                    Assert.Null(Assert.Single(await Read(context.Set<Row>().Where(row => row.Id == 2)
+                        .Select(row => (DateTime?)anchor.AddDays(sign * invalidDays + row.Amount)), async)));
+                    Assert.Null(Assert.Single(await Read(context.Set<Row>().Where(row => row.Id == 2)
+                        .Select(row => (DateTime?)anchor.AddHours(sign * invalidHours + row.Amount)), async)));
+                }
+
+                DateTime? ExpectedNumeric(double? value, bool hours)
+                {
+                    if (!value.HasValue) return null;
+                    var result = hours ? anchor.AddHours(value.Value) : anchor.AddDays(value.Value);
+                    return mode == OceanBaseCompatibilityMode.MySql && (result - anchor).Ticks % 10 != 0 ? null : result;
+                }
+            });
+
         private static Task SetZone(Context context, bool async, string zone)
         {
             var sql = (context.Mode == OceanBaseCompatibilityMode.MySql ? "SET SESSION time_zone = '" : "ALTER SESSION SET TIME_ZONE = '")
@@ -396,6 +463,7 @@ namespace OceanBase.EntityFrameworkCore.LiveTests
                 new TimeSpan(34, 22, 59, 59), new TimeSpan(2, 3, 4, 5).Add(TimeSpan.FromTicks(9999990)),
                 TimeSpan.FromTicks(10), -TimeSpan.FromHours(1).Add(TimeSpan.FromTicks(2345670)) };
             var offsets = new[] { 0, 0, 345, -210, -720, 840, -30, 30 };
+            double?[] numericAmounts = [null, 0, 0.5, -1.25, 40.25, -40.25, 1000000.0000000001, -1000000.0000000001];
             return stamps.Select((stamp, index) =>
             {
                 stamp = stamp?.AddTicks(fractions[index]);
@@ -407,7 +475,7 @@ namespace OceanBase.EntityFrameworkCore.LiveTests
                     ConvertedStamp = stamp, ConvertedDay = stamp.HasValue ? DateOnly.FromDateTime(stamp.Value) : null,
                     ConvertedDuration = durations[index],
                     ConvertedClock = stamp.HasValue ? TimeOnly.FromDateTime(stamp.Value) : null, ConvertedZoned = zoned,
-                    Amount = index % 3 - 1 };
+                    Amount = index % 3 - 1, NumericAmount = numericAmounts[index] };
             }).ToArray();
         }
 
@@ -444,6 +512,7 @@ namespace OceanBase.EntityFrameworkCore.LiveTests
         {
             public int Id { get; set; }
             public int Amount { get; set; }
+            public double? NumericAmount { get; set; }
             public DateTime? Stamp { get; set; }
             public DateTime? DateStamp { get; set; }
             public DateOnly? Day { get; set; }

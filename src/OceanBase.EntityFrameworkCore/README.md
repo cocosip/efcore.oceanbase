@@ -108,8 +108,14 @@ Subtract(TimeSpan) translate for unzoned timestamps, duration columns, constants
 parameters, preserving NULLs. Results promote to DATETIME(6)/TIMESTAMP(7), including
 Oracle DATE inputs. MySQL duration inputs retain the existing TIME range and microsecond
 validation; Oracle retains 100ns values. Out-of-range results follow server error/NULL
-semantics rather than reproducing CLR exceptions per row. AddDays/AddHours(double) remain
-unsupported. Oracle calendar arithmetic
+semantics rather than reproducing CLR exceptions per row. DateTime.AddDays(double) and
+AddHours(double) translate constants, refreshed parameters and columns in both modes without
+the MySQL TIME duration range. Whole/fractional units truncate separately to CLR ticks;
+integer ticks are combined before timestamp arithmetic. Offsets outside the CLR unit range,
+or offsets containing sub-microsecond ticks in MySQL, return SQL NULL instead of rounding.
+Non-finite parameters/literals are rejected by the numeric mapping. Results retain the same
+DATETIME(6)/TIMESTAMP(7) promotion and converter ownership as duration arithmetic.
+Oracle calendar arithmetic
 requires a Gregorian session; month ends clamp without losing timestamp fractions.
 Oracle DateTimeOffset components use the stored offset's local wall clock; UTC members
 use UTC extraction. MySQL components use the normalized UTC storage, and offset-local

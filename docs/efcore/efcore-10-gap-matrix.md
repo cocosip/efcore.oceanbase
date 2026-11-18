@@ -1,6 +1,6 @@
 # EF Core 10 Feature Gap Matrix
 
-Updated: 2026-11-17; corresponds to the [55 feature groups](efcore-10-feature-matrix.md). This matrix tracks only code capability gaps,
+Updated: 2026-11-18; corresponds to the [55 feature groups](efcore-10-feature-matrix.md). This matrix tracks only code capability gaps,
 explicitly unsupported features, dependencies, and capabilities to confirm. Pre-release tests, acceptance coverage, and review evidence belong only in the [release checklist](efcore-10-release-checklist.md).
 
 ## Statuses and counts
@@ -14,14 +14,33 @@ explicitly unsupported features, dependencies, and capabilities to confirm. Pre-
 - The current known unavailable/rejected capabilities are based on the code and package README. Supporting every BCL method is not an implicit Provider commitment.
   Add newly discovered valid requirements to their owning row or give them a new stable ID. Rejection of invalid inputs or malformed models/catalogs is validation, not a missing feature.
 
-Current counts: 46 G records (25 Not started, 19 Unsupported, 2 Deferred); also retained are 2 Implemented F records, 9 external dependency B records, 4 To confirm C records, and 4 Deferred D groups.
+Current counts: 46 G records (23 Not started, 2 Implemented, 19 Unsupported, 2 Deferred); also retained are 2 Implemented F records, 9 external dependency B records, 4 To confirm C records, and 4 Deferred D groups.
+
+## Development order
+
+Prioritize missing Provider functionality before the pre-release acceptance campaign.
+
+1. Next: G-03..07, server-side minute through tick additions in both modes (QRY-07), extending the
+   existing numeric-add translator/renderer. G-01/G-02 are implemented; preserve separate whole/fraction
+   tick truncation, NULL/range contracts, refreshed parameters/columns and result precision promotion.
+   Numeric offsets must not inherit the unrelated MySQL TIME duration storage range.
+2. Then complete G-08 (date differences) and G-09..11 (TimeOnly arithmetic and wrapping).
+3. After P0/P1 completion, select the next Extension gap by application value and Provider feasibility.
+   String overloads, DDL metadata/comments and scaffold fidelity remain candidates, not an automatic
+   commitment to every BCL signature. Investigate C items before classifying them as missing code;
+   retain Unsupported/Deferred contracts and resolve B dependencies at their owning layer.
+
+Each implementation still needs focused SQL/mapping/behavior regression tests and relevant inventory
+updates. Schedule the full live/specification/platform/package/release acceptance campaign after the
+selected feature work; its pending gates do not take precedence over this development queue.
+Acceptance requirements remain in the [release checklist](efcore-10-release-checklist.md).
 
 ## Provider gaps and current limitations
 
 | ID | Related feature | Missing capability | Status | Scope/priority | Mode / owner layer | Closure conditions | Owning source |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| G-01 | QRY-07 | DateTime.AddDays(double) | Not started | P0 priority completion | Both modes / Provider | Translate server-side predicates/composition; define contracts for parameters/constants/columns, NULL, positive/negative values, precision, and range; never silently discard ticks | [Temporal methods][temporal] |
-| G-02 | QRY-07 | DateTime.AddHours(double) | Not started | P0 priority completion | Both modes / Provider | Translate server-side predicates/composition; define contracts for parameters/constants/columns, NULL, positive/negative values, precision, and range; never silently discard ticks | [Temporal methods][temporal] |
+| G-01 | QRY-07 | DateTime.AddDays(double) | Implemented | P0 priority completion | Both modes / Provider | Translator/renderer supports predicates/composition, constants/refreshed parameters/columns/NULL and signed fractional offsets; whole/fraction ticks are combined exactly before promoted timestamp arithmetic. Invalid unit ranges and MySQL sub-microsecond offsets return NULL, without silent rounding | [Temporal methods][temporal] |
+| G-02 | QRY-07 | DateTime.AddHours(double) | Implemented | P0 priority completion | Both modes / Provider | Same contracts as G-01; Oracle uses positive intervals with explicit timestamp addition/subtraction to preserve negative subsecond offsets; numeric offsets do not use the MySQL TIME carrier | [Temporal methods][temporal] |
 | G-03 | QRY-07 | DateTime.AddMinutes(double) | Not started | P1 completion | Both modes / Provider | Translate server-side predicates/composition; define contracts for parameters/constants/columns, NULL, positive/negative values, precision, and range; never silently discard ticks | [Temporal methods][temporal] |
 | G-04 | QRY-07 | DateTime.AddSeconds(double) | Not started | P1 completion | Both modes / Provider | Translate server-side predicates/composition; define contracts for parameters/constants/columns, NULL, positive/negative values, precision, and range; never silently discard ticks | [Temporal methods][temporal] |
 | G-05 | QRY-07 | DateTime.AddMilliseconds(double) | Not started | P1 completion | Both modes / Provider | Translate server-side predicates/composition; define contracts for parameters/constants/columns, NULL, positive/negative values, precision, and range; never silently discard ticks | [Temporal methods][temporal] |

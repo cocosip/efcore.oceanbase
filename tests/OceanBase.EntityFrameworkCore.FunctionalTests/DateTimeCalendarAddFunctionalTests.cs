@@ -32,6 +32,51 @@ public sealed class DateTimeCalendarAddFunctionalTests
         OceanBaseCompatibilityMode mode, bool async)
         => await Run(mode, async, years: true);
 
+    [Theory]
+    [InlineData(OceanBaseCompatibilityMode.MySql, false)]
+    [InlineData(OceanBaseCompatibilityMode.MySql, true)]
+    [InlineData(OceanBaseCompatibilityMode.Oracle, false)]
+    [InlineData(OceanBaseCompatibilityMode.Oracle, true)]
+    public async Task Numeric_day_hour_additions_refresh_parameters_and_materialize_promoted_results(
+        OceanBaseCompatibilityMode mode, bool async)
+    {
+        using var table = new DataTable();
+        table.Columns.Add("Value", typeof(object));
+        var expected = new DateTime(2024, 3, 1, 1, 0, 0).AddTicks(mode == OceanBaseCompatibilityMode.MySql ? 10 : 1);
+        table.Rows.Add(expected);
+        table.Rows.Add(DBNull.Value);
+        var capture = new Capture(table);
+        await using var context = Create(mode, capture);
+        var amount = 0.5;
+        var query = context.Rows.Where(row => row.Stamp.AddDays(amount) > new DateTime(2000, 1, 1))
+            .OrderBy(row => row.Id).Select(row => (DateTime?)row.OptionalStamp!.Value.AddHours(amount));
+        var initial = async ? await query.ToListAsync() : query.ToList();
+        Assert.Equal([expected, null], initial);
+        Assert.Equal(DateTimeKind.Unspecified, initial[0]!.Value.Kind);
+        Assert.All(Assert.Single(capture.Parameters), value => Assert.Equal(0.5, Assert.IsType<double>(value)));
+        Assert.NotEmpty(capture.Parameters[0]);
+        amount = -900.25;
+        Assert.Equal([expected, null], async ? await query.ToListAsync() : query.ToList());
+        Assert.All(capture.Parameters[1], value => Assert.Equal(-900.25, Assert.IsType<double>(value)));
+        Assert.Equal(capture.Sql[0], capture.Sql[1]);
+        Assert.DoesNotContain("__oceanbase_internal", capture.Sql[0]);
+        Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? " AS DATETIME(6))" : " AS TIMESTAMP(7))", capture.Sql[0]);
+    }
+
+    [Fact]
+    public void Oracle_interpolated_native_parameters_keep_caller_owned_names()
+    {
+        using var table = new DataTable();
+        table.Columns.Add("Value", typeof(int));
+        table.Rows.Add(1);
+        var capture = new Capture(table);
+        using var context = Create(OceanBaseCompatibilityMode.Oracle, capture);
+        var parameter = new OceanBaseParameter { ParameterName = "_ob_value", Value = 1 };
+        Assert.Equal(1, context.Database.SqlQuery<int>($"SELECT {parameter} AS \"Value\" FROM DUAL").Single());
+        Assert.Contains(":" + parameter.ParameterName, Assert.Single(capture.Sql));
+        Assert.DoesNotContain(":_ob__ob_value", capture.Sql[0]);
+    }
+
     private static async Task Run(OceanBaseCompatibilityMode mode, bool async, bool years)
     {
         using var table = new DataTable();

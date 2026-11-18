@@ -27,7 +27,13 @@ internal sealed class OceanBaseSqlGenerationHelper : RelationalSqlGenerationHelp
     }
 
     public override string GenerateParameterName(string name)
-        => name.StartsWith(_parameterPrefix, StringComparison.Ordinal) ? name : _parameterPrefix + name;
+    {
+        if (name.StartsWith(_parameterPrefix, StringComparison.Ordinal)) return name;
+        // EF uniquifies generated names after this mapping; preserve valid caller-owned parameter names.
+        if (_parameterPrefix == ":" && name.Length != 0 && char.IsDigit(name[0]))
+            name = "_ob_" + name;
+        return _parameterPrefix + name;
+    }
 
     public override void GenerateParameterName(StringBuilder builder, string name)
         => builder.Append(GenerateParameterName(name));

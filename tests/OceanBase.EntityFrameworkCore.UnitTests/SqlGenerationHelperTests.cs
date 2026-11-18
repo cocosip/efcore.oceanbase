@@ -8,6 +8,22 @@ namespace OceanBase.EntityFrameworkCore.UnitTests;
 public sealed class SqlGenerationHelperTests
 {
     [Theory]
+    [InlineData("8__locals1_anchor", ":_ob_8__locals1_anchor")]
+    [InlineData("_ob_8__locals1_anchor", ":_ob_8__locals1_anchor")]
+    [InlineData("_OB_name", ":_OB_name")]
+    public void Oracle_compiler_generated_parameter_names_are_valid_and_caller_names_are_preserved(string name, string expected)
+    {
+        var helper = new OceanBaseSqlGenerationHelper(OceanBaseCompatibilityMode.Oracle);
+        Assert.Equal(expected, helper.GenerateParameterName(name));
+        Assert.Equal(expected, helper.GenerateParameterNamePlaceholder(name));
+        Assert.Equal(expected, helper.GenerateParameterName(expected));
+        var builder = new StringBuilder();
+        helper.GenerateParameterName(builder, name);
+        Assert.Equal(expected, builder.ToString());
+        Assert.Equal("@" + name, new OceanBaseSqlGenerationHelper(OceanBaseCompatibilityMode.MySql).GenerateParameterName(name));
+    }
+
+    [Theory]
     [InlineData(OceanBaseCompatibilityMode.MySql, "`order`", "@p0")]
     [InlineData(OceanBaseCompatibilityMode.Oracle, "\"order\"", ":p0")]
     public void Generates_mode_specific_identifiers_and_parameters(

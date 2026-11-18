@@ -1,8 +1,9 @@
 # EF Core 10 Release Acceptance Checklist
 
-Updated: 2026-11-17. This checklist records only tests, evidence and release gates; **do not use it to count unimplemented features**.
+Updated: 2026-11-18. This checklist records only tests, evidence and release gates; **do not use it to count unimplemented features**.
 See the [feature inventory](efcore-10-feature-matrix.md) for code scope and the [gap inventory](efcore-10-gap-matrix.md) for individual development states.
-The current feature-code checkpoint is `f119f51` (DateTime.Add/Subtract(TimeSpan)); no final release revision has been selected.
+The current feature work adds DateTime.AddDays/AddHours(double) after `f119f51` (DateTime.Add/Subtract(TimeSpan)); no final release revision has been selected.
+Develop missing features first; the full pre-release acceptance campaign follows the selected development queue.
 
 ## Acceptance states and completion criteria
 
@@ -17,14 +18,14 @@ The current feature-code checkpoint is `f119f51` (DateTime.Add/Subtract(TimeSpan
 
 | Gate | State | Current evidence / remaining conditions |
 | --- | --- | --- |
-| R-01 Dependency and source identity | Partially passed | The current duration module consistently uses the same Connector 0.3.0 DLL; old assets/cache identities differ, so historical full-suite results do not carry forward. The final release must still pin all artifacts and source revisions |
-| R-02 Local / TST-01 | Partially passed | Final totals across projects for each patch: 6699 passed/16 existing skips: Unit 2672, Functional 2487, Specification 1538+16 skips, Consumer 2; complete runtime families remain uncovered, and the final revision requires a rerun |
-| R-03 Live database / TST-02 | Partially passed | With the current fixed dependency, each patch passed 8 native duration cases; see historical ordinary profiles below. Broader live evidence for writes/concurrency, transaction atomicity/cancellation, Schema, inheritance/lazy/compiled and other areas remains incomplete |
+| R-01 Dependency and source identity | Partially passed | Numeric-add development tests consistently use the Connector 0.3.0 identity recorded below; it differs from the duration checkpoint. Historical results do not carry forward across artifacts with the same package version; final release identities remain pending |
+| R-02 Local / TST-01 | Partially passed | Numeric-add feature regression is recorded below; historical duration totals across projects for each patch were 6699 passed/16 existing skips. Complete runtime families remain uncovered, and the final release revision requires a rerun |
+| R-03 Live database / TST-02 | Partially passed | Targeted numeric-add evidence and historical duration/ordinary profiles are listed below with separate dependency identities. Broader live evidence for writes/concurrency, transaction atomicity/cancellation, Schema, inheritance/lazy/compiled and other areas remains incomplete |
 | R-04 PKG-01..04 | Partially passed | duration-r2 package contents/EF range, package-only consumers for both patches and modes, and DLL/README/Connector identity passed; the final release package, consumer, EF11 negative dependency check and version consistency still require execution |
 | R-05 Tooling / DEF-01/02/08 | Partially passed | Existing migration CLI, generated context/compiled-model C#, and Windows bundle build/help have local evidence; native catalog checks with the current identity, bundle application, script-client execution/locking and broader generated combinations await acceptance |
 | R-06 Platforms | Pending acceptance | Current evidence is local Windows only; repository CI previously passed Windows/Linux for e41981e, which does not cover the current revision; release requires CI on both platforms and portable-path/line-ending checks |
 | R-07 Environment / REL-01 | Partially passed | Ordinary direct connections in both modes use OceanBase 4.4.2.2 with TLS Disabled; the complete supported environment/options and runtime/EF/Connector identities must be fixed alongside final results; additional deployments extend only the declared scope |
-| R-08 Review / REL-02 | Partially passed | Independent duration review found 0 Critical/Important issues; the two coverage gaps for low-precision promotion/ConvertsNulls have been filled; the historical Minor issues below and final-revision review remain outstanding |
+| R-08 Review / REL-02 | Partially passed | Independent numeric-add review has no remaining findings after precision/sign, naming/collision and mapping-preservation fixes and regressions. Historical Minor items below and final-release revision review remain outstanding |
 | R-09 Sensitive information/cleanup | Partially passed | The latest checks found 0 EFT_ leftovers in both modes; the final run must recheck object cleanup, log redaction and exclusion of credentials/connection strings from Git and artifacts |
 | R-10 Release operations | Pending acceptance | Version, README support claims, dependency ranges, release notes, tag and package revision must agree; a local commit does not authorize push/publish; nothing has been released |
 
@@ -94,10 +95,12 @@ Existing DEF-01/02/03/07/08/09 functionality still requires R-03/R-05 checks; de
 
 | Layer | Latest result | Boundary / entry point |
 | --- | --- | --- |
-| Local EF10.0.0/10.0.14 | Final totals across projects for each patch: 6699 passed/16 skips | `artifacts/datetime-duration/root-final/`, `compat-final/`; the new Oracle null-converter fixture initially had 1 failure; after correction, both patches passed the complete Unit suite at 2672/2672 in `unit-final/`, `compat-unit-final/`; source for the other three projects did not change afterward |
+| Numeric day/hour additions, EF10.0.0 | Unit 2690/2690 and Functional 2492/2492 passed | `artifacts/numeric-date-add/unit-closed/`, `functional-closed/`; covers fractional-unit SQL, NULL/precision promotion, parameter refresh/ownership, Oracle nested-closure naming, repeated collisions and distinct converter bindings. These are development regressions, not final release acceptance or EF10.0.14 evidence |
+| Numeric day/hour native feature checks, EF10.0.0 | 8/8 native, 0 failures/skips | `artifacts/numeric-date-add/native-closed/`; final serial run covers both modes, sync/async and two NULL settings with constants/refreshed parameters/native Double columns, large signed fractional offsets, signed 1/9/10/11-tick boundaries and invalid-unit NULL guards. Uses the ordinary direct fixture with TLS Disabled; it is not a full native-suite or TLS acceptance run |
+| Duration local EF10.0.0/10.0.14 | Historical totals across projects for each patch: 6699 passed/16 skips | `artifacts/datetime-duration/root-final/`, `compat-final/`; the new Oracle null-converter fixture initially had 1 failure; after correction, both patches passed the complete Unit suite at 2672/2672 in `unit-final/`, `compat-unit-final/`; source for the other three projects did not change afterward |
 | Documented-capability check | For each mode, 37 unsupported predicate/sequence probes passed, along with supported Add/Subtract and ordinary-string positive controls | `artifacts/efcore-doc-cleanup/probe/`; invokes only the real Provider's offline ToQueryString, opens no connection, and is not live release acceptance |
-| Current native checks with fixed dependency | Each patch: 8/8, 0 failures/skips | `artifacts/datetime-duration/root-final-live/`, `compat-final-live/`; covers only the new duration family, sync/async in both modes and two NULL configurations; it does not establish a full 626-case pass |
-| Current package-only checks | `10.0.0-datetime-duration-r2-20261117` contents and consumers for both patches and modes passed | `artifacts/datetime-duration/feed/`, `consumer-10.0.0-final.log`, `consumer-10.0.14-final.log`; DLL/README/dependency identity matches, with no local project references |
+| Duration native checks with its fixed dependency | Each patch: 8/8, 0 failures/skips | `artifacts/datetime-duration/root-final-live/`, `compat-final-live/`; covers only the duration family, sync/async in both modes and two NULL configurations; it does not establish a full 626-case pass |
+| Duration package-only checks | `10.0.0-datetime-duration-r2-20261117` contents and consumers for both patches and modes passed | `artifacts/datetime-duration/feed/`, `consumer-10.0.0-final.log`, `consumer-10.0.14-final.log`; DLL/README/dependency identity matches, with no local project references |
 | Historical full native suite | After raw/diagnostics, each patch: 618/618 (605 native, 13 offline) | `artifacts/raw-diagnostics/`; same-version Connector cache/old assets differed, so these historical results cannot establish complete acceptance with the current fixed dependency |
 | Historical module profiles | Connection lifecycle 56; raw/diagnostics 28; graph 56+ownership 10; temporal 72 plus endpoint/Kind; numeric 64; string 64; relational/aggregate/storage and others | Test source remains; historical TRX files are in the corresponding `artifacts/`; module plans have been merged and deleted; do not add these counts as feature counts or use them to claim a current full-suite pass |
 | Specification tests | 6 complete relationship/inheritance/owned model families, plus non-relational/service/partial write-SQL profiles | [SpecificationTests](../../tests/OceanBase.EntityFrameworkCore.SpecificationTests/); 16 skips retain the reasons in source. Metadata tests are not official store-backed query/write/runtime acceptance |
@@ -107,7 +110,11 @@ Different cached Connector 0.3.0 artifacts were found locally (including an old 
 After alignment, the current duration module uses nuspec revision `6de85dee1849b04fc937f4419c4ff7e17fce64b4`,
 assembly 0.3.0.0, and net10 DLL SHA256
 `aa1a7b3dafb0a3b543a3cfbcde0bdefff5dff3a7ff81dfeac0c7edbd5b01b19f`.
-Identities such as 7f0cf7e from old documents do not carry forward; release records must state the actual package hash/revision, not just the version.
+The later numeric-add development run instead resolves the available Connector 0.3.0 package with nuspec revision
+`7f0cf7e544bf8b944d584ddf9116bea03ec4c5df`, assembly 0.3.0.0, and net10 DLL SHA256
+`f4105bdc9d8b33a77f7223ac09265faa497267add542812fc1763c9bf8ab0c55` in Unit, Functional and Live test outputs.
+Its scoped results do not replace the earlier duration artifact's evidence; no Connector source or package configuration was changed.
+Release records must state the actual package hash/revision, not just the version.
 NuGet network/vulnerability sources previously failed; restore completed using existing packages plus a local feed. This documentation cleanup changes neither dependencies nor NuGet configuration.
 
 ## Outstanding coverage and independent review items
