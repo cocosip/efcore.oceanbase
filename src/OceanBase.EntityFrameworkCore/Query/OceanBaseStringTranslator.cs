@@ -60,11 +60,7 @@ namespace OceanBase.EntityFrameworkCore.Query
             if (isRemove || function is "TRIM" or "LTRIM" or "RTRIM")
             {
                 // Shortening fixed text returns variable text; keep national/LOB families and value conversion.
-                mapping = mappingSource.FindMapping(typeof(string),
-                    storeTypeName: mapping.StoreTypeNameBase.Trim().ToUpperInvariant() is "CLOB" or "NCLOB" ? mapping.StoreType : null,
-                    unicode: mapping.IsUnicode, size: mapping.Size, fixedLength: false)!;
-                if (instance.TypeMapping!.Converter is { } converter)
-                    mapping = (RelationalTypeMapping)mapping.WithComposedConverter(converter);
+                mapping = TrimResultMapping(mappingSource, mapping);
             }
 
             if (isRemove)
@@ -104,6 +100,14 @@ namespace OceanBase.EntityFrameworkCore.Query
             // Oracle all-space trim can return NULL for required input; do not simplify result null tests.
             return sqlExpressionFactory.Function(function!, [instance], nullable: true,
                 argumentsPropagateNullability: [false], typeof(string), mapping);
+        }
+
+        internal static RelationalTypeMapping TrimResultMapping(IRelationalTypeMappingSource mappings, RelationalTypeMapping source)
+        {
+            var result = mappings.FindMapping(typeof(string),
+                storeTypeName: source.StoreTypeNameBase.Trim().ToUpperInvariant() is "CLOB" or "NCLOB" ? source.StoreType : null,
+                unicode: source.IsUnicode, size: source.Size, fixedLength: false)!;
+            return source.Converter is { } converter ? (RelationalTypeMapping)result.WithComposedConverter(converter) : result;
         }
 
         private SqlExpression TranslateRemove(SqlExpression source, IReadOnlyList<SqlExpression> arguments,

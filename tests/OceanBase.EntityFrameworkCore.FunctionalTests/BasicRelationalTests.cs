@@ -2023,6 +2023,84 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
         [InlineData(OceanBaseCompatibilityMode.Oracle, true, false)]
         [InlineData(OceanBaseCompatibilityMode.Oracle, false, true)]
         [InlineData(OceanBaseCompatibilityMode.Oracle, true, true)]
+        public async Task Explicit_trim_refreshes_mutated_arrays_defaults_and_decodes_results_once(
+            OceanBaseCompatibilityMode mode, bool async, bool relationalNulls)
+        {
+            using var table = new DataTable();
+            table.Columns.Add("Plain", typeof(string));
+            table.Columns.Add("Converted", typeof(string));
+            table.Rows.Add("x", "x!");
+            table.Rows.Add(DBNull.Value, DBNull.Value);
+            var commands = new CommandCapture { Results = table };
+            await using var context = CreateContext(mode, commands, relationalNulls);
+            char[]? characters = ['x', 'y'];
+            var query = context.Set<ShortTextRow>().Where(row => row.Caption!.Trim(characters) == null)
+                .Select(row => new { Plain = row.Caption!.TrimStart(characters), Converted = row.Converted.TrimEnd(characters) });
+            var forced = context.Set<ShortTextRow>().Select(row => new
+            {
+                Plain = row.Caption!.Trim(EF.Constant(characters)), Converted = row.Converted.TrimStart(EF.Constant(characters))
+            });
+            foreach (var value in new char[]?[] { characters, ['y', 'x'], [], null, ['海', '\\', '[', ']', '^', '-', '&', '\0'], ['x'] })
+            {
+                characters = value;
+                commands.StringInputs.Clear();
+                var rows = async ? await query.ToListAsync() : query.ToList();
+                Assert.Equal("x", rows[0].Plain);
+                Assert.Equal("x", rows[0].Converted);
+                Assert.Null(rows[1].Plain);
+                Assert.Null(rows[1].Converted);
+                var set = value is null || value.Length == 0
+                    ? new string(Enumerable.Range(0, char.MaxValue + 1).Select(unit => (char)unit).Where(char.IsWhiteSpace).ToArray())
+                    : new string(value);
+                var encoded = mode == OceanBaseCompatibilityMode.Oracle ? set
+                    : string.Concat(set.Distinct().Select(unit => "\\x{" + ((int)unit).ToString("x4", CultureInfo.InvariantCulture) + "}"));
+                Assert.NotEmpty(commands.StringInputs);
+                Assert.All(commands.StringInputs, parameter => Assert.Equal(encoded, parameter.Value));
+                Assert.Contains(" IS NULL", commands.Sql[^1]);
+                commands.StringInputs.Clear();
+                var constantRows = async ? await forced.ToListAsync() : forced.ToList();
+                Assert.Equal("x", constantRows[0].Converted);
+                Assert.Empty(commands.StringInputs);
+                if (characters is { Length: > 0 }) characters[0] = 'z';
+                commands.StringInputs.Clear();
+                _ = async ? await query.ToListAsync() : query.ToList();
+                if (characters is { Length: > 0 })
+                {
+                    var changed = mode == OceanBaseCompatibilityMode.Oracle ? new string(characters)
+                        : string.Concat(characters.Distinct().Select(unit => "\\x{" + ((int)unit).ToString("x4", CultureInfo.InvariantCulture) + "}"));
+                    Assert.All(commands.StringInputs, parameter => Assert.Equal(changed, parameter.Value));
+                }
+            }
+            if (!async)
+            {
+                var compiled = EF.CompileQuery((TestContext db, char[]? set) => db.Set<ShortTextRow>()
+                    .Select(row => new { Plain = row.Caption!.Trim(set), Converted = row.Converted.TrimStart(set) }));
+                foreach (var set in new char[]?[] { ['x'], ['y'], [], null })
+                {
+                    commands.StringInputs.Clear();
+                    var result = compiled(context, set).ToList();
+                    Assert.Equal("x", result[0].Plain);
+                    Assert.Equal("x", result[0].Converted);
+                    Assert.NotEmpty(commands.StringInputs);
+                    Assert.All(commands.StringInputs, parameter => Assert.DoesNotContain("!", (string)parameter.Value!));
+                }
+            }
+            characters = ['\ud800'];
+            commands.Sql.Clear();
+            if (async) await Assert.ThrowsAsync<ArgumentException>(() => query.ToListAsync());
+            else Assert.Throws<ArgumentException>(() => query.ToList());
+            Assert.Empty(commands.Sql);
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false, true)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true, true)]
         public async Task Remove_commands_refresh_bounds_and_decode_converted_results_once(
             OceanBaseCompatibilityMode mode, bool async, bool relationalNulls)
         {

@@ -109,10 +109,15 @@ namespace OceanBase.EntityFrameworkCore.Query
             }
         }
 
-        private sealed class Visitor(RelationalSqlTranslatingExpressionVisitorDependencies dependencies,
-            QueryCompilationContext queryCompilationContext, QueryableMethodTranslatingExpressionVisitor queryableVisitor)
-            : RelationalSqlTranslatingExpressionVisitor(dependencies, queryCompilationContext, queryableVisitor)
+        private sealed class Visitor : RelationalSqlTranslatingExpressionVisitor
         {
+            private readonly QueryCompilationContext _queryCompilationContext;
+
+            public Visitor(RelationalSqlTranslatingExpressionVisitorDependencies dependencies,
+                QueryCompilationContext queryCompilationContext, QueryableMethodTranslatingExpressionVisitor queryableVisitor)
+                : base(dependencies, queryCompilationContext, queryableVisitor)
+                => _queryCompilationContext = queryCompilationContext;
+
             public override Expression? Visit(Expression? expression)
             {
                 var visited = base.Visit(expression);
@@ -280,6 +285,48 @@ namespace OceanBase.EntityFrameworkCore.Query
 
             protected override Expression VisitMethodCall(MethodCallExpression call)
             {
+                if (OceanBaseExplicitTrimTranslator.IsArrayTrim(call.Method))
+                {
+                    if (Visit(call.Object) is not SqlExpression source)
+                        return QueryCompilationContext.NotTranslatedExpression;
+                    var factory = Dependencies.SqlExpressionFactory;
+                    source = factory.ApplyDefaultTypeMapping(source);
+                    var mapping = source.TypeMapping as OceanBaseStringTypeMapping
+                        ?? (OceanBaseStringTypeMapping)Dependencies.TypeMappingSource.FindMapping(typeof(string))!;
+                    var mode = mapping.CompatibilityMode;
+                    var text = Dependencies.TypeMappingSource.FindMapping(typeof(string), storeTypeName: null, unicode: mapping.IsUnicode)!;
+                    SqlExpression? set;
+                    switch (call.Arguments[0])
+                    {
+                        case ConstantExpression constant:
+                            set = factory.Constant(OceanBaseExplicitTrimTranslator.EncodeSet((char[]?)constant.Value, mode), text);
+                            break;
+                        case QueryParameterExpression parameter:
+                            // A genuine string runtime parameter avoids admitting mapped char[] collections.
+                            var name = "_ob_trim_" + Guid.NewGuid().ToString("N");
+                            var context = QueryCompilationContext.QueryContextParameter;
+                            _queryCompilationContext.RegisterRuntimeParameter(name, Expression.Lambda(
+                                Expression.Call(typeof(OceanBaseExplicitTrimTranslator), nameof(OceanBaseExplicitTrimTranslator.EncodeParameter),
+                                    Type.EmptyTypes, context, Expression.Constant(parameter.Name), Expression.Constant(mode)), context));
+                            set = new SqlParameterExpression(name, name, typeof(string), nullable: false,
+                                parameter.TranslationMode, text);
+                            break;
+                        case NewArrayExpression { NodeType: ExpressionType.NewArrayInit } trimArray:
+                            var elements = new List<SqlExpression>();
+                            foreach (var element in trimArray.Expressions)
+                            {
+                                if (Visit(element) is not SqlExpression value) return QueryCompilationContext.NotTranslatedExpression;
+                                elements.Add(value);
+                            }
+                            set = OceanBaseExplicitTrimTranslator.CharacterSet(factory, text, mode, elements);
+                            break;
+                        default:
+                            return QueryCompilationContext.NotTranslatedExpression;
+                    }
+                    return set is null ? QueryCompilationContext.NotTranslatedExpression
+                        : Dependencies.MethodCallTranslatorProvider.Translate(_queryCompilationContext.Model, source, call.Method, [set], _queryCompilationContext.Logger)
+                            ?? QueryCompilationContext.NotTranslatedExpression;
+                }
                 if (call.Method.DeclaringType == typeof(TimeSpan) && call.Method.Name is nameof(TimeSpan.Compare) or nameof(TimeSpan.CompareTo))
                 {
                     var first = Unbox(call.Object ?? call.Arguments[0]);

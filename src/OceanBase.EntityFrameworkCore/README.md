@@ -169,11 +169,10 @@ when portable placement is required; this does not configure string collation.
 
 String translations support ordinary equality, two/three/four-string concat,
 single-string and char Contains/StartsWith/EndsWith, Length, both integer Substring/Remove overloads,
-parameterless ToLower/ToUpper and parameterless Trim/TrimStart/TrimEnd. Length and
+parameterless ToLower/ToUpper and Trim/TrimStart/TrimEnd with no argument, char or char[]. Length and
 substring bounds count native characters rather than CLR UTF-16 units. Substring
-uses native negative/out-of-range/zero-length rules; trim removes ordinary spaces,
-and case conversion follows the database. StringComparison, culture/Invariant,
-and explicit trim-character overloads are not translated in
+uses native negative/out-of-range/zero-length rules; parameterless trim removes ordinary spaces,
+and case conversion follows the database. StringComparison and culture/Invariant overloads are not translated in
 predicates; EF may evaluate permitted final client projections.
 
 Search treats percent, underscore, quotes and backslashes as text. NULL source or
@@ -194,6 +193,21 @@ text-backed char columns retain their own mappings, including nullable column
 needles. Numeric/binary-backed chars are not translated. Text validation rejects
 lone UTF-16 surrogates rather than searching half of a supplementary character.
 These overloads follow the same native collation and NULL policy as string search.
+
+Explicit trim repeatedly removes any character in the supplied set at the requested
+ends, using stored text and case-sensitive character matching. Null/empty char[]
+arguments select CLR whitespace, including tabs, newlines and Unicode spaces;
+parameterless trim keeps its ordinary-space contract. Captured arrays refresh at
+each execution, including in-place mutations; constant and inline char arrays and
+ordinary text-backed char columns are supported, and EF.Constant retains inlining.
+A NULL char column propagates
+NULL, including within an inline array. Surrogate code units and custom/multichar
+or non-text char converters reject. Trim characters have plain text mappings,
+independent of the receiver's converter; string results use variable text mappings
+with the receiver's inverse converter once. Oracle scalar empty results are NULL;
+native CLOB trimming can retain an empty LOB. MySQL uses strictly anchored,
+case-sensitive escaped regex, so punctuation is literal and final newlines do not
+weaken the end anchor. This does not enable mapped char[] collection properties.
 
 Remove uses native character counts in stored text. Start must be in [0,length]
 and count in [0,length-start]; invalid or NULL SQL bounds/source return NULL.

@@ -14,7 +14,7 @@ explicitly unsupported features, dependencies, and capabilities to confirm. Pre-
 - The current known unavailable/rejected capabilities are based on the code and package README. Supporting every BCL method is not an implicit Provider commitment.
   Add newly discovered valid requirements to their owning row or give them a new stable ID. Rejection of invalid inputs or malformed models/catalogs is validation, not a missing feature.
 
-Current counts: 46 G records (11 Not started, 0 In development, 14 Implemented, 19 Unsupported, 2 Deferred); also retained are 2 Implemented F records, 9 external dependency B records, 4 To confirm C records, and 4 Deferred D groups.
+Current counts: 46 G records (10 Not started, 0 In development, 15 Implemented, 19 Unsupported, 2 Deferred); also retained are 2 Implemented F records, 9 external dependency B records, 4 To confirm C records, and 4 Deferred D groups.
 
 ## Development order
 
@@ -30,10 +30,13 @@ Prioritize missing Provider functionality before the pre-release acceptance camp
    Repeated mapping-specific parameters keep their canonical names in both modes.
 4. G-16 Remove(int)/Remove(int,int) are implemented using guarded native substring/concat, native
    character counts and variable result mappings. Preserve NULL/range/overflow and converter ownership.
-5. Next: G-15 explicit trim char/char[] signatures (QRY-06). Define repeated character-set removal,
-   empty/null sets, valid Unicode and constant/parameter/column support before implementation;
-   multi-character sets are not equivalent to repeating a native substring trim.
-6. Other Extension candidates remain string overloads, DDL metadata/comments and scaffold fidelity,
+5. G-15 explicit trim char/char[] signatures are implemented as repeated character-set removal.
+   Preserve null/empty array whitespace, valid Unicode, refreshed arrays/inline nullable char columns,
+   EF.Constant inlining, stored-text converter ownership, case sensitivity and strict regex anchors
+   without NULL compensation.
+6. Next: G-18 string method families (QRY-06), selecting IndexOf and Replace signatures first and
+   recording each signature's indexing, NULL, comparison and converter contract before implementation.
+   DDL metadata/comments and scaffold fidelity remain subsequent Extension candidates,
    selected by application value and Provider feasibility rather than a commitment to every BCL method.
    Investigate C items before classifying them as missing code;
    retain Unsupported/Deferred contracts and resolve B dependencies at their owning layer.
@@ -61,7 +64,7 @@ Acceptance requirements remain in the [release checklist](efcore-10-release-chec
 | G-12 | QRY-07 | DateTimeOffset Add/Subtract/calendar method families | Not started | Extension | Both modes / Provider | Determine UTC/local offset semantics, result mapping, and supported ranges for each signature | [Temporal methods][temporal] |
 | G-13 | QRY-07 | DateOnly.FromDateTime/ToDateTime; TimeOnly.FromDateTime/FromTimeSpan/ToTimeSpan/IsBetween | Implemented | Extension | Both modes / Provider | TranslateConversion reuses date/time/tick carriers; see the feature inventory's exact signatures. FromTimeSpan accepts only [0,24h), returning NULL for invalid SQL values or MySQL sub-microsecond results; EF.Parameter scalars use full-range ticks. ToDateTime promotes timestamp precision and returns Kind.Unspecified, rejecting UTC/Local/dynamic Kind. IsBetween has inclusive/exclusive endpoints, midnight wrapping, empty equal endpoints and explicit NULL propagation; scalar bounds adopt the clock converter and mismatched column converters reject. Type-changing conversions use stored calendar space and their own result mapping | [Temporal methods][temporal] |
 | G-14 | QRY-06 | Contains(char), StartsWith(char), EndsWith(char) | Implemented | Extension | Both modes / Provider | OceanBaseStringTranslator reuses native search/collation and total Boolean NULL semantics. Scalar chars compose CharToStringConverter with the receiver mapping/converter; text-backed char columns preserve their own mappings and non-text carriers reject. Existing UTF-16 validation rejects lone surrogates. Literals, refreshed parameters, nullable columns, national/fixed/LOB text and composition are covered; the existing parameter-name repair now preserves repeated mapping-specific names in both modes | [Strings][strings] |
-| G-15 | QRY-06 | Explicit trim char/char[] overloads | Not started | Extension | Both modes / Provider | Translate Trim/TrimStart/TrimEnd by signature; space trimming is not a substitute | [Strings][strings] |
+| G-15 | QRY-06 | Explicit trim char/char[] overloads | Implemented | Extension | Both modes / Provider | OceanBaseExplicitTrimTranslator implements all six signatures as repeated character-set removal in stored text space, independently of the receiver converter. Null/empty arrays use CLR whitespace; parameterless trim retains ordinary spaces. Constants, per-execution captured arrays/in-place mutations, compiled-query array parameters and inline nullable char columns are supported without enabling mapped collections; surrogate and custom/multichar/non-text char carriers reject. Results preserve national/LOB families, variable mapping and the receiver inverse once; NULL chars propagate and Oracle CLOB trim retains native empty LOBs. Oracle uses LTRIM/RTRIM; MySQL uses escaped, case-sensitive strictly anchored regex with native NULL-propagating concatenation. Literal/parameter receivers receive default mappings and supported array shapes retain plugin dispatch. Constant-array cache keys snapshot mutations | [Explicit trim][trim] |
 | G-16 | QRY-06 | Remove(int), Remove(int,int) | Implemented | Extension | Both modes / Provider | OceanBaseStringTranslator uses native character counts and stored text, with start in [0,length] and count in [0,length-start]; invalid/NULL SQL bounds or NULL source return NULL. Guarded substring/concat uses long arithmetic, variable text/national/LOB families and the receiver's inverse converter exactly once. Oracle guarded empty results are NULL, including LOBs; bare Substring retains its separate native contract. Constants/refreshed parameters/independently nullable columns/composition, fixed/national/LOB text and extreme bounds are covered | [Strings][strings] |
 | G-17 | QRY-06 | StringComparison, culture/Invariant overloads | Unsupported | Current scope limitation | Both modes / Provider + Server | Lift only with a per-signature approach that preserves comparison semantics; do not assume equivalence to DB collation | [Strings][strings] |
 | G-18 | QRY-06 | string.IndexOf/Replace/Insert/PadLeft/PadRight method families | Not started | Extension | Both modes / Provider | Split support and tests by method/signature; do not add a generic "full string support" checkbox | [Strings][strings] |
@@ -147,6 +150,7 @@ Do not remove data precision/NULL/ownership validation or intentional rejections
 [sqlgenerator]: ../../src/OceanBase.EntityFrameworkCore/Query/OceanBaseQuerySqlGenerator.cs
 [roots]: ../../src/OceanBase.EntityFrameworkCore/Query/OceanBaseQueryableMethodTranslatingExpressionVisitorFactory.cs
 [strings]: ../../src/OceanBase.EntityFrameworkCore/Query/OceanBaseStringTranslator.cs
+[trim]: ../../src/OceanBase.EntityFrameworkCore/Query/OceanBaseExplicitTrimTranslator.cs
 [temporal]: ../../src/OceanBase.EntityFrameworkCore/Query/OceanBaseTemporalMethodTranslator.cs
 [temporalmap]: ../../src/OceanBase.EntityFrameworkCore/Storage/OceanBaseTemporalTypeMapping.cs
 [transactions]: ../../src/OceanBase.EntityFrameworkCore/Storage/OceanBaseRelationalTransactionFactory.cs

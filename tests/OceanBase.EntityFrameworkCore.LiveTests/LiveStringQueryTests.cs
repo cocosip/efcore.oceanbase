@@ -376,9 +376,6 @@ namespace OceanBase.EntityFrameworkCore.LiveTests
                     rows.Where(row => row.Required.Contains('a', StringComparison.Ordinal)),
                     rows.Where(row => row.Required.ToLowerInvariant() == "a"),
                     rows.Where(row => row.Required.ToUpper(CultureInfo.InvariantCulture) == "a"),
-                    rows.Where(row => row.Required.Trim(' ') == "a"),
-                    rows.Where(row => row.Required.TrimStart(new[] { ' ' }) == "a"),
-                    rows.Where(row => row.Required.TrimEnd(' ') == "a"),
                     rows.Where(row => row.BinaryConverted!.Remove(1) == "a"),
                     rows.Where(row => row.BinaryConverted!.ToLower() == "a"),
                     rows.Where(row => row.BinaryConverted!.Substring(0, 1) == "a")
@@ -458,6 +455,105 @@ namespace OceanBase.EntityFrameworkCore.LiveTests
                 Assert.Equal(large.ToLowerInvariant(), result.Lower);
                 Assert.Equal(large.Trim(' '), result.Trim);
                 Assert.Equal(Substring(large, 0, 4002, mode, true), result.Prefix);
+            });
+
+        [Theory]
+        [MemberData(nameof(Cases))]
+        public async Task Explicit_trim_removes_character_sets_with_refreshed_arrays_columns_and_text_families(
+            OceanBaseCompatibilityMode mode, bool async, bool nulls)
+            => await WithTable(mode, async, nulls, async (context, seed, stage) =>
+            {
+                var rows = context.Set<Row>();
+                char[]? characters = ['A', 'b', 'c', ' '];
+                var query = rows.OrderBy(row => row.Id).Select(row => new
+                {
+                    row.Id, Both = (string?)row.Plain!.Trim(characters), Start = (string?)row.Plain!.TrimStart(characters),
+                    Forced = (string?)row.Plain!.Trim(EF.Constant(characters)),
+                    End = (string?)row.Plain!.TrimEnd(characters), National = (string?)row.National!.Trim(characters),
+                    Fixed = (string?)row.Fixed!.Trim(characters), NationalFixed = (string?)row.NationalFixed!.Trim(characters),
+                    Lob = (string?)row.Large!.Trim(characters), Converted = (string?)row.Converted!.TrimStart(characters)
+                });
+                var filtered = rows.Where(row => row.Plain!.Trim(characters) == null).OrderBy(row => row.Id).Select(row => row.Id);
+                foreach (var value in new char[]?[] { characters, ['A', 'b', 'c', ' '], ['a'], [], null,
+                    ['海', 'd', 'n', 'e'], ['[', ']', '^', '-', '&', '\\', '\'', '\0'], [' '] })
+                {
+                    characters = value;
+                    stage("explicit trim array refresh/default whitespace and text families");
+                    await Check();
+                    if (characters is { Length: > 0 })
+                    {
+                        characters[0] = 'c';
+                        stage("explicit trim in-place array mutation");
+                        await Check();
+                    }
+                }
+                async Task Check()
+                {
+                    Assert.Equal(seed.Select(row => new
+                    {
+                        row.Id, Both = Normalize(row.Plain?.Trim(characters), mode), Start = Normalize(row.Plain?.TrimStart(characters), mode),
+                        Forced = Normalize(row.Plain?.Trim(characters), mode),
+                        End = Normalize(row.Plain?.TrimEnd(characters), mode), National = Normalize(row.National?.Trim(characters), mode),
+                        Fixed = Normalize(row.Fixed?.Trim(characters), mode), NationalFixed = Normalize(row.NationalFixed?.Trim(characters), mode),
+                        Lob = row.Large?.Trim(characters), Converted = Decode(Normalize(Encode(row.Converted)?.TrimStart(characters), mode))
+                    }), await Read(query, async));
+                    Assert.Equal(seed.Where(row => Normalize(row.Plain?.Trim(characters), mode) is null).Select(row => row.Id), await Read(filtered, async));
+                }
+                stage("explicit trim literals, inline nullable char columns and composition");
+                var columns = rows.OrderBy(row => row.Id).Select(row => new
+                {
+                    row.Id, Single = (string?)row.Plain!.Trim(row.Character!.Value),
+                    Set = (string?)row.Plain!.Trim(new[] { row.Character!.Value, ' ' }),
+                    Literal = (string?)row.Plain!.TrimStart('A').TrimEnd(new[] { ' ', 'c' }),
+                    EmptySet = (string?)row.Plain!.Trim(Array.Empty<char>()),
+                    NullSet = (string?)row.Plain!.Trim((char[]?)null)
+                });
+                Assert.Equal(seed.Select(row => new
+                {
+                    row.Id, Single = row.Character is { } ch ? Normalize(row.Plain?.Trim(ch), mode) : null,
+                    Set = row.Character is { } ch2 ? Normalize(row.Plain?.Trim(ch2, ' '), mode) : null,
+                    Literal = Normalize(row.Plain?.TrimStart('A').TrimEnd(' ', 'c'), mode),
+                    EmptySet = Normalize(row.Plain?.Trim(), mode), NullSet = Normalize(row.Plain?.Trim(), mode)
+                }), await Read(columns, async));
+                var entity = async ? await rows.AsTracking().SingleAsync(row => row.Id == 1) : rows.AsTracking().Single(row => row.Id == 1);
+                var character = 'x';
+                var source = "xxbodyxx";
+                var dynamic = rows.Where(row => row.Id == 1).Select(row => new
+                {
+                    Single = (string?)row.Plain!.Trim(row.Character!.Value),
+                    Set = (string?)row.Plain!.Trim(new[] { row.Character!.Value, ' ' }),
+                    Parameter = (string?)row.Plain!.Trim(character), Start = (string?)row.Plain!.TrimStart(character),
+                    End = (string?)row.Plain!.TrimEnd(character),
+                    LiteralSource = "xxbodyxx".Trim(new[] { row.Character!.Value }),
+                    ParameterSource = source.Trim(new[] { row.Character!.Value })
+                });
+                foreach (var value in new[] { 'x', 'A', '[', ']', '^', '-', '&', '\\', '\'', '\0', '海' })
+                {
+                    stage("explicit trim dynamic char class escaping and ASCII case sensitivity");
+                    character = value;
+                    entity.Plain = value + "X\n" + value;
+                    entity.Character = value;
+                    Assert.Equal(1, async ? await context.SaveChangesAsync() : context.SaveChanges());
+                    var result = Assert.Single(await Read(dynamic, async));
+                    Assert.Equal("X\n", result.Single);
+                    Assert.Equal("X\n", result.Set);
+                    Assert.Equal("X\n", result.Parameter);
+                    Assert.Equal("X\n" + value, result.Start);
+                    Assert.Equal(value + "X\n", result.End);
+                    Assert.Equal("xxbodyxx".Trim(value), result.LiteralSource);
+                    Assert.Equal(source.Trim(value), result.ParameterSource);
+                }
+                stage("strict final-newline anchors and LOB result over 4000 characters");
+                entity.Plain = "x\n";
+                entity.Large = "[" + new string('v', 4001) + "海🌊]";
+                Assert.Equal(1, async ? await context.SaveChangesAsync() : context.SaveChanges());
+                var large = rows.Where(row => row.Id == 1).Select(row => new
+                {
+                    End = (string?)row.Plain!.TrimEnd('x'), Lob = (string?)row.Large!.Trim(new[] { '[', ']' })
+                });
+                var last = Assert.Single(await Read(large, async));
+                Assert.Equal("x\n", last.End);
+                Assert.Equal(new string('v', 4001) + "海🌊", last.Lob);
             });
 
         private static bool Match(string? source, string? needle, int operation, QueryContext context)
