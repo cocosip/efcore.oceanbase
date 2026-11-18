@@ -54,6 +54,8 @@ namespace OceanBase.EntityFrameworkCore.Query
         private static readonly MethodInfo DateTimeSubtractDateTime = typeof(DateTime).GetMethod(nameof(DateTime.Subtract), [typeof(DateTime)])!;
         private static readonly MethodInfo DateTimeOffsetSubtractDateTimeOffset = typeof(DateTimeOffset)
             .GetMethod(nameof(DateTimeOffset.Subtract), [typeof(DateTimeOffset)])!;
+        private static readonly MethodInfo DateTimeOffsetAddTicks = typeof(DateTimeOffset)
+            .GetMethod(nameof(DateTimeOffset.AddTicks), [typeof(long)])!;
         private static readonly TimeSpanToTicksConverter DurationTicksConverter = new();
         private static readonly MethodInfo DateTimeAddDays = typeof(DateTime).GetMethod(nameof(DateTime.AddDays), [typeof(double)])!;
         private static readonly MethodInfo DateTimeAddHours = typeof(DateTime).GetMethod(nameof(DateTime.AddHours), [typeof(double)])!;
@@ -72,6 +74,8 @@ namespace OceanBase.EntityFrameworkCore.Query
             IDiagnosticsLogger<DbLoggerCategory.Query> logger)
         {
             if (TranslateConversion(instance, method, arguments) is { } conversion) return conversion;
+            if (instance is not null && method == DateTimeOffsetAddTicks && arguments.Count == 1)
+                return TranslateOffsetTickAddition(instance, arguments[0]);
 
             if (instance is not null && arguments.Count == 1
                 && (method == TimeOnlyAdd || method == TimeOnlyAddHours || method == TimeOnlyAddMinutes))
@@ -234,6 +238,49 @@ namespace OceanBase.EntityFrameworkCore.Query
             return sqlExpressionFactory.Function(marker,
                 [instance, days], nullable: true,
                 argumentsPropagateNullability: [false, false], instance.Type, dateMapping);
+        }
+
+        private SqlExpression? TranslateOffsetTickAddition(SqlExpression instance, SqlExpression amount)
+        {
+            var factory = sqlExpressionFactory;
+            instance = factory.ApplyDefaultTypeMapping(instance);
+            amount = factory.ApplyDefaultTypeMapping(amount);
+            if (instance.TypeMapping is not { } mapping || amount.TypeMapping is not { } amountMapping
+                || !IsTickOffsetMapping(amountMapping, mode)
+                || OceanBaseTemporalMemberTranslator.TranslateUtcDateTime(factory, mappingSource, mode, instance) is not { } utc)
+                return null;
+
+            var oracle = mode == OceanBaseCompatibilityMode.Oracle;
+            var timestamp = utc.TypeMapping!;
+            var local = oracle ? factory.Convert(instance, typeof(DateTime), timestamp) : utc;
+            var integer = mappingSource.FindMapping(typeof(long))!;
+            var maximum = factory.Constant(DateTime.MaxValue.Ticks - (oracle ? 0L : 9L), integer);
+            var valid = InRange(utc);
+            if (oracle) valid = factory.AndAlso(valid, InRange(local));
+
+            var adjusted = factory.Function(DateTimeAddTicksMarker, [local, amount], nullable: true,
+                argumentsPropagateNullability: [false, false], typeof(DateTime), timestamp);
+            var resultMapping = mapping.WithPrecisionAndScale(oracle ? 7 : 6, null);
+            SqlExpression result;
+            if (oracle)
+            {
+                var text = mappingSource.FindMapping(typeof(string))!;
+                var offset = factory.Function("TO_CHAR", [instance, factory.Constant("TZH:TZM", text)], nullable: true,
+                    argumentsPropagateNullability: [true, false], typeof(string), text);
+                result = factory.Function("FROM_TZ", [adjusted, offset], nullable: true,
+                    argumentsPropagateNullability: [true, true], typeof(DateTimeOffset), resultMapping);
+            }
+            else result = factory.Convert(adjusted, typeof(DateTimeOffset), resultMapping);
+
+            return factory.Case([new CaseWhenClause(valid, result)], elseResult: null);
+
+            SqlExpression InRange(SqlExpression stamp)
+            {
+                var ticks = factory.Function(OceanBaseTemporalMemberTranslator.DateTimeTicksMarker, [stamp], nullable: true,
+                    argumentsPropagateNullability: [false], typeof(long), integer);
+                return factory.AndAlso(factory.GreaterThanOrEqual(amount, factory.Negate(ticks)),
+                    factory.LessThanOrEqual(amount, factory.Subtract(maximum, ticks)));
+            }
         }
 
         private SqlExpression? TranslateConversion(SqlExpression? instance, MethodInfo method, IReadOnlyList<SqlExpression> arguments)

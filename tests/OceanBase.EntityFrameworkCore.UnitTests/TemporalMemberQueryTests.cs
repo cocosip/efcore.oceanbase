@@ -18,6 +18,51 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
     public sealed class TemporalMemberQueryTests
     {
         [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle)]
+        public void DateTimeOffset_AddTicks_guards_timestamp_range_and_preserves_native_offset(OceanBaseCompatibilityMode mode)
+        {
+            using var context = CreateContext(mode);
+            var adjustment = -20L;
+            var sql = context.Rows.Where(row => row.Zoned.AddTicks(adjustment).UtcTicks > 0)
+                .Select(row => (DateTimeOffset?)row.ConvertedZoned!.Value.AddTicks(adjustment)).ToQueryString();
+
+            var select = sql.Split("SELECT ", StringSplitOptions.None)[1].Split("WHERE ", StringSplitOptions.None)[0];
+            Assert.DoesNotContain("__oceanbase_internal", sql);
+            Assert.Contains("31553789759999999", sql);
+            Assert.Contains("CASE WHEN", select);
+            if (mode == OceanBaseCompatibilityMode.Oracle)
+            {
+                Assert.Contains("FROM_TZ", select);
+                Assert.Contains("TZH:TZM", select);
+                Assert.Contains("SYS_EXTRACT_UTC", select);
+                Assert.Contains("NUMTODSINTERVAL", select);
+            }
+            else
+            {
+                Assert.Contains("TIMESTAMPADD(MICROSECOND", select);
+                Assert.Contains("MOD(", select);
+                Assert.DoesNotContain("FROM_TZ", select);
+            }
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle)]
+        public void DateTimeOffset_AddTicks_uses_unconverted_bounds_and_composes_with_UtcNow(OceanBaseCompatibilityMode mode)
+        {
+            using var context = CreateContext(mode);
+            var sql = context.Rows.Select(row => DateTimeOffset.UtcNow.AddTicks(row.ConvertedTickAdjustment)).ToQueryString();
+            var maximum = mode == OceanBaseCompatibilityMode.MySql ? "3155378975999999990" : "3155378975999999999";
+
+            Assert.Contains("ConvertedTickAdjustment", sql);
+            Assert.Matches(@"<=\s*\(?" + maximum + @"\b", sql);
+            Assert.DoesNotMatch(@"<=\s*\(?-" + maximum + @"\b", sql);
+            if (mode == OceanBaseCompatibilityMode.Oracle)
+                Assert.Contains("FROM_TZ(CAST(SYS_EXTRACT_UTC(SYSTIMESTAMP) AS TIMESTAMP(7)), '+00:00')", sql);
+        }
+
+        [Theory]
         [InlineData(OceanBaseCompatibilityMode.MySql, false)]
         [InlineData(OceanBaseCompatibilityMode.MySql, true)]
         [InlineData(OceanBaseCompatibilityMode.Oracle, false)]
@@ -263,7 +308,7 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             Assert.DoesNotContain("__oceanbase_internal", sql);
             Assert.Contains(mode == OceanBaseCompatibilityMode.MySql
                 ? "UTC_TIMESTAMP(6)"
-                : "CAST(SYS_EXTRACT_UTC(SYSTIMESTAMP) AS TIMESTAMP(7))", sql);
+                : "FROM_TZ(CAST(SYS_EXTRACT_UTC(SYSTIMESTAMP) AS TIMESTAMP(7)), '+00:00')", sql);
         }
 
         [Theory]
@@ -1651,6 +1696,8 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
                     value => value.HasValue ? value.Value.Negate() : value, value => value.HasValue ? value.Value.Negate() : value);
                 modelBuilder.Entity<Row>().Property(row => row.ConvertedZoned).HasPrecision(3).HasConversion(
                     value => value.HasValue ? value.Value.AddMinutes(30) : value, value => value.HasValue ? value.Value.AddMinutes(-30) : value);
+                modelBuilder.Entity<Row>().Property(row => row.ConvertedTickAdjustment)
+                    .HasConversion(value => -value, value => -value);
             }
         }
 
@@ -1681,6 +1728,7 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             public DateOnly? ConvertedDay { get; set; }
             public TimeSpan? ConvertedDuration { get; set; }
             public DateTimeOffset? ConvertedZoned { get; set; }
+            public long ConvertedTickAdjustment { get; set; }
         }
     }
 }

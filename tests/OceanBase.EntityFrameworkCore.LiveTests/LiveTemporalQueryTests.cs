@@ -213,7 +213,8 @@ namespace OceanBase.EntityFrameworkCore.LiveTests
                         var beforeLocal = await Clock(false);
                         var beforeUtc = await Clock(true);
                         var query = context.Set<Row>().Where(row => row.Id == 1 && DateTime.UtcNow > new DateTime(1900, 1, 1))
-                            .Select(row => new { Now = DateTime.Now, Utc = DateTime.UtcNow, Today = DateTime.Today, OffsetUtc = DateTimeOffset.UtcNow });
+                            .Select(row => new { Now = DateTime.Now, Utc = DateTime.UtcNow, Today = DateTime.Today,
+                                OffsetUtc = DateTimeOffset.UtcNow, AdjustedOffsetUtc = (DateTimeOffset?)DateTimeOffset.UtcNow.AddTicks(10) });
                         var sql = query.ToQueryString();
                         Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? "CURRENT_TIMESTAMP(6)" : "CURRENT_TIMESTAMP AS TIMESTAMP", sql);
                         var value = Assert.Single(await Read(query, async));
@@ -223,6 +224,9 @@ namespace OceanBase.EntityFrameworkCore.LiveTests
                         Assert.InRange(value.Utc, beforeUtc, afterUtc);
                         Assert.InRange(value.OffsetUtc.UtcDateTime.Ticks, beforeUtc.Ticks, afterUtc.Ticks);
                         Assert.Equal(TimeSpan.Zero, value.OffsetUtc.Offset);
+                        Assert.NotNull(value.AdjustedOffsetUtc);
+                        Assert.Equal(TimeSpan.Zero, value.AdjustedOffsetUtc.Value.Offset);
+                        Assert.InRange(value.AdjustedOffsetUtc.Value.UtcTicks - 10, beforeUtc.Ticks, afterUtc.Ticks);
                         Assert.InRange(value.Today, beforeLocal.Date, afterLocal.Date);
                         Assert.Equal(TimeSpan.Zero, value.Today.TimeOfDay);
                         Assert.Equal(DateTimeKind.Unspecified, value.Now.Kind);

@@ -602,7 +602,7 @@ namespace OceanBase.EntityFrameworkCore.Query
 
                 Sql.Append(_mode == OceanBaseCompatibilityMode.MySql
                     ? "UTC_TIMESTAMP(6)"
-                    : "CAST(SYS_EXTRACT_UTC(SYSTIMESTAMP) AS TIMESTAMP(7))");
+                    : "FROM_TZ(CAST(SYS_EXTRACT_UTC(SYSTIMESTAMP) AS TIMESTAMP(7)), '+00:00')");
                 return sqlFunctionExpression;
             }
 

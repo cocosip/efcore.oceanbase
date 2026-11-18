@@ -114,6 +114,32 @@ public sealed class DateTimeCalendarAddFunctionalTests
     [InlineData(OceanBaseCompatibilityMode.MySql, true)]
     [InlineData(OceanBaseCompatibilityMode.Oracle, false)]
     [InlineData(OceanBaseCompatibilityMode.Oracle, true)]
+    public async Task DateTimeOffset_AddTicks_materializes_timezone_and_null(OceanBaseCompatibilityMode mode, bool async)
+    {
+        var oracle = mode == OceanBaseCompatibilityMode.Oracle;
+        var expected = new DateTimeOffset(2024, 2, 29, 23, 59, 59, oracle ? TimeSpan.FromMinutes(-30) : TimeSpan.Zero)
+            .AddTicks(oracle ? 9999999 : 9999990);
+        using var table = new DataTable();
+        table.Columns.Add("Value", oracle ? typeof(OceanBaseTimestampWithTimeZone) : typeof(DateTime));
+        table.Rows.Add(oracle ? (object)new OceanBaseTimestampWithTimeZone(expected) : expected.UtcDateTime);
+        table.Rows.Add(DBNull.Value);
+        var capture = new Capture(table);
+        await using var context = Create(mode, capture);
+        var adjustment = -20L;
+        var query = context.Rows.OrderBy(row => row.Id).Select(row => (DateTimeOffset?)row.Zoned!.Value.AddTicks(adjustment));
+
+        var result = async ? await query.ToListAsync() : query.ToList();
+        Assert.Equal(2, result.Count);
+        Assert.True(result[0]?.EqualsExact(expected));
+        Assert.Null(result[1]);
+        Assert.Contains(oracle ? "FROM_TZ" : "TIMESTAMPADD", Assert.Single(capture.Sql));
+    }
+
+    [Theory]
+    [InlineData(OceanBaseCompatibilityMode.MySql, false)]
+    [InlineData(OceanBaseCompatibilityMode.MySql, true)]
+    [InlineData(OceanBaseCompatibilityMode.Oracle, false)]
+    [InlineData(OceanBaseCompatibilityMode.Oracle, true)]
     public async Task DateTimeOffset_differences_materialize_exact_ticks_and_nulls(
         OceanBaseCompatibilityMode mode, bool async)
     {

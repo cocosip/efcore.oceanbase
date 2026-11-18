@@ -65,7 +65,7 @@ namespace OceanBase.EntityFrameworkCore.LiveTests
 
         internal static async Task Verify(Context context, OceanBaseCompatibilityMode mode, bool async, CancellationToken token)
         {
-            await VerifyOffsetDifferences(context, mode, async, token);
+            await VerifyOffsetArithmetic(context, mode, async, token);
             var rows = Rows(context, mode);
             var materialized = await List(rows.OrderBy(r => r.Id), async, token);
             Assert.Equal(new[] { 1, 2, 3, 4 }, materialized.Select(r => r.Id));
@@ -142,14 +142,17 @@ namespace OceanBase.EntityFrameworkCore.LiveTests
             await Assert.ThrowsAsync<InvalidOperationException>(() => List(rows.Where(r => r.Id == 3).Select(r => r.Value!.Value).DefaultIfEmpty(), async, token));
         }
 
-        private static async Task VerifyOffsetDifferences(Context context, OceanBaseCompatibilityMode mode, bool async, CancellationToken token)
+        private static async Task VerifyOffsetArithmetic(Context context, OceanBaseCompatibilityMode mode, bool async, CancellationToken token)
         {
             var oracle = mode == OceanBaseCompatibilityMode.Oracle;
             var anchor = new DateTimeOffset(2024, 3, 1, 0, 0, 0, TimeSpan.FromHours(6));
-            var sameInstant = anchor.ToOffset(TimeSpan.FromMinutes(-210));
+            var sameInstant = anchor.ToOffset(TimeSpan.FromMinutes(-30));
             var distant = new DateTimeOffset(1900, 1, 1, 0, 0, 0, TimeSpan.Zero);
             var fractional = sameInstant.AddTicks(oracle ? -19 : -10);
-            DateTimeOffset?[] values = [sameInstant, distant, fractional, null];
+            var maximum = oracle ? DateTimeOffset.MaxValue : DateTimeOffset.MaxValue.AddTicks(-9);
+            DateTimeOffset?[] values = [sameInstant, distant, fractional, null, DateTimeOffset.MinValue,
+                maximum.ToOffset(oracle ? TimeSpan.FromMinutes(-30) : TimeSpan.Zero),
+                oracle ? new DateTimeOffset(DateTime.MaxValue, TimeSpan.FromHours(6)) : null];
             var mapping = context.GetService<IRelationalTypeMappingSource>().FindMapping(typeof(DateTimeOffset))!;
             var quote = oracle ? "\"" : "`";
             var tail = oracle ? " FROM DUAL" : "";
@@ -167,8 +170,36 @@ namespace OceanBase.EntityFrameworkCore.LiveTests
 
             anchor = distant;
             Assert.Equal(values.Select(value => value?.Subtract(anchor)), await List(differences, async, token));
-            Assert.Equal(new[] { 0, 2 }, await List(rows.Where(row => row.Zoned!.Value.Subtract(anchor).Ticks > 0)
+            Assert.Equal(values.Select((value, index) => (value, index)).Where(pair => pair.value > anchor).Select(pair => pair.index),
+                await List(rows.Where(row => row.Zoned!.Value.Subtract(anchor).Ticks > 0)
                 .OrderBy(row => row.Id).Select(row => row.Id), async, token));
+
+            var adjustment = 0L;
+            var adjusted = rows.OrderBy(row => row.Id).Select(row => (DateTimeOffset?)row.Zoned!.Value.AddTicks(adjustment));
+            var step = oracle ? 1L : 10L;
+            foreach (var ticks in new[] { -20L, -step, 0L, step, 20L, 1L, long.MinValue, long.MaxValue })
+            {
+                adjustment = ticks;
+                var expected = values.Select(value => Expected(value, ticks));
+                var actual = await List(adjusted, async, token);
+                Assert.Equal(values.Length, actual.Count);
+                foreach (var (wanted, found) in expected.Zip(actual))
+                    if (wanted.HasValue) Assert.True(found?.EqualsExact(wanted.Value));
+                    else Assert.Null(found);
+            }
+
+            Assert.Null(Assert.Single(await List(rows.Where(row => row.Id == 0)
+                .Select(row => (DateTimeOffset?)row.Zoned!.Value.AddTicks((row.Id == 0 ? (long?)null : row.Id)!.Value)), async, token)));
+
+            DateTimeOffset? Expected(DateTimeOffset? value, long ticks)
+            {
+                if (!value.HasValue || ticks % step != 0) return null;
+                var stamp = oracle ? value.Value : value.Value.ToUniversalTime();
+                if ((decimal)stamp.UtcTicks + ticks < 0 || (decimal)stamp.UtcTicks + ticks > maximum.UtcTicks
+                    || (decimal)stamp.Ticks + ticks < 0 || (decimal)stamp.Ticks + ticks > maximum.Ticks)
+                    return null;
+                return stamp.AddTicks(ticks);
+            }
         }
 
         private static Task<List<T>> List<T>(IQueryable<T> query, bool async, CancellationToken token)
