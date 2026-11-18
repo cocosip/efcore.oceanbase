@@ -179,6 +179,12 @@ namespace OceanBase.EntityFrameworkCore.LiveTests
             var duration = TimeSpan.Zero;
             var added = rows.OrderBy(row => row.Id).Select(row => (DateTimeOffset?)row.Zoned!.Value.Add(duration));
             var subtracted = rows.OrderBy(row => row.Id).Select(row => (DateTimeOffset?)row.Zoned!.Value.Subtract(duration));
+            var amount = 0.0;
+            var numeric = rows.Where(row => row.Id <= 3).OrderBy(row => row.Id).Select(row => new DateTimeOffset?[]
+            {
+                row.Zoned!.Value.AddDays(amount), row.Zoned.Value.AddHours(amount), row.Zoned.Value.AddMinutes(amount),
+                row.Zoned.Value.AddSeconds(amount), row.Zoned.Value.AddMilliseconds(amount), row.Zoned.Value.AddMicroseconds(amount)
+            });
             var step = oracle ? 1L : 10L;
             foreach (var ticks in new[] { -20L, -step, 0L, step, 20L, 1L, 9_007_199_254_740_990L, long.MinValue, long.MaxValue })
             {
@@ -188,6 +194,35 @@ namespace OceanBase.EntityFrameworkCore.LiveTests
                 await VerifyValues(added, ticks);
                 await VerifyValues(subtracted, -(decimal)ticks);
             }
+
+            foreach (var increment in new[] { 1.125, -1.125, 1.0, -0.01, 0.0, 1_000_000.0000000001 })
+            {
+                amount = increment;
+                var actual = await List(numeric, async, token);
+                Assert.Equal(4, actual.Count);
+                foreach (var (value, row) in values.Take(4).Zip(actual))
+                {
+                    Assert.Equal(6, row.Length);
+                    if (!value.HasValue) { Assert.All(row, item => Assert.Null(item)); continue; }
+                    var stamp = oracle ? value.Value : value.Value.ToUniversalTime();
+                    var expected = new[] { stamp.AddDays(increment), stamp.AddHours(increment), stamp.AddMinutes(increment),
+                        stamp.AddSeconds(increment), stamp.AddMilliseconds(increment), stamp.AddMicroseconds(increment) };
+                    foreach (var (wanted, found) in expected.Zip(row))
+                        if (!oracle && wanted.UtcTicks % 10 != 0) Assert.Null(found);
+                        else Assert.True(found?.EqualsExact(wanted));
+                }
+            }
+
+            var numericEndpoints = rows.OrderBy(row => row.Id).Select(row => (DateTimeOffset?)row.Zoned!.Value.AddMicroseconds(amount));
+            foreach (var ticks in new[] { -step, 0L, step })
+            {
+                amount = ticks / 10.0;
+                await VerifyValues(numericEndpoints, ticks);
+            }
+
+            amount = 4_000_000;
+            Assert.All(await List(rows.Select(row => (DateTimeOffset?)row.Zoned!.Value.AddDays(amount)), async, token),
+                item => Assert.Null(item));
 
             async Task VerifyValues(IQueryable<DateTimeOffset?> query, decimal ticks)
             {

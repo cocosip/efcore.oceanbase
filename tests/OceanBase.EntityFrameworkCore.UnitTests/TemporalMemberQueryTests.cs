@@ -20,6 +20,29 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
         [Theory]
         [InlineData(OceanBaseCompatibilityMode.MySql)]
         [InlineData(OceanBaseCompatibilityMode.Oracle)]
+        public void DateTimeOffset_numeric_additions_keep_truncated_ticks_and_native_offset(OceanBaseCompatibilityMode mode)
+        {
+            using var context = CreateContext(mode);
+            var amount = 0.125;
+            var sql = context.Rows.Where(row => row.Zoned.AddDays(amount).UtcTicks != row.Zoned.UtcTicks)
+                .Select(row => new
+                {
+                    Days = row.Zoned.AddDays(amount), Hours = row.Zoned.AddHours(amount),
+                    Minutes = row.Zoned.AddMinutes(amount), Seconds = row.Zoned.AddSeconds(amount),
+                    Milliseconds = row.Zoned.AddMilliseconds(amount), Microseconds = row.Zoned.AddMicroseconds(amount)
+                }).ToQueryString();
+
+            var select = sql.Split("SELECT ", StringSplitOptions.None)[1].Split("WHERE ", StringSplitOptions.None)[0];
+            Assert.DoesNotContain("__oceanbase_internal", sql);
+            var suffix = mode == OceanBaseCompatibilityMode.MySql ? "E0" : "D";
+            foreach (var scale in new[] { 864000000000L, 36000000000L, 600000000L, 10000000L, 10000L, 10L })
+                Assert.Contains(" * " + scale + suffix, select);
+            Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? "MOD(" : "FROM_TZ", select);
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle)]
         public void DateTimeOffset_duration_arithmetic_uses_exact_scalars_and_native_duration_columns(OceanBaseCompatibilityMode mode)
         {
             using var context = CreateContext(mode);

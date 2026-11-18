@@ -166,7 +166,8 @@ DateTimeOffset.AddTicks(long), Add(TimeSpan) and Subtract(TimeSpan) preserve the
 offset on Oracle and return UTC on MySQL. Out-of-range results and MySQL adjustments finer than
 one microsecond return SQL NULL. Duration operands use exact scalar ticks, ordinary native
 TIME or INTERVAL columns, and tick-backed query results. Custom native duration converters reject.
-The remaining DateTimeOffset arithmetic methods are not covered by this profile.
+DateTimeOffset AddDays/AddHours/AddMinutes/AddSeconds/AddMilliseconds/AddMicroseconds use the
+same guarded whole- and fractional-tick truncation as DateTime. AddMonths and AddYears remain open.
 
 `Math.Acosh(double)` and `MathF.Acosh(float)` translate in both modes. They calculate in Double
 precision before applying the existing result mapping, including Single normalization. Finite input

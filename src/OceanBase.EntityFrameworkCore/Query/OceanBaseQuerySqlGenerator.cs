@@ -610,6 +610,9 @@ namespace OceanBase.EntityFrameworkCore.Query
                 or OceanBaseTemporalMethodTranslator.DateTimeAddYearsMarker)
                 return GenerateDateTimeCalendarAdd(sqlFunctionExpression);
 
+            if (sqlFunctionExpression.Name == OceanBaseTemporalMethodTranslator.DateTimeAddUnitTicksMarker)
+                return GenerateDateTimeAddUnitTicks(sqlFunctionExpression);
+
             if (sqlFunctionExpression.Name is OceanBaseTemporalMethodTranslator.DateTimeAddDurationMarker
                 or OceanBaseTemporalMethodTranslator.DateTimeSubtractDurationMarker)
                 return GenerateDateTimeDurationAdd(sqlFunctionExpression);

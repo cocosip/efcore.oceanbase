@@ -114,6 +114,36 @@ public sealed class DateTimeCalendarAddFunctionalTests
     [InlineData(OceanBaseCompatibilityMode.MySql, true)]
     [InlineData(OceanBaseCompatibilityMode.Oracle, false)]
     [InlineData(OceanBaseCompatibilityMode.Oracle, true)]
+    public async Task DateTimeOffset_numeric_additions_bind_refreshed_offsets(OceanBaseCompatibilityMode mode, bool async)
+    {
+        var oracle = mode == OceanBaseCompatibilityMode.Oracle;
+        var expected = new DateTimeOffset(2024, 3, 1, 0, 0, 0, oracle ? TimeSpan.FromMinutes(-30) : TimeSpan.Zero);
+        using var table = new DataTable();
+        table.Columns.Add("Value", oracle ? typeof(OceanBaseTimestampWithTimeZone) : typeof(DateTime));
+        table.Rows.Add(oracle ? (object)new OceanBaseTimestampWithTimeZone(expected) : expected.UtcDateTime);
+        table.Rows.Add(DBNull.Value);
+        var capture = new Capture(table);
+        await using var context = Create(mode, capture);
+        var amount = 0.125;
+        var query = context.Rows.Where(row => row.Zoned!.Value.AddDays(amount).UtcTicks > 0)
+            .Select(row => (DateTimeOffset?)row.Zoned!.Value.AddMicroseconds(amount));
+        foreach (var value in new[] { 0.125, -0.125 })
+        {
+            amount = value;
+            var result = async ? await query.ToListAsync() : query.ToList();
+            Assert.Equal(2, result.Count);
+            Assert.True(result[0]?.EqualsExact(expected));
+            Assert.Null(result[1]);
+            Assert.All(capture.Parameters[^1], parameter => Assert.Equal(value, parameter));
+        }
+        Assert.Equal(capture.Sql[0], capture.Sql[1]);
+    }
+
+    [Theory]
+    [InlineData(OceanBaseCompatibilityMode.MySql, false)]
+    [InlineData(OceanBaseCompatibilityMode.MySql, true)]
+    [InlineData(OceanBaseCompatibilityMode.Oracle, false)]
+    [InlineData(OceanBaseCompatibilityMode.Oracle, true)]
     public async Task DateTimeOffset_duration_arithmetic_binds_full_range_ticks(OceanBaseCompatibilityMode mode, bool async)
     {
         var oracle = mode == OceanBaseCompatibilityMode.Oracle;

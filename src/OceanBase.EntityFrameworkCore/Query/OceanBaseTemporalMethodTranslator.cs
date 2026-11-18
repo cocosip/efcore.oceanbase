@@ -31,6 +31,7 @@ namespace OceanBase.EntityFrameworkCore.Query
         internal const string DateTimeAddMillisecondsMarker = "__oceanbase_internal_datetime_add_milliseconds";
         internal const string DateTimeAddMicrosecondsMarker = "__oceanbase_internal_datetime_add_microseconds";
         internal const string DateTimeAddTicksMarker = "__oceanbase_internal_datetime_add_ticks";
+        internal const string DateTimeAddUnitTicksMarker = "__oceanbase_internal_datetime_add_unit_ticks";
         internal const string TimeOnlyFromTicksMarker = "__oceanbase_internal_timeonly_from_ticks";
         internal const string TimeOnlyHoursToTicksMarker = "__oceanbase_internal_timeonly_hours_to_ticks";
         internal const string TimeOnlyMinutesToTicksMarker = "__oceanbase_internal_timeonly_minutes_to_ticks";
@@ -71,7 +72,13 @@ namespace OceanBase.EntityFrameworkCore.Query
             [typeof(DateTime).GetMethod(nameof(DateTime.AddSeconds), [typeof(double)])!] = DateTimeAddSecondsMarker,
             [typeof(DateTime).GetMethod(nameof(DateTime.AddMilliseconds), [typeof(double)])!] = DateTimeAddMillisecondsMarker,
             [typeof(DateTime).GetMethod(nameof(DateTime.AddMicroseconds), [typeof(double)])!] = DateTimeAddMicrosecondsMarker,
-            [typeof(DateTime).GetMethod(nameof(DateTime.AddTicks), [typeof(long)])!] = DateTimeAddTicksMarker
+            [typeof(DateTime).GetMethod(nameof(DateTime.AddTicks), [typeof(long)])!] = DateTimeAddTicksMarker,
+            [typeof(DateTimeOffset).GetMethod(nameof(DateTimeOffset.AddDays), [typeof(double)])!] = DateTimeAddDaysMarker,
+            [typeof(DateTimeOffset).GetMethod(nameof(DateTimeOffset.AddHours), [typeof(double)])!] = DateTimeAddHoursMarker,
+            [typeof(DateTimeOffset).GetMethod(nameof(DateTimeOffset.AddMinutes), [typeof(double)])!] = DateTimeAddMinutesMarker,
+            [typeof(DateTimeOffset).GetMethod(nameof(DateTimeOffset.AddSeconds), [typeof(double)])!] = DateTimeAddSecondsMarker,
+            [typeof(DateTimeOffset).GetMethod(nameof(DateTimeOffset.AddMilliseconds), [typeof(double)])!] = DateTimeAddMillisecondsMarker,
+            [typeof(DateTimeOffset).GetMethod(nameof(DateTimeOffset.AddMicroseconds), [typeof(double)])!] = DateTimeAddMicrosecondsMarker
         };
 
         public SqlExpression? Translate(SqlExpression? instance, MethodInfo method, IReadOnlyList<SqlExpression> arguments,
@@ -180,6 +187,15 @@ namespace OceanBase.EntityFrameworkCore.Query
             }
 
             var numericAdd = NumericAddMarkers.TryGetValue(method, out var numericMarker);
+            if (instance is not null && arguments.Count == 1 && numericAdd && method.DeclaringType == typeof(DateTimeOffset))
+            {
+                var amount = sqlExpressionFactory.ApplyDefaultTypeMapping(arguments[0]);
+                if (amount.TypeMapping is not { } mapping || !IsNumericOffsetMapping(mapping, mode)) return null;
+                var unitTicks = sqlExpressionFactory.Function(DateTimeAddUnitTicksMarker,
+                    [amount, sqlExpressionFactory.Fragment(numericMarker!)], nullable: true,
+                    argumentsPropagateNullability: [false, false], typeof(long), mappingSource.FindMapping(typeof(long)));
+                return TranslateOffsetTickAddition(instance, unitTicks, subtract: false);
+            }
             var ticks = numericMarker == DateTimeAddTicksMarker;
             if (instance is not null && arguments.Count == 1 && (numericAdd || method == DateTimeAddDuration || method == DateTimeSubtractDuration))
             {

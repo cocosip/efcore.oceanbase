@@ -23,17 +23,7 @@ namespace OceanBase.EntityFrameworkCore.Query
                     : amountType != typeof(double) || !OceanBaseTemporalMethodTranslator.IsNumericOffsetMapping(amountMapping, _mode)))
                 throw new InvalidOperationException("Invalid internal DateTime numeric-add expression.");
 
-            var ticksPerUnit = expression.Name switch
-            {
-                OceanBaseTemporalMethodTranslator.DateTimeAddDaysMarker => TimeSpan.TicksPerDay,
-                OceanBaseTemporalMethodTranslator.DateTimeAddHoursMarker => TimeSpan.TicksPerHour,
-                OceanBaseTemporalMethodTranslator.DateTimeAddMinutesMarker => TimeSpan.TicksPerMinute,
-                OceanBaseTemporalMethodTranslator.DateTimeAddSecondsMarker => TimeSpan.TicksPerSecond,
-                OceanBaseTemporalMethodTranslator.DateTimeAddMillisecondsMarker => TimeSpan.TicksPerMillisecond,
-                OceanBaseTemporalMethodTranslator.DateTimeAddMicrosecondsMarker => TimeSpan.TicksPerMicrosecond,
-                _ => 1L
-            };
-            var scale = ticksPerUnit.ToString(CultureInfo.InvariantCulture);
+            var ticksPerUnit = ticks ? 1L : DateTimeAddTicksPerUnit(expression.Name);
             var amount = expression.Arguments[1];
             var limit = (DateTime.MaxValue.Ticks / ticksPerUnit).ToString(CultureInfo.InvariantCulture);
             Sql.Append(ticks ? "(CASE WHEN " : "(CASE WHEN ABS(");
@@ -46,9 +36,9 @@ namespace OceanBase.EntityFrameworkCore.Query
             {
                 // A CLR tick below MySQL's microsecond precision must not be rounded away.
                 Sql.Append("CASE WHEN MOD(");
-                AppendTicks();
+                AppendDateTimeAddTicks(amount, ticksPerUnit);
                 Sql.Append(", 10) = 0 THEN CAST(TIMESTAMPADD(MICROSECOND, (");
-                AppendTicks();
+                AppendDateTimeAddTicks(amount, ticksPerUnit);
                 Sql.Append(") / 10, ");
                 Visit(expression.Arguments[0]);
                 Sql.Append(") AS DATETIME(6)) END");
@@ -72,31 +62,65 @@ namespace OceanBase.EntityFrameworkCore.Query
                 Sql.Append("(CAST(");
                 Visit(expression.Arguments[0]);
                 Sql.Append(subtract ? " AS TIMESTAMP(7)) - NUMTODSINTERVAL(ABS(" : " AS TIMESTAMP(7)) + NUMTODSINTERVAL(ABS(");
-                AppendTicks();
+                AppendDateTimeAddTicks(amount, ticksPerUnit);
                 Sql.Append(") / 10000000, 'SECOND'))");
             }
+        }
 
-            void AppendTicks()
+        private Expression GenerateDateTimeAddUnitTicks(SqlFunctionExpression expression)
+        {
+            if (expression is not { IsBuiltIn: true, Schema: null, Instance: null, Arguments.Count: 2,
+                    IsNullable: true, ArgumentsPropagateNullability: [false, false], Type: var resultType,
+                    TypeMapping: { } resultMapping }
+                || resultType != typeof(long) || !OceanBaseTemporalMethodTranslator.IsTickOffsetMapping(resultMapping, _mode)
+                || expression.Arguments[0] is not { Type: var amountType, TypeMapping: { } amountMapping }
+                || amountType != typeof(double) || !OceanBaseTemporalMethodTranslator.IsNumericOffsetMapping(amountMapping, _mode)
+                || expression.Arguments[1] is not SqlFragmentExpression { Sql: var marker })
+                throw new InvalidOperationException("Invalid internal DateTime unit-to-ticks expression.");
+
+            var ticksPerUnit = DateTimeAddTicksPerUnit(marker);
+            var amount = expression.Arguments[0];
+            Sql.Append("(CASE WHEN ABS(");
+            Visit(amount);
+            Sql.Append(") <= ").Append((DateTime.MaxValue.Ticks / ticksPerUnit).ToString(CultureInfo.InvariantCulture)).Append(" THEN ");
+            AppendDateTimeAddTicks(amount, ticksPerUnit);
+            Sql.Append(" END)");
+            return expression;
+        }
+
+        private static long DateTimeAddTicksPerUnit(string marker)
+            => marker switch
             {
-                if (ticks)
-                {
-                    Sql.Append("CAST(");
-                    Visit(amount);
-                    Sql.Append(_mode == OceanBaseCompatibilityMode.MySql ? " AS DECIMAL(19,0))" : " AS NUMBER(19,0))");
-                    return;
-                }
-                // .NET AddUnits truncates the whole and fractional parts separately, before adding integer ticks.
-                Sql.Append("(CAST(");
-                AppendTruncatedAmount();
-                Sql.Append(_mode == OceanBaseCompatibilityMode.MySql ? " AS DECIMAL(19,0)) * " : " AS NUMBER(19,0)) * ");
-                Sql.Append(scale).Append(" + CAST(");
-                Sql.Append(_mode == OceanBaseCompatibilityMode.MySql ? "TRUNCATE((" : "TRUNC((");
+                OceanBaseTemporalMethodTranslator.DateTimeAddDaysMarker => TimeSpan.TicksPerDay,
+                OceanBaseTemporalMethodTranslator.DateTimeAddHoursMarker => TimeSpan.TicksPerHour,
+                OceanBaseTemporalMethodTranslator.DateTimeAddMinutesMarker => TimeSpan.TicksPerMinute,
+                OceanBaseTemporalMethodTranslator.DateTimeAddSecondsMarker => TimeSpan.TicksPerSecond,
+                OceanBaseTemporalMethodTranslator.DateTimeAddMillisecondsMarker => TimeSpan.TicksPerMillisecond,
+                OceanBaseTemporalMethodTranslator.DateTimeAddMicrosecondsMarker => TimeSpan.TicksPerMicrosecond,
+                _ => throw new InvalidOperationException("Invalid internal DateTime numeric-add unit.")
+            };
+
+        private void AppendDateTimeAddTicks(SqlExpression amount, long ticksPerUnit)
+        {
+            if (ticksPerUnit == 1L)
+            {
+                Sql.Append("CAST(");
                 Visit(amount);
-                Sql.Append(" - ");
-                AppendTruncatedAmount();
-                Sql.Append(") * ").Append(scale).Append(_mode == OceanBaseCompatibilityMode.MySql ? "E0" : "D");
-                Sql.Append(_mode == OceanBaseCompatibilityMode.MySql ? ", 0) AS DECIMAL(19,0)))" : ") AS NUMBER(19,0)))");
+                Sql.Append(_mode == OceanBaseCompatibilityMode.MySql ? " AS DECIMAL(19,0))" : " AS NUMBER(19,0))");
+                return;
             }
+
+            var scale = ticksPerUnit.ToString(CultureInfo.InvariantCulture);
+            Sql.Append("(CAST(");
+            AppendTruncatedAmount();
+            Sql.Append(_mode == OceanBaseCompatibilityMode.MySql ? " AS DECIMAL(19,0)) * " : " AS NUMBER(19,0)) * ");
+            Sql.Append(scale).Append(" + CAST(");
+            Sql.Append(_mode == OceanBaseCompatibilityMode.MySql ? "TRUNCATE((" : "TRUNC((");
+            Visit(amount);
+            Sql.Append(" - ");
+            AppendTruncatedAmount();
+            Sql.Append(") * ").Append(scale).Append(_mode == OceanBaseCompatibilityMode.MySql ? "E0" : "D");
+            Sql.Append(_mode == OceanBaseCompatibilityMode.MySql ? ", 0) AS DECIMAL(19,0)))" : ") AS NUMBER(19,0)))");
 
             void AppendTruncatedAmount()
             {
