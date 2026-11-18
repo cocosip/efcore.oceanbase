@@ -80,6 +80,45 @@ namespace OceanBase.EntityFrameworkCore.LiveTests
                 await HyperbolicBoundaries<float>(context, async, nameof(Row.Single), typeof(MathF), stage);
             });
 
+        [Theory]
+        [MemberData(nameof(Cases))]
+        public Task Acosh_preserves_domain_nulls_and_precision_across_finite_inputs(
+            OceanBaseCompatibilityMode mode, bool async, bool nulls)
+            => WithTable(mode, async, nulls, async (context, stage) =>
+            {
+                await Check(nameof(Row.Double), row => Math.Acosh(row.Double!.Value), Math.Acosh,
+                    [double.MinValue, 0d, Math.BitDecrement(1d), 1d, Math.BitIncrement(1d), 1.0000019, 1.0000021, 2d, 1e150, double.MaxValue], 5e-12);
+                await Check(nameof(Row.Single), row => MathF.Acosh(row.Single!.Value), MathF.Acosh,
+                    [float.MinValue, 0f, MathF.BitDecrement(1f), 1f, MathF.BitIncrement(1f), 1.0000019f, 1.0000021f, 2f, 1e30f, float.MaxValue], 3e-6);
+
+                async Task Check<T>(string property, Expression<Func<Row, T?>> projection, Func<T, T> expected,
+                    T[] inputs, double relativeTolerance) where T : struct
+                {
+                    var mapping = context.Model.FindEntityType(typeof(Row))!.FindProperty(property)!.GetRelationalTypeMapping();
+                    var helper = context.GetService<ISqlGenerationHelper>();
+                    var valueQuery = context.Set<Row>().Where(row => row.Id == 1).Select(projection);
+                    var selectDomain = valueQuery.Where(value => value != null);
+                    foreach (var input in inputs.Select(value => (T?)value).Append(null))
+                    {
+                        stage($"{typeof(T).Name}.Acosh finite boundary={input}");
+                        var sql = "UPDATE " + helper.DelimitIdentifier(context.Table) + " SET " + helper.DelimitIdentifier(property)
+                            + " = " + (input.HasValue ? mapping.GenerateSqlLiteral(input.Value) : "NULL")
+                            + " WHERE " + helper.DelimitIdentifier(nameof(Row.Id)) + " = 1";
+                        Assert.Equal(1, async ? await context.Database.ExecuteSqlRawAsync(sql) : context.Database.ExecuteSqlRaw(sql));
+                        if (!input.HasValue || Convert.ToDouble(input.Value) < 1)
+                        {
+                            Assert.Null(Assert.Single(await Read(valueQuery, async)));
+                            Assert.Empty(await Read(selectDomain, async));
+                            continue;
+                        }
+                        var actual = Convert.ToDouble(Assert.IsType<T>(Assert.Single(await Read(selectDomain, async))));
+                        var wanted = Convert.ToDouble(expected(input.Value));
+                        Assert.True(double.IsFinite(actual) && Math.Abs(actual - wanted) <= relativeTolerance * Math.Abs(wanted),
+                            $"Acosh({input}): expected={wanted:R},actual={actual:R}");
+                    }
+                }
+            });
+
         private static async Task HyperbolicBoundaries<T>(Context context, bool async, string property, Type owner, Action<string> stage) where T : struct
         {
             var single = typeof(T) == typeof(float);
@@ -245,7 +284,6 @@ namespace OceanBase.EntityFrameworkCore.LiveTests
                     rows.Where(row => Math.Round(row.Double!.Value, row.Id) > 0),
                     rows.Where(row => Math.Round(row.Decimal!.Value, 29) > 0),
                     rows.Where(row => MathF.Round(row.Single!.Value, 7) > 0),
-                    rows.Where(row => Math.Acosh(row.Positive!.Value) > 0),
                     rows.Where(row => Math.IEEERemainder(row.Double!.Value, 2) > 0)
                 ];
                 foreach (var candidate in rejected)

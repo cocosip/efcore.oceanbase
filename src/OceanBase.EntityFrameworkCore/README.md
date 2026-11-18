@@ -158,7 +158,13 @@ results, including UTC-valued projections and clocks, have Kind.Unspecified; cal
 must assign a Kind explicitly when constructing zoned application values. Same-carrier
 converter expressions operate in stored space; temporal-valued mapped results apply the
 inverse converter once. Other temporal methods and wider coercion/calendar combinations
-are not implied by this profile; QRY-07 remains open for its DateTimeOffset and Math.Acosh gaps.
+are not implied by this profile. QRY-07 remains open for its DateTimeOffset arithmetic gap.
+
+`Math.Acosh(double)` and `MathF.Acosh(float)` translate in both modes. They calculate in Double
+precision before applying the existing result mapping, including Single normalization. Finite input
+at or above 1 returns a numeric result. SQL NULL and finite input below 1 return SQL NULL. Use a
+nullable projection when a row can contain an out-of-domain value. Numeric mapping rejects nonfinite
+parameters and literals.
 
 Ordinary ordered queries have native coverage for OrderBy/ThenBy in both directions,
 Distinct, nonnegative Skip/Take, offset-only and empty pages. Use a final unique key

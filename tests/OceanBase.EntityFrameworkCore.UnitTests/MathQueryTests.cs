@@ -44,6 +44,19 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             }
         }
 
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle)]
+        public void Acosh_for_double_and_single_translates_in_predicates(OceanBaseCompatibilityMode mode)
+        {
+            using var context = CreateContext(mode);
+            var sql = context.Rows.Where(row => Math.Acosh(row.Double) > 0d && MathF.Acosh(row.Single) > 0f).ToQueryString();
+            Assert.Contains("CASE", sql);
+            Assert.Contains("SQRT(", sql);
+            Assert.Contains("LN(", sql);
+            Assert.DoesNotContain("ACOSH(", sql);
+        }
+
         [Fact]
         public void Oracle_binary_floating_sign_handles_zero_before_native_sign()
         {

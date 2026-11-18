@@ -90,6 +90,7 @@ namespace OceanBase.EntityFrameworkCore.Query
                 Add(owner, "Cosh", type, type, "COSH");
                 Add(owner, "Tanh", type, type, "TANH");
                 Add(owner, "Asinh", type, type, "ASINH");
+                Add(owner, "Acosh", type, type, "ACOSH");
                 Add(owner, "Atanh", type, type, "ATANH");
             }
             return functions;
@@ -132,7 +133,7 @@ namespace OceanBase.EntityFrameworkCore.Query
                 return null;
             if (function is "SQRT" or "EXP" or "LN" or "LOG" or "LOG2" or "LOG10" or "POWER"
                 or "SIN" or "COS" or "TAN" or "ASIN" or "ACOS" or "ATAN" or "ATAN2"
-                or "SINH" or "COSH" or "TANH" or "ASINH" or "ATANH")
+                or "SINH" or "COSH" or "TANH" or "ASINH" or "ACOSH" or "ATANH")
                 return TranslateTranscendental(function, method.ReturnType, inputs, mapping);
             var resultMapping = function == "SIGN" ? intMapping : mapping;
             var inputCarrier = Nullable.GetUnderlyingType(mapping.Converter?.ProviderClrType ?? mapping.ClrType)
@@ -252,7 +253,7 @@ namespace OceanBase.EntityFrameworkCore.Query
             var nativeType = single ? typeof(double) : returnType;
             var nativeMapping = single ? mappingSource.FindMapping(typeof(double))! : resultMapping;
             SqlExpression body;
-            if (function is "ASINH" or "ATANH"
+            if (function is "ASINH" or "ACOSH" or "ATANH"
                 || mode == OceanBaseCompatibilityMode.MySql && function is "SINH" or "COSH" or "TANH")
             {
                 body = TranslateHyperbolic(function, inputs[0], nativeType, nativeMapping);
@@ -318,6 +319,18 @@ namespace OceanBase.EntityFrameworkCore.Query
                 var large = Add(Native("LN", absolute), Number(Math.Log(2)));
                 result = Signed(Choose(sqlExpressionFactory.GreaterThan(absolute, Number(1e150)), large, ordinary));
                 result = Small(Taylor(-1d / 6, 3d / 40), result);
+            }
+            else if (function == "ACOSH")
+            {
+                var halfDistance = Multiply(Subtract(input, one), half);
+                var root = Native("SQRT", halfDistance);
+                var ordinary = Native("LN", Add(root, Native("SQRT", Add(one, halfDistance))));
+                var series = Multiply(root, Add(one, Multiply(halfDistance,
+                    Add(Number(-1d / 6), Multiply(halfDistance, Number(3d / 40))))));
+                var magnitude = Choose(sqlExpressionFactory.LessThan(halfDistance, Number(1e-6)), series, ordinary);
+                result = new CaseExpression(
+                    [new CaseWhenClause(sqlExpressionFactory.GreaterThanOrEqual(input, one), Result(Multiply(Number(2), magnitude)))],
+                    elseResult: null);
             }
             else
             {
