@@ -14,7 +14,7 @@ explicitly unsupported features, dependencies, and capabilities to confirm. Pre-
 - The current known unavailable/rejected capabilities are based on the code and package README. Supporting every BCL method is not an implicit Provider commitment.
   Add newly discovered valid requirements to their owning row or give them a new stable ID. Rejection of invalid inputs or malformed models/catalogs is validation, not a missing feature.
 
-Current counts: 50 G records (0 Not started, 0 In development, 26 Implemented, 2 Blocked, 20 Unsupported, 2 Deferred). The inventory also retains 2 Implemented F records, 10 external dependencies (B-01 through B-09 and C-03), 3 To confirm C records, and 4 Deferred D groups.
+Current counts: 50 G records (0 Not started, 0 In development, 26 Implemented, 2 Blocked, 20 Unsupported, 2 Deferred). The inventory also retains 2 Implemented F records, 10 external dependencies (B-01 through B-09 and C-03), 1 Blocked and 2 To confirm capability investigations, and 4 Deferred D groups.
 
 ## Development order
 
@@ -131,13 +131,13 @@ The Provider must not bypass them by changing the wire protocol, narrowing mappi
 | B-09 | SQL-02/DEF-06 | MySQL | Unsupported | Current Provider command adaptation supports only Input; repeated streams also cannot be safely reused; Output/InputOutput/ReturnValue require public driver contracts and explicit Provider integration | Provider + Connector |
 | C-03 | DEF-02 | Oracle | Blocked | Connector 0.3.1 exposes `IS_IDENTITY` in `GetSchema("Columns")`. The catalog lacks the generation mode and sequence options, so the Provider scaffolds `ValueGeneratedOnAdd` with a warning. Full fidelity requires public catalog fields for those facts and Provider mapping that preserves them in generated C# and DDL | Connector public catalog + Provider |
 
-## Capabilities to confirm
+## Capability investigations
 
 After investigation, record the result under Provider gaps, Connector/server dependencies, or release acceptance as appropriate. Preserve the original ID and distinguish a missing capability from missing evidence.
 
 | ID | Related feature | Status | Capability to confirm and next step |
 | --- | --- | --- | --- |
-| C-01 | DEF-08 | To confirm | NativeAOT/precompiled queries: separately check EF10 generation/runtime restrictions and Provider entry points; do not infer support from ordinary compiled model results |
+| C-01 | DEF-08 | Blocked | EF10 experimental query precompilation requires a generator and compiler that agree on the interceptor format. The Provider also needs a public code-generation path for integer readers and a MySQL command resolver that preserves positional binding. Close after generating, compiling and executing representative parameterized queries in both modes, including NativeAOT publication and execution for any NativeAOT claim |
 | C-02 | MAP-05/QRY-07 | To confirm | Named timezones/DST/non-Gregorian calendars and TIMESTAMP WITH LOCAL TIME ZONE: first check mapping/semantic contracts; numeric offset evidence is insufficient to determine completeness |
 | C-04 | DEF-08/QRY-08 | To confirm | Generated models support the tested combination of lazy-loading and change-tracking proxies when both options match at design time and runtime. Native execution belongs to release acceptance. Investigate broader proxy and inheritance combinations before extending the support scope. Nested lazy loading within streaming roots remains outside the single-active-reader contract |
 
