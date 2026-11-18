@@ -25,7 +25,7 @@ namespace OceanBase.EntityFrameworkCore.Storage
             var commands = new List<string>();
             foreach (var table in tables)
             {
-                if (table.Comment is not null || table.Triggers.Any()) throw Unsupported("table comments or triggers");
+                if (table.Triggers.Any()) throw Unsupported("table triggers");
                 var identities = table.Columns.Where(IsIdentity).ToArray();
                 if (identities.Length > 1 || identities.Length == 1
                     && (table.PrimaryKey is null || !table.PrimaryKey.Columns.Contains(identities[0])
@@ -47,7 +47,16 @@ namespace OceanBase.EntityFrameworkCore.Storage
                 {
                     definitions.Add("CONSTRAINT " + Q(check.Name!) + " CHECK (" + check.Sql + ")");
                 }
-                commands.Add("CREATE TABLE " + Table(table) + " (\n    " + string.Join(",\n    ", definitions) + "\n)");
+                var tableName = Table(table);
+                var create = "CREATE TABLE " + tableName + " (\n    " + string.Join(",\n    ", definitions) + "\n)";
+                if (!Oracle && table.Comment is not null)
+                    create += " COMMENT = " + OceanBaseCommentSql.Literal(table.Comment, oracle: false);
+                commands.Add(create);
+                if (!Oracle) continue;
+                if (table.Comment is not null)
+                    commands.Add(OceanBaseCommentSql.OracleStatement(tableName, null, table.Comment));
+                foreach (var column in table.Columns.Where(column => column.Comment is not null))
+                    commands.Add(OceanBaseCommentSql.OracleStatement(tableName, Q(column.Name), column.Comment));
             }
             foreach (var table in tables)
             {
@@ -80,10 +89,12 @@ namespace OceanBase.EntityFrameworkCore.Storage
 
         private string Column(IColumn column)
         {
-            if (column.Comment is not null || column.Collation is not null && Oracle)
+            if (column.Collation is not null && Oracle)
             {
-                throw Unsupported("column comments or Oracle column collations");
+                throw Unsupported("Oracle column collations");
             }
+            var comment = !Oracle && column.Comment is not null
+                ? " COMMENT " + OceanBaseCommentSql.Literal(column.Comment, oracle: false) : "";
             var collationSql = column.Collation is { } collation ? " COLLATE " + Q(collation) : "";
             if (column.ComputedColumnSql is { } computed)
             {
@@ -93,7 +104,7 @@ namespace OceanBase.EntityFrameworkCore.Storage
                 }
                 return Q(column.Name) + (Oracle ? "" : " " + column.StoreType + collationSql)
                     + " GENERATED ALWAYS AS (" + computed + ") " + (column.IsStored == true ? "STORED" : "VIRTUAL")
-                    + (column.IsNullable ? "" : " NOT NULL");
+                    + (column.IsNullable ? "" : " NOT NULL") + comment;
             }
             var identity = IsIdentity(column);
             foreach (var mapping in column.PropertyMappings)
@@ -121,7 +132,7 @@ namespace OceanBase.EntityFrameworkCore.Storage
             }
             definition += column.IsNullable ? " NULL" : " NOT NULL";
             if (identity && !Oracle) definition += " AUTO_INCREMENT";
-            return definition;
+            return definition + comment;
         }
 
         private string Q(string name) => sql.DelimitIdentifier(name);

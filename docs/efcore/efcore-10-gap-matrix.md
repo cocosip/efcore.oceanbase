@@ -14,7 +14,7 @@ explicitly unsupported features, dependencies, and capabilities to confirm. Pre-
 - The current known unavailable/rejected capabilities are based on the code and package README. Supporting every BCL method is not an implicit Provider commitment.
   Add newly discovered valid requirements to their owning row or give them a new stable ID. Rejection of invalid inputs or malformed models/catalogs is validation, not a missing feature.
 
-Current counts: 49 G records (9 Not started, 0 In development, 19 Implemented, 19 Unsupported, 2 Deferred). Also retained are 2 Implemented F records, 9 external dependency B records, 4 To confirm C records, and 4 Deferred D groups.
+Current counts: 49 G records (8 Not started, 0 In development, 20 Implemented, 19 Unsupported, 2 Deferred). Also retained are 2 Implemented F records, 9 external dependency B records, 4 To confirm C records, and 4 Deferred D groups.
 
 ## Development order
 
@@ -36,8 +36,8 @@ Prioritize missing Provider functionality before the pre-release acceptance camp
    without NULL compensation.
 6. G-18 implements the six IndexOf signatures with native character positions and guarded ranges.
    G-47 implements ordinary string and char Replace. G-48 implements guarded Insert. G-49 implements
-   non-truncating character padding. Next, implement table and column comment DDL (G-30).
-   Trigger metadata and scaffold fidelity remain subsequent Extension candidates,
+   non-truncating character padding. G-30 implements table and column comment DDL.
+   Next, adapt model trigger metadata (G-29), followed by scaffold fidelity candidates,
    selected by application value and Provider feasibility rather than a commitment to every BCL method.
    Investigate C items before classifying them as missing code;
    retain Unsupported/Deferred contracts and resolve B dependencies at their owning layer.
@@ -80,7 +80,7 @@ Acceptance requirements remain in the [release checklist](efcore-10-release-chec
 | G-27 | UPD-02/05 | MySQL readback shapes with multiple generated keys | Unsupported | Current scope limitation | MySQL / Provider + Server | Uniquely locate/return multiple generated values and reject unsupported shapes before DML | [Writes][writes] |
 | G-28 | DEF-07/06 | TPC store-generated key allocation across tables | Deferred | Related to D-06 | Both modes / Provider | Ensure uniqueness across the entire hierarchy; independent table identities are not a substitute; assigned/client Guid support is implemented | [Inheritance generated values][annotations] |
 | G-29 | MOD-03/SCH-02/DEF-01 | Model trigger metadata adaptation | Not started | Extension | Both modes / Provider | Accept/preserve valid trigger metadata and define its write effects; trigger SQL still requires explicit authoring | [DDL][schema] |
-| G-30 | SCH-02/DEF-01 | Table/column comment DDL | Not started | Extension | Both modes / Provider | Consistent create/alter/diff/script behavior and correct escaping; ordinary scaffold reads do not establish DDL support | [Migrations][migrations] |
+| G-30 | SCH-02/DEF-01 | Table/column comment DDL | Implemented | Extension | Both modes / Provider | Create scripts, schema creation and migrations preserve comments, with model diffs for adding, changing, clearing and reverting them. MySQL uses native COMMENT clauses and restates the column definition when modifying it. Oracle uses separate COMMENT ON statements. NUL and mode-dependent MySQL backslashes are rejected during generation | [DDL][schema], [Migrations][migrations] |
 | G-31 | SCH-02/DEF-01 | Database collation changes | Not started | Extension | Both modes / Provider + Server | Define valid DDL and its impact according to namespace ownership and the target OB version | [Migrations][migrations] |
 | G-32 | SCH-02/DEF-01 | Oracle column collation DDL | Unsupported | Current scope limitation | Oracle / Provider + Server | First confirm target version/type support; do not ignore the configuration | [DDL][schema] |
 | G-33 | SCH-02/DEF-01 | Filtered index DDL | Unsupported | Current scope limitation | Both modes / Provider + Server | Provide an equivalent approach supported by the target OB version; Filter is currently explicitly rejected | [DDL][schema] |

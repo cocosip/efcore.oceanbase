@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Data;
 using System.Data.Common;
 using System.Linq;
+using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
@@ -38,6 +39,8 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
             var forward = migrator.GenerateScript();
             Assert.Contains("__EFMigrationsHistory", forward);
             Assert.Contains("CREATE TABLE", forward);
+            Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? "table''s comment" : "table''''s comment", forward);
+            Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? "column''s comment" : "column''''s comment", forward);
             Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? "MODIFY COLUMN" : "MODIFY (", forward);
             Assert.Contains(Expand, forward);
             Assert.DoesNotContain("START TRANSACTION", forward);
@@ -46,6 +49,8 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
             Assert.Contains("DELETE FROM", reverse);
             var idempotent = migrator.GenerateScript(options: MigrationsSqlGenerationOptions.Idempotent);
             Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? "PREPARE" : "EXECUTE IMMEDIATE", idempotent);
+            Assert.Contains(mode == OceanBaseCompatibilityMode.MySql
+                ? Convert.ToHexString(Encoding.UTF8.GetBytes("table''s comment")) : "table''''s comment", idempotent);
             Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? "@ob_migration_apply" : "IF ob_count = 0 THEN", idempotent);
             var down = migrator.GenerateScript(Expand, Migration.InitialDatabase, MigrationsSqlGenerationOptions.Idempotent);
             Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? "@ob_migration_apply" : "IF ob_count > 0 THEN", down);
@@ -291,10 +296,10 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
         {
             builder.HasAnnotation("ProductVersion", "10.0.0");
             var row = builder.Entity("MigrationRow");
-            row.ToTable("Rows");
+            row.ToTable("Rows", table => table.HasComment("table's comment"));
             row.Property<int>("Id").ValueGeneratedOnAdd();
             row.HasKey("Id");
-            row.Property<string>("Code").HasMaxLength(evolved ? 64 : 32).IsRequired();
+            row.Property<string>("Code").HasMaxLength(evolved ? 64 : 32).IsRequired().HasComment("column's comment");
         }
 
         private sealed record Command(string Sql, bool Async);
@@ -394,8 +399,8 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
             => builder.CreateTable("Rows", columns: table => new
             {
                 Id = table.Column<int>(nullable: false).Annotation("OceanBase:Identity", true),
-                Code = table.Column<string>(maxLength: 32, nullable: false)
-            }, constraints: table => table.PrimaryKey("PK_Rows", row => row.Id));
+                Code = table.Column<string>(maxLength: 32, nullable: false, comment: "column's comment")
+            }, constraints: table => table.PrimaryKey("PK_Rows", row => row.Id), comment: "table's comment");
         protected override void Down(MigrationBuilder builder) => builder.DropTable("Rows");
         protected override void BuildTargetModel(ModelBuilder builder) => MigrationsTests.ConfigureModel(builder, false);
     }
@@ -405,9 +410,11 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
     public sealed class ExpandSchemaMigration : Migration
     {
         protected override void Up(MigrationBuilder builder)
-            => builder.AlterColumn<string>("Code", "Rows", maxLength: 64, nullable: false, oldClrType: typeof(string), oldMaxLength: 32);
+            => builder.AlterColumn<string>("Code", "Rows", maxLength: 64, nullable: false, oldClrType: typeof(string), oldMaxLength: 32,
+                comment: "column's comment", oldComment: "column's comment");
         protected override void Down(MigrationBuilder builder)
-            => builder.AlterColumn<string>("Code", "Rows", maxLength: 32, nullable: false, oldClrType: typeof(string), oldMaxLength: 64);
+            => builder.AlterColumn<string>("Code", "Rows", maxLength: 32, nullable: false, oldClrType: typeof(string), oldMaxLength: 64,
+                comment: "column's comment", oldComment: "column's comment");
         protected override void BuildTargetModel(ModelBuilder builder) => MigrationsTests.ConfigureModel(builder, true);
     }
 

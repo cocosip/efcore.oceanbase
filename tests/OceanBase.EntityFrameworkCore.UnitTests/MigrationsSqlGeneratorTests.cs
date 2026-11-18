@@ -284,12 +284,73 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
         private static string Sql(DbContext context, IReadOnlyList<MigrationOperation> operations)
             => string.Concat(context.GetService<IMigrationsSqlGenerator>().Generate(operations).Select(c => c.CommandText));
 
-        private static IModel Model(DbContext context, bool evolved)
+        [Theory]
+        [MemberData(nameof(Modes))]
+        public void Model_diffs_create_change_and_clear_table_and_column_comments(OceanBaseCompatibilityMode mode)
+        {
+            using var context = Create(mode);
+            var initial = Model(context, evolved: false, comment: "title's text");
+            var updated = Model(context, evolved: false, comment: "new comment");
+            var bare = Model(context, evolved: false);
+            var differ = context.GetService<IMigrationsModelDiffer>();
+            var generator = context.GetService<IMigrationsSqlGenerator>();
+            var create = generator.Generate(differ.GetDifferences(null, initial.GetRelationalModel()), initial);
+            var sql = string.Join("\n", create.Select(command => command.CommandText));
+            Assert.Contains("title''s text", sql);
+            Assert.Contains("base title''s text", sql);
+            Assert.All(create, command => Assert.True(command.TransactionSuppressed));
+            if (mode == OceanBaseCompatibilityMode.Oracle)
+            {
+                Assert.Contains("COMMENT ON TABLE \"Rows\" IS 'title''s text'", sql);
+                Assert.Contains("COMMENT ON COLUMN \"Rows\".\"Code\" IS 'base title''s text'", sql);
+            }
+            else
+            {
+                Assert.Contains(" COMMENT = 'title''s text'", sql);
+                Assert.Contains(" COMMENT 'base title''s text'", sql);
+            }
+
+            var changeOps = differ.GetDifferences(initial.GetRelationalModel(), updated.GetRelationalModel());
+            var change = string.Join("\n", generator.Generate(changeOps, updated, MigrationsSqlGenerationOptions.Script)
+                .Select(command => command.CommandText));
+            Assert.Contains("new comment", change);
+            Assert.Contains("base new comment", change);
+            if (mode == OceanBaseCompatibilityMode.Oracle) Assert.DoesNotContain("MODIFY", change);
+
+            var clear = string.Join("\n", generator.Generate(differ.GetDifferences(updated.GetRelationalModel(), bare.GetRelationalModel()), bare)
+                .Select(command => command.CommandText));
+            Assert.Contains("''", clear);
+            Assert.DoesNotContain("new comment", clear);
+            var rollback = string.Join("\n", generator.Generate(differ.GetDifferences(bare.GetRelationalModel(), initial.GetRelationalModel()), initial)
+                .Select(command => command.CommandText));
+            Assert.Contains("base title''s text", rollback);
+        }
+
+        [Theory]
+        [MemberData(nameof(Modes))]
+        public void Schema_comment_literals_reject_unrepresentable_inputs(OceanBaseCompatibilityMode mode)
+        {
+            using var context = Create(mode);
+            var operation = new AlterTableOperation { Name = "Rows", Comment = "invalid\0comment" };
+            Assert.Throws<NotSupportedException>(() => Sql(context, [operation]));
+            operation.Comment = "one\\two";
+            if (mode == OceanBaseCompatibilityMode.MySql)
+                Assert.Throws<NotSupportedException>(() => Sql(context, [operation]));
+            else
+                Assert.Contains("'one\\two'", Sql(context, [operation]));
+        }
+
+        private static IModel Model(DbContext context, bool evolved, string? comment = null)
         {
             var builder = new ModelBuilder(context.GetService<IConventionSetBuilder>().CreateConventionSet());
             var row = builder.Entity<Row>();
             row.ToTable("Rows");
             row.Property(r => r.Code).HasMaxLength(evolved ? 64 : 32).HasDefaultValue("can't");
+            if (comment is not null)
+            {
+                row.ToTable(table => table.HasComment(comment));
+                row.Property(r => r.Code).HasComment("base " + comment);
+            }
             if (evolved) row.Property<int?>("Revision");
             return context.GetService<IModelRuntimeInitializer>().Initialize(builder.FinalizeModel(), designTime: true);
         }

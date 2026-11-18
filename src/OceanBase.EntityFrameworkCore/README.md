@@ -471,6 +471,17 @@ if any ordinary table exists; it does not reconcile or upgrade existing schemas.
 can leave partially created objects requiring manual cleanup. Caller transactions are rejected. This option
 enables supported table creation and migrations in that existing namespace.
 
+Table and column comments configured with HasComment are included in create
+scripts and migrations. Migration diffs can add, replace or clear comments.
+Oracle emits separate COMMENT ON statements. MySQL uses COMMENT clauses and
+repeats the column definition when changing a column comment. Comment literals
+support quotes, Unicode and line breaks. NUL is rejected in both modes. MySQL
+rejects backslashes in comment literals because their interpretation depends on
+NO_BACKSLASH_ESCAPES and the target rejects hexadecimal comment literals.
+When running Oracle create scripts in SQL*Plus or a compatible client, use
+`SET DEFINE OFF` to preserve text containing ampersands. Oracle migration scripts
+already include this command.
+
 `Database.Migrate()` / `MigrateAsync()` now provide a locally tested migrations core for both modes under
 the same schema opt-in. It supports table/column/index/constraint changes, seed data, identity/default/computed
 metadata, history, upgrade/downgrade and idempotent scripts. Provision the namespace first; do not mix

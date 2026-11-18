@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -11,6 +12,7 @@ using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.EntityFrameworkCore.Update;
 using OceanBase.EntityFrameworkCore.Internal;
 using OceanBase.EntityFrameworkCore.Metadata;
+using OceanBase.EntityFrameworkCore.Storage;
 
 namespace OceanBase.EntityFrameworkCore.Migrations
 {
@@ -69,10 +71,7 @@ namespace OceanBase.EntityFrameworkCore.Migrations
                     throw Unsupported("sequence strategies or namespace creation/deletion");
                 case AlterDatabaseOperation database when database.Collation is not null || database.OldDatabase.Collation is not null:
                     throw Unsupported("database collations");
-                case AlterTableOperation table when table.Comment is not null || table.OldTable.Comment is not null:
-                    throw Unsupported("table comments");
                 case CreateTableOperation table:
-                    if (table.Comment is not null) throw Unsupported("table comments");
                     foreach (var column in table.Columns) ValidateColumn(column);
                     if (table.PrimaryKey is { } primary) ValidateAnnotations(primary);
                     foreach (var unique in table.UniqueConstraints) ValidateAnnotations(unique);
@@ -111,8 +110,8 @@ namespace OceanBase.EntityFrameworkCore.Migrations
         private void ValidateColumn(ColumnOperation column)
         {
             ValidateAnnotations(column);
-            if (column.Comment is not null || column.IsRowVersion || Oracle && column.Collation is not null)
-                throw Unsupported("column comments, rowversion or Oracle column collations");
+            if (column.IsRowVersion || Oracle && column.Collation is not null)
+                throw Unsupported("rowversion or Oracle column collations");
             if (IsIdentity(column) && (column.ClrType != typeof(int) && column.ClrType != typeof(long)
                 || column.IsNullable || column.DefaultValue is not null || column.DefaultValueSql is not null
                 || column.ComputedColumnSql is not null))
@@ -131,6 +130,54 @@ namespace OceanBase.EntityFrameworkCore.Migrations
         private static bool IsIdentity(ColumnOperation operation)
             => operation[OceanBaseRelationalAnnotationProvider.IdentityAnnotation] is true;
 
+        protected override void Generate(CreateTableOperation operation, IModel? model, MigrationCommandListBuilder builder,
+            bool terminate = true)
+        {
+            base.Generate(operation, model, builder, terminate: false);
+            if (!Oracle && operation.Comment is not null)
+                builder.Append(" COMMENT = ").Append(CommentLiteral(operation.Comment));
+
+            if (!terminate) return;
+            Finish(builder);
+            if (!Oracle) return;
+
+            if (operation.Comment is not null)
+                OracleComment(builder, operation.Name, operation.Schema, null, operation.Comment);
+            foreach (var column in operation.Columns.Where(column => column.Comment is not null))
+                OracleComment(builder, operation.Name, operation.Schema, column.Name, column.Comment);
+        }
+
+        protected override void Generate(AlterTableOperation operation, IModel? model, MigrationCommandListBuilder builder)
+        {
+            if (operation.Comment == operation.OldTable.Comment) return;
+            if (Oracle)
+            {
+                OracleComment(builder, operation.Name, operation.Schema, null, operation.Comment);
+                return;
+            }
+
+            builder.Append("ALTER TABLE ").Append(Q(operation.Name, operation.Schema))
+                .Append(" COMMENT = ").Append(CommentLiteral(operation.Comment));
+            Finish(builder);
+        }
+
+        protected override void Generate(AddColumnOperation operation, IModel? model, MigrationCommandListBuilder builder,
+            bool terminate = true)
+        {
+            base.Generate(operation, model, builder, terminate);
+            if (Oracle && terminate && operation.Comment is not null)
+                OracleComment(builder, operation.Table, operation.Schema, operation.Name, operation.Comment);
+        }
+
+        private void OracleComment(MigrationCommandListBuilder builder, string table, string? schema, string? column, string? comment)
+        {
+            builder.Append(OceanBaseCommentSql.OracleStatement(Q(table, schema), column is null ? null : Q(column), comment));
+            Finish(builder);
+        }
+
+        private string CommentLiteral(string? comment)
+            => OceanBaseCommentSql.Literal(comment, Oracle);
+
         protected override void ColumnDefinition(string? schema, string table, string name, ColumnOperation operation,
             IModel? model, MigrationCommandListBuilder builder)
         {
@@ -138,6 +185,7 @@ namespace OceanBase.EntityFrameworkCore.Migrations
             if (operation.ComputedColumnSql is not null)
             {
                 ComputedColumnDefinition(schema, table, name, operation, model, builder);
+                AppendMySqlColumnComment(operation, builder);
                 return;
             }
             var type = operation.ColumnType ?? GetColumnType(schema, table, name, operation, model);
@@ -151,6 +199,13 @@ namespace OceanBase.EntityFrameworkCore.Migrations
             if (!Oracle || operation is not AlterColumnOperation old || old.IsNullable != old.OldColumn.IsNullable)
                 builder.Append(operation.IsNullable ? " NULL" : " NOT NULL");
             if (!Oracle && IsIdentity(operation)) builder.Append(" AUTO_INCREMENT");
+            AppendMySqlColumnComment(operation, builder);
+        }
+
+        private void AppendMySqlColumnComment(ColumnOperation operation, MigrationCommandListBuilder builder)
+        {
+            if (!Oracle && (operation.Comment is not null || operation is AlterColumnOperation { OldColumn.Comment: not null }))
+                builder.Append(" COMMENT ").Append(CommentLiteral(operation.Comment));
         }
 
         protected override void ComputedColumnDefinition(string? schema, string table, string name, ColumnOperation operation,
@@ -181,15 +236,36 @@ namespace OceanBase.EntityFrameworkCore.Migrations
 
         protected override void Generate(AlterColumnOperation operation, IModel? model, MigrationCommandListBuilder builder)
         {
-            if (operation.ComputedColumnSql is not null || operation.OldColumn.ComputedColumnSql is not null
-                || IsIdentity(operation) != IsIdentity(operation.OldColumn) || IsIdentity(operation))
+            var old = operation.OldColumn;
+            var commentChanged = operation.Comment != old.Comment;
+            var commentOnly = commentChanged && SameColumnDefinition(operation, old);
+            if (Oracle && commentOnly)
+            {
+                OracleComment(builder, operation.Table, operation.Schema, operation.Name, operation.Comment);
+                return;
+            }
+
+            if (!commentOnly && (operation.ComputedColumnSql is not null || old.ComputedColumnSql is not null
+                || IsIdentity(operation) != IsIdentity(old) || IsIdentity(operation)))
                 throw Unsupported("altering computed or identity columns; use an explicit data-preserving migration");
             builder.Append("ALTER TABLE ").Append(Q(operation.Table, operation.Schema))
                 .Append(Oracle ? " MODIFY (" : " MODIFY COLUMN ");
             ColumnDefinition(operation.Schema, operation.Table, operation.Name, operation, model, builder);
             if (Oracle) builder.Append(")");
             Finish(builder);
+            if (Oracle && commentChanged)
+                OracleComment(builder, operation.Table, operation.Schema, operation.Name, operation.Comment);
         }
+
+        private static bool SameColumnDefinition(ColumnOperation column, ColumnOperation old)
+            => column.ClrType == old.ClrType && column.ColumnType == old.ColumnType
+                && column.IsUnicode == old.IsUnicode && column.IsFixedLength == old.IsFixedLength
+                && column.MaxLength == old.MaxLength && column.Precision == old.Precision && column.Scale == old.Scale
+                && column.IsNullable == old.IsNullable && column.IsRowVersion == old.IsRowVersion
+                && column.Collation == old.Collation && column.DefaultValueSql == old.DefaultValueSql
+                && StructuralComparisons.StructuralEqualityComparer.Equals(column.DefaultValue, old.DefaultValue)
+                && column.ComputedColumnSql == old.ComputedColumnSql && column.IsStored == old.IsStored
+                && IsIdentity(column) == IsIdentity(old);
 
         protected override void Generate(RenameColumnOperation operation, IModel? model, MigrationCommandListBuilder builder)
         {

@@ -63,10 +63,22 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
         }
 
         [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle)]
+        public void Create_script_preserves_table_and_column_comments(OceanBaseCompatibilityMode mode)
+        {
+            using var context = Create(mode, "comment");
+            var script = context.Database.GenerateCreateScript();
+            Assert.Contains("table''s description", script);
+            Assert.Contains("column''s description", script);
+            Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? " COMMENT = " : "COMMENT ON TABLE ", script);
+            Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? " COMMENT 'column" : "COMMENT ON COLUMN ", script);
+        }
+
+        [Theory]
         [InlineData("sequence")]
         [InlineData("trigger")]
         [InlineData("filter")]
-        [InlineData("comment")]
         [InlineData("unknown-default")]
         [InlineData("unknown-computed")]
         [InlineData("multiple-identity")]
@@ -206,7 +218,10 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
                     case "seed": row.HasData(new Generated { Id = 1, Caption = "seed" }); break;
                     case "trigger": row.ToTable(t => t.HasTrigger("Trigger")); break;
                     case "filter": row.HasIndex(r => r.BaseValue).HasFilter("BaseValue > 0"); break;
-                    case "comment": row.Property(r => r.Caption).HasComment("must not disappear"); break;
+                    case "comment":
+                        row.ToTable(table => table.HasComment("table's description"));
+                        row.Property(r => r.Caption).HasComment("column's description");
+                        break;
                     case "unknown-default": row.Property(r => r.Caption).HasDefaultValue(); break;
                     case "unknown-computed": row.Property(r => r.Twice).HasComputedColumnSql(); break;
                     case "multiple-identity":
