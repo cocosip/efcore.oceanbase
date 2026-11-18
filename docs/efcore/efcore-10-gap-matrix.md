@@ -14,7 +14,7 @@ explicitly unsupported features, dependencies, and capabilities to confirm. Pre-
 - The current known unavailable/rejected capabilities are based on the code and package README. Supporting every BCL method is not an implicit Provider commitment.
   Add newly discovered valid requirements to their owning row or give them a new stable ID. Rejection of invalid inputs or malformed models/catalogs is validation, not a missing feature.
 
-Current counts: 50 G records (4 Not started, 0 In development, 23 Implemented, 1 Blocked, 20 Unsupported, 2 Deferred). Also retained are 2 Implemented F records, 9 external dependency B records, 4 To confirm C records, and 4 Deferred D groups.
+Current counts: 50 G records (3 Not started, 0 In development, 24 Implemented, 1 Blocked, 20 Unsupported, 2 Deferred). Also retained are 2 Implemented F records, 9 external dependency B records, 4 To confirm C records, and 4 Deferred D groups.
 
 ## Development order
 
@@ -71,7 +71,7 @@ Acceptance requirements remain in the [release checklist](efcore-10-release-chec
 | G-16 | QRY-06 | Remove(int), Remove(int,int) | Implemented | Extension | Both modes / Provider | OceanBaseStringTranslator uses native character counts and stored text, with start in [0,length] and count in [0,length-start]; invalid/NULL SQL bounds or NULL source return NULL. Guarded substring/concat uses long arithmetic, variable text/national/LOB families and the receiver's inverse converter exactly once. Oracle guarded empty results are NULL, including LOBs; bare Substring retains its separate native contract. Constants/refreshed parameters/independently nullable columns/composition, fixed/national/LOB text and extreme bounds are covered | [Strings][strings] |
 | G-17 | QRY-06 | StringComparison, culture/Invariant overloads | Unsupported | Current scope limitation | Both modes / Provider + Server | Lift only with a per-signature approach that preserves comparison semantics; do not assume equivalence to DB collation | [Strings][strings] |
 | G-18 | QRY-06 | IndexOf(string/char), IndexOf(string/char,int), IndexOf(string/char,int,int) | Implemented | Extension | Both modes / Provider | OceanBaseStringIndexOfTranslator uses native character counts/collation, zero-based positions or -1, guarded wide start/count arithmetic, SQL NULL results for NULL inputs or invalid ranges, and contextual needle mappings. Oracle distinguishes known empty scalar needles from NULL. Constants, refreshed parameters, nullable columns and composition are covered. See G-47 for the remaining families | [IndexOf][indexof] |
-| G-19 | QRY-05/03 | FirstOrDefault/SingleOrDefault/DefaultIfEmpty overloads with explicit default values | Not started | Extension | Both modes / Provider | Distinguish an existing source row whose value is NULL from an empty source; support parameterized default values and composition | [Queries][roots] |
+| G-19 | QRY-05/03 | FirstOrDefault/SingleOrDefault/DefaultIfEmpty overloads with explicit scalar defaults | Implemented | Extension | Both modes / Provider | Row presence distinguishes an empty source from an existing NULL result. Supports mapped scalar defaults, including captured parameters. SingleOrDefault with an explicit default is limited to the terminal query so multiple rows are detected. Explicit defaults for entities and structured projections are unsupported | [Query normalization][defaults] |
 | G-20 | QRY-02/03 | Custom comparers for ordering, joins, membership, and set operations | Unsupported | Current scope limitation | Both modes / Provider + Server | Add support only for specific comparers that can be translated consistently with SQL comparison rules | [Queries][roots] |
 | G-21 | QRY-03/DEF-04 | Primitive collection translation using a single JSON parameter | Deferred | Related to D-04 | Both modes / Provider | Establish a separate JSON SQL/type contract; preserve existing Constant/MultipleParameters support | [Queries][roots] |
 | G-22 | QRY-03 | Oracle contextual CHAR/NCHAR collection roots | Unsupported | Current scope limitation | Oracle / Provider | Preserve fixed blank-padding comparison; do not use TO_CHAR/TO_NCHAR as a supposedly equivalent fixed-length replacement | [SQL][sqlgenerator] |
@@ -156,6 +156,7 @@ Do not remove data precision/NULL/ownership validation or intentional rejections
 [schema]: ../../src/OceanBase.EntityFrameworkCore/Storage/OceanBaseSchemaSqlGenerator.cs
 [sqlgenerator]: ../../src/OceanBase.EntityFrameworkCore/Query/OceanBaseQuerySqlGenerator.cs
 [roots]: ../../src/OceanBase.EntityFrameworkCore/Query/OceanBaseQueryableMethodTranslatingExpressionVisitorFactory.cs
+[defaults]: ../../src/OceanBase.EntityFrameworkCore/Query/OceanBaseQueryTranslationPreprocessorFactory.cs
 [strings]: ../../src/OceanBase.EntityFrameworkCore/Query/OceanBaseStringTranslator.cs
 [indexof]: ../../src/OceanBase.EntityFrameworkCore/Query/OceanBaseStringIndexOfTranslator.cs
 [trim]: ../../src/OceanBase.EntityFrameworkCore/Query/OceanBaseExplicitTrimTranslator.cs

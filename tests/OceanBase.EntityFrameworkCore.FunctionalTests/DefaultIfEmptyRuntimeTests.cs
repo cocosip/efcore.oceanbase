@@ -579,7 +579,7 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
             var commands = new Commands();
             await using var context = Create(mode, commands);
             var rows = context.Set<Row>();
-            await Assert.ThrowsAsync<InvalidOperationException>(() => Run(rows.Select(r => r.Id).DefaultIfEmpty(42), async));
+            await Assert.ThrowsAsync<InvalidOperationException>(() => Run(rows.DefaultIfEmpty(new Row { Id = 42 }), async));
             await Assert.ThrowsAsync<InvalidOperationException>(() => Run(rows.Select(r => r.Id).DefaultIfEmpty().Where(value => Local(value)), async));
             Assert.Equal(0, commands.Openings.Count);
             Assert.Empty(commands.Items);

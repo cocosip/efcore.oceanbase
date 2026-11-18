@@ -11,6 +11,26 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
     {
         [Theory]
         [MemberData(nameof(Modes))]
+        public void Explicit_scalar_defaults_depend_on_row_presence_in_composed_queries(OceanBaseCompatibilityMode mode)
+        {
+            using var context = Create(mode);
+            var rows = context.Set<Row>();
+            int? fallback = 42;
+            var defaults = rows.Where(row => row.Id > 20).Select(row => row.Value).DefaultIfEmpty(fallback);
+            var composed = Flat(defaults.Where(value => value == fallback).ToQueryString());
+            Assert.Contains("LEFT JOIN", composed);
+            Assert.Contains("CASE", composed);
+            Assert.Contains("IS NULL", composed);
+            Assert.DoesNotContain("COALESCE", composed);
+
+            var terminal = Flat(rows.Where(row => rows.OrderBy(child => child.Id).Select(child => child.Value)
+                .FirstOrDefault(fallback) == row.Value).ToQueryString());
+            Assert.Contains("CASE", terminal);
+            Assert.Contains("LEFT JOIN", terminal);
+        }
+
+        [Theory]
+        [MemberData(nameof(Modes))]
         public void Reference_defaults_project_presence_inside_the_original_source(OceanBaseCompatibilityMode mode)
         {
             using var context = Create(mode);
@@ -159,10 +179,20 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
 
         [Theory]
         [MemberData(nameof(Modes))]
-        public void Explicit_default_overload_is_rejected(OceanBaseCompatibilityMode mode)
+        public void Explicit_entity_default_is_rejected(OceanBaseCompatibilityMode mode)
         {
             using var context = Create(mode);
-            Assert.Throws<InvalidOperationException>(() => context.Set<Row>().Select(r => r.Id).DefaultIfEmpty(42).ToQueryString());
+            Assert.Throws<InvalidOperationException>(() => context.Set<Row>().DefaultIfEmpty(new Row { Id = 42 }).ToQueryString());
+        }
+
+        [Theory]
+        [MemberData(nameof(Modes))]
+        public void Explicit_SingleOrDefault_does_not_reduce_a_multirow_subquery_to_one_row(OceanBaseCompatibilityMode mode)
+        {
+            using var context = Create(mode);
+            var rows = context.Set<Row>();
+            Assert.Throws<InvalidOperationException>(() => rows.Select(parent => rows.Where(child => child.Id > parent.Id)
+                .Select(child => child.Value).SingleOrDefault(42)).ToQueryString());
         }
 
         [Theory]

@@ -257,8 +257,8 @@ text capacity for the source family.
 
 First/FirstOrDefault/Single/SingleOrDefault and ordinary predicate overloads have
 sync/async native coverage for empty, one and multiple rows with entity, scalar,
-nullable, converter and reference projections. Comparer and explicit default-value
-overloads are excluded. Ordinary duplicate-entity queries separately verify tracked,
+nullable, converter and reference projections. Comparer overloads are excluded.
+Ordinary duplicate-entity queries separately verify tracked,
 untracked and identity-resolution behavior. The ordinary graph profile below has separate
 native evidence; broader official runtime families retain their own acceptance requirements.
 
@@ -276,8 +276,14 @@ Parameterless `DefaultIfEmpty` has local coverage for ordinary scalar/converter 
 objects, DTOs, constructed mapped CLR types and boxed scalar projections, including per-parent paging.
 A missing source returns null for reference projections; a present row with NULL members remains an
 object. Required reads of nullable scalar expressions still throw for present NULL, while missing rows
-receive their CLR default. EF retains entity tracking. Explicit-default overloads remain unsupported;
-arbitrary client projections and native OceanBase results are not established by this local profile.
+receive their CLR default. EF retains entity tracking.
+
+`Queryable.DefaultIfEmpty`, `FirstOrDefault`, and `SingleOrDefault` support explicit defaults for
+mapped scalar projections in both modes. A present row whose value is NULL retains that NULL.
+Captured defaults in composed queries are evaluated for the current execution. An ordered
+`FirstOrDefault` applies ordering before taking the first row. Explicit `SingleOrDefault` defaults
+are supported only at the query root, where EF checks for multiple rows. Explicit defaults for
+entities and structured projections are unsupported.
 
 Enable EF operation retries explicitly for replayable queries and writes:
 

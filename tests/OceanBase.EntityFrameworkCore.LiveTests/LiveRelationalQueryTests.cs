@@ -33,6 +33,51 @@ namespace OceanBase.EntityFrameworkCore.LiveTests
 
         [Theory]
         [MemberData(nameof(Cases))]
+        public Task Explicit_scalar_defaults_use_only_a_missing_row(OceanBaseCompatibilityMode mode, bool async, bool relationalNulls)
+            => WithTable(mode, async, relationalNulls, async (context, stage) =>
+            {
+                var rows = context.Set<Row>();
+                var empty = rows.Where(row => row.Id < 0);
+                var presentNull = rows.Where(row => row.Id == 3);
+                int? fallback = 42;
+                stage("explicit DefaultIfEmpty with nullable, nonnullable and converted results");
+                var padded = empty.Select(row => row.Score).DefaultIfEmpty(fallback).Where(value => value > 0);
+                Assert.Equal(new int?[] { 42 }, await Read(padded, async));
+                Assert.Null(Assert.Single(await Read(presentNull.Select(row => row.Score).DefaultIfEmpty(fallback), async)));
+                Assert.Equal(new[] { 42 }, await Read(empty.Select(row => row.Id).DefaultIfEmpty(42), async));
+                Assert.Equal(new[] { Rank.High }, await Read(empty.Select(row => row.Rank).DefaultIfEmpty(Rank.High), async));
+                Assert.Equal(new[] { "none" }, await Read(empty.Select(row => row.Label).DefaultIfEmpty("none"), async));
+                fallback = null;
+                Assert.Null(Assert.Single(await Read(empty.Select(row => row.Score).DefaultIfEmpty(fallback), async)));
+
+                stage("explicit FirstOrDefault in a correlated scalar projection");
+                fallback = 42;
+                var first = rows.OrderBy(row => row.Id).Select(parent => rows.OrderBy(child => child.Id)
+                    .Select(child => child.Id == 3 ? child.Score : null)
+                    .FirstOrDefault(value => parent.Id == 0, fallback));
+                Assert.All(await Read(first, async), value => Assert.Equal(fallback, value));
+                var correlated = rows.OrderBy(row => row.Id).Select(parent => rows.Where(child => child.Id == parent.Id + 1)
+                    .Select(child => child.Score).FirstOrDefault(fallback));
+                Assert.Equal(new int?[] { 20, null, 40, 50, null, 42 }, await Read(correlated, async));
+                fallback = 43;
+                Assert.Equal(new int?[] { 20, null, 40, 50, null, 43 }, await Read(correlated, async));
+
+                if (async) return;
+                stage("explicit terminal defaults and cardinality");
+                var scores = rows.OrderBy(row => row.Id).Select(row => row.Score);
+                Assert.Equal(10, scores.FirstOrDefault(fallback));
+                Assert.Equal(fallback, empty.Select(row => row.Score).FirstOrDefault(fallback));
+                Assert.Null(scores.FirstOrDefault(value => value == null, fallback));
+                Assert.Equal(fallback, scores.FirstOrDefault(value => value > 100, fallback));
+                Assert.Null(presentNull.Select(row => row.Score).SingleOrDefault(fallback));
+                Assert.Equal(fallback, scores.SingleOrDefault(value => value > 100, fallback));
+                Assert.Equal(20, scores.SingleOrDefault(value => value == 20, fallback));
+                Assert.Throws<InvalidOperationException>(() => scores.SingleOrDefault(fallback));
+                Assert.Throws<InvalidOperationException>(() => scores.SingleOrDefault(value => value > 15, fallback));
+            });
+
+        [Theory]
+        [MemberData(nameof(Cases))]
         public async Task Inner_left_cross_and_nullable_composite_joins_preserve_rows(OceanBaseCompatibilityMode mode, bool async, bool relationalNulls)
             => await WithTable(mode, async, relationalNulls, async (context, stage) =>
             {
