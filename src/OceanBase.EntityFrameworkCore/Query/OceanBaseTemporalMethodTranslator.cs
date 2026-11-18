@@ -37,6 +37,13 @@ namespace OceanBase.EntityFrameworkCore.Query
         private static readonly MethodInfo TimeOnlyAdd = typeof(TimeOnly).GetMethod(nameof(TimeOnly.Add), [typeof(TimeSpan)])!;
         private static readonly MethodInfo TimeOnlyAddHours = typeof(TimeOnly).GetMethod(nameof(TimeOnly.AddHours), [typeof(double)])!;
         private static readonly MethodInfo TimeOnlyAddMinutes = typeof(TimeOnly).GetMethod(nameof(TimeOnly.AddMinutes), [typeof(double)])!;
+        private static readonly MethodInfo DateOnlyFromDateTime = typeof(DateOnly).GetMethod(nameof(DateOnly.FromDateTime), [typeof(DateTime)])!;
+        private static readonly MethodInfo TimeOnlyFromDateTime = typeof(TimeOnly).GetMethod(nameof(TimeOnly.FromDateTime), [typeof(DateTime)])!;
+        private static readonly MethodInfo TimeOnlyFromTimeSpan = typeof(TimeOnly).GetMethod(nameof(TimeOnly.FromTimeSpan), [typeof(TimeSpan)])!;
+        private static readonly MethodInfo TimeOnlyToTimeSpan = typeof(TimeOnly).GetMethod(nameof(TimeOnly.ToTimeSpan), Type.EmptyTypes)!;
+        private static readonly MethodInfo DateOnlyToDateTime = typeof(DateOnly).GetMethod(nameof(DateOnly.ToDateTime), [typeof(TimeOnly)])!;
+        private static readonly MethodInfo DateOnlyToDateTimeKind = typeof(DateOnly).GetMethod(nameof(DateOnly.ToDateTime), [typeof(TimeOnly), typeof(DateTimeKind)])!;
+        private static readonly MethodInfo TimeOnlyIsBetween = typeof(TimeOnly).GetMethod(nameof(TimeOnly.IsBetween), [typeof(TimeOnly), typeof(TimeOnly)])!;
         private static readonly MethodInfo DateOnlyAddDays = typeof(DateOnly).GetMethod(nameof(DateOnly.AddDays), [typeof(int)])!;
         private static readonly MethodInfo DateOnlyAddMonths = typeof(DateOnly).GetMethod(nameof(DateOnly.AddMonths), [typeof(int)])!;
         private static readonly MethodInfo DateOnlyAddYears = typeof(DateOnly).GetMethod(nameof(DateOnly.AddYears), [typeof(int)])!;
@@ -62,6 +69,8 @@ namespace OceanBase.EntityFrameworkCore.Query
         public SqlExpression? Translate(SqlExpression? instance, MethodInfo method, IReadOnlyList<SqlExpression> arguments,
             IDiagnosticsLogger<DbLoggerCategory.Query> logger)
         {
+            if (TranslateConversion(instance, method, arguments) is { } conversion) return conversion;
+
             if (instance is not null && arguments.Count == 1
                 && (method == TimeOnlyAdd || method == TimeOnlyAddHours || method == TimeOnlyAddMinutes))
             {
@@ -193,6 +202,92 @@ namespace OceanBase.EntityFrameworkCore.Query
             return sqlExpressionFactory.Function(marker,
                 [instance, days], nullable: true,
                 argumentsPropagateNullability: [false, false], instance.Type, dateMapping);
+        }
+
+        private SqlExpression? TranslateConversion(SqlExpression? instance, MethodInfo method, IReadOnlyList<SqlExpression> arguments)
+        {
+            var factory = sqlExpressionFactory;
+            if (instance is null && arguments.Count == 1 && (method == DateOnlyFromDateTime || method == TimeOnlyFromDateTime))
+            {
+                var stamp = factory.ApplyDefaultTypeMapping(arguments[0]);
+                if (stamp.TypeMapping is not { } stampMapping || !IsDateTimeCalendarMapping(stampMapping, mode)) return null;
+                return method == DateOnlyFromDateTime
+                    ? factory.Function(mode == OceanBaseCompatibilityMode.MySql ? "DATE" : "TRUNC", [stamp],
+                        nullable: true, argumentsPropagateNullability: [false], typeof(DateOnly), mappingSource.FindMapping(typeof(DateOnly)))
+                    : factory.Function(OceanBaseTemporalMemberTranslator.TimeOfDayMarker, [stamp],
+                        nullable: true, argumentsPropagateNullability: [false], typeof(TimeOnly), mappingSource.FindMapping(typeof(TimeOnly)));
+            }
+
+            if (instance is null && arguments.Count == 1 && method == TimeOnlyFromTimeSpan)
+            {
+                var amount = factory.ApplyDefaultTypeMapping(arguments[0]);
+                var integer = mappingSource.FindMapping(typeof(long))!;
+                var tickMapping = (RelationalTypeMapping)integer.WithComposedConverter(DurationTicksConverter);
+                if (amount is SqlConstantExpression constant) amount = constant.ApplyTypeMapping(tickMapping);
+                else if (amount is SqlParameterExpression parameter) amount = parameter.ApplyTypeMapping(tickMapping);
+                SqlExpression ticks;
+                if (IsTickDurationMapping(amount.TypeMapping)) ticks = factory.Convert(amount, typeof(long), integer);
+                else if (amount.TypeMapping is { } durationMapping && IsDurationMapping(durationMapping, mode))
+                    ticks = factory.Function(OceanBaseTemporalMemberTranslator.TicksMarker, [amount], nullable: true,
+                        argumentsPropagateNullability: [false], typeof(long), integer);
+                else return null;
+                // FromTimeSpan validates a clock range; unlike Add it must never wrap invalid durations.
+                var valid = factory.AndAlso(factory.GreaterThanOrEqual(ticks, factory.Constant(0L, integer)),
+                    factory.LessThan(ticks, factory.Constant(TimeSpan.TicksPerDay, integer)));
+                var guarded = factory.Case([new CaseWhenClause(valid, ticks)], new SqlConstantExpression(null, typeof(long), integer));
+                return factory.Function(TimeOnlyFromTicksMarker, [guarded], nullable: true,
+                    argumentsPropagateNullability: [false], typeof(TimeOnly), mappingSource.FindMapping(typeof(TimeOnly)));
+            }
+
+            if (instance is null) return null;
+            if (method == TimeOnlyToTimeSpan && arguments.Count == 0)
+            {
+                instance = factory.ApplyDefaultTypeMapping(instance);
+                return instance.TypeMapping is { } clockMapping && IsClockMapping(clockMapping, mode)
+                    ? factory.Convert(instance, typeof(TimeSpan), mappingSource.FindMapping(typeof(TimeSpan))) : null;
+            }
+
+            if ((method == DateOnlyToDateTime && arguments.Count == 1 || method == DateOnlyToDateTimeKind && arguments.Count == 2)
+                && (arguments.Count == 1 || arguments[1] is SqlConstantExpression { Value: DateTimeKind.Unspecified }))
+            {
+                instance = factory.ApplyDefaultTypeMapping(instance);
+                var clock = factory.ApplyDefaultTypeMapping(arguments[0]);
+                if (instance.TypeMapping is not { } dayMapping || !IsDateOnlyMapping(dayMapping)
+                    || clock.TypeMapping is not { } clockMapping || !IsClockMapping(clockMapping, mode)) return null;
+                var timestamp = mappingSource.FindMapping(typeof(DateTime), mode == OceanBaseCompatibilityMode.MySql ? "DATETIME(6)" : "TIMESTAMP(7)")!;
+                var date = factory.Convert(instance, typeof(DateTime), timestamp);
+                var duration = factory.Convert(clock, typeof(TimeSpan), mappingSource.FindMapping(typeof(TimeSpan)));
+                return factory.Function(DateTimeAddDurationMarker, [date, duration], nullable: true,
+                    argumentsPropagateNullability: [false, false], typeof(DateTime), timestamp);
+            }
+
+            if (method != TimeOnlyIsBetween || arguments.Count != 2) return null;
+            instance = factory.ApplyDefaultTypeMapping(instance);
+            if (instance.TypeMapping is not { } owner || !IsClockMapping(owner, mode)) return null;
+            var scalarMapping = owner.WithPrecisionAndScale(mode == OceanBaseCompatibilityMode.MySql ? 6 : 7, null);
+            var start = MapBound(arguments[0]);
+            var end = MapBound(arguments[1]);
+            if (start is null || end is null) return null;
+            var normal = factory.AndAlso(factory.LessThanOrEqual(start, end),
+                factory.AndAlso(factory.GreaterThanOrEqual(instance, start), factory.LessThan(instance, end)));
+            var wrapped = factory.AndAlso(factory.GreaterThan(start, end),
+                factory.OrElse(factory.GreaterThanOrEqual(instance, start), factory.LessThan(instance, end)));
+            // EF compensates nullable comparison values to false; guard the method's NULL result explicitly.
+            var missing = factory.OrElse(factory.IsNull(instance), factory.OrElse(factory.IsNull(start), factory.IsNull(end)));
+            return factory.Case([new CaseWhenClause(missing,
+                factory.Constant(null, typeof(bool), mappingSource.FindMapping(typeof(bool))))], factory.OrElse(normal, wrapped));
+
+            SqlExpression? MapBound(SqlExpression bound)
+            {
+                if (bound is SqlConstantExpression constant) return constant.ApplyTypeMapping(scalarMapping);
+                if (bound is SqlParameterExpression parameter) return parameter.ApplyTypeMapping(scalarMapping);
+                bound = factory.ApplyDefaultTypeMapping(bound);
+                if (bound.TypeMapping is not { } mapping || !IsClockMapping(mapping, mode)) return null;
+                if (!ExpressionEqualityComparer.Instance.Equals(owner.Converter?.ConvertToProviderExpression, mapping.Converter?.ConvertToProviderExpression)
+                    || !ExpressionEqualityComparer.Instance.Equals(owner.Converter?.ConvertFromProviderExpression, mapping.Converter?.ConvertFromProviderExpression))
+                    throw new NotSupportedException("TimeOnly.IsBetween requires matching clock converters.");
+                return bound;
+            }
         }
 
         internal static bool IsClockMapping(RelationalTypeMapping mapping, OceanBaseCompatibilityMode mode)

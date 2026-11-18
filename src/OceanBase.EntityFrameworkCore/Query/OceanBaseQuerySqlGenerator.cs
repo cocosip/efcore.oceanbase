@@ -532,7 +532,8 @@ namespace OceanBase.EntityFrameworkCore.Query
                 if (sqlFunctionExpression is not { IsBuiltIn: true, Schema: null, Instance: null, Arguments.Count: 1,
                         IsNullable: true, ArgumentsPropagateNullability: [false], Type: var timeOfDayType,
                         TypeMapping: { } resultMapping }
-                    || timeOfDayType != typeof(TimeSpan)
+                    || (timeOfDayType != typeof(TimeSpan) && timeOfDayType != typeof(TimeOnly))
+                    || resultMapping.ClrType != timeOfDayType
                     || !IsTimeSpanMapping(resultMapping)
                     || sqlFunctionExpression.Arguments[0] is not { Type: var inputType, TypeMapping: { } inputMapping }
                     || (inputType != typeof(DateTime) && inputType != typeof(DateTimeOffset))

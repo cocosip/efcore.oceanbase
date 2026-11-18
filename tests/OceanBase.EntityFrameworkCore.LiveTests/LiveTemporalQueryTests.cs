@@ -594,6 +594,91 @@ namespace OceanBase.EntityFrameworkCore.LiveTests
                     => mode == OceanBaseCompatibilityMode.MySql && value.Ticks % 10 != 0 ? null : value;
             });
 
+        [Theory]
+        [MemberData(nameof(Cases))]
+        public Task DateOnly_TimeOnly_conversions_and_ranges_preserve_native_values(
+            OceanBaseCompatibilityMode mode, bool async, bool nulls)
+            => WithTable(mode, async, nulls, async (context, stage) =>
+            {
+                stage("date and clock extraction, roundtrip and stored-calendar converters");
+                await Check(context, async, row => (DateOnly?)DateOnly.FromDateTime(row.Stamp!.Value),
+                    row => row.Stamp.HasValue ? DateOnly.FromDateTime(row.Stamp.Value) : null);
+                await Check(context, async, row => (TimeOnly?)TimeOnly.FromDateTime(row.Stamp!.Value),
+                    row => row.Stamp.HasValue ? TimeOnly.FromDateTime(row.Stamp.Value) : null);
+                await Check(context, async, row => (TimeOnly?)TimeOnly.FromDateTime(row.DateStamp!.Value),
+                    row => row.DateStamp.HasValue ? TimeOnly.FromDateTime(row.DateStamp.Value) : null);
+                await Check(context, async, row => (DateOnly?)DateOnly.FromDateTime(row.ConvertedStamp!.Value),
+                    row => row.ConvertedStamp.HasValue ? DateOnly.FromDateTime(row.ConvertedStamp.Value.AddDays(7)) : null);
+                await Check(context, async, row => (TimeSpan?)row.Clock!.Value.ToTimeSpan(),
+                    row => row.Clock?.ToTimeSpan());
+                await Check(context, async, row => (TimeSpan?)row.ConvertedClock!.Value.ToTimeSpan(),
+                    row => row.ConvertedClock?.AddHours(1).ToTimeSpan());
+                await Check(context, async, row => (DateTime?)row.Day!.Value.ToDateTime(row.Clock!.Value),
+                    row => row.Day.HasValue && row.Clock.HasValue ? row.Day.Value.ToDateTime(row.Clock.Value) : null);
+                await Check(context, async, row => (DateTime?)DateOnly.FromDateTime(row.Stamp!.Value)
+                        .ToDateTime(TimeOnly.FromDateTime(row.Stamp.Value), DateTimeKind.Unspecified), row => row.Stamp);
+                await Check(context, async, row => (DateTime?)row.ConvertedDay!.Value.ToDateTime(row.ConvertedClock!.Value),
+                    row => row.ConvertedDay.HasValue && row.ConvertedClock.HasValue
+                        ? row.ConvertedDay.Value.AddDays(2).ToDateTime(row.ConvertedClock.Value.AddHours(1)) : null);
+                var fixedClock = new TimeOnly(12, 34, 56);
+                var fixedDay = new DateOnly(2024, 2, 29);
+                await Check(context, async, row => (DateTime?)row.Day!.Value.ToDateTime(fixedClock),
+                    row => row.Day?.ToDateTime(fixedClock));
+                await Check(context, async, row => (DateTime?)EF.Parameter(fixedDay).ToDateTime(row.Clock!.Value),
+                    row => row.Clock.HasValue ? fixedDay.ToDateTime(row.Clock.Value) : null);
+                foreach (var date in new[] { DateOnly.MinValue, DateOnly.MaxValue })
+                {
+                    var duration = date == DateOnly.MinValue ? TimeSpan.Zero
+                        : TimeSpan.FromDays(1).Subtract(TimeSpan.FromTicks(mode == OceanBaseCompatibilityMode.MySql ? 10 : 1));
+                    await Check(context, async, row => (DateTime?)EF.Parameter(date).ToDateTime(TimeOnly.FromTimeSpan(EF.Parameter(duration))),
+                        _ => date.ToDateTime(TimeOnly.FromTimeSpan(duration)));
+                }
+
+                stage("duration conversions: NULL, invalid ranges, full scalar tick range and precision");
+                await Check(context, async, row => (TimeOnly?)TimeOnly.FromTimeSpan(row.Duration!.Value),
+                    row => Clock(row.Duration));
+                await Check(context, async, row => (TimeOnly?)TimeOnly.FromTimeSpan(row.ConvertedDuration!.Value),
+                    row => Clock(row.ConvertedDuration?.Negate()));
+                await Check(context, async, row => (TimeOnly?)TimeOnly.FromTimeSpan(row.Clock!.Value.ToTimeSpan()), row => row.Clock);
+                await Check(context, async, row => (TimeOnly?)TimeOnly.FromTimeSpan(row.Stamp!.Value.Subtract(row.DateStamp!.Value)),
+                    row => row.Stamp.HasValue && row.DateStamp.HasValue ? Clock(row.Stamp.Value.Subtract(row.DateStamp.Value)) : null);
+                foreach (var offset in new[] { TimeSpan.Zero, TimeSpan.FromTicks(-1), TimeSpan.FromTicks(1), TimeSpan.FromTicks(10),
+                    TimeSpan.FromDays(1).Subtract(TimeSpan.FromTicks(1)), TimeSpan.FromDays(1).Subtract(TimeSpan.FromTicks(10)),
+                    TimeSpan.FromDays(1), TimeSpan.MinValue, TimeSpan.MaxValue })
+                {
+                    await Check(context, async, row => (TimeOnly?)TimeOnly.FromTimeSpan(EF.Parameter(offset)), _ => Clock(offset));
+                }
+
+                stage("normal, wrapping, equal and fractional IsBetween endpoints and refreshed parameters");
+                foreach (var (start, end) in new[] { (TimeOnly.MinValue, new TimeOnly(1, 0)),
+                    (new TimeOnly(23, 0), new TimeOnly(1, 0)), (TimeOnly.MinValue, TimeOnly.MinValue),
+                    (new TimeOnly(1, 0), new TimeOnly(23, 0)), (TimeOnly.FromTimeSpan(TimeSpan.FromTicks(10)), new TimeOnly(0, 0, 1)),
+                    (new TimeOnly(23, 59, 59), TimeOnly.FromTimeSpan(TimeSpan.FromTicks(10))) })
+                {
+                    await Check(context, async, row => (bool?)row.Clock!.Value.IsBetween(start, end),
+                        row => row.Clock?.IsBetween(start, end));
+                    await Check(context, async, row => (bool?)row.ConvertedClock!.Value.IsBetween(start, end),
+                        row => row.ConvertedClock?.IsBetween(start, end));
+                }
+                await Check(context, async, row => (bool?)row.Clock!.Value.IsBetween(row.Clock.Value, row.Clock.Value),
+                    row => row.Clock.HasValue ? false : null);
+                await Check(context, async, row => (bool?)row.Clock!.Value.IsBetween(
+                        TimeOnly.FromDateTime(row.Stamp!.Value), row.Clock.Value.AddMinutes(1)),
+                    row => row.Clock.HasValue && row.Stamp.HasValue
+                        ? row.Clock.Value.IsBetween(TimeOnly.FromDateTime(row.Stamp.Value), row.Clock.Value.AddMinutes(1)) : null);
+                var upper = new TimeOnly(1, 0);
+                await Check(context, async, row => (bool?)row.Clock!.Value.IsBetween(TimeOnly.FromTimeSpan(row.Duration!.Value), upper),
+                    row => row.Clock.HasValue && Clock(row.Duration) is { } lower ? row.Clock.Value.IsBetween(lower, upper) : null);
+                var lowerLimit = TimeOnly.MinValue;
+                await Check(context, async, row => (bool?)row.Clock!.Value.IsBetween(lowerLimit, TimeOnly.FromTimeSpan(row.Duration!.Value)),
+                    row => row.Clock.HasValue && Clock(row.Duration) is { } endLimit ? row.Clock.Value.IsBetween(lowerLimit, endLimit) : null);
+
+                TimeOnly? Clock(TimeSpan? value)
+                    => value.HasValue && value.Value >= TimeSpan.Zero && value.Value < TimeSpan.FromDays(1)
+                        && (mode != OceanBaseCompatibilityMode.MySql || value.Value.Ticks % 10 == 0)
+                        ? TimeOnly.FromTimeSpan(value.Value) : null;
+            });
+
         private static Task SetZone(Context context, bool async, string zone)
         {
             var sql = (context.Mode == OceanBaseCompatibilityMode.MySql ? "SET SESSION time_zone = '" : "ALTER SESSION SET TIME_ZONE = '")

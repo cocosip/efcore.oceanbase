@@ -47,7 +47,7 @@ For gaps and development status, see the [Gap Matrix](efcore-10-gap-matrix.md). 
 | QRY-04 | Count/LongCount/Sum/Average/Min/Max, GroupBy and grouped first-row/aggregate combinations | Implemented | Implemented | [Aggregates][aggregates] | B-02/03; G-46; LOB extrema are rejected |
 | QRY-05 | First/Single/OrDefault, ordinary predicates, cardinality and empty-result materialization | Partial | Partial | [Queries][roots] | G-19; explicit defaults are not implemented |
 | QRY-06 | String equality/concat, Contains/StartsWith/EndsWith(string), Length, Substring and parameterless case/trim methods | Partial | Partial | [Strings][strings] | G-14..18 |
-| QRY-07 | Date/time members and existing calendar/duration methods, Math/MathF/decimal, Round/Clamp/extrema | Partial | Partial | [Temporal methods][temporal] | G-01..13/G-39/G-41/42; B-03; see the detailed support table below |
+| QRY-07 | Date/time members, calendar/duration methods and DateOnly/TimeOnly conversions/ranges, Math/MathF/decimal, Round/Clamp/extrema | Partial | Partial | [Temporal methods][temporal] | G-12/G-39/G-41/42; B-03; see the detailed support/signature tables below |
 | QRY-08 | Include/ThenInclude, single/split graph queries and three tracking/identity-resolution modes | Implemented | Implemented | [Queries][roots] | Broader graph combinations belong to acceptance; C-04 |
 | QRY-09 | EF10 named filters, context values and selective/all IgnoreQueryFilters | Implemented | Implemented | [Compilation context][compilation] | — |
 | QRY-10 | FromSqlRaw/Interpolated, SqlQueryRaw/SqlQuery, ExecuteSqlRaw/Interpolated and materialization | Implemented | Implemented | [Commands][commands] | B-04; broader error contracts belong to acceptance |
@@ -86,6 +86,22 @@ For gaps and development status, see the [Gap Matrix](efcore-10-gap-matrix.md). 
 | Math | Abs/Sign/Truncate/Floor/Ceiling, Sqrt/Exp/Log/Log2/Log10/Pow, trigonometric/inverse trigonometric functions, Sinh/Cosh/Tanh/Asinh/Atanh, CopySign, Clamp, finite extrema and Least/Greatest | The [Math][math]/[Round][round] translators define exact signatures; nonfinite values are rejected; support is not inferred for unlisted signatures such as Acosh |
 | Round | All five MidpointRounding modes for Decimal/Double/Single; constant digits and refreshed captured digits/rules | Respective digits ranges are 0..28/15/6; row-dependent rules/digits are rejected |
 | Results/composition | Tracking/identity resolution, converters/shadow/owned properties, DefaultIfEmpty, grouped/lateral queries, four set operations and ordinary raw entity/scalar/DML | See the gap matrix for explicit defaults/comparers, arbitrary cross-converter combinations and LOB combinations; local results are not live-database evidence |
+
+### DateOnly/TimeOnly conversion signatures (G-13)
+
+| Signature | Contract in both modes |
+| --- | --- |
+| DateOnly.FromDateTime(DateTime) | Extract the stored calendar date, ignoring the clock |
+| TimeOnly.FromDateTime(DateTime) | Extract the stored clock with native microsecond/100ns precision |
+| TimeOnly.FromTimeSpan(TimeSpan) | Accept only ticks in [0,24h); invalid row values return NULL, without wrapping. Scalars use exact ticks across the full TimeSpan range; MySQL unrepresentable sub-microsecond results return NULL |
+| TimeOnly.ToTimeSpan() | Return a nonnegative duration using the native duration carrier |
+| DateOnly.ToDateTime(TimeOnly), ToDateTime(TimeOnly, DateTimeKind.Unspecified) | Combine stored date and clock with promoted timestamp precision and Kind.Unspecified; UTC/Local/dynamic Kind are not translated |
+| TimeOnly.IsBetween(TimeOnly, TimeOnly) | Inclusive start, exclusive end, midnight wrapping; equal endpoints are empty. Scalar bounds adopt the clock converter with promoted precision; mismatched column converters reject |
+
+These type-changing conversions use stored calendar space, like existing cross-type temporal members;
+the new result uses its own built-in mapping, without applying an inverse converter for the input type.
+NULL values propagate, and incompatible/null-converting carriers reject. Pure scalar calls may be
+evaluated by EF before translation; EF.Parameter keeps a scalar duration in SQL for range guarding.
 
 For exact numeric/text/temporal storage contracts and usage examples, see the [Package README](../../src/OceanBase.EntityFrameworkCore/README.md).
 Do not duplicate acceptance pass counts, individual fix histories or the full commit history here; update acceptance evidence only in the release checklist.

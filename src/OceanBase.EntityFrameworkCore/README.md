@@ -137,6 +137,18 @@ saturation before wrapping; this differs from DateTime's separate whole/fraction
 Clock results promote to TIME(6)/INTERVAL DAY TO SECOND(7), preserve contextual clock converters
 and apply the inverse converter once. MySQL returns NULL for results finer than a microsecond;
 Oracle retains 100ns ticks. Non-finite numeric inputs remain rejected by the numeric mapping.
+DateOnly.FromDateTime and TimeOnly.FromDateTime extract the stored date/clock; ToTimeSpan returns
+the clock as a native nonnegative duration. DateOnly.ToDateTime(TimeOnly) combines date and clock
+with promoted timestamp precision and Kind.Unspecified; the explicit constant Unspecified overload
+is also supported, while UTC/Local/dynamic Kind reject. TimeOnly.FromTimeSpan accepts only [0,24h),
+returning NULL for invalid SQL values or MySQL sub-microsecond ticks, without wrapping. EF.Parameter
+can keep a scalar duration in SQL as exact ticks, avoiding native TIME storage limits and EF's ordinary
+client evaluation of a pure scalar call. These type-changing methods use stored calendar space and
+the result's own built-in mapping, without applying an inverse converter for the input type.
+TimeOnly.IsBetween uses inclusive start/exclusive end, supports midnight wrapping, and treats equal
+endpoints as empty. NULL clocks/bounds return NULL; scalar bounds adopt the receiver's clock converter
+with promoted precision, while differently converted column bounds reject. See the feature inventory
+for the exact G-13 signatures; the methods do not imply broader parsing/formatting support.
 Oracle calendar arithmetic
 requires a Gregorian session; month ends clamp without losing timestamp fractions.
 Oracle DateTimeOffset components use the stored offset's local wall clock; UTC members
@@ -146,7 +158,7 @@ results, including UTC-valued projections and clocks, have Kind.Unspecified; cal
 must assign a Kind explicitly when constructing zoned application values. Same-carrier
 converter expressions operate in stored space; temporal-valued mapped results apply the
 inverse converter once. Other temporal methods and wider coercion/calendar combinations
-are not implied by this profile; QRY-07 remains open for its DateTimeOffset and conversion gaps.
+are not implied by this profile; QRY-07 remains open for its DateTimeOffset and Math.Acosh gaps.
 
 Ordinary ordered queries have native coverage for OrderBy/ThenBy in both directions,
 Distinct, nonnegative Skip/Take, offset-only and empty pages. Use a final unique key

@@ -167,6 +167,61 @@ public sealed class DateTimeCalendarAddFunctionalTests
         Assert.Equal(capture.Sql[0], capture.Sql[1]);
     }
 
+    [Theory]
+    [InlineData(OceanBaseCompatibilityMode.MySql, false)]
+    [InlineData(OceanBaseCompatibilityMode.MySql, true)]
+    [InlineData(OceanBaseCompatibilityMode.Oracle, false)]
+    [InlineData(OceanBaseCompatibilityMode.Oracle, true)]
+    public async Task Temporal_conversions_materialize_own_carriers_and_refresh_bounds(OceanBaseCompatibilityMode mode, bool async)
+    {
+        using var table = new DataTable();
+        table.Columns.Add("Value", typeof(object));
+        var capture = new Capture(table);
+        await using var context = Create(mode, capture);
+        var day = new DateOnly(2024, 2, 29);
+        var clock = new TimeOnly(12, 34, 56).Add(TimeSpan.FromTicks(mode == OceanBaseCompatibilityMode.MySql ? 1234560 : 1234567));
+        var stamp = day.ToDateTime(clock);
+        Set(day.ToDateTime(TimeOnly.MinValue));
+        Assert.Equal([day, null], await Read(context.Rows.Where(row => DateOnly.FromDateTime(row.Stamp).Year > 2000)
+            .Select(row => (DateOnly?)DateOnly.FromDateTime(row.OptionalStamp!.Value))));
+        Set(mode == OceanBaseCompatibilityMode.MySql ? (object)clock.ToTimeSpan()
+            : new OceanBaseIntervalDayToSecond(false, 0, 12, 34, 56, 123456700, 1, 7));
+        Assert.Equal([clock, null], await Read(context.Rows.Select(row => (TimeOnly?)TimeOnly.FromDateTime(row.OptionalStamp!.Value))));
+        Assert.Equal([clock.ToTimeSpan(), null], await Read(context.Rows.Select(row => (TimeSpan?)row.OptionalClock!.Value.ToTimeSpan())));
+        var amount = TimeSpan.MaxValue;
+        var start = new TimeOnly(22, 0);
+        var end = new TimeOnly(2, 0);
+        var query = context.Rows.Where(row => row.Clock.IsBetween(start, end))
+            .Select(row => (TimeOnly?)TimeOnly.FromTimeSpan(EF.Parameter(amount)));
+        var index = capture.Parameters.Count;
+        Assert.Equal([clock, null], await Read(query));
+        Assert.Contains((object)long.MaxValue, capture.Parameters[index]);
+        Assert.Contains(capture.Parameters[index], value => Bound(value) == TimeSpan.FromHours(22));
+        amount = TimeSpan.MinValue;
+        start = new TimeOnly(20, 0);
+        Assert.Equal([clock, null], await Read(query));
+        Assert.Contains((object)long.MinValue, capture.Parameters[index + 1]);
+        Assert.Contains(capture.Parameters[index + 1], value => Bound(value) == TimeSpan.FromHours(20));
+        Assert.Equal(capture.Sql[index], capture.Sql[index + 1]);
+        Set(stamp);
+        var combined = await Read(context.Rows.Select(row => (DateTime?)row.Day.ToDateTime(row.OptionalClock!.Value)));
+        Assert.Equal([stamp, null], combined);
+        Assert.Equal(DateTimeKind.Unspecified, combined[0]!.Value.Kind);
+        Set(true);
+        Assert.Equal([true, null], await Read(context.Rows.Select(row => (bool?)row.OptionalClock!.Value.IsBetween(start, end))));
+
+        void Set(object value)
+        {
+            table.Rows.Clear();
+            table.Rows.Add(value);
+            table.Rows.Add(DBNull.Value);
+        }
+
+        Task<T[]> Read<T>(IQueryable<T> value) => async ? value.ToArrayAsync() : Task.FromResult(value.ToArray());
+        TimeSpan? Bound(object? value) => value is TimeSpan span ? span
+            : value is OceanBaseIntervalDayToSecond interval ? interval.ToTimeSpan() : null;
+    }
+
     private static async Task Run(OceanBaseCompatibilityMode mode, bool async, bool years)
     {
         using var table = new DataTable();
@@ -231,6 +286,7 @@ public sealed class DateTimeCalendarAddFunctionalTests
         public DateTime? OptionalStamp { get; set; }
         public TimeOnly Clock { get; set; }
         public TimeOnly? OptionalClock { get; set; }
+        public DateOnly Day { get; set; }
     }
 
     private sealed class NoNetwork : DbConnectionInterceptor

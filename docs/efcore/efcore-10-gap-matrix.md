@@ -14,7 +14,7 @@ explicitly unsupported features, dependencies, and capabilities to confirm. Pre-
 - The current known unavailable/rejected capabilities are based on the code and package README. Supporting every BCL method is not an implicit Provider commitment.
   Add newly discovered valid requirements to their owning row or give them a new stable ID. Rejection of invalid inputs or malformed models/catalogs is validation, not a missing feature.
 
-Current counts: 46 G records (14 Not started, 0 In development, 11 Implemented, 19 Unsupported, 2 Deferred); also retained are 2 Implemented F records, 9 external dependency B records, 4 To confirm C records, and 4 Deferred D groups.
+Current counts: 46 G records (13 Not started, 0 In development, 12 Implemented, 19 Unsupported, 2 Deferred); also retained are 2 Implemented F records, 9 external dependency B records, 4 To confirm C records, and 4 Deferred D groups.
 
 ## Development order
 
@@ -23,11 +23,12 @@ Prioritize missing Provider functionality before the pre-release acceptance camp
 1. G-01..11 complete the selected P0/P1 temporal additions and differences. Preserve DateTime's
    separate whole/fraction tick truncation, exact Int64 duration results and TimeOnly's whole-product
    truncation/saturation, 24-hour wrapping, NULL/precision and contextual converter contracts.
-2. Next: G-13, DateOnly/TimeOnly conversions and IsBetween (QRY-07). Start with FromDateTime
-   date/clock extraction, then define the supported FromTimeSpan/ToTimeSpan/ToDateTime and ordinary/
-   midnight-wrapping IsBetween signatures. Reuse existing calendar/clock/tick carriers; record
-   per-signature precision, NULL, converter and DateTimeKind boundaries before implementation.
-3. Other Extension candidates remain string overloads, DDL metadata/comments and scaffold fidelity,
+2. G-13 conversions and IsBetween are implemented for the exact signatures in the feature inventory;
+   preserve stored-calendar, NULL/precision, invalid-duration and DateTimeKind boundaries.
+3. Next: G-14, Contains/StartsWith/EndsWith(char) (QRY-06). Reuse existing search SQL and contextual
+   text mappings; establish char-to-text conversion, valid Unicode and NULL/column/parameter contracts
+   before implementation, without silently accepting invalid surrogate code units or changing collation.
+4. Other Extension candidates remain string overloads, DDL metadata/comments and scaffold fidelity,
    selected by application value and Provider feasibility rather than a commitment to every BCL method.
    Investigate C items before classifying them as missing code;
    retain Unsupported/Deferred contracts and resolve B dependencies at their owning layer.
@@ -53,7 +54,7 @@ Acceptance requirements remain in the [release checklist](efcore-10-release-chec
 | G-10 | QRY-07 | TimeOnly.AddHours(double) | Implemented | P1 completion | Both modes / Provider | Whole binary-product truncation and Int64 saturation precede 24-hour wrapping, preserving low ticks near Int64 limits. Supports constants/refreshed parameters/nullable columns/composition and promoted clock mappings; MySQL sub-microsecond results return NULL instead of rounding, Oracle retains 100ns | [Temporal methods][temporal] |
 | G-11 | QRY-07 | TimeOnly.AddMinutes(double) | Implemented | P1 completion | Both modes / Provider | Same contracts as G-10, including fractional-tick truncation, adjacent saturation boundaries and exact signed wrapping for the minute unit | [Temporal methods][temporal] |
 | G-12 | QRY-07 | DateTimeOffset Add/Subtract/calendar method families | Not started | Extension | Both modes / Provider | Determine UTC/local offset semantics, result mapping, and supported ranges for each signature | [Temporal methods][temporal] |
-| G-13 | QRY-07 | DateOnly.FromDateTime/ToDateTime; TimeOnly.FromDateTime/FromTimeSpan/ToTimeSpan/IsBetween | Not started | Extension | Both modes / Provider | Provide a support table by signature; handle midnight/wrapping/NULL and the corresponding carriers correctly; do not imply full support by naming the whole family | [Temporal methods][temporal] |
+| G-13 | QRY-07 | DateOnly.FromDateTime/ToDateTime; TimeOnly.FromDateTime/FromTimeSpan/ToTimeSpan/IsBetween | Implemented | Extension | Both modes / Provider | TranslateConversion reuses date/time/tick carriers; see the feature inventory's exact signatures. FromTimeSpan accepts only [0,24h), returning NULL for invalid SQL values or MySQL sub-microsecond results; EF.Parameter scalars use full-range ticks. ToDateTime promotes timestamp precision and returns Kind.Unspecified, rejecting UTC/Local/dynamic Kind. IsBetween has inclusive/exclusive endpoints, midnight wrapping, empty equal endpoints and explicit NULL propagation; scalar bounds adopt the clock converter and mismatched column converters reject. Type-changing conversions use stored calendar space and their own result mapping | [Temporal methods][temporal] |
 | G-14 | QRY-06 | char search overloads | Not started | Extension | Both modes / Provider | Confirm Contains/StartsWith/EndsWith and other methods by signature; define character encoding/NULL semantics | [Strings][strings] |
 | G-15 | QRY-06 | Explicit trim char/char[] overloads | Not started | Extension | Both modes / Provider | Translate Trim/TrimStart/TrimEnd by signature; space trimming is not a substitute | [Strings][strings] |
 | G-16 | QRY-06 | string.Remove overloads | Not started | Extension | Both modes / Provider | Define contracts for both range shapes, NULL/character counting, and boundaries | [Strings][strings] |
