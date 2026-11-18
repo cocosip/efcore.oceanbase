@@ -273,19 +273,7 @@ namespace OceanBase.EntityFrameworkCore.Query
 
             if (instance is not null && member == DateTimeOffsetUtcTicks && instance.Type == typeof(DateTimeOffset)
                 && returnType == typeof(long))
-            {
-                instance = factory.ApplyDefaultTypeMapping(instance);
-                var offsetMapping = instance.TypeMapping;
-                if (offsetMapping is null || offsetMapping.Converter?.ConvertsNulls == true
-                    || !SupportsDate(typeof(DateTimeOffset), offsetMapping))
-                    return null;
-
-                var storeType = mode == OceanBaseCompatibilityMode.MySql ? "DATETIME(6)" : "TIMESTAMP(7)";
-                var utcDateTime = factory.Function(DateTimeOffsetUtcDateTimeMarker, [instance], nullable: true,
-                    argumentsPropagateNullability: [false], typeof(DateTime), mappingSource.FindMapping(typeof(DateTime), storeType));
-                return factory.Function(DateTimeTicksMarker, [utcDateTime], nullable: true,
-                    argumentsPropagateNullability: [false], typeof(long), mappingSource.FindMapping(typeof(long)));
-            }
+                return TranslateUtcTicks(factory, mappingSource, mode, instance);
 
             if (instance is null && returnType == typeof(DateTime)
                 && member is MemberInfo clock
@@ -442,7 +430,25 @@ namespace OceanBase.EntityFrameworkCore.Query
                         : providerType == typeof(OceanBaseIntervalDayToSecond) && store.StartsWith("INTERVAL DAY", StringComparison.Ordinal);
         }
 
+        internal static SqlExpression? TranslateUtcTicks(ISqlExpressionFactory factory, IRelationalTypeMappingSource mappingSource,
+            OceanBaseCompatibilityMode mode, SqlExpression instance)
+        {
+            instance = factory.ApplyDefaultTypeMapping(instance);
+            if (instance.TypeMapping is not { } mapping || mapping.Converter?.ConvertsNulls == true
+                || !SupportsDate(typeof(DateTimeOffset), mapping, mode))
+                return null;
+
+            var storeType = mode == OceanBaseCompatibilityMode.MySql ? "DATETIME(6)" : "TIMESTAMP(7)";
+            var utcDateTime = factory.Function(DateTimeOffsetUtcDateTimeMarker, [instance], nullable: true,
+                argumentsPropagateNullability: [false], typeof(DateTime), mappingSource.FindMapping(typeof(DateTime), storeType));
+            return factory.Function(DateTimeTicksMarker, [utcDateTime], nullable: true,
+                argumentsPropagateNullability: [false], typeof(long), mappingSource.FindMapping(typeof(long)));
+        }
+
         private bool SupportsDate(Type receiver, RelationalTypeMapping mapping)
+            => SupportsDate(receiver, mapping, mode);
+
+        private static bool SupportsDate(Type receiver, RelationalTypeMapping mapping, OceanBaseCompatibilityMode mode)
         {
             var store = mapping.StoreTypeNameBase.Trim().ToUpperInvariant();
             var providerType = mapping.Converter?.ProviderClrType ?? mapping.ClrType;

@@ -6,6 +6,8 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Storage;
 using OceanBase.EntityFrameworkCore;
 using Xunit;
 
@@ -63,6 +65,7 @@ namespace OceanBase.EntityFrameworkCore.LiveTests
 
         internal static async Task Verify(Context context, OceanBaseCompatibilityMode mode, bool async, CancellationToken token)
         {
+            await VerifyOffsetDifferences(context, mode, async, token);
             var rows = Rows(context, mode);
             var materialized = await List(rows.OrderBy(r => r.Id), async, token);
             Assert.Equal(new[] { 1, 2, 3, 4 }, materialized.Select(r => r.Id));
@@ -139,6 +142,35 @@ namespace OceanBase.EntityFrameworkCore.LiveTests
             await Assert.ThrowsAsync<InvalidOperationException>(() => List(rows.Where(r => r.Id == 3).Select(r => r.Value!.Value).DefaultIfEmpty(), async, token));
         }
 
+        private static async Task VerifyOffsetDifferences(Context context, OceanBaseCompatibilityMode mode, bool async, CancellationToken token)
+        {
+            var oracle = mode == OceanBaseCompatibilityMode.Oracle;
+            var anchor = new DateTimeOffset(2024, 3, 1, 0, 0, 0, TimeSpan.FromHours(6));
+            var sameInstant = anchor.ToOffset(TimeSpan.FromMinutes(-210));
+            var distant = new DateTimeOffset(1900, 1, 1, 0, 0, 0, TimeSpan.Zero);
+            var fractional = sameInstant.AddTicks(oracle ? -19 : -10);
+            DateTimeOffset?[] values = [sameInstant, distant, fractional, null];
+            var mapping = context.GetService<IRelationalTypeMappingSource>().FindMapping(typeof(DateTimeOffset))!;
+            var quote = oracle ? "\"" : "`";
+            var tail = oracle ? " FROM DUAL" : "";
+            var nullValue = oracle ? "CAST(NULL AS TIMESTAMP(7) WITH TIME ZONE)" : "CAST(NULL AS DATETIME(6))";
+            var seed = string.Join(" UNION ALL ", values.Select((value, index) =>
+                $"SELECT {index} AS {quote}Id{quote}, {(value.HasValue ? mapping.GenerateSqlLiteral(value.Value) : nullValue)} AS {quote}Zoned{quote}{tail}"));
+            var rows = context.Set<ZonedRow>().FromSqlRaw(seed);
+            var differences = rows.OrderBy(row => row.Id).Select(row => (TimeSpan?)row.Zoned!.Value.Subtract(anchor));
+            Assert.Equal(values.Select(value => value?.Subtract(anchor)), await List(differences, async, token));
+            Assert.Equal(values.Select(value => value.HasValue ? (TimeSpan?)anchor.Subtract(value.Value) : null),
+                await List(rows.OrderBy(row => row.Id).Select(row => (TimeSpan?)anchor.Subtract(row.Zoned!.Value)), async, token));
+            var fractionalTicks = oracle ? -19L : -10L;
+            Assert.Equal(new[] { 2 }, await List(rows.Where(row => row.Zoned!.Value.Subtract(anchor).Ticks == fractionalTicks)
+                .Select(row => row.Id), async, token));
+
+            anchor = distant;
+            Assert.Equal(values.Select(value => value?.Subtract(anchor)), await List(differences, async, token));
+            Assert.Equal(new[] { 0, 2 }, await List(rows.Where(row => row.Zoned!.Value.Subtract(anchor).Ticks > 0)
+                .OrderBy(row => row.Id).Select(row => row.Id), async, token));
+        }
+
         private static Task<List<T>> List<T>(IQueryable<T> query, bool async, CancellationToken token)
             => async ? query.ToListAsync(token) : Task.FromResult(query.ToList());
 
@@ -149,6 +181,7 @@ namespace OceanBase.EntityFrameworkCore.LiveTests
                 var row = model.Entity<Row>().HasNoKey();
                 row.Property(r => r.Name).HasMaxLength(16).IsUnicode(false);
                 row.Property(r => r.Amount).HasPrecision(10, 2);
+                model.Entity<ZonedRow>().HasNoKey();
             }
         }
         internal sealed class Row
@@ -158,6 +191,12 @@ namespace OceanBase.EntityFrameworkCore.LiveTests
             public string? Name { get; set; }
             public bool Active { get; set; }
             public decimal Amount { get; set; }
+        }
+
+        private sealed class ZonedRow
+        {
+            public int Id { get; set; }
+            public DateTimeOffset? Zoned { get; set; }
         }
 
         internal sealed class Commands : DbCommandInterceptor

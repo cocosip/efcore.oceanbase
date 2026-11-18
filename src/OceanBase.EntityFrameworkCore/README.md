@@ -158,7 +158,11 @@ results, including UTC-valued projections and clocks, have Kind.Unspecified; cal
 must assign a Kind explicitly when constructing zoned application values. Same-carrier
 converter expressions operate in stored space; temporal-valued mapped results apply the
 inverse converter once. Other temporal methods and wider coercion/calendar combinations
-are not implied by this profile. QRY-07 remains open for its DateTimeOffset arithmetic gap.
+are not implied by this profile. DateTimeOffset.Subtract(DateTimeOffset) returns the signed
+difference between stored UTC instants as a tick-backed TimeSpan, with SQL NULL propagation
+and the precision of the stored operands. Scalar operands use the other operand's converter
+at full temporal precision. Operands with mismatched converters are rejected. Other
+DateTimeOffset arithmetic remains open.
 
 `Math.Acosh(double)` and `MathF.Acosh(float)` translate in both modes. They calculate in Double
 precision before applying the existing result mapping, including Single normalization. Finite input

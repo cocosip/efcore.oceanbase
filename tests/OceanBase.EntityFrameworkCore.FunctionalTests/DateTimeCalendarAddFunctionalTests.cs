@@ -114,6 +114,30 @@ public sealed class DateTimeCalendarAddFunctionalTests
     [InlineData(OceanBaseCompatibilityMode.MySql, true)]
     [InlineData(OceanBaseCompatibilityMode.Oracle, false)]
     [InlineData(OceanBaseCompatibilityMode.Oracle, true)]
+    public async Task DateTimeOffset_differences_materialize_exact_ticks_and_nulls(
+        OceanBaseCompatibilityMode mode, bool async)
+    {
+        using var table = new DataTable();
+        table.Columns.Add("Value", typeof(object));
+        var ticks = mode == OceanBaseCompatibilityMode.MySql ? -39_000_000_000_000_010L : -39_000_000_000_000_019L;
+        table.Rows.Add(mode == OceanBaseCompatibilityMode.MySql ? (object)ticks : (decimal)ticks);
+        table.Rows.Add(DBNull.Value);
+        var capture = new Capture(table);
+        await using var context = Create(mode, capture);
+        var anchor = new DateTimeOffset(2024, 3, 1, 0, 0, 0, TimeSpan.FromHours(6));
+        var query = context.Rows.OrderBy(row => row.Id).Select(row => (TimeSpan?)row.Zoned!.Value.Subtract(anchor));
+
+        Assert.Equal([TimeSpan.FromTicks(ticks), null], async ? await query.ToListAsync() : query.ToList());
+        var sql = Assert.Single(capture.Sql);
+        Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? "DATEDIFF" : "SYS_EXTRACT_UTC", sql);
+        Assert.Contains("Zoned", sql);
+    }
+
+    [Theory]
+    [InlineData(OceanBaseCompatibilityMode.MySql, false)]
+    [InlineData(OceanBaseCompatibilityMode.MySql, true)]
+    [InlineData(OceanBaseCompatibilityMode.Oracle, false)]
+    [InlineData(OceanBaseCompatibilityMode.Oracle, true)]
     public async Task Date_differences_materialize_exact_long_durations_and_refresh_parameters(
         OceanBaseCompatibilityMode mode, bool async)
     {
@@ -287,6 +311,7 @@ public sealed class DateTimeCalendarAddFunctionalTests
         public TimeOnly Clock { get; set; }
         public TimeOnly? OptionalClock { get; set; }
         public DateOnly Day { get; set; }
+        public DateTimeOffset? Zoned { get; set; }
     }
 
     private sealed class NoNetwork : DbConnectionInterceptor

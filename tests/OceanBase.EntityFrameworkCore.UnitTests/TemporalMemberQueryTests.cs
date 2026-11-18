@@ -18,6 +18,50 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
     public sealed class TemporalMemberQueryTests
     {
         [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true)]
+        public void DateTimeOffset_difference_translates_both_operands_as_utc_ticks(
+            OceanBaseCompatibilityMode mode, bool relationalNulls)
+        {
+            using var context = CreateContext(mode, relationalNulls);
+            var anchor = new DateTimeOffset(2024, 2, 29, 0, 0, 0, TimeSpan.FromHours(6));
+            var sql = context.Rows
+                .Where(row => row.Zoned.Subtract(anchor).Ticks > 0)
+                .Select(row => (TimeSpan?)anchor.Subtract(row.Zoned))
+                .ToQueryString();
+
+            Assert.DoesNotContain("__oceanbase_internal", sql);
+            var function = mode == OceanBaseCompatibilityMode.MySql ? "DATEDIFF(" : "SYS_EXTRACT_UTC(";
+            var parts = sql.Split(["SELECT ", "WHERE "], StringSplitOptions.None);
+            Assert.Equal(3, parts.Length);
+            var projection = parts[1].Split(function, StringSplitOptions.None);
+            var predicate = parts[2].Split(function, StringSplitOptions.None);
+            Assert.Contains("Zoned", parts[1]);
+            Assert.True(projection.Length >= 3);
+            Assert.True(predicate.Length >= 3);
+            Assert.DoesNotContain("Zoned", projection[1].Split(')')[0]);
+            Assert.Contains("Zoned", predicate[1].Split(')')[0]);
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle)]
+        public void DateTimeOffset_difference_maps_scalars_with_the_column_converter_at_full_precision(OceanBaseCompatibilityMode mode)
+        {
+            using var context = CreateContext(mode);
+            var anchor = new DateTimeOffset(2024, 2, 29, 0, 0, 0, TimeSpan.Zero).AddTicks(1234560);
+            var sql = context.Rows.Where(row => row.ConvertedZoned!.Value.Subtract(EF.Constant(anchor)).Ticks == 0
+                    && EF.Constant(anchor).Subtract(row.ConvertedZoned.Value).Ticks == 0).ToQueryString();
+
+            Assert.Contains("00:30:00.123456", sql);
+            Assert.DoesNotContain("00:00:00.123456", sql);
+            Assert.Throws<NotSupportedException>(() => context.Rows
+                .Where(row => row.Zoned.Subtract(row.ConvertedZoned!.Value).Ticks == 0).ToQueryString());
+        }
+
+        [Theory]
         [InlineData(OceanBaseCompatibilityMode.MySql)]
         [InlineData(OceanBaseCompatibilityMode.Oracle)]
         public void Tick_expressions_balance_delimiters_in_projection_and_predicate(OceanBaseCompatibilityMode mode)
@@ -1605,7 +1649,7 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
                     value => value.HasValue ? value.Value.AddDays(2) : value, value => value.HasValue ? value.Value.AddDays(-2) : value);
                 modelBuilder.Entity<Row>().Property(row => row.ConvertedDuration).HasConversion(
                     value => value.HasValue ? value.Value.Negate() : value, value => value.HasValue ? value.Value.Negate() : value);
-                modelBuilder.Entity<Row>().Property(row => row.ConvertedZoned).HasConversion(
+                modelBuilder.Entity<Row>().Property(row => row.ConvertedZoned).HasPrecision(3).HasConversion(
                     value => value.HasValue ? value.Value.AddMinutes(30) : value, value => value.HasValue ? value.Value.AddMinutes(-30) : value);
             }
         }

@@ -52,6 +52,8 @@ namespace OceanBase.EntityFrameworkCore.Query
         private static readonly MethodInfo DateTimeAddDuration = typeof(DateTime).GetMethod(nameof(DateTime.Add), [typeof(TimeSpan)])!;
         private static readonly MethodInfo DateTimeSubtractDuration = typeof(DateTime).GetMethod(nameof(DateTime.Subtract), [typeof(TimeSpan)])!;
         private static readonly MethodInfo DateTimeSubtractDateTime = typeof(DateTime).GetMethod(nameof(DateTime.Subtract), [typeof(DateTime)])!;
+        private static readonly MethodInfo DateTimeOffsetSubtractDateTimeOffset = typeof(DateTimeOffset)
+            .GetMethod(nameof(DateTimeOffset.Subtract), [typeof(DateTimeOffset)])!;
         private static readonly TimeSpanToTicksConverter DurationTicksConverter = new();
         private static readonly MethodInfo DateTimeAddDays = typeof(DateTime).GetMethod(nameof(DateTime.AddDays), [typeof(double)])!;
         private static readonly MethodInfo DateTimeAddHours = typeof(DateTime).GetMethod(nameof(DateTime.AddHours), [typeof(double)])!;
@@ -144,6 +146,36 @@ namespace OceanBase.EntityFrameworkCore.Query
                     if (owner.Converter is { } converter) mapping = (RelationalTypeMapping)mapping.WithComposedConverter(converter);
                     return value is SqlConstantExpression constant ? constant.ApplyTypeMapping(mapping)
                         : ((SqlParameterExpression)value).ApplyTypeMapping(mapping);
+                }
+            }
+
+            if (instance is not null && method == DateTimeOffsetSubtractDateTimeOffset && arguments.Count == 1)
+            {
+                var left = sqlExpressionFactory.ApplyDefaultTypeMapping(instance);
+                var right = sqlExpressionFactory.ApplyDefaultTypeMapping(arguments[0]);
+                left = MapOffsetScalar(left, right);
+                right = MapOffsetScalar(right, left);
+                if (OceanBaseTemporalMemberTranslator.TranslateUtcTicks(sqlExpressionFactory, mappingSource, mode, left) is not { } leftTicks
+                    || OceanBaseTemporalMemberTranslator.TranslateUtcTicks(sqlExpressionFactory, mappingSource, mode, right) is not { } rightTicks)
+                    return null;
+
+                var leftConverter = left.TypeMapping?.Converter;
+                var rightConverter = right.TypeMapping?.Converter;
+                if (!ExpressionEqualityComparer.Instance.Equals(leftConverter?.ConvertToProviderExpression, rightConverter?.ConvertToProviderExpression)
+                    || !ExpressionEqualityComparer.Instance.Equals(leftConverter?.ConvertFromProviderExpression, rightConverter?.ConvertFromProviderExpression))
+                    throw new NotSupportedException("DateTimeOffset differences require matching converters.");
+
+                var integer = mappingSource.FindMapping(typeof(long))!;
+                var result = (RelationalTypeMapping)integer.WithComposedConverter(DurationTicksConverter);
+                return new SqlBinaryExpression(ExpressionType.Subtract, leftTicks, rightTicks, typeof(TimeSpan), result);
+
+                SqlExpression MapOffsetScalar(SqlExpression value, SqlExpression owner)
+                {
+                    if (owner is SqlConstantExpression or SqlParameterExpression || owner.TypeMapping is not { } mapping
+                        || value is not (SqlConstantExpression or SqlParameterExpression)) return value;
+                    var scalarMapping = mapping.WithPrecisionAndScale(mode == OceanBaseCompatibilityMode.MySql ? 6 : 7, null);
+                    return value is SqlConstantExpression constant ? constant.ApplyTypeMapping(scalarMapping)
+                        : ((SqlParameterExpression)value).ApplyTypeMapping(scalarMapping);
                 }
             }
 
