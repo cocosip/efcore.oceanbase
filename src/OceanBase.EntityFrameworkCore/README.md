@@ -169,7 +169,7 @@ when portable placement is required; this does not configure string collation.
 
 String translations support ordinary equality, two/three/four-string concat,
 single-string and char Contains/StartsWith/EndsWith/IndexOf, Length, both integer Substring/Remove overloads,
-ordinary string and char Replace,
+ordinary string and char Replace, Insert(int,string),
 parameterless ToLower/ToUpper and Trim/TrimStart/TrimEnd with no argument, char or char[]. Length and
 substring bounds count native characters rather than CLR UTF-16 units. Substring
 uses native negative/out-of-range/zero-length rules; parameterless trim removes ordinary spaces,
@@ -232,6 +232,13 @@ tokens use plain text mappings independent of the receiver converter. Text-backe
 char columns use the ordinary char-to-string converter. Results can grow beyond
 the source value and use variable national/LOB mappings with the receiver's
 inverse converter applied once. Oracle scalar empty results become NULL.
+
+Insert splits stored text at a native character boundary in [0,length] and
+inserts the supplied text there. NULL inputs and invalid indices return SQL NULL.
+Known empty scalar values leave the source intact, including Oracle literals
+and captured parameters. SQL columns and computed operands follow native storage
+semantics. Inserted scalars use plain contextual mappings. The result preserves
+variable national or LOB text and applies the receiver inverse once.
 
 First/FirstOrDefault/Single/SingleOrDefault and ordinary predicate overloads have
 sync/async native coverage for empty, one and multiple rows with entity, scalar,

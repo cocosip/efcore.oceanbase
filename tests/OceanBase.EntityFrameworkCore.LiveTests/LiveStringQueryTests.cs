@@ -559,6 +559,74 @@ namespace OceanBase.EntityFrameworkCore.LiveTests
 
         [Theory]
         [MemberData(nameof(Cases))]
+        public async Task Insert_preserves_native_character_bounds_empty_values_and_text_families(
+            OceanBaseCompatibilityMode mode, bool async, bool nulls)
+            => await WithTable(mode, async, nulls, async (context, seed, stage) =>
+            {
+                var rows = context.Set<Row>().OrderBy(row => row.Id);
+                var start = 0;
+                string? inserted = "x";
+                var query = rows.Select(row => new
+                {
+                    row.Id, Plain = (string?)row.Plain!.Insert(start, inserted!),
+                    National = (string?)row.National!.Insert(start, inserted!),
+                    Fixed = (string?)row.Fixed!.Insert(start, inserted!),
+                    NationalFixed = (string?)row.NationalFixed!.Insert(start, inserted!),
+                    Converted = (string?)row.Converted!.Insert(start, inserted!)
+                });
+                var filtered = rows.Where(row => row.Plain!.Insert(start, inserted!) == null).Select(row => row.Id);
+                foreach (var input in new (int Start, string? Value)[]
+                {
+                    (0, "海🌊"), (2, "'\\_"), (3, "longer than fixed"), (1, ""), (0, null),
+                    (0, ""), (100, "x"), (-1, "x"), (int.MaxValue, "x"), (int.MinValue, "x"), (2, "x")
+                })
+                {
+                    stage("Insert captured indices and values into ordinary, national, fixed and converted text");
+                    (start, inserted) = input;
+                    Assert.Equal(seed.Select(row => new
+                    {
+                        row.Id, Plain = Inserted(row.Plain, start, inserted, mode),
+                        National = Inserted(row.National, start, inserted, mode),
+                        Fixed = Inserted(row.Fixed, start, inserted, mode),
+                        NationalFixed = Inserted(row.NationalFixed, start, inserted, mode),
+                        Converted = Decode(Inserted(Encode(row.Converted), start, inserted, mode))
+                    }), await Read(query, async));
+                    Assert.Equal(seed.Where(row => Inserted(row.Plain, start, inserted, mode) is null).Select(row => row.Id),
+                        await Read(filtered, async));
+                }
+                stage("Insert nullable columns, literal empty strings and both endpoints");
+                var columns = rows.Select(row => new
+                {
+                    row.Id, Value = (string?)row.Plain!.Insert(row.RemoveStart!.Value, row.Needle!),
+                    End = (string?)row.Plain!.Insert(row.Plain.Length, "🌊"),
+                    Empty = (string?)row.Plain!.Insert(0, "").ToUpper(),
+                    EmptyLob = (string?)row.Large!.Trim().Insert(0, "x")
+                });
+                Assert.Equal(seed.Select(row => new
+                {
+                    row.Id, Value = Inserted(row.Plain, row.RemoveStart, row.Needle, mode),
+                    End = Inserted(row.Plain, Characters(row.Plain), "🌊", mode),
+                    Empty = row.Plain?.ToUpperInvariant(), EmptyLob = Inserted(row.Large?.Trim(' '), 0, "x", mode)
+                }), await Read(columns, async));
+
+                stage("Insert into LOBs beyond scalar text limits");
+                var rowWithLob = Assert.Single(await Read(rows.AsTracking().Where(row => row.Id == 1), async));
+                rowWithLob.Large = new string('v', 4001) + "海🌊end";
+                Assert.Equal(1, async ? await context.SaveChangesAsync() : context.SaveChanges());
+                var lob = Assert.Single(await Read(rows.Where(row => row.Id == 1).Select(row => row.Large!.Insert(4003, "X")), async));
+                Assert.Equal(new string('v', 4001) + "海🌊Xend", lob);
+            });
+
+        private static string? Inserted(string? source, int? start, string? value, OceanBaseCompatibilityMode mode)
+        {
+            if (source is null || start is null or < 0 || value is null) return null;
+            var characters = source.EnumerateRunes().ToArray();
+            return start > characters.Length ? null : Normalize(string.Concat(characters.Take(start.Value))
+                + value + string.Concat(characters.Skip(start.Value)), mode);
+        }
+
+        [Theory]
+        [MemberData(nameof(Cases))]
         public async Task Replace_preserves_literal_tokens_nulls_and_variable_text(
             OceanBaseCompatibilityMode mode, bool async, bool nulls)
             => await WithTable(mode, async, nulls, async (context, seed, stage) =>

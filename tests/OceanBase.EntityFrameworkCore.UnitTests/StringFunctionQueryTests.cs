@@ -229,6 +229,26 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
         [Theory]
         [InlineData(OceanBaseCompatibilityMode.MySql)]
         [InlineData(OceanBaseCompatibilityMode.Oracle)]
+        public void Insert_uses_guarded_native_character_offsets(OceanBaseCompatibilityMode mode)
+        {
+            using var context = CreateContext(mode);
+            var start = 1;
+            string? inserted = "海";
+            var query = context.Rows.Where(row => row.Optional!.Insert(start, inserted!) == "body");
+            var sql = query.ToQueryString();
+            Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? "SUBSTRING(" : "SUBSTR(", sql);
+            Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? "CONCAT(" : " || ", sql);
+            Assert.Contains("CASE", sql);
+            Assert.DoesNotContain("__oceanbase_internal", sql);
+            inserted = "";
+            Assert.DoesNotContain("__oceanbase_internal", query.ToQueryString());
+            Assert.Throws<InvalidOperationException>(() => context.Rows.Where(row =>
+                row.BinaryConverted.Insert(start, "x") == "body").ToQueryString());
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle)]
         public void Replace_translates_ordinary_signatures_and_guards_search_tokens(OceanBaseCompatibilityMode mode)
         {
             using var context = CreateContext(mode);

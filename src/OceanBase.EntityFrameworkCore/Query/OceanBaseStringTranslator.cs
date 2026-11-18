@@ -42,7 +42,9 @@ namespace OceanBase.EntityFrameworkCore.Query
         private static readonly MethodInfo RemoveStartCount = typeof(string).GetMethod(nameof(string.Remove), [typeof(int), typeof(int)])!;
         private static readonly MethodInfo ReplaceText = typeof(string).GetMethod(nameof(string.Replace), [typeof(string), typeof(string)])!;
         private static readonly MethodInfo ReplaceCharacters = typeof(string).GetMethod(nameof(string.Replace), [typeof(char), typeof(char)])!;
+        private static readonly MethodInfo InsertText = typeof(string).GetMethod(nameof(string.Insert), [typeof(int), typeof(string)])!;
         internal const string OracleSearchMarker = "__oceanbase_internal_string_search";
+        internal const string OracleInsertLengthMarker = "__oceanbase_internal_insert_length";
 
         public SqlExpression? Translate(SqlExpression? instance, MethodInfo method, IReadOnlyList<SqlExpression> arguments,
             IDiagnosticsLogger<DbLoggerCategory.Query> logger)
@@ -52,7 +54,8 @@ namespace OceanBase.EntityFrameworkCore.Query
             var isSubstring = method == SubstringStart || method == SubstringStartLength;
             var isRemove = method == RemoveStart || method == RemoveStartCount;
             var isReplace = method == ReplaceText || method == ReplaceCharacters;
-            if (instance is null || !isSearch && !isFunction && !isSubstring && !isRemove && !isReplace)
+            var isInsert = method == InsertText;
+            if (instance is null || !isSearch && !isFunction && !isSubstring && !isRemove && !isReplace && !isInsert)
                 return null;
 
             instance = sqlExpressionFactory.ApplyDefaultTypeMapping(instance);
@@ -62,6 +65,9 @@ namespace OceanBase.EntityFrameworkCore.Query
 
             if (isReplace)
                 return TranslateReplace(instance, arguments, mapping, method == ReplaceCharacters);
+
+            if (isInsert)
+                return TranslateInsert(instance, arguments, mapping);
 
             if (isRemove || function is "TRIM" or "LTRIM" or "RTRIM")
             {
@@ -106,6 +112,39 @@ namespace OceanBase.EntityFrameworkCore.Query
             // Oracle all-space trim can return NULL for required input; do not simplify result null tests.
             return sqlExpressionFactory.Function(function!, [instance], nullable: true,
                 argumentsPropagateNullability: [false], typeof(string), mapping);
+        }
+
+        private SqlExpression? TranslateInsert(SqlExpression source, IReadOnlyList<SqlExpression> arguments,
+            RelationalTypeMapping mapping)
+        {
+            var factory = sqlExpressionFactory;
+            var text = mappingSource.FindMapping(typeof(string), storeTypeName: null, unicode: mapping.IsUnicode)!;
+            var inserted = factory.ApplyTypeMapping(arguments[1], text);
+            if (inserted.TypeMapping?.Converter?.ProviderClrType is { } carrier && carrier != typeof(string))
+                return null;
+
+            var wide = mappingSource.FindMapping(typeof(long))!;
+            var start = factory.Convert(factory.ApplyDefaultTypeMapping(arguments[0]), typeof(long), wide);
+            var one = factory.Constant(1L, wide);
+            var mysql = mode == OceanBaseCompatibilityMode.MySql;
+            var length = factory.Function(mysql ? "CHAR_LENGTH" : "LENGTH", [source], nullable: true,
+                argumentsPropagateNullability: [false], typeof(long), wide);
+            var insertedLength = factory.Function(mysql ? "CHAR_LENGTH" : OracleInsertLengthMarker, [inserted], nullable: true,
+                argumentsPropagateNullability: [false], typeof(long), wide);
+            var valid = factory.AndAlso(factory.AndAlso(factory.GreaterThanOrEqual(start, factory.Constant(0L, wide)),
+                factory.LessThanOrEqual(start, length)), factory.IsNotNull(insertedLength));
+
+            var resultMapping = mapping.IsFixedLength ? TrimResultMapping(mappingSource, mapping) : mapping;
+            var substring = mysql ? "SUBSTRING" : "SUBSTR";
+            var prefix = factory.Function(substring, [source, one, start], nullable: true,
+                argumentsPropagateNullability: [false, false, false], typeof(string), resultMapping);
+            var suffix = factory.Function(substring, [source, factory.Add(start, one, wide)], nullable: true,
+                argumentsPropagateNullability: [false, false], typeof(string), resultMapping);
+            var first = factory.Function("CONCAT", [prefix, inserted], nullable: true,
+                argumentsPropagateNullability: [false, false], typeof(string), resultMapping);
+            var result = factory.Function("CONCAT", [first, suffix], nullable: true,
+                argumentsPropagateNullability: [false, false], typeof(string), resultMapping);
+            return factory.Case([new CaseWhenClause(valid, result)], factory.Constant(null, typeof(string), resultMapping));
         }
 
         private SqlExpression? TranslateReplace(SqlExpression instance, IReadOnlyList<SqlExpression> arguments,

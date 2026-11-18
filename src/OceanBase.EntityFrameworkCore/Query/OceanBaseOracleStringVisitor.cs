@@ -45,6 +45,17 @@ namespace OceanBase.EntityFrameworkCore.Query
                         (SqlExpression)Visit(indexArgs[0]), (SqlExpression)Visit(indexNeedle),
                         (SqlExpression)Visit(indexArgs[2]), (SqlExpression)Visit(indexArgs[3]), index.TypeMapping!,
                         indexValue is "");
+                case SqlFunctionExpression { IsBuiltIn: true, Name: OceanBaseStringTranslator.OracleInsertLengthMarker,
+                    Arguments: [var inserted] } insertLength:
+                    var insertedValue = inserted switch
+                    {
+                        SqlConstantExpression constant => ProviderValue(constant, constant.Value),
+                        SqlParameterExpression parameter => ProviderValue(parameter, parameters.GetAndDisableCaching()[parameter.Name]),
+                        _ => null
+                    };
+                    return insertedValue is "" ? factory.Constant(0L, insertLength.TypeMapping)
+                        : factory.Function("LENGTH", [(SqlExpression)Visit(inserted)], nullable: true,
+                            argumentsPropagateNullability: [false], typeof(long), insertLength.TypeMapping);
                 case SqlConstantExpression constant when IsProviderString(constant):
                     return Normalize(constant, constant.Value);
                 case SqlParameterExpression parameter when IsProviderString(parameter):
