@@ -383,9 +383,11 @@ Supported scalar columns, keys, ordinary indexes, relationships and keyless view
 Unavailable behavior metadata produces design-time warnings requiring configuration review before writes or
 schema recreation. Known defaults with unavailable SQL use EF's `HasDefaultValue()` marker; unknown identity
 is not guessed from a key or sequence-looking default. This is a usable model scaffold, not a lossless DDL
-backup. Unsupported types and expression indexes reject explicitly. Oracle identity mode/options
-remain unverified. Known MySQL BTREE prefix indexes keep their member lengths, order and uniqueness
-through scaffolded C# and DDL. The `OceanBase:IndexPrefixLengths` annotation stores the lengths in
+backup. Unsupported types and expression indexes reject explicitly. The Connector 0.3.1 catalog
+reports whether an Oracle column is an identity and omits its generation mode and sequence options.
+Review the scaffolded identity configuration before recreating the schema. Known MySQL BTREE prefix
+indexes keep their member lengths, order and uniqueness through scaffolded C# and DDL. The
+`OceanBase:IndexPrefixLengths` annotation stores the lengths in
 index column order. A zero entry denotes a full column. Sort direction follows the catalog. OceanBase
 4.4.2.2 reports `ASC` for the tested prefix columns declared as `DESC`. A generated migration batch
 rejects creating a unique prefix index after dropping an index on the same table. Create the

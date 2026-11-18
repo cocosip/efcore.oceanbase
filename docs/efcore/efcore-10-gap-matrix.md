@@ -14,7 +14,7 @@ explicitly unsupported features, dependencies, and capabilities to confirm. Pre-
 - The current known unavailable/rejected capabilities are based on the code and package README. Supporting every BCL method is not an implicit Provider commitment.
   Add newly discovered valid requirements to their owning row or give them a new stable ID. Rejection of invalid inputs or malformed models/catalogs is validation, not a missing feature.
 
-Current counts: 50 G records (0 Not started, 1 In development, 26 Implemented, 1 Blocked, 20 Unsupported, 2 Deferred). Also retained are 2 Implemented F records, 9 external dependency B records, 4 To confirm C records, and 4 Deferred D groups.
+Current counts: 50 G records (0 Not started, 0 In development, 26 Implemented, 2 Blocked, 20 Unsupported, 2 Deferred). The inventory also retains 2 Implemented F records, 10 external dependencies (B-01 through B-09 and C-03), 3 To confirm C records, and 4 Deferred D groups.
 
 ## Development order
 
@@ -86,7 +86,7 @@ Acceptance requirements remain in the [release checklist](efcore-10-release-chec
 | G-31 | SCH-02/DEF-01 | Explicit database-default collation changes | Implemented | Extension | MySQL / Provider + Server | Initial migrations and empty-schema creation can set the default of an explicitly owned MySQL database. Later migration transitions require both defaults to be named. An unspecified endpoint in a transition, table-only scope, and Oracle database-level collation reject. A generated downgrade to the initial database drops the migration tables and leaves the collation set by the initial migration | [Migrations][migrations], [schema][schema] |
 | G-32 | SCH-02/DEF-01 | Oracle column collation DDL | Unsupported | Current scope limitation | Oracle / Provider + Server | First confirm target version/type support; do not ignore the configuration | [DDL][schema] |
 | G-33 | SCH-02/DEF-01 | Filtered index DDL | Unsupported | Current scope limitation | Both modes / Provider + Server | Provide an equivalent approach supported by the target OB version; Filter is currently explicitly rejected | [DDL][schema] |
-| G-34 | DEF-01 | Automatic alteration of identity/computed columns | In development | Extension | Both modes / Provider + Server | MySQL migrations can toggle `AUTO_INCREMENT` on an unchanged, non-null signed `INT` or `BIGINT` sole primary key using a matching target model. A table rename or primary-key replacement needs a separate migration. Oracle identity transitions, computed expression/storage changes, and combined type/key changes still require explicit migrations. Extend automatic generation only after identifying reversible DDL or a strategy that preserves data, dependencies and key allocation | [Migrations][migrations] |
+| G-34 | DEF-01 | Automatic alteration of identity/computed columns | Blocked | Extension | Both modes / Provider + Server | MySQL supports a bounded `AUTO_INCREMENT` toggle on an unchanged signed `INT`/`BIGINT` sole primary key. The OceanBase 4.4.2 `MODIFY` resolver rejects adding identity to an existing Oracle column and preserves identity when the clause is omitted. Its generated-column checks reject changes to the expression or storage kind. The remaining transitions require supported reversible DDL or a rebuild strategy that preserves data, dependencies and key allocation | [Migrations][migrations], [identity resolver][ob-identity-resolver], [generated-column checks][ob-generated-column-checks] |
 | G-35 | DEF-01 | Table migration across namespaces | Unsupported | Current scope limitation | Both modes / Provider | Establish explicit permission/ownership and data migration contracts; ordinary rename is implemented | [Migrations][migrations] |
 | G-36 | DEF-02 | Reverse engineering of expression/prefix and other non-ordinary indexes | Blocked | Extension | Both modes / Provider + Connector metadata | MySQL BTREE prefix indexes preserve per-column lengths, order and uniqueness in C# and DDL. Connector 0.3.1 does not expose expression text through IndexColumns. Close the remaining gap after the public catalog supplies exact member expressions and the facts needed to distinguish and recreate the selected index kinds | [Reverse engineering][scaffold] |
 | G-37 | DEF-02 | Reverse engineering of known ON UPDATE column behavior for supported mappings | Implemented | Extension | MySQL / Provider | Preserve catalog `ON UPDATE CURRENT_TIMESTAMP[(p)]` on non-key DATETIME columns in scaffolded C#, write readback, and DDL. Use update-only generation unless the catalog establishes an insert default. Required additions without an insert default require an explicit backfill. Oracle metadata is unknown for this behavior. See G-50 for MySQL TIMESTAMP | [Reverse engineering][scaffold], [DDL][schema] |
@@ -115,7 +115,7 @@ Retain only stable gap IDs and closure results; do not append development logs.
 
 ## Connector / server dependencies
 
-The following historical failures have direct Connector/SQL comparisons; recheck the current pinned dependency identity against the release checklist.
+The table records historical failures reproduced through Connector/SQL comparisons and confirmed limits of the public catalog. Recheck the pinned dependency identity against the release checklist.
 The Provider must not bypass them by changing the wire protocol, narrowing mappings, silently converting to text, or swallowing errors. Explain driver changes first and wait for user confirmation.
 
 | ID | Related feature | Mode | Status | Issue and conditions for resolution | Owner |
@@ -129,16 +129,16 @@ The Provider must not bypass them by changing the wire protocol, narrowing mappi
 | B-07 | SQL-01 | Oracle | Blocked | Identifiers containing embedded double quotes return 600 for EF/direct CREATE or SELECT; backtick-only/ordinary name controls succeed; do not change correct escaping to conceal server behavior | Server; recheck by version |
 | B-08 | QRY-03 | MySQL | Blocked | Collection roots associated with bounded/fixed text properties produce collation error 1267; require an equivalent collation approach, without truncating through a narrower CAST or changing comparison rules | Provider SQL + Server |
 | B-09 | SQL-02/DEF-06 | MySQL | Unsupported | Current Provider command adaptation supports only Input; repeated streams also cannot be safely reused; Output/InputOutput/ReturnValue require public driver contracts and explicit Provider integration | Provider + Connector |
+| C-03 | DEF-02 | Oracle | Blocked | Connector 0.3.1 exposes `IS_IDENTITY` in `GetSchema("Columns")`. The catalog lacks the generation mode and sequence options, so the Provider scaffolds `ValueGeneratedOnAdd` with a warning. Full fidelity requires public catalog fields for those facts and Provider mapping that preserves them in generated C# and DDL | Connector public catalog + Provider |
 
 ## Capabilities to confirm
 
-To confirm does not mean unimplemented. After investigation, move the item to G (a code gap), the release checklist (only evidence is missing), or Implemented; do not leave an ambiguous status indefinitely instead of investigating.
+After investigation, record the result under Provider gaps, Connector/server dependencies, or release acceptance as appropriate. Preserve the original ID and distinguish a missing capability from missing evidence.
 
 | ID | Related feature | Status | Capability to confirm and next step |
 | --- | --- | --- | --- |
 | C-01 | DEF-08 | To confirm | NativeAOT/precompiled queries: separately check EF10 generation/runtime restrictions and Provider entry points; do not infer support from ordinary compiled model results |
 | C-02 | MAP-05/QRY-07 | To confirm | Named timezones/DST/non-Gregorian calendars and TIMESTAMP WITH LOCAL TIME ZONE: first check mapping/semantic contracts; numeric offset evidence is insufficient to determine completeness |
-| C-03 | DEF-02 | To confirm | Scaffold fidelity for Oracle identity modes/options: check GetSchema facts and the generated model to determine whether metadata is missing or only live database evidence is absent |
 | C-04 | DEF-08/QRY-08 | To confirm | Check whether change-tracking proxies, lazy proxies with compiled models, and broader inheritance combinations have dedicated rejections or missing adaptations; nested lazy loading within ordinary streaming roots is explicitly excluded by the single active reader, so do not infer implementation gaps from missing tests |
 
 ## Four groups explicitly deferred for the current release
@@ -169,3 +169,5 @@ Do not remove data precision/NULL/ownership validation or intentional rejections
 [annotations]: ../../src/OceanBase.EntityFrameworkCore/Metadata/OceanBaseRelationalAnnotationProvider.cs
 [math]: ../../src/OceanBase.EntityFrameworkCore/Query/OceanBaseMathTranslator.cs
 [aggregates]: ../../src/OceanBase.EntityFrameworkCore/Query/OceanBaseAggregateMethodTranslator.cs
+[ob-identity-resolver]: https://github.com/oceanbase/oceanbase/blob/v4.4.2_CE/src/sql/resolver/ddl/ob_alter_table_resolver.cpp#L6900
+[ob-generated-column-checks]: https://github.com/oceanbase/oceanbase/blob/v4.4.2_CE/src/rootserver/ob_ddl_service.cpp#L9144
