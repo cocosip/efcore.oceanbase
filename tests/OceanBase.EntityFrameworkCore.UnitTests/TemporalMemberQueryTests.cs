@@ -20,6 +20,38 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
         [Theory]
         [InlineData(OceanBaseCompatibilityMode.MySql)]
         [InlineData(OceanBaseCompatibilityMode.Oracle)]
+        public void DateTimeOffset_calendar_additions_guard_year_range_and_use_the_stored_calendar(OceanBaseCompatibilityMode mode)
+        {
+            using var context = CreateContext(mode);
+            var months = -1;
+            var years = 4;
+            var sql = context.Rows.Where(row => row.Zoned.AddMonths(months).UtcTicks > 0)
+                .Select(row => new { Months = row.Zoned.AddMonths(months), Years = row.Zoned.AddYears(years) }).ToQueryString();
+            var select = sql.Split("SELECT ", StringSplitOptions.None)[1].Split("WHERE ", StringSplitOptions.None)[0];
+
+            Assert.DoesNotContain("__oceanbase_internal", sql);
+            Assert.Contains("CASE", select);
+            Assert.Contains("9999", select);
+            Assert.Contains("119988", select);
+            Assert.DoesNotContain("120000", select);
+            if (mode == OceanBaseCompatibilityMode.Oracle)
+            {
+                Assert.Contains("ADD_MONTHS", select);
+                Assert.Contains("LAST_DAY", select);
+                Assert.Contains("FROM_TZ", select);
+                Assert.Contains("EXTRACT(TIMEZONE_MINUTE", select);
+            }
+            else
+            {
+                Assert.Contains(" MONTH)", select);
+                Assert.Contains(" YEAR)", select);
+                Assert.DoesNotContain("FROM_TZ", select);
+            }
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle)]
         public void DateTimeOffset_numeric_additions_keep_truncated_ticks_and_native_offset(OceanBaseCompatibilityMode mode)
         {
             using var context = CreateContext(mode);

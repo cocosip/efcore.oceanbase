@@ -61,6 +61,10 @@ namespace OceanBase.EntityFrameworkCore.Query
             .GetMethod(nameof(DateTimeOffset.Add), [typeof(TimeSpan)])!;
         private static readonly MethodInfo DateTimeOffsetSubtractDuration = typeof(DateTimeOffset)
             .GetMethod(nameof(DateTimeOffset.Subtract), [typeof(TimeSpan)])!;
+        private static readonly MethodInfo DateTimeOffsetAddMonths = typeof(DateTimeOffset)
+            .GetMethod(nameof(DateTimeOffset.AddMonths), [typeof(int)])!;
+        private static readonly MethodInfo DateTimeOffsetAddYears = typeof(DateTimeOffset)
+            .GetMethod(nameof(DateTimeOffset.AddYears), [typeof(int)])!;
         private static readonly TimeSpanToTicksConverter DurationTicksConverter = new();
         private static readonly MethodInfo DateTimeAddDays = typeof(DateTime).GetMethod(nameof(DateTime.AddDays), [typeof(double)])!;
         private static readonly MethodInfo DateTimeAddHours = typeof(DateTime).GetMethod(nameof(DateTime.AddHours), [typeof(double)])!;
@@ -87,6 +91,9 @@ namespace OceanBase.EntityFrameworkCore.Query
             if (TranslateConversion(instance, method, arguments) is { } conversion) return conversion;
             if (instance is not null && method == DateTimeOffsetAddTicks && arguments.Count == 1)
                 return TranslateOffsetTickAddition(instance, arguments[0], subtract: false);
+            if (instance is not null && arguments.Count == 1
+                && (method == DateTimeOffsetAddMonths || method == DateTimeOffsetAddYears))
+                return TranslateOffsetCalendarAddition(instance, arguments[0], method == DateTimeOffsetAddYears);
             if (instance is not null && arguments.Count == 1
                 && (method == DateTimeOffsetAddDuration || method == DateTimeOffsetSubtractDuration))
                 return TranslateDurationTicks(arguments[0]) is { } durationTicks
@@ -294,18 +301,7 @@ namespace OceanBase.EntityFrameworkCore.Query
             var offsetTicks = subtract ? factory.Negate(amount) : amount;
             var adjusted = factory.Function(DateTimeAddTicksMarker, [local, offsetTicks], nullable: true,
                 argumentsPropagateNullability: [false, false], typeof(DateTime), timestamp);
-            var resultMapping = mapping.WithPrecisionAndScale(oracle ? 7 : 6, null);
-            SqlExpression result;
-            if (oracle)
-            {
-                var text = mappingSource.FindMapping(typeof(string))!;
-                var offset = factory.Function("TO_CHAR", [instance, factory.Constant("TZH:TZM", text)], nullable: true,
-                    argumentsPropagateNullability: [true, false], typeof(string), text);
-                result = factory.Function("FROM_TZ", [adjusted, offset], nullable: true,
-                    argumentsPropagateNullability: [true, true], typeof(DateTimeOffset), resultMapping);
-            }
-            else result = factory.Convert(adjusted, typeof(DateTimeOffset), resultMapping);
-
+            var result = RestoreOffset(instance, adjusted, mapping);
             return factory.Case([new CaseWhenClause(valid, result)], elseResult: null);
 
             SqlExpression InRange(SqlExpression stamp)
@@ -318,6 +314,68 @@ namespace OceanBase.EntityFrameworkCore.Query
                     : factory.AndAlso(factory.GreaterThanOrEqual(amount, factory.Negate(ticks)),
                         factory.LessThanOrEqual(amount, factory.Subtract(maximum, ticks)));
             }
+        }
+
+        private SqlExpression? TranslateOffsetCalendarAddition(SqlExpression instance, SqlExpression amount, bool years)
+        {
+            var factory = sqlExpressionFactory;
+            instance = factory.ApplyDefaultTypeMapping(instance);
+            amount = factory.ApplyDefaultTypeMapping(amount);
+            if (instance.TypeMapping is not { } mapping || amount.TypeMapping is not { } amountMapping
+                || amount.Type != typeof(int) || amountMapping.Converter?.ConvertsNulls == true
+                || (amountMapping.Converter?.ProviderClrType ?? amountMapping.ClrType) != typeof(int)
+                || OceanBaseTemporalMemberTranslator.TranslateUtcDateTime(factory, mappingSource, mode, instance) is not { } utc)
+                return null;
+
+            var oracle = mode == OceanBaseCompatibilityMode.Oracle;
+            var timestamp = utc.TypeMapping!;
+            var local = oracle ? factory.Convert(instance, typeof(DateTime), timestamp) : utc;
+            var integer = mappingSource.FindMapping(typeof(int))!;
+            var one = factory.Constant(1, integer);
+            var position = Part("YEAR");
+            if (!years)
+                position = factory.Add(factory.Multiply(factory.Subtract(position, one), factory.Constant(12, integer)), Part("MONTH"));
+            var valid = factory.AndAlso(factory.GreaterThanOrEqual(amount, factory.Subtract(one, position)),
+                factory.LessThanOrEqual(amount, factory.Subtract(factory.Constant(years ? 9999 : 9999 * 12, integer), position)));
+            var shifted = factory.Function(years ? DateTimeAddYearsMarker : DateTimeAddMonthsMarker, [local, amount], nullable: true,
+                argumentsPropagateNullability: [false, false], typeof(DateTime), timestamp);
+            SqlExpression guarded = factory.Case([new CaseWhenClause(valid, shifted)], elseResult: null);
+
+            if (oracle)
+            {
+                var longMapping = mappingSource.FindMapping(typeof(long))!;
+                var offsetMinutes = factory.Function(OceanBaseTemporalMemberTranslator.DateTimeOffsetTotalOffsetMinutesMarker,
+                    [instance], nullable: true, argumentsPropagateNullability: [false], typeof(int), integer);
+                var offsetTicks = factory.Multiply(factory.Convert(offsetMinutes, typeof(long), longMapping),
+                    factory.Constant(TimeSpan.TicksPerMinute, longMapping));
+                var localTicks = factory.Function(OceanBaseTemporalMemberTranslator.DateTimeTicksMarker, [guarded], nullable: true,
+                    argumentsPropagateNullability: [false], typeof(long), longMapping);
+                var utcTicks = factory.Subtract(localTicks, offsetTicks);
+                var validUtc = factory.AndAlso(factory.GreaterThanOrEqual(utcTicks, factory.Constant(0L, longMapping)),
+                    factory.LessThanOrEqual(utcTicks, factory.Constant(DateTime.MaxValue.Ticks, longMapping)));
+                guarded = factory.Case([new CaseWhenClause(validUtc, guarded)], elseResult: null);
+            }
+
+            return RestoreOffset(instance, guarded, mapping);
+
+            SqlExpression Part(string unit)
+                => oracle ? factory.Function(OceanBaseTemporalMemberTranslator.ExtractMarker, [factory.Fragment(unit), local], nullable: true,
+                    argumentsPropagateNullability: [false, false], typeof(int), integer)
+                    : factory.Function(unit, [local], nullable: true, argumentsPropagateNullability: [true], typeof(int), integer);
+        }
+
+        private SqlExpression RestoreOffset(SqlExpression instance, SqlExpression shifted, RelationalTypeMapping mapping)
+        {
+            var factory = sqlExpressionFactory;
+            var oracle = mode == OceanBaseCompatibilityMode.Oracle;
+            var resultMapping = mapping.WithPrecisionAndScale(oracle ? 7 : 6, null);
+            if (!oracle) return factory.Convert(shifted, typeof(DateTimeOffset), resultMapping);
+
+            var text = mappingSource.FindMapping(typeof(string))!;
+            var offset = factory.Function("TO_CHAR", [instance, factory.Constant("TZH:TZM", text)], nullable: true,
+                argumentsPropagateNullability: [true, false], typeof(string), text);
+            return factory.Function("FROM_TZ", [shifted, offset], nullable: true,
+                argumentsPropagateNullability: [true, true], typeof(DateTimeOffset), resultMapping);
         }
 
         private SqlExpression? TranslateConversion(SqlExpression? instance, MethodInfo method, IReadOnlyList<SqlExpression> arguments)

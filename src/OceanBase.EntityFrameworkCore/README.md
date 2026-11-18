@@ -167,7 +167,9 @@ offset on Oracle and return UTC on MySQL. Out-of-range results and MySQL adjustm
 one microsecond return SQL NULL. Duration operands use exact scalar ticks, ordinary native
 TIME or INTERVAL columns, and tick-backed query results. Custom native duration converters reject.
 DateTimeOffset AddDays/AddHours/AddMinutes/AddSeconds/AddMilliseconds/AddMicroseconds use the
-same guarded whole- and fractional-tick truncation as DateTime. AddMonths and AddYears remain open.
+same guarded whole- and fractional-tick truncation as DateTime. AddMonths and AddYears clamp
+the day and preserve fractional seconds on the stored calendar. That calendar is the numeric
+offset's wall clock in Oracle mode and UTC in MySQL mode.
 
 `Math.Acosh(double)` and `MathF.Acosh(float)` translate in both modes. They calculate in Double
 precision before applying the existing result mapping, including Single normalization. Finite input

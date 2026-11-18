@@ -114,6 +114,37 @@ public sealed class DateTimeCalendarAddFunctionalTests
     [InlineData(OceanBaseCompatibilityMode.MySql, true)]
     [InlineData(OceanBaseCompatibilityMode.Oracle, false)]
     [InlineData(OceanBaseCompatibilityMode.Oracle, true)]
+    public async Task DateTimeOffset_calendar_additions_bind_signed_counts_and_materialize_native_offsets(OceanBaseCompatibilityMode mode, bool async)
+    {
+        var oracle = mode == OceanBaseCompatibilityMode.Oracle;
+        var expected = new DateTimeOffset(2024, 2, 29, 0, 0, 0, oracle ? TimeSpan.FromHours(6) : TimeSpan.Zero)
+            .AddTicks(oracle ? 1234567 : 1234560);
+        using var table = new DataTable();
+        table.Columns.Add("Value", oracle ? typeof(OceanBaseTimestampWithTimeZone) : typeof(DateTime));
+        table.Rows.Add(oracle ? (object)new OceanBaseTimestampWithTimeZone(expected) : expected.UtcDateTime);
+        table.Rows.Add(DBNull.Value);
+        var capture = new Capture(table);
+        await using var context = Create(mode, capture);
+        var amount = 1;
+        var query = context.Rows.Where(row => row.Zoned!.Value.AddYears(amount).UtcTicks > 0)
+            .Select(row => (DateTimeOffset?)row.Zoned!.Value.AddMonths(amount));
+        foreach (var value in new[] { -1, 1, int.MaxValue })
+        {
+            amount = value;
+            var result = async ? await query.ToListAsync() : query.ToList();
+            Assert.Equal(2, result.Count);
+            Assert.True(result[0]?.EqualsExact(expected));
+            Assert.Null(result[1]);
+            Assert.All(capture.Parameters[^1], parameter => Assert.Equal(value, parameter));
+        }
+        Assert.All(capture.Sql, sql => Assert.Equal(capture.Sql[0], sql));
+    }
+
+    [Theory]
+    [InlineData(OceanBaseCompatibilityMode.MySql, false)]
+    [InlineData(OceanBaseCompatibilityMode.MySql, true)]
+    [InlineData(OceanBaseCompatibilityMode.Oracle, false)]
+    [InlineData(OceanBaseCompatibilityMode.Oracle, true)]
     public async Task DateTimeOffset_numeric_additions_bind_refreshed_offsets(OceanBaseCompatibilityMode mode, bool async)
     {
         var oracle = mode == OceanBaseCompatibilityMode.Oracle;

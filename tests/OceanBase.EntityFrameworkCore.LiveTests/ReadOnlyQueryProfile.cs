@@ -152,7 +152,10 @@ namespace OceanBase.EntityFrameworkCore.LiveTests
             var maximum = oracle ? DateTimeOffset.MaxValue : DateTimeOffset.MaxValue.AddTicks(-9);
             DateTimeOffset?[] values = [sameInstant, distant, fractional, null, DateTimeOffset.MinValue,
                 maximum.ToOffset(oracle ? TimeSpan.FromMinutes(-30) : TimeSpan.Zero),
-                oracle ? new DateTimeOffset(DateTime.MaxValue, TimeSpan.FromHours(6)) : null];
+                oracle ? new DateTimeOffset(DateTime.MaxValue, TimeSpan.FromHours(6)) : null,
+                anchor, new DateTimeOffset(2024, 1, 31, 12, 0, 0, TimeSpan.FromMinutes(345)).AddTicks(oracle ? 1234567 : 1234560),
+                oracle ? new DateTimeOffset(1, 2, 1, 0, 0, 0, TimeSpan.FromHours(6)) : null,
+                oracle ? new DateTimeOffset(9998, 12, 31, 23, 45, 0, TimeSpan.FromMinutes(-30)) : null];
             var mapping = context.GetService<IRelationalTypeMappingSource>().FindMapping(typeof(DateTimeOffset))!;
             var quote = oracle ? "\"" : "`";
             var tail = oracle ? " FROM DUAL" : "";
@@ -224,14 +227,31 @@ namespace OceanBase.EntityFrameworkCore.LiveTests
             Assert.All(await List(rows.Select(row => (DateTimeOffset?)row.Zoned!.Value.AddDays(amount)), async, token),
                 item => Assert.Null(item));
 
+            var units = 0;
+            var calendar = rows.OrderBy(row => row.Id).Select(row => new
+            {
+                Months = (DateTimeOffset?)row.Zoned!.Value.AddMonths(units),
+                Years = (DateTimeOffset?)row.Zoned.Value.AddYears(units)
+            });
+            foreach (var count in new[] { -1, 0, 1, 4, int.MinValue, int.MaxValue })
+            {
+                units = count;
+                var actual = await List(calendar, async, token);
+                Assert.Equal(values.Length, actual.Count);
+                foreach (var (value, row) in values.Zip(actual))
+                {
+                    AssertZoned(CalendarExpected(value, count, years: false), row.Months);
+                    AssertZoned(CalendarExpected(value, count, years: true), row.Years);
+                }
+            }
+
             async Task VerifyValues(IQueryable<DateTimeOffset?> query, decimal ticks)
             {
                 var expected = values.Select(value => Expected(value, ticks));
                 var actual = await List(query, async, token);
                 Assert.Equal(values.Length, actual.Count);
                 foreach (var (wanted, found) in expected.Zip(actual))
-                    if (wanted.HasValue) Assert.True(found?.EqualsExact(wanted.Value));
-                    else Assert.Null(found);
+                    AssertZoned(wanted, found);
             }
 
             Assert.Null(Assert.Single(await List(rows.Where(row => row.Id == 0)
@@ -245,6 +265,20 @@ namespace OceanBase.EntityFrameworkCore.LiveTests
                     || (decimal)stamp.Ticks + ticks < 0 || (decimal)stamp.Ticks + ticks > maximum.Ticks)
                     return null;
                 return stamp.AddTicks((long)ticks);
+            }
+
+            DateTimeOffset? CalendarExpected(DateTimeOffset? value, int count, bool years)
+            {
+                if (!value.HasValue) return null;
+                var stamp = oracle ? value.Value : value.Value.ToUniversalTime();
+                try { return years ? stamp.AddYears(count) : stamp.AddMonths(count); }
+                catch (ArgumentOutOfRangeException) { return null; }
+            }
+
+            static void AssertZoned(DateTimeOffset? expected, DateTimeOffset? actual)
+            {
+                if (expected.HasValue) Assert.True(actual?.EqualsExact(expected.Value));
+                else Assert.Null(actual);
             }
         }
 
