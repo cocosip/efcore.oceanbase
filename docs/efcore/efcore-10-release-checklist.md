@@ -22,7 +22,7 @@ Develop missing features first; the full pre-release acceptance campaign follows
 
 | Gate | State | Current evidence / remaining conditions |
 | --- | --- | --- |
-| R-01 Dependency and source identity | Partially passed | Latest temporal/string feature checks use the aligned Connector 0.3.0 identity recorded below; it differs from the duration checkpoint. Historical results do not carry forward across artifacts with the same package version; final release identities remain pending |
+| R-01 Dependency and source identity | Partially passed | The Provider now resolves the official Connector 0.3.1 package recorded below. The temporal/string and initial trigger checkpoints retain their Connector 0.3.0 identities. Final release identities remain pending |
 | R-02 Local / TST-01 | Partially passed | Current feature solution regression is recorded below; complete runtime families remain uncovered, and the final release revision requires a rerun |
 | R-03 Live database / TST-02 | Partially passed | Targeted temporal/string feature evidence and historical duration/ordinary profiles are listed below with separate dependency identities. Broader live evidence for writes/concurrency, transaction atomicity/cancellation, Schema, inheritance/lazy/compiled and other areas remains incomplete |
 | R-04 PKG-01..04 | Partially passed | duration-r2 package contents/EF range, package-only consumers for both patches and modes, and DLL/README/Connector identity passed; the final release package, consumer, EF11 negative dependency check and version consistency still require execution |
@@ -45,7 +45,7 @@ Existing DEF-01/02/03/07/08/09 functionality still requires R-03/R-05 checks; de
 | CFG-02 | Database.IsOceanBase() and invariant identify this provider through EF's real service graph. | Historical pass | Historical pass | R-01/R-02/R-03 |
 | CFG-03 | Model/service-provider and compiled-query caches separate compatibility/translation modes and design-time/runtime models; compatible options reuse services. | Historical pass | Historical pass | R-01/R-02/R-03 |
 | CFG-04 | Required relational services resolve with EF10 lifetimes; normal DatabaseFacade APIs have no missing services. | Pending acceptance | Pending acceptance | R-01/R-02/R-03 |
-| CON-01 | Create OceanBaseConnection through public OceanBaseConnector 0.3.0 APIs and supply ExpectedMode. | Historical pass | Historical pass | R-03/R-09 |
+| CON-01 | Create OceanBaseConnection through public OceanBaseConnector APIs and supply ExpectedMode. | Historical pass | Historical pass | R-03/R-09 |
 | CON-02 | Reject configured/detected mode conflicts before execution for supplied/created connections; cleanup remains safe after rejection. | Historical pass | Historical pass | R-03/R-09 |
 | CON-03 | Caller-owned connections survive context disposal; provider-owned connections close/dispose in sync/async success/error paths. | Historical pass | Historical pass | R-03/R-09 |
 | CON-04 | Sync/async open, execute, read, close and connection reuse honor mode and connector settings. | Historical pass | Historical pass | R-03/R-09 |
@@ -86,7 +86,7 @@ Existing DEF-01/02/03/07/08/09 functionality still requires R-03/R-05 checks; de
 | SCH-01 | DatabaseFacade services resolve; existence checks distinguish absence from authentication, permission and network failures. | Pending acceptance | Pending acceptance | R-03/R-05 |
 | SCH-02 | EnsureCreated/GenerateCreateScript implement schema profile and key generation; existing populated schemas are handled explicitly. | Pending acceptance | Pending acceptance | R-03/R-05 |
 | SCH-03 | EnsureDeleted has an explicit ownership/deletion boundary, preserves tenant objects outside that boundary and fails clearly outside supported profile. | Pending acceptance | Pending acceptance | R-03/R-05 |
-| PKG-01 | Build net10.0 assets against OceanBaseConnector 0.3.0 with warnings as errors. | Historical pass | Historical pass | R-01/R-04 |
+| PKG-01 | Build net10.0 assets against OceanBaseConnector 0.3.1 with warnings as errors. | Local pass | Local pass | R-01/R-04 |
 | PKG-02 | Packed nuspec uses OceanBase.EntityFrameworkCore and EF ranges [10.0.0,11.0.0). | Historical pass | Historical pass | R-01/R-04 |
 | PKG-03 | Isolated packed consumer restores/executes provider API without project/local connector references. | Historical pass | Historical pass | R-01/R-04 |
 | PKG-04 | Minimum EF10 and selected later available EF10 patch restore/build/test without pinning the EF patch in the provider package; EF11 cannot satisfy dependencies. | Historical pass | Historical pass | R-01/R-04 |
@@ -124,7 +124,7 @@ Existing DEF-01/02/03/07/08/09 functionality still requires R-03/R-05 checks; de
 | Historical cross-platform checks | All four Windows/Linux gates passed for e41981e | [Historical CI](https://github.com/cocosip/efcore.oceanbase/actions/runs/42865290840); the current revision requires a rerun |
 
 Different cached Connector 0.3.0 artifacts were found locally (including an old assembly 0.2.0); some old assets even still referenced package 0.2.0.
-After alignment, the current duration module uses nuspec revision `6de85dee1849b04fc937f4419c4ff7e17fce64b4`,
+After alignment, the historical duration module used nuspec revision `6de85dee1849b04fc937f4419c4ff7e17fce64b4`,
 assembly 0.3.0.0, and net10 DLL SHA256
 `aa1a7b3dafb0a3b543a3cfbcde0bdefff5dff3a7ff81dfeac0c7edbd5b01b19f`.
 The later numeric-add development run instead resolves the available Connector 0.3.0 package with nuspec revision
@@ -134,7 +134,13 @@ Its scoped results do not replace the earlier duration artifact's evidence; no C
 Minute-through-tick and early date-difference local builds resolved the earlier artifact from the shared cache;
 the latest local results above supersede them after aligning the package folder with native checks and verifying all three output DLL hashes.
 Release records must state the actual package hash/revision, not just the version.
-NuGet network/vulnerability sources previously failed; restore completed using existing packages plus a local feed. This documentation cleanup changes neither dependencies nor NuGet configuration.
+The official Connector 0.3.1 package has nuspec revision `6447429f398c4b11cfaeb09335fbd7ff096b7d25`,
+nupkg SHA256 `8c933fb9e958ea9429968d87fbef0490084d2b8de2cef876e3e2fe7ee8b05a8a` and net10 DLL SHA256
+`edcece109e4aab4e5fb80b436179d72f940c8fb70759cedeb9c26d8e3e0c1f9f`. The solution Release build passed with
+warnings as errors, the Provider package content check confirmed the dependency, and the four native
+trigger cases passed again on both modes. See `artifacts/connector-031/` for the package and scoped evidence.
+NuGet source indexing was unreliable during this run. Restores used the official nupkg in a local feed
+with the existing package cache. Final release acceptance remains pending.
 
 ## Outstanding coverage and independent review items
 
