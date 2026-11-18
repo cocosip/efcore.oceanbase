@@ -229,6 +229,43 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
         [Theory]
         [InlineData(OceanBaseCompatibilityMode.MySql)]
         [InlineData(OceanBaseCompatibilityMode.Oracle)]
+        public void Pad_translates_all_four_signatures_without_truncation(OceanBaseCompatibilityMode mode)
+        {
+            using var context = CreateContext(mode);
+            var width = 8;
+            var token = '海';
+            var query = context.Rows.Where(row => row.Required.PadLeft(width).PadRight(12, token) == "body"
+                || row.Optional!.PadRight(width).PadLeft(2, row.Character!.Value) == "other");
+            var sql = query.ToQueryString();
+            Assert.Contains("PAD(", sql);
+            Assert.Contains(Length(mode), sql);
+            Assert.Contains("CASE", sql);
+            Assert.Throws<InvalidOperationException>(() => context.Rows.Where(row =>
+                row.Required.PadLeft(width, row.NumericCharacter) == "body").ToQueryString());
+            Assert.Throws<InvalidOperationException>(() => context.Rows.Where(row =>
+                row.BinaryConverted.PadRight(width) == "body").ToQueryString());
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql, "CHAR(8)")]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, "NCHAR(8)")]
+        public void Pad_returns_variable_text_for_fixed_receivers(OceanBaseCompatibilityMode mode, string storeType)
+        {
+            using var context = CreateContext(mode);
+            var mapping = context.GetService<IRelationalTypeMappingSource>().FindMapping(typeof(string), storeTypeName: storeType)!;
+            Assert.True(mapping.IsFixedLength);
+            var factory = context.GetService<ISqlExpressionFactory>();
+            var padded = context.GetService<IMethodCallTranslatorProvider>().Translate(context.Model, factory.Constant("x", mapping),
+                typeof(string).GetMethod(nameof(string.PadRight), [typeof(int)])!, [factory.Constant(1)],
+                context.GetService<IDiagnosticsLogger<DbLoggerCategory.Query>>());
+            var resultMapping = Assert.IsType<CaseExpression>(padded).TypeMapping!;
+            Assert.False(resultMapping.IsFixedLength);
+            Assert.Equal(mapping.IsUnicode, resultMapping.IsUnicode);
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle)]
         public void Insert_uses_guarded_native_character_offsets(OceanBaseCompatibilityMode mode)
         {
             using var context = CreateContext(mode);

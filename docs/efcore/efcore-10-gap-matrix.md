@@ -14,7 +14,7 @@ explicitly unsupported features, dependencies, and capabilities to confirm. Pre-
 - The current known unavailable/rejected capabilities are based on the code and package README. Supporting every BCL method is not an implicit Provider commitment.
   Add newly discovered valid requirements to their owning row or give them a new stable ID. Rejection of invalid inputs or malformed models/catalogs is validation, not a missing feature.
 
-Current counts: 49 G records (10 Not started, 0 In development, 18 Implemented, 19 Unsupported, 2 Deferred). Also retained are 2 Implemented F records, 9 external dependency B records, 4 To confirm C records, and 4 Deferred D groups.
+Current counts: 49 G records (9 Not started, 0 In development, 19 Implemented, 19 Unsupported, 2 Deferred). Also retained are 2 Implemented F records, 9 external dependency B records, 4 To confirm C records, and 4 Deferred D groups.
 
 ## Development order
 
@@ -35,8 +35,9 @@ Prioritize missing Provider functionality before the pre-release acceptance camp
    EF.Constant inlining, stored-text converter ownership, case sensitivity and strict regex anchors
    without NULL compensation.
 6. G-18 implements the six IndexOf signatures with native character positions and guarded ranges.
-   G-47 implements ordinary string and char Replace. G-48 implements guarded Insert. Next, implement G-49 padding.
-   DDL metadata/comments and scaffold fidelity remain subsequent Extension candidates,
+   G-47 implements ordinary string and char Replace. G-48 implements guarded Insert. G-49 implements
+   non-truncating character padding. Next, implement table and column comment DDL (G-30).
+   Trigger metadata and scaffold fidelity remain subsequent Extension candidates,
    selected by application value and Provider feasibility rather than a commitment to every BCL method.
    Investigate C items before classifying them as missing code;
    retain Unsupported/Deferred contracts and resolve B dependencies at their owning layer.
@@ -98,7 +99,7 @@ Acceptance requirements remain in the [release checklist](efcore-10-release-chec
 | G-46 | QRY-04 | Oracle CLOB/NCLOB aggregate Min/Max | Unsupported | Current scope limitation | Oracle / Provider + Server | Establish lossless LOB comparison/return-type contracts; preserve bounded text/temporal extrema | [Aggregates][aggregates] |
 | G-47 | QRY-06 | Replace(string,string), Replace(char,char) | Implemented | Extension | Both modes / Provider | Native literal replacement in stored text. NULL source or invalid old token returns SQL NULL. NULL/empty new string deletes matches and NULL char operands propagate. Variable national/LOB result families retain the receiver inverse once. Expanded strings and LOBs, captured tokens, nullable columns and composition are covered | [Strings][strings] |
 | G-48 | QRY-06 | Insert(int,string) | Implemented | Extension | Both modes / Provider | Insert at a native character boundary in [0,length] with wide arithmetic. NULL input or an invalid index yields SQL NULL. Known empty scalar values leave the source intact, including in Oracle. Plain contextual values and variable national/LOB results preserve stored text behavior and the receiver inverse | [Strings][strings] |
-| G-49 | QRY-06 | string.PadLeft/PadRight method families | Not started | Extension | Both modes / Provider | Define non-truncating native character padding, NULL and invalid widths, result mappings and converter ownership before adding translation and regressions | [Strings][strings] |
+| G-49 | QRY-06 | PadLeft(int/int,char), PadRight(int/int,char) | Implemented | Extension | Both modes / Provider | Width counts native characters, with no truncation. Negative or NULL width, NULL source and NULL char operands yield SQL NULL. Oracle generates single-width spaces before substituting the requested char and concatenating with the source. Variable national/LOB mappings retain the receiver inverse | [Strings][strings] |
 
 ## Implemented entries
 

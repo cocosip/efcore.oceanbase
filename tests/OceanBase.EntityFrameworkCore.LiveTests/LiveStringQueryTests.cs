@@ -559,6 +559,65 @@ namespace OceanBase.EntityFrameworkCore.LiveTests
 
         [Theory]
         [MemberData(nameof(Cases))]
+        public async Task Pad_preserves_native_character_width_and_does_not_truncate(
+            OceanBaseCompatibilityMode mode, bool async, bool nulls)
+            => await WithTable(mode, async, nulls, async (context, seed, stage) =>
+            {
+                var rows = context.Set<Row>().OrderBy(row => row.Id);
+                var width = 0;
+                var token = 'x';
+                var query = rows.Select(row => new
+                {
+                    row.Id, Left = (string?)row.Plain!.PadLeft(width), Right = (string?)row.Plain!.PadRight(width),
+                    ExplicitLeft = (string?)row.Plain!.PadLeft(width, token), ExplicitRight = (string?)row.Plain!.PadRight(width, token),
+                    Fixed = (string?)row.Fixed!.PadRight(width, token), National = (string?)row.NationalFixed!.PadLeft(width, token),
+                    Converted = (string?)row.Converted!.PadLeft(width, token)
+                });
+                foreach (var input in new[] { (0, ' '), (3, 'x'), (10, '海'), (16, '\''), (10, '\\'), (-1, 'x'), (int.MinValue, 'x'), (2, ' ') })
+                {
+                    stage("Pad native character counts, shorter widths, constants, parameters and converted text");
+                    (width, token) = input;
+                    Assert.Equal(seed.Select(row => new
+                    {
+                        row.Id, Left = Padded(row.Plain, width, ' ', true), Right = Padded(row.Plain, width, ' ', false),
+                        ExplicitLeft = Padded(row.Plain, width, token, true), ExplicitRight = Padded(row.Plain, width, token, false),
+                        Fixed = Padded(row.Fixed, width, token, false), National = Padded(row.NationalFixed, width, token, true),
+                        Converted = Decode(Padded(Encode(row.Converted), width, token, true))
+                    }), await Read(query, async));
+                }
+                stage("Pad nullable width and char columns and query composition");
+                var columns = rows.Select(row => new
+                {
+                    row.Id, Width = (string?)row.Plain!.PadRight(row.RemoveStart!.Value, '海'),
+                    Token = (string?)row.Plain!.PadLeft(7, row.Character!.Value),
+                    Composed = (string?)row.Plain!.PadRight(8, 'z').ToUpper(),
+                    EmptyLob = (string?)row.Large!.Trim().PadLeft(2, 'x')
+                });
+                Assert.Equal(seed.Select(row => new
+                {
+                    row.Id, Width = Padded(row.Plain, row.RemoveStart, '海', false), Token = Padded(row.Plain, 7, row.Character, true),
+                    Composed = Padded(row.Plain, 8, 'z', false)?.ToUpperInvariant(), EmptyLob = Padded(row.Large?.Trim(' '), 2, 'x', true)
+                }), await Read(columns, async));
+                Assert.Equal(seed.Where(row => Padded(row.Plain, 12, '海', true)?.StartsWith("海海", StringComparison.Ordinal) == true)
+                    .Select(row => row.Id), await Read(rows.Where(row => row.Plain!.PadLeft(12, '海').StartsWith("海海"))
+                        .Select(row => row.Id), async));
+
+                stage("Pad LOB results beyond scalar text limits");
+                var lob = Assert.Single(await Read(rows.Where(row => row.Id == 8).Select(row => row.Large!.PadLeft(4100, '海')), async));
+                Assert.Equal(Padded(seed[7].Large, 4100, '海', true), lob);
+            });
+
+        private static string? Padded(string? source, int? width, char? token, bool left)
+        {
+            if (source is null || width is null or < 0 || token is null) return null;
+            var difference = width.Value - source.EnumerateRunes().Count();
+            if (difference <= 0) return source;
+            var padding = new string(token.Value, difference);
+            return left ? padding + source : source + padding;
+        }
+
+        [Theory]
+        [MemberData(nameof(Cases))]
         public async Task Insert_preserves_native_character_bounds_empty_values_and_text_families(
             OceanBaseCompatibilityMode mode, bool async, bool nulls)
             => await WithTable(mode, async, nulls, async (context, seed, stage) =>

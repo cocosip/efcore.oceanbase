@@ -43,6 +43,13 @@ namespace OceanBase.EntityFrameworkCore.Query
         private static readonly MethodInfo ReplaceText = typeof(string).GetMethod(nameof(string.Replace), [typeof(string), typeof(string)])!;
         private static readonly MethodInfo ReplaceCharacters = typeof(string).GetMethod(nameof(string.Replace), [typeof(char), typeof(char)])!;
         private static readonly MethodInfo InsertText = typeof(string).GetMethod(nameof(string.Insert), [typeof(int), typeof(string)])!;
+        private static readonly Dictionary<MethodInfo, string> PadMethods = new()
+        {
+            [typeof(string).GetMethod(nameof(string.PadLeft), [typeof(int)])!] = "LPAD",
+            [typeof(string).GetMethod(nameof(string.PadLeft), [typeof(int), typeof(char)])!] = "LPAD",
+            [typeof(string).GetMethod(nameof(string.PadRight), [typeof(int)])!] = "RPAD",
+            [typeof(string).GetMethod(nameof(string.PadRight), [typeof(int), typeof(char)])!] = "RPAD"
+        };
         internal const string OracleSearchMarker = "__oceanbase_internal_string_search";
         internal const string OracleInsertLengthMarker = "__oceanbase_internal_insert_length";
 
@@ -55,7 +62,8 @@ namespace OceanBase.EntityFrameworkCore.Query
             var isRemove = method == RemoveStart || method == RemoveStartCount;
             var isReplace = method == ReplaceText || method == ReplaceCharacters;
             var isInsert = method == InsertText;
-            if (instance is null || !isSearch && !isFunction && !isSubstring && !isRemove && !isReplace && !isInsert)
+            var isPad = PadMethods.TryGetValue(method, out var pad);
+            if (instance is null || !isSearch && !isFunction && !isSubstring && !isRemove && !isReplace && !isInsert && !isPad)
                 return null;
 
             instance = sqlExpressionFactory.ApplyDefaultTypeMapping(instance);
@@ -68,6 +76,9 @@ namespace OceanBase.EntityFrameworkCore.Query
 
             if (isInsert)
                 return TranslateInsert(instance, arguments, mapping);
+
+            if (isPad)
+                return TranslatePad(instance, arguments, mapping, pad!);
 
             if (isRemove || function is "TRIM" or "LTRIM" or "RTRIM")
             {
@@ -112,6 +123,59 @@ namespace OceanBase.EntityFrameworkCore.Query
             // Oracle all-space trim can return NULL for required input; do not simplify result null tests.
             return sqlExpressionFactory.Function(function!, [instance], nullable: true,
                 argumentsPropagateNullability: [false], typeof(string), mapping);
+        }
+
+        private SqlExpression? TranslatePad(SqlExpression source, IReadOnlyList<SqlExpression> arguments,
+            RelationalTypeMapping mapping, string function)
+        {
+            var factory = sqlExpressionFactory;
+            var text = mappingSource.FindMapping(typeof(string), storeTypeName: null, unicode: mapping.IsUnicode)!;
+            var space = factory.Constant(" ", text);
+            var token = arguments.Count == 1 ? space : factory.ApplyTypeMapping(arguments[1],
+                (RelationalTypeMapping)text.WithComposedConverter(new CharToStringConverter()));
+            if (arguments.Count == 2 && token.TypeMapping?.Converter is not CharToStringConverter)
+                return null;
+
+            var width = factory.ApplyDefaultTypeMapping(arguments[0]);
+            var lengthFunction = mode == OceanBaseCompatibilityMode.MySql ? "CHAR_LENGTH" : "LENGTH";
+            var length = factory.Function(lengthFunction, [source], nullable: true,
+                argumentsPropagateNullability: [false], typeof(int));
+            var valid = factory.GreaterThanOrEqual(width, factory.Constant(0));
+            if (arguments.Count == 2)
+            {
+                var tokenLength = factory.Function(lengthFunction, [token], nullable: true,
+                    argumentsPropagateNullability: [false], typeof(int));
+                valid = factory.AndAlso(valid, factory.IsNotNull(tokenLength));
+            }
+
+            var resultMapping = mapping.IsFixedLength ? TrimResultMapping(mappingSource, mapping) : mapping;
+            SqlExpression result;
+            if (mode == OceanBaseCompatibilityMode.MySql)
+            {
+                result = factory.Function(function, [source, width, token], nullable: true,
+                    argumentsPropagateNullability: [false, false, false], typeof(string), resultMapping);
+            }
+            else
+            {
+                SqlExpression seed = space;
+                var storeType = mapping.StoreTypeNameBase.Trim().ToUpperInvariant();
+                if (storeType is "CLOB" or "NCLOB")
+                    seed = factory.Function("TO_" + storeType, [space], nullable: true,
+                        argumentsPropagateNullability: [false], typeof(string), mapping);
+
+                var padding = factory.Function("RPAD", [seed, factory.Subtract(width, length), space], nullable: true,
+                    argumentsPropagateNullability: [false, false, false], typeof(string), resultMapping);
+                if (arguments.Count == 2)
+                    padding = factory.Function("REPLACE", [padding, space, token], nullable: true,
+                        argumentsPropagateNullability: [false, false, false], typeof(string), resultMapping);
+
+                result = factory.Function("CONCAT", function == "LPAD" ? [padding, source] : [source, padding], nullable: true,
+                    argumentsPropagateNullability: [false, false], typeof(string), resultMapping);
+            }
+            return factory.Case([
+                new CaseWhenClause(factory.AndAlso(valid, factory.GreaterThan(width, length)), result),
+                new CaseWhenClause(factory.AndAlso(valid, factory.LessThanOrEqual(width, length)), source)
+            ], factory.Constant(null, typeof(string), resultMapping));
         }
 
         private SqlExpression? TranslateInsert(SqlExpression source, IReadOnlyList<SqlExpression> arguments,

@@ -169,7 +169,7 @@ when portable placement is required; this does not configure string collation.
 
 String translations support ordinary equality, two/three/four-string concat,
 single-string and char Contains/StartsWith/EndsWith/IndexOf, Length, both integer Substring/Remove overloads,
-ordinary string and char Replace, Insert(int,string),
+ordinary string and char Replace, Insert(int,string), PadLeft/PadRight with optional char padding,
 parameterless ToLower/ToUpper and Trim/TrimStart/TrimEnd with no argument, char or char[]. Length and
 substring bounds count native characters rather than CLR UTF-16 units. Substring
 uses native negative/out-of-range/zero-length rules; parameterless trim removes ordinary spaces,
@@ -239,6 +239,15 @@ Known empty scalar values leave the source intact, including Oracle literals
 and captured parameters. SQL columns and computed operands follow native storage
 semantics. Inserted scalars use plain contextual mappings. The result preserves
 variable national or LOB text and applies the receiver inverse once.
+
+PadLeft and PadRight count native characters and leave source text intact when
+the requested width is no larger than its length. Negative widths and NULL
+inputs return SQL NULL. The one-argument overloads pad with ordinary space.
+Explicit characters use plain contextual text mappings and support ordinary
+text-backed char columns. Oracle builds the exact number of padding characters
+independently of display width. Results use variable national or LOB mappings
+and apply the receiver inverse once. Large SQL results follow the server's
+text capacity for the source family.
 
 First/FirstOrDefault/Single/SingleOrDefault and ordinary predicate overloads have
 sync/async native coverage for empty, one and multiple rows with entity, scalar,
