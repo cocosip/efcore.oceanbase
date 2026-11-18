@@ -128,6 +128,15 @@ and their difference operates in stored calendar space. Custom converted native 
 be combined with tick-carried results because their inverse is not generally expressible in SQL.
 Binary TimeSpan Add/Subtract on date differences, mixed native/tick duration set projections and
 mixed-carrier membership are explicitly rejected. Stored TIME/INTERVAL mappings are unchanged.
+TimeOnly.Add(TimeSpan), AddHours(double) and AddMinutes(double) wrap at 24 hours for signed
+offsets, constants, refreshed parameters, native columns and NULLs. Scalar TimeSpan offsets use
+exact ticks across the full TimeSpan range; native duration columns retain their storage limits,
+and custom converted native duration columns are rejected. Date-difference tick results can be
+used as offsets. Numeric additions truncate the entire binary product to Int64 with .NET 10
+saturation before wrapping; this differs from DateTime's separate whole/fraction truncation.
+Clock results promote to TIME(6)/INTERVAL DAY TO SECOND(7), preserve contextual clock converters
+and apply the inverse converter once. MySQL returns NULL for results finer than a microsecond;
+Oracle retains 100ns ticks. Non-finite numeric inputs remain rejected by the numeric mapping.
 Oracle calendar arithmetic
 requires a Gregorian session; month ends clamp without losing timestamp fractions.
 Oracle DateTimeOffset components use the stored offset's local wall clock; UTC members
@@ -137,7 +146,7 @@ results, including UTC-valued projections and clocks, have Kind.Unspecified; cal
 must assign a Kind explicitly when constructing zoned application values. Same-carrier
 converter expressions operate in stored space; temporal-valued mapped results apply the
 inverse converter once. Other temporal methods and wider coercion/calendar combinations
-are not implied by this profile; QRY-07 remains open for its separate numeric gaps.
+are not implied by this profile; QRY-07 remains open for its DateTimeOffset and conversion gaps.
 
 Ordinary ordered queries have native coverage for OrderBy/ThenBy in both directions,
 Distinct, nonnegative Skip/Take, offset-only and empty pages. Use a final unique key

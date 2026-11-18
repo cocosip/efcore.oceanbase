@@ -14,19 +14,22 @@ explicitly unsupported features, dependencies, and capabilities to confirm. Pre-
 - The current known unavailable/rejected capabilities are based on the code and package README. Supporting every BCL method is not an implicit Provider commitment.
   Add newly discovered valid requirements to their owning row or give them a new stable ID. Rejection of invalid inputs or malformed models/catalogs is validation, not a missing feature.
 
-Current counts: 46 G records (17 Not started, 8 Implemented, 19 Unsupported, 2 Deferred); also retained are 2 Implemented F records, 9 external dependency B records, 4 To confirm C records, and 4 Deferred D groups.
+Current counts: 46 G records (14 Not started, 0 In development, 11 Implemented, 19 Unsupported, 2 Deferred); also retained are 2 Implemented F records, 9 external dependency B records, 4 To confirm C records, and 4 Deferred D groups.
 
 ## Development order
 
 Prioritize missing Provider functionality before the pre-release acceptance campaign.
 
-1. Next: G-09..11, TimeOnly arithmetic and wrapping (QRY-07): Add(TimeSpan), AddHours(double)
-   and AddMinutes(double), with 24-hour wrapping, signed/NULL offsets and explicit precision/range contracts.
-   G-01..08 are implemented; preserve separate whole/fraction tick truncation, exact Int64 ticks,
-   duration-result carriers, NULL/range contracts and promoted timestamp results.
-2. After P0/P1 completion, select the next Extension gap by application value and Provider feasibility.
-   String overloads, DDL metadata/comments and scaffold fidelity remain candidates, not an automatic
-   commitment to every BCL signature. Investigate C items before classifying them as missing code;
+1. G-01..11 complete the selected P0/P1 temporal additions and differences. Preserve DateTime's
+   separate whole/fraction tick truncation, exact Int64 duration results and TimeOnly's whole-product
+   truncation/saturation, 24-hour wrapping, NULL/precision and contextual converter contracts.
+2. Next: G-13, DateOnly/TimeOnly conversions and IsBetween (QRY-07). Start with FromDateTime
+   date/clock extraction, then define the supported FromTimeSpan/ToTimeSpan/ToDateTime and ordinary/
+   midnight-wrapping IsBetween signatures. Reuse existing calendar/clock/tick carriers; record
+   per-signature precision, NULL, converter and DateTimeKind boundaries before implementation.
+3. Other Extension candidates remain string overloads, DDL metadata/comments and scaffold fidelity,
+   selected by application value and Provider feasibility rather than a commitment to every BCL method.
+   Investigate C items before classifying them as missing code;
    retain Unsupported/Deferred contracts and resolve B dependencies at their owning layer.
 
 Each implementation still needs focused SQL/mapping/behavior regression tests and relevant inventory
@@ -46,9 +49,9 @@ Acceptance requirements remain in the [release checklist](efcore-10-release-chec
 | G-06 | QRY-07 | DateTime.AddMicroseconds(double) | Implemented | P1 completion | Both modes / Provider | Same contracts as G-03; Oracle retains 100ns offsets and MySQL returns NULL for unrepresentable ticks | [Temporal methods][temporal] |
 | G-07 | QRY-07 | DateTime.AddTicks(long) | Implemented | P1 completion | Both modes / Provider | Exact Int64 constants/refreshed parameters/nullable columns without Double conversion; offsets outside +/-DateTime.MaxValue.Ticks return NULL, including Int64 extrema without ABS overflow. Same result promotion, MySQL precision and server result-overflow contracts as G-03 | [Temporal methods][temporal] |
 | G-08 | QRY-07 | DateTime.Subtract(DateTime) returning TimeSpan | Implemented | P1 completion | Both modes / Provider | Exact signed integer ticks carry full supported DateTime differences, NULL, duration members, scalar comparisons/Compare/CompareTo, CASE/COALESCE and timestamp arithmetic composition. Stored TIME/INTERVAL mappings are unchanged. Scalar dates keep promoted precision and contextual converters; mismatched date converters, custom native duration conversions, binary duration arithmetic and mixed set/membership carriers reject explicitly | [Temporal methods][temporal] |
-| G-09 | QRY-07 | TimeOnly.Add(TimeSpan) | Not started | P1 completion | Both modes / Provider | Correct 24-hour wrapping, positive/negative durations, NULL, and precision | [Temporal methods][temporal] |
-| G-10 | QRY-07 | TimeOnly.AddHours(double) | Not started | P1 completion | Both modes / Provider | Define wrapping, fraction-to-tick precision, and dynamic parameter/column contracts | [Temporal methods][temporal] |
-| G-11 | QRY-07 | TimeOnly.AddMinutes(double) | Not started | P1 completion | Both modes / Provider | Same as G-10, with separate coverage of minute-unit boundaries | [Temporal methods][temporal] |
+| G-09 | QRY-07 | TimeOnly.Add(TimeSpan) | Implemented | P1 completion | Both modes / Provider | Translator and TimeOnly renderer wrap at 24 hours with signed/NULL offsets; scalar durations use exact ticks across the full TimeSpan range and accept date-difference composition. Native duration columns retain storage limits; custom converted native durations reject. Clock results promote precision and preserve contextual converters | [Temporal methods][temporal] |
+| G-10 | QRY-07 | TimeOnly.AddHours(double) | Implemented | P1 completion | Both modes / Provider | Whole binary-product truncation and Int64 saturation precede 24-hour wrapping, preserving low ticks near Int64 limits. Supports constants/refreshed parameters/nullable columns/composition and promoted clock mappings; MySQL sub-microsecond results return NULL instead of rounding, Oracle retains 100ns | [Temporal methods][temporal] |
+| G-11 | QRY-07 | TimeOnly.AddMinutes(double) | Implemented | P1 completion | Both modes / Provider | Same contracts as G-10, including fractional-tick truncation, adjacent saturation boundaries and exact signed wrapping for the minute unit | [Temporal methods][temporal] |
 | G-12 | QRY-07 | DateTimeOffset Add/Subtract/calendar method families | Not started | Extension | Both modes / Provider | Determine UTC/local offset semantics, result mapping, and supported ranges for each signature | [Temporal methods][temporal] |
 | G-13 | QRY-07 | DateOnly.FromDateTime/ToDateTime; TimeOnly.FromDateTime/FromTimeSpan/ToTimeSpan/IsBetween | Not started | Extension | Both modes / Provider | Provide a support table by signature; handle midnight/wrapping/NULL and the corresponding carriers correctly; do not imply full support by naming the whole family | [Temporal methods][temporal] |
 | G-14 | QRY-06 | char search overloads | Not started | Extension | Both modes / Provider | Confirm Contains/StartsWith/EndsWith and other methods by signature; define character encoding/NULL semantics | [Strings][strings] |

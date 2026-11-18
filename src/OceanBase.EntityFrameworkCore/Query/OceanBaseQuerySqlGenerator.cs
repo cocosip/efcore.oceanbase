@@ -382,6 +382,9 @@ namespace OceanBase.EntityFrameworkCore.Query
 
         protected override Expression VisitSqlFunction(SqlFunctionExpression sqlFunctionExpression)
         {
+            if (sqlFunctionExpression.Name is OceanBaseTemporalMethodTranslator.TimeOnlyFromTicksMarker
+                or OceanBaseTemporalMethodTranslator.TimeOnlyHoursToTicksMarker or OceanBaseTemporalMethodTranslator.TimeOnlyMinutesToTicksMarker)
+                return GenerateTimeOnlyAdd(sqlFunctionExpression);
             if (sqlFunctionExpression.Name == OceanBaseSqlTranslatingExpressionVisitorFactory.BooleanValueMarker)
             {
                 if (sqlFunctionExpression is not { IsBuiltIn: true, Instance: null, Schema: null, Arguments.Count: 1,

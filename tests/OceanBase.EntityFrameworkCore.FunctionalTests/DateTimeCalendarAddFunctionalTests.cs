@@ -137,6 +137,36 @@ public sealed class DateTimeCalendarAddFunctionalTests
         Assert.Equal(capture.Sql[0], capture.Sql[1]);
     }
 
+    [Theory]
+    [InlineData(OceanBaseCompatibilityMode.MySql, false)]
+    [InlineData(OceanBaseCompatibilityMode.MySql, true)]
+    [InlineData(OceanBaseCompatibilityMode.Oracle, false)]
+    [InlineData(OceanBaseCompatibilityMode.Oracle, true)]
+    public async Task TimeOnly_additions_refresh_full_duration_and_floating_offsets(OceanBaseCompatibilityMode mode, bool async)
+    {
+        using var table = new DataTable();
+        table.Columns.Add("Value", typeof(object));
+        var expected = new TimeOnly(12, 34, 56).Add(TimeSpan.FromTicks(mode == OceanBaseCompatibilityMode.MySql ? 1234560 : 1234567));
+        table.Rows.Add(mode == OceanBaseCompatibilityMode.MySql ? (object)expected.ToTimeSpan()
+            : new OceanBaseIntervalDayToSecond(false, 0, 12, 34, 56, 123456700, 1, 7));
+        table.Rows.Add(DBNull.Value);
+        var capture = new Capture(table);
+        await using var context = Create(mode, capture);
+        var amount = TimeSpan.MaxValue;
+        var hours = 0.5;
+        var query = context.Rows.Where(row => row.Clock.AddHours(hours).AddMinutes(hours).Ticks > 0)
+            .OrderBy(row => row.Id).Select(row => (TimeOnly?)row.OptionalClock!.Value.Add(amount));
+        Assert.Equal([expected, null], async ? await query.ToListAsync() : query.ToList());
+        Assert.Contains((object)long.MaxValue, capture.Parameters[0]);
+        Assert.Contains((object)hours, capture.Parameters[0]);
+        amount = TimeSpan.MinValue;
+        hours = -1.25;
+        Assert.Equal([expected, null], async ? await query.ToListAsync() : query.ToList());
+        Assert.Contains((object)long.MinValue, capture.Parameters[1]);
+        Assert.Contains((object)hours, capture.Parameters[1]);
+        Assert.Equal(capture.Sql[0], capture.Sql[1]);
+    }
+
     private static async Task Run(OceanBaseCompatibilityMode mode, bool async, bool years)
     {
         using var table = new DataTable();
@@ -199,6 +229,8 @@ public sealed class DateTimeCalendarAddFunctionalTests
         public int Id { get; set; }
         public DateTime Stamp { get; set; }
         public DateTime? OptionalStamp { get; set; }
+        public TimeOnly Clock { get; set; }
+        public TimeOnly? OptionalClock { get; set; }
     }
 
     private sealed class NoNetwork : DbConnectionInterceptor

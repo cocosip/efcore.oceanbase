@@ -31,6 +31,12 @@ namespace OceanBase.EntityFrameworkCore.Query
         internal const string DateTimeAddMillisecondsMarker = "__oceanbase_internal_datetime_add_milliseconds";
         internal const string DateTimeAddMicrosecondsMarker = "__oceanbase_internal_datetime_add_microseconds";
         internal const string DateTimeAddTicksMarker = "__oceanbase_internal_datetime_add_ticks";
+        internal const string TimeOnlyFromTicksMarker = "__oceanbase_internal_timeonly_from_ticks";
+        internal const string TimeOnlyHoursToTicksMarker = "__oceanbase_internal_timeonly_hours_to_ticks";
+        internal const string TimeOnlyMinutesToTicksMarker = "__oceanbase_internal_timeonly_minutes_to_ticks";
+        private static readonly MethodInfo TimeOnlyAdd = typeof(TimeOnly).GetMethod(nameof(TimeOnly.Add), [typeof(TimeSpan)])!;
+        private static readonly MethodInfo TimeOnlyAddHours = typeof(TimeOnly).GetMethod(nameof(TimeOnly.AddHours), [typeof(double)])!;
+        private static readonly MethodInfo TimeOnlyAddMinutes = typeof(TimeOnly).GetMethod(nameof(TimeOnly.AddMinutes), [typeof(double)])!;
         private static readonly MethodInfo DateOnlyAddDays = typeof(DateOnly).GetMethod(nameof(DateOnly.AddDays), [typeof(int)])!;
         private static readonly MethodInfo DateOnlyAddMonths = typeof(DateOnly).GetMethod(nameof(DateOnly.AddMonths), [typeof(int)])!;
         private static readonly MethodInfo DateOnlyAddYears = typeof(DateOnly).GetMethod(nameof(DateOnly.AddYears), [typeof(int)])!;
@@ -56,6 +62,48 @@ namespace OceanBase.EntityFrameworkCore.Query
         public SqlExpression? Translate(SqlExpression? instance, MethodInfo method, IReadOnlyList<SqlExpression> arguments,
             IDiagnosticsLogger<DbLoggerCategory.Query> logger)
         {
+            if (instance is not null && arguments.Count == 1
+                && (method == TimeOnlyAdd || method == TimeOnlyAddHours || method == TimeOnlyAddMinutes))
+            {
+                instance = sqlExpressionFactory.ApplyDefaultTypeMapping(instance);
+                var amount = sqlExpressionFactory.ApplyDefaultTypeMapping(arguments[0]);
+                if (instance.TypeMapping is not { } clockMapping || !IsClockMapping(clockMapping, mode)) return null;
+                var integer = mappingSource.FindMapping(typeof(long))!;
+                SqlExpression offset;
+                if (method == TimeOnlyAdd)
+                {
+                    // Scalar durations use ticks so the clock operation does not inherit TIME storage limits.
+                    var ticksMapping = (RelationalTypeMapping)integer.WithComposedConverter(DurationTicksConverter);
+                    if (amount is SqlParameterExpression parameter) amount = parameter.ApplyTypeMapping(ticksMapping);
+                    else if (amount is SqlConstantExpression constant) amount = constant.ApplyTypeMapping(ticksMapping);
+                    if (IsTickDurationMapping(amount.TypeMapping)) offset = sqlExpressionFactory.Convert(amount, typeof(long), integer);
+                    else if (amount.TypeMapping is { } durationMapping && IsDurationMapping(durationMapping, mode))
+                    {
+                        var expected = mappingSource.FindMapping(typeof(TimeSpan), durationMapping.StoreType)?.Converter;
+                        if (!ExpressionEqualityComparer.Instance.Equals(durationMapping.Converter?.ConvertToProviderExpression, expected?.ConvertToProviderExpression)
+                            || !ExpressionEqualityComparer.Instance.Equals(durationMapping.Converter?.ConvertFromProviderExpression, expected?.ConvertFromProviderExpression))
+                            throw new NotSupportedException("TimeOnly addition cannot use custom converted native duration carriers.");
+                        offset = sqlExpressionFactory.Function(OceanBaseTemporalMemberTranslator.TicksMarker, [amount],
+                            nullable: true, argumentsPropagateNullability: [false], typeof(long), integer);
+                    }
+                    else return null;
+                }
+                else
+                {
+                    if (amount.Type != typeof(double) || amount.TypeMapping is not { } numericMapping || !IsNumericOffsetMapping(numericMapping, mode)) return null;
+                    offset = sqlExpressionFactory.Function(method == TimeOnlyAddHours ? TimeOnlyHoursToTicksMarker : TimeOnlyMinutesToTicksMarker,
+                        [amount], nullable: true, argumentsPropagateNullability: [false], typeof(long), integer);
+                }
+                var clockTicks = sqlExpressionFactory.Function(OceanBaseTemporalMemberTranslator.TicksMarker, [instance],
+                    nullable: true, argumentsPropagateNullability: [false], typeof(long), integer);
+                var day = sqlExpressionFactory.Constant(TimeSpan.TicksPerDay, integer);
+                var wrapped = sqlExpressionFactory.Modulo(sqlExpressionFactory.Add(sqlExpressionFactory.Add(clockTicks,
+                    sqlExpressionFactory.Modulo(offset, day)), day), day);
+                return sqlExpressionFactory.Function(TimeOnlyFromTicksMarker, [wrapped], nullable: true,
+                    argumentsPropagateNullability: [false], typeof(TimeOnly), clockMapping.WithPrecisionAndScale(
+                        mode == OceanBaseCompatibilityMode.MySql ? 6 : 7, null));
+            }
+
             if (instance is not null && method == DateTimeSubtractDateTime && arguments.Count == 1)
             {
                 var left = sqlExpressionFactory.ApplyDefaultTypeMapping(instance);
@@ -145,6 +193,16 @@ namespace OceanBase.EntityFrameworkCore.Query
             return sqlExpressionFactory.Function(marker,
                 [instance, days], nullable: true,
                 argumentsPropagateNullability: [false, false], instance.Type, dateMapping);
+        }
+
+        internal static bool IsClockMapping(RelationalTypeMapping mapping, OceanBaseCompatibilityMode mode)
+        {
+            if ((Nullable.GetUnderlyingType(mapping.ClrType) ?? mapping.ClrType) != typeof(TimeOnly) || mapping.Converter?.ConvertsNulls == true) return false;
+            var provider = mapping.Converter?.ProviderClrType ?? mapping.ClrType;
+            var store = mapping.StoreTypeNameBase.Trim().ToUpperInvariant();
+            return mode == OceanBaseCompatibilityMode.MySql
+                ? (Nullable.GetUnderlyingType(provider) ?? provider) == typeof(TimeSpan) && store == "TIME"
+                : (Nullable.GetUnderlyingType(provider) ?? provider) == typeof(OceanBaseIntervalDayToSecond) && store.StartsWith("INTERVAL DAY", StringComparison.Ordinal);
         }
 
         internal static bool IsDateTimeCalendarMapping(RelationalTypeMapping mapping, OceanBaseCompatibilityMode mode)

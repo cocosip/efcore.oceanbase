@@ -517,6 +517,83 @@ namespace OceanBase.EntityFrameworkCore.LiveTests
                 Assert.Equal(maximum - minimum, Assert.Single(await Read(endpoints, async)));
             });
 
+        [Theory]
+        [MemberData(nameof(Cases))]
+        public Task TimeOnly_additions_wrap_signed_numeric_and_full_duration_offsets(
+            OceanBaseCompatibilityMode mode, bool async, bool nulls)
+            => WithTable(mode, async, nulls, async (context, stage) =>
+            {
+                foreach (var name in new[] { nameof(TimeOnly.AddHours), nameof(TimeOnly.AddMinutes) })
+                {
+                    var method = typeof(TimeOnly).GetMethod(name, [typeof(double)])!;
+                    var scale = name == nameof(TimeOnly.AddHours) ? TimeSpan.TicksPerHour : TimeSpan.TicksPerMinute;
+                    var row = Expression.Parameter(typeof(Row), "row");
+                    Expression<Func<Row, TimeOnly>> clock = value => value.Clock!.Value;
+                    var source = ReplacingExpressionVisitor.Replace(clock.Parameters[0], row, clock.Body);
+                    var amount = 0.0;
+                    Expression<Func<double>> captured = () => amount;
+                    var projection = Expression.Lambda<Func<Row, TimeOnly?>>(Expression.Convert(
+                        Expression.Call(source, method, captured.Body), typeof(TimeOnly?)), row);
+                    foreach (var value in new[] { 0.0, 0.5, -1.25, 25.5, -25.5, 1440.25, -1440.25,
+                        1000000.0000000001, -1000000.0000000001, 9223372036854775808.0 / scale,
+                        -9223372036854775808.0 / scale,
+                        Math.BitDecrement(9223372036854775808.0 / scale), Math.BitIncrement(-9223372036854775808.0 / scale),
+                        -11.0 / scale, -10.0 / scale, -1.75 / scale, -1.0 / scale, -0.75 / scale,
+                        0.75 / scale, 1.0 / scale, 1.75 / scale, 10.0 / scale, 11.0 / scale })
+                    {
+                        stage(name + " signed/wrapped fractional parameters and saturated Int64 boundaries");
+                        amount = value;
+                        try
+                        {
+                            await Check(context, async, projection, value => value.Clock.HasValue ? Expected(value.Clock.Value, amount) : null);
+                        }
+                        catch (Xunit.Sdk.XunitException error)
+                        {
+                            Assert.Fail($"{name}({amount:R}): {error.Message}");
+                        }
+                    }
+                    foreach (var value in new[] { double.MaxValue, -double.MaxValue })
+                    {
+                        stage(name + " extreme finite literals (parameter transport remains B-01)");
+                        await Check(context, async, Expression.Lambda<Func<Row, TimeOnly?>>(Expression.Convert(
+                            Expression.Call(source, method, Expression.Constant(value)), typeof(TimeOnly?)), row),
+                            seed => seed.Clock.HasValue ? Expected(seed.Clock.Value, value) : null);
+                    }
+                    stage(name + " nullable native Double columns");
+                    var column = Expression.Property(Expression.Property(row, nameof(Row.NumericAmount)), "Value");
+                    await Check(context, async, Expression.Lambda<Func<Row, TimeOnly?>>(
+                        Expression.Convert(Expression.Call(source, method, column), typeof(TimeOnly?)), row),
+                        value => value.Clock.HasValue && value.NumericAmount.HasValue ? Expected(value.Clock.Value, value.NumericAmount.Value) : null);
+
+                    TimeOnly? Expected(TimeOnly clockValue, double units)
+                    {
+                        var result = (TimeOnly)method.Invoke(clockValue, [units])!;
+                        return Representable(result);
+                    }
+                }
+                foreach (var amount in new[] { TimeSpan.Zero, TimeSpan.FromDays(1000).Add(TimeSpan.FromTicks(10)),
+                    -TimeSpan.FromDays(1000).Add(TimeSpan.FromTicks(10)), TimeSpan.FromTicks(-1), TimeSpan.FromTicks(1),
+                    TimeSpan.FromTicks(-10), TimeSpan.FromTicks(10), TimeSpan.MinValue, TimeSpan.MaxValue })
+                {
+                    stage("TimeOnly.Add full TimeSpan parameter range");
+                    await Check(context, async, row => (TimeOnly?)row.Clock!.Value.Add(amount),
+                        row => row.Clock.HasValue ? Representable(row.Clock.Value.Add(amount)) : null);
+                    await Check(context, async, row => (TimeOnly?)row.ConvertedClock!.Value.Add(amount),
+                        row => row.ConvertedClock.HasValue ? Representable(row.ConvertedClock.Value.Add(amount)) : null);
+                }
+                stage("TimeOnly duration columns, numeric constants and method composition");
+                await Check(context, async, row => (TimeOnly?)row.Clock!.Value.Add(row.Duration!.Value),
+                    row => row.Clock.HasValue && row.Duration.HasValue ? Representable(row.Clock.Value.Add(row.Duration.Value)) : null);
+                await Check(context, async, row => (TimeOnly?)row.Clock!.Value.AddHours(0.5).AddMinutes(-90.5),
+                    row => row.Clock.HasValue ? Representable(row.Clock.Value.AddHours(0.5).AddMinutes(-90.5)) : null);
+                var anchor = new DateTime(5000, 1, 1);
+                await Check(context, async, row => (TimeOnly?)row.Clock!.Value.Add(row.Stamp!.Value.Subtract(anchor)),
+                    row => row.Clock.HasValue && row.Stamp.HasValue ? Representable(row.Clock.Value.Add(row.Stamp.Value.Subtract(anchor))) : null);
+
+                TimeOnly? Representable(TimeOnly value)
+                    => mode == OceanBaseCompatibilityMode.MySql && value.Ticks % 10 != 0 ? null : value;
+            });
+
         private static Task SetZone(Context context, bool async, string zone)
         {
             var sql = (context.Mode == OceanBaseCompatibilityMode.MySql ? "SET SESSION time_zone = '" : "ALTER SESSION SET TIME_ZONE = '")
