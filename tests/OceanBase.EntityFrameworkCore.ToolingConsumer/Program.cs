@@ -31,14 +31,17 @@ namespace ToolingConsumer
         }
     }
 
-    public abstract class ToolingContext(DbContextOptions options, bool expanded) : DbContext(options)
+    public abstract class ToolingContext(DbContextOptions options, bool expanded, bool mySql) : DbContext(options)
     {
         protected override void OnModelCreating(ModelBuilder builder)
         {
+            if (mySql) builder.UseCollation(expanded ? "utf8mb4_bin" : "utf8mb4_general_ci");
             builder.Entity("ToolingRow", row =>
             {
                 row.ToTable("ToolingRows");
-                row.Property<int>("Id").ValueGeneratedOnAdd();
+                var id = row.Property<int>("Id");
+                if (mySql && !expanded) id.ValueGeneratedNever();
+                else id.ValueGeneratedOnAdd();
                 row.HasKey("Id");
                 row.Property<string>("Name").HasMaxLength(expanded ? 64 : 32).IsRequired();
                 row.Property<bool>("Active").HasConversion(new BoolToStringConverter("N", "Y")).HasDefaultValue(true);
@@ -89,8 +92,8 @@ namespace ToolingConsumer
     public sealed class ToolingOwner { public int Id { get; set; } public string? Name { get; set; } public int? Version { get; set; } public ToolingDetail? Detail { get; set; } }
     public sealed class ToolingDetail { public int Id { get; set; } public string? Text { get; set; } public int? Version { get; set; } }
 
-    public sealed class MySqlContext(DbContextOptions<MySqlContext> options, bool expanded) : ToolingContext(options, expanded);
-    public sealed class OracleContext(DbContextOptions<OracleContext> options, bool expanded) : ToolingContext(options, expanded);
+    public sealed class MySqlContext(DbContextOptions<MySqlContext> options, bool expanded) : ToolingContext(options, expanded, mySql: true);
+    public sealed class OracleContext(DbContextOptions<OracleContext> options, bool expanded) : ToolingContext(options, expanded, mySql: false);
 
     public sealed class MySqlFactory : IDesignTimeDbContextFactory<MySqlContext>
     {
@@ -107,12 +110,16 @@ namespace ToolingConsumer
     internal static class ToolingOptions
     {
         internal static DbContextOptions<T> Create<T>(OceanBaseCompatibilityMode mode) where T : DbContext
-            => new DbContextOptionsBuilder<T>()
+        {
+            var builder = new DbContextOptionsBuilder<T>()
                 .UseOceanBase("Server=offline.invalid;Database=tooling", mode, options => options
                     .MigrationsAssembly(typeof(T).Assembly.GetName().Name)
                     .MigrationsHistoryTable("__ToolingHistory"))
-                .EnableOceanBaseSchemaManagement("tooling")
-                .AddInterceptors(new NoNetwork()).Options;
+                .AddInterceptors(new NoNetwork());
+            if (mode == OceanBaseCompatibilityMode.MySql) builder.EnableOceanBaseDatabaseManagement("tooling");
+            else builder.EnableOceanBaseSchemaManagement("tooling");
+            return builder.Options;
+        }
 
         private sealed class NoNetwork : DbConnectionInterceptor
         {
