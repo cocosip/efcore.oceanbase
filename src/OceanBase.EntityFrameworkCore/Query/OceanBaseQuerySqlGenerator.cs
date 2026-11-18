@@ -590,7 +590,12 @@ namespace OceanBase.EntityFrameworkCore.Query
                 return GenerateDateTimeDurationAdd(sqlFunctionExpression);
 
             if (sqlFunctionExpression.Name is OceanBaseTemporalMethodTranslator.DateTimeAddDaysMarker
-                or OceanBaseTemporalMethodTranslator.DateTimeAddHoursMarker)
+                or OceanBaseTemporalMethodTranslator.DateTimeAddHoursMarker
+                or OceanBaseTemporalMethodTranslator.DateTimeAddMinutesMarker
+                or OceanBaseTemporalMethodTranslator.DateTimeAddSecondsMarker
+                or OceanBaseTemporalMethodTranslator.DateTimeAddMillisecondsMarker
+                or OceanBaseTemporalMethodTranslator.DateTimeAddMicrosecondsMarker
+                or OceanBaseTemporalMethodTranslator.DateTimeAddTicksMarker)
                 return GenerateDateTimeNumericAdd(sqlFunctionExpression);
 
             if (sqlFunctionExpression.Name == OceanBaseTemporalMethodTranslator.DateOnlyAddDaysMarker)

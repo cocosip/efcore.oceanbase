@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Infrastructure;
@@ -16,6 +17,41 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
 {
     public sealed class DateTimeNumericAddQueryTests
     {
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle)]
+        public void Minute_through_tick_additions_translate_server_side(OceanBaseCompatibilityMode mode)
+        {
+            using var context = Create(mode);
+            foreach (var name in new[] { nameof(DateTime.AddMinutes), nameof(DateTime.AddSeconds),
+                nameof(DateTime.AddMilliseconds), nameof(DateTime.AddMicroseconds), nameof(DateTime.AddTicks) })
+            {
+                var ticks = name == nameof(DateTime.AddTicks);
+                var row = Expression.Parameter(typeof(Row), "row");
+                var amount = ticks ? (Expression)Expression.Property(row, nameof(Row.TickAmount))
+                    : Expression.Property(row, nameof(Row.Amount));
+                var call = Expression.Call(Expression.Property(row, nameof(Row.Stamp)), name, null, amount);
+                var predicate = Expression.Lambda<Func<Row, bool>>(Expression.GreaterThan(call,
+                    Expression.Constant(new DateTime(2000, 1, 1))), row);
+                var sql = context.Rows.Where(predicate).Select(value => value.Id).ToQueryString();
+                Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? "TIMESTAMPADD(MICROSECOND" : "NUMTODSINTERVAL", sql);
+                Assert.DoesNotContain("__oceanbase_internal", sql);
+                Assert.DoesNotContain("TIME_TO_SEC", sql);
+                Assert.Contains(ticks ? "TickAmount" : "Amount", sql);
+                if (ticks)
+                {
+                    Assert.DoesNotContain("TRUNC", sql);
+                    Assert.Contains("BETWEEN -3155378975999999999 AND 3155378975999999999", sql);
+                }
+            }
+            var tickAmount = 9007199254740991L;
+            var query = context.Rows.Where(row => row.Stamp.AddTicks(tickAmount).AddMicroseconds(0.5) > row.Stamp)
+                .Select(row => (DateTime?)row.OptionalStamp!.Value.AddTicks(-10));
+            Assert.Contains(tickAmount.ToString(), query.ToQueryString());
+            tickAmount = -9007199254740991L;
+            Assert.Contains(tickAmount.ToString(), query.ToQueryString());
+        }
+
         [Theory]
         [InlineData(OceanBaseCompatibilityMode.MySql, false)]
         [InlineData(OceanBaseCompatibilityMode.MySql, true)]
@@ -63,12 +99,15 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             var converter = new ValueConverter<DateTime, DateTime>(value => value.AddDays(1), value => value.AddDays(-1));
             var narrow = source.FindMapping(typeof(DateTime), mode == OceanBaseCompatibilityMode.MySql ? "DATETIME(0)" : "DATE")!;
             var mapping = (RelationalTypeMapping)narrow.WithComposedConverter(converter);
-            foreach (var name in new[] { nameof(DateTime.AddDays), nameof(DateTime.AddHours) })
+            foreach (var name in new[] { nameof(DateTime.AddDays), nameof(DateTime.AddHours), nameof(DateTime.AddMinutes),
+                nameof(DateTime.AddSeconds), nameof(DateTime.AddMilliseconds), nameof(DateTime.AddMicroseconds), nameof(DateTime.AddTicks) })
             {
+                var ticks = name == nameof(DateTime.AddTicks);
                 var result = Assert.IsType<SqlFunctionExpression>(methods.Translate(context.Model,
                     new ColumnExpression("Stamp", "r", typeof(DateTime), mapping, true),
-                    typeof(DateTime).GetMethod(name, [typeof(double)])!,
-                    [factory.Constant(0.5, source.FindMapping(typeof(double)))], logger));
+                    typeof(DateTime).GetMethod(name, [ticks ? typeof(long) : typeof(double)])!,
+                    [ticks ? factory.Constant(10L, source.FindMapping(typeof(long)))
+                        : factory.Constant(0.5, source.FindMapping(typeof(double)))], logger));
                 Assert.Equal(mode == OceanBaseCompatibilityMode.MySql ? "DATETIME(6)" : "TIMESTAMP(7)", result.TypeMapping!.StoreType);
                 Assert.Same(converter, result.TypeMapping.Converter);
             }
@@ -92,7 +131,8 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
                 new ValueConverter<DateTime, string>(value => value.ToString(), value => DateTime.Parse(value)));
             var nullNumber = (RelationalTypeMapping)number.WithComposedConverter(
                 new ValueConverter<double, double>(value => value, value => value, convertsNulls: true));
-            foreach (var name in new[] { nameof(DateTime.AddDays), nameof(DateTime.AddHours) })
+            foreach (var name in new[] { nameof(DateTime.AddDays), nameof(DateTime.AddHours), nameof(DateTime.AddMinutes),
+                nameof(DateTime.AddSeconds), nameof(DateTime.AddMilliseconds), nameof(DateTime.AddMicroseconds) })
             {
                 var method = typeof(DateTime).GetMethod(name, [typeof(double)])!;
                 var input = new ColumnExpression("Stamp", "r", typeof(DateTime), date, true);
@@ -102,6 +142,18 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
                 Assert.Null(methods.Translate(context.Model, new ColumnExpression("Stamp", "r", typeof(DateTime), textDate, true),
                     method, [factory.Constant(0.5, number)], logger));
             }
+            var tickMethod = typeof(DateTime).GetMethod(nameof(DateTime.AddTicks), [typeof(long)])!;
+            var tickInput = new ColumnExpression("Stamp", "r", typeof(DateTime), date, true);
+            var tickMapping = source.FindMapping(typeof(long))!;
+            var nullTicks = (RelationalTypeMapping)tickMapping.WithComposedConverter(
+                new ValueConverter<long, long>(value => value, value => value, convertsNulls: true));
+            var textTicks = (RelationalTypeMapping)source.FindMapping(typeof(string))!.WithComposedConverter(
+                new ValueConverter<long, string>(value => value.ToString(), value => long.Parse(value)));
+            foreach (var invalid in new[] { nullTicks, textTicks })
+                Assert.Null(methods.Translate(context.Model, tickInput, tickMethod, [factory.Constant(10L, invalid)], logger));
+            Assert.Null(methods.Translate(context.Model, tickInput, tickMethod, [factory.Constant(10.0, number)], logger));
+            Assert.Null(methods.Translate(context.Model, new ColumnExpression("Stamp", "r", typeof(DateTime), textDate, true),
+                tickMethod, [factory.Constant(10L, tickMapping)], logger));
         }
 
         [Theory]
@@ -116,7 +168,9 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             var stamp = new ColumnExpression("Stamp", "r", typeof(DateTime), date, true);
             var amount = factory.Constant(0.5, source.FindMapping(typeof(double)));
             foreach (var marker in new[] { OceanBaseTemporalMethodTranslator.DateTimeAddDaysMarker,
-                OceanBaseTemporalMethodTranslator.DateTimeAddHoursMarker })
+                OceanBaseTemporalMethodTranslator.DateTimeAddHoursMarker, OceanBaseTemporalMethodTranslator.DateTimeAddMinutesMarker,
+                OceanBaseTemporalMethodTranslator.DateTimeAddSecondsMarker, OceanBaseTemporalMethodTranslator.DateTimeAddMillisecondsMarker,
+                OceanBaseTemporalMethodTranslator.DateTimeAddMicrosecondsMarker, OceanBaseTemporalMethodTranslator.DateTimeAddTicksMarker })
             {
                 SqlExpression[] invalid =
                 [
@@ -212,6 +266,7 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             public DateTime Stamp { get; set; }
             public DateTime? OptionalStamp { get; set; }
             public double Amount { get; set; }
+            public long TickAmount { get; set; }
         }
     }
 }

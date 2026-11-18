@@ -2,7 +2,8 @@
 
 Updated: 2026-11-18. This checklist records only tests, evidence and release gates; **do not use it to count unimplemented features**.
 See the [feature inventory](efcore-10-feature-matrix.md) for code scope and the [gap inventory](efcore-10-gap-matrix.md) for individual development states.
-The current feature work adds DateTime.AddDays/AddHours(double) after `f119f51` (DateTime.Add/Subtract(TimeSpan)); no final release revision has been selected.
+The current feature work adds DateTime.AddDays through AddMicroseconds(double) and AddTicks(long)
+after `f119f51` (DateTime.Add/Subtract(TimeSpan)); no final release revision has been selected.
 Develop missing features first; the full pre-release acceptance campaign follows the selected development queue.
 
 ## Acceptance states and completion criteria
@@ -95,8 +96,9 @@ Existing DEF-01/02/03/07/08/09 functionality still requires R-03/R-05 checks; de
 
 | Layer | Latest result | Boundary / entry point |
 | --- | --- | --- |
-| Numeric day/hour additions, EF10.0.0 | Unit 2690/2690 and Functional 2492/2492 passed | `artifacts/numeric-date-add/unit-closed/`, `functional-closed/`; covers fractional-unit SQL, NULL/precision promotion, parameter refresh/ownership, Oracle nested-closure naming, repeated collisions and distinct converter bindings. These are development regressions, not final release acceptance or EF10.0.14 evidence |
+| Numeric date additions, EF10.0.0 | Unit 2692/2692 and Functional 2496/2496 passed | `artifacts/numeric-date-add/small-units-unit/`, `small-units-functional-all/`; covers all seven signatures, fractional-unit SQL, exact Int64 ticks, NULL/precision promotion, parameter refresh/ownership, Oracle nested-closure naming, repeated collisions and distinct converter bindings. These are development regressions, not final release acceptance or EF10.0.14 evidence |
 | Numeric day/hour native feature checks, EF10.0.0 | 8/8 native, 0 failures/skips | `artifacts/numeric-date-add/native-closed/`; final serial run covers both modes, sync/async and two NULL settings with constants/refreshed parameters/native Double columns, large signed fractional offsets, signed 1/9/10/11-tick boundaries and invalid-unit NULL guards. Uses the ordinary direct fixture with TLS Disabled; it is not a full native-suite or TLS acceptance run |
+| Numeric minute through tick native feature checks, EF10.0.0 | 8/8 native, 0 failures/skips | `artifacts/numeric-date-add/small-units-native/`; both modes, sync/async and two NULL settings cover signed fractional parameters, predicates/composition/converters, DATE promotion, nullable native Double/Int64 columns, Int64 offsets above 2^53, signed 1/9/10/11-tick boundaries, unit-range guards and Int64.MinValue/MaxValue. Ordinary direct profile with TLS Disabled; not full native-suite or TLS acceptance |
 | Duration local EF10.0.0/10.0.14 | Historical totals across projects for each patch: 6699 passed/16 skips | `artifacts/datetime-duration/root-final/`, `compat-final/`; the new Oracle null-converter fixture initially had 1 failure; after correction, both patches passed the complete Unit suite at 2672/2672 in `unit-final/`, `compat-unit-final/`; source for the other three projects did not change afterward |
 | Documented-capability check | For each mode, 37 unsupported predicate/sequence probes passed, along with supported Add/Subtract and ordinary-string positive controls | `artifacts/efcore-doc-cleanup/probe/`; invokes only the real Provider's offline ToQueryString, opens no connection, and is not live release acceptance |
 | Duration native checks with its fixed dependency | Each patch: 8/8, 0 failures/skips | `artifacts/datetime-duration/root-final-live/`, `compat-final-live/`; covers only the duration family, sync/async in both modes and two NULL configurations; it does not establish a full 626-case pass |

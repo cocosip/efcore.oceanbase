@@ -371,6 +371,81 @@ namespace OceanBase.EntityFrameworkCore.LiveTests
                 }
             });
 
+        [Theory]
+        [MemberData(nameof(Cases))]
+        public Task DateTime_numeric_minute_through_tick_additions_match_CLR(
+            OceanBaseCompatibilityMode mode, bool async, bool nulls)
+            => WithTable(mode, async, nulls, async (context, stage) =>
+            {
+                var anchor = new DateTime(5000, 1, 1);
+                foreach (var (name, scale) in new[] { (nameof(DateTime.AddMinutes), TimeSpan.TicksPerMinute),
+                    (nameof(DateTime.AddSeconds), TimeSpan.TicksPerSecond),
+                    (nameof(DateTime.AddMilliseconds), TimeSpan.TicksPerMillisecond),
+                    (nameof(DateTime.AddMicroseconds), TimeSpan.TicksPerMicrosecond) })
+                {
+                    var method = typeof(DateTime).GetMethod(name, [typeof(double)])!;
+                    Func<DateTime, double, DateTime> add = (value, units) => (DateTime)method.Invoke(value, [units])!;
+                    var row = Expression.Parameter(typeof(Row), "row");
+                    var stamp = Expression.Property(Expression.Property(row, nameof(Row.DateStamp)), "Value");
+                    var amount = 0.0;
+                    Expression<Func<double>> captured = () => amount;
+                    var projection = Expression.Lambda<Func<Row, DateTime?>>(Expression.Convert(
+                        Expression.Call(stamp, method, captured.Body), typeof(DateTime?)), row);
+                    foreach (var value in new[] { 0.0, 0.5, -1.25, 1000000.0000000001, -1000000.0000000001,
+                        -11.0 / scale, -10.0 / scale, -9.0 / scale, -1.0 / scale,
+                        1.0 / scale, 9.0 / scale, 10.0 / scale, 11.0 / scale })
+                    {
+                        stage(name + " signed fractional parameters, predicates and DATE promotion");
+                        amount = value;
+                        await Check(context, async, projection, value => value.DateStamp.HasValue
+                            ? Expected(value.DateStamp.Value, amount) : null);
+                    }
+                    stage(name + " nullable native Double column");
+                    var columnCall = Expression.Call(Expression.Constant(anchor), method,
+                        Expression.Property(Expression.Property(row, nameof(Row.NumericAmount)), "Value"));
+                    await Check(context, async, Expression.Lambda<Func<Row, DateTime?>>(
+                        Expression.Convert(columnCall, typeof(DateTime?)), row),
+                        value => value.NumericAmount.HasValue ? Expected(anchor, value.NumericAmount.Value) : null);
+                    stage(name + " constant and converted timestamp composition");
+                    var converted = Expression.Property(Expression.Property(row, nameof(Row.ConvertedStamp)), "Value");
+                    var composed = Expression.Call(Expression.Call(converted, method, Expression.Constant(0.5)),
+                        typeof(DateTime).GetMethod(nameof(DateTime.AddTicks), [typeof(long)])!, Expression.Constant(-10L));
+                    await Check(context, async, Expression.Lambda<Func<Row, DateTime?>>(
+                        Expression.Convert(composed, typeof(DateTime?)), row), value => value.ConvertedStamp.HasValue
+                            ? Expected(value.ConvertedStamp.Value, 0.5)?.AddTicks(-10) : null);
+                    stage(name + " out-of-unit-range NULL guard");
+                    foreach (var sign in new[] { -1, 1 })
+                    {
+                        amount = sign * (DateTime.MaxValue.Ticks / scale + 1024.0);
+                        Assert.All(await Read(context.Set<Row>().OrderBy(value => value.Id).Select(projection), async), Assert.Null);
+                    }
+
+                    DateTime? Expected(DateTime stampValue, double units)
+                    {
+                        var result = add(stampValue, units);
+                        return mode == OceanBaseCompatibilityMode.MySql && (result - stampValue).Ticks % 10 != 0 ? null : result;
+                    }
+                }
+                stage("AddTicks exact Int64 columns, NULL, large values and extreme guards");
+                await Check(context, async, row => (DateTime?)anchor.AddTicks(row.TickAmount!.Value),
+                    row => ExpectedTicks(row.TickAmount));
+                var ticks = 0L;
+                var query = context.Set<Row>().Where(row => row.Id == 2)
+                    .Select(row => (DateTime?)anchor.AddTicks(ticks + row.Amount));
+                foreach (var value in new[] { -11L, -10, -9, -1, 0, 1, 9, 10, 11,
+                    9007199254740993, -9007199254740993, 9007199254741010, -9007199254741010, long.MinValue, long.MaxValue })
+                {
+                    stage("AddTicks precision and parameter refresh");
+                    ticks = value;
+                    Assert.Equal(ExpectedTicks(ticks), Assert.Single(await Read(query, async)));
+                }
+                await Check(context, async, row => (DateTime?)row.DateStamp!.Value.AddTicks(10), row => row.DateStamp?.AddTicks(10));
+
+                DateTime? ExpectedTicks(long? value)
+                    => !value.HasValue || value < -DateTime.MaxValue.Ticks || value > DateTime.MaxValue.Ticks
+                        || mode == OceanBaseCompatibilityMode.MySql && value % 10 != 0 ? null : anchor.AddTicks(value.Value);
+            });
+
         private static Task SetZone(Context context, bool async, string zone)
         {
             var sql = (context.Mode == OceanBaseCompatibilityMode.MySql ? "SET SESSION time_zone = '" : "ALTER SESSION SET TIME_ZONE = '")
@@ -391,7 +466,7 @@ namespace OceanBase.EntityFrameworkCore.LiveTests
         {
             var seeds = expectedRows ?? Seed(context.Mode);
             var wanted = seeds.Select(expected).ToArray();
-            var needle = wanted.First(value => value.HasValue);
+            var needle = wanted.FirstOrDefault(value => value.HasValue);
             // Database DateTime literals are unzoned, including UTC-valued results.
             if (needle is DateTime date) needle = (T)(object)DateTime.SpecifyKind(date, DateTimeKind.Unspecified);
             // A predicate requires translation even where EF permits client evaluation of the final projection.
@@ -464,6 +539,7 @@ namespace OceanBase.EntityFrameworkCore.LiveTests
                 TimeSpan.FromTicks(10), -TimeSpan.FromHours(1).Add(TimeSpan.FromTicks(2345670)) };
             var offsets = new[] { 0, 0, 345, -210, -720, 840, -30, 30 };
             double?[] numericAmounts = [null, 0, 0.5, -1.25, 40.25, -40.25, 1000000.0000000001, -1000000.0000000001];
+            long?[] tickAmounts = [null, 0, 10, -10, 9007199254741010, -9007199254741010, long.MinValue, long.MaxValue];
             return stamps.Select((stamp, index) =>
             {
                 stamp = stamp?.AddTicks(fractions[index]);
@@ -475,7 +551,7 @@ namespace OceanBase.EntityFrameworkCore.LiveTests
                     ConvertedStamp = stamp, ConvertedDay = stamp.HasValue ? DateOnly.FromDateTime(stamp.Value) : null,
                     ConvertedDuration = durations[index],
                     ConvertedClock = stamp.HasValue ? TimeOnly.FromDateTime(stamp.Value) : null, ConvertedZoned = zoned,
-                    Amount = index % 3 - 1, NumericAmount = numericAmounts[index] };
+                    Amount = index % 3 - 1, NumericAmount = numericAmounts[index], TickAmount = tickAmounts[index] };
             }).ToArray();
         }
 
@@ -513,6 +589,7 @@ namespace OceanBase.EntityFrameworkCore.LiveTests
             public int Id { get; set; }
             public int Amount { get; set; }
             public double? NumericAmount { get; set; }
+            public long? TickAmount { get; set; }
             public DateTime? Stamp { get; set; }
             public DateTime? DateStamp { get; set; }
             public DateOnly? Day { get; set; }

@@ -14,17 +14,17 @@ explicitly unsupported features, dependencies, and capabilities to confirm. Pre-
 - The current known unavailable/rejected capabilities are based on the code and package README. Supporting every BCL method is not an implicit Provider commitment.
   Add newly discovered valid requirements to their owning row or give them a new stable ID. Rejection of invalid inputs or malformed models/catalogs is validation, not a missing feature.
 
-Current counts: 46 G records (23 Not started, 2 Implemented, 19 Unsupported, 2 Deferred); also retained are 2 Implemented F records, 9 external dependency B records, 4 To confirm C records, and 4 Deferred D groups.
+Current counts: 46 G records (18 Not started, 7 Implemented, 19 Unsupported, 2 Deferred); also retained are 2 Implemented F records, 9 external dependency B records, 4 To confirm C records, and 4 Deferred D groups.
 
 ## Development order
 
 Prioritize missing Provider functionality before the pre-release acceptance campaign.
 
-1. Next: G-03..07, server-side minute through tick additions in both modes (QRY-07), extending the
-   existing numeric-add translator/renderer. G-01/G-02 are implemented; preserve separate whole/fraction
-   tick truncation, NULL/range contracts, refreshed parameters/columns and result precision promotion.
-   Numeric offsets must not inherit the unrelated MySQL TIME duration storage range.
-2. Then complete G-08 (date differences) and G-09..11 (TimeOnly arithmetic and wrapping).
+1. Next: G-08, server-side date differences (QRY-07), with NULL, signed results and explicit duration
+   precision/range contracts. G-01..07 are implemented through the existing numeric-add translator/renderer;
+   preserve separate whole/fraction tick truncation, exact Int64 ticks, NULL/range contracts and promoted results.
+   Numeric offsets do not inherit the unrelated MySQL TIME duration storage range.
+2. Then complete G-09..11 (TimeOnly arithmetic and wrapping).
 3. After P0/P1 completion, select the next Extension gap by application value and Provider feasibility.
    String overloads, DDL metadata/comments and scaffold fidelity remain candidates, not an automatic
    commitment to every BCL signature. Investigate C items before classifying them as missing code;
@@ -41,11 +41,11 @@ Acceptance requirements remain in the [release checklist](efcore-10-release-chec
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | G-01 | QRY-07 | DateTime.AddDays(double) | Implemented | P0 priority completion | Both modes / Provider | Translator/renderer supports predicates/composition, constants/refreshed parameters/columns/NULL and signed fractional offsets; whole/fraction ticks are combined exactly before promoted timestamp arithmetic. Invalid unit ranges and MySQL sub-microsecond offsets return NULL, without silent rounding | [Temporal methods][temporal] |
 | G-02 | QRY-07 | DateTime.AddHours(double) | Implemented | P0 priority completion | Both modes / Provider | Same contracts as G-01; Oracle uses positive intervals with explicit timestamp addition/subtraction to preserve negative subsecond offsets; numeric offsets do not use the MySQL TIME carrier | [Temporal methods][temporal] |
-| G-03 | QRY-07 | DateTime.AddMinutes(double) | Not started | P1 completion | Both modes / Provider | Translate server-side predicates/composition; define contracts for parameters/constants/columns, NULL, positive/negative values, precision, and range; never silently discard ticks | [Temporal methods][temporal] |
-| G-04 | QRY-07 | DateTime.AddSeconds(double) | Not started | P1 completion | Both modes / Provider | Translate server-side predicates/composition; define contracts for parameters/constants/columns, NULL, positive/negative values, precision, and range; never silently discard ticks | [Temporal methods][temporal] |
-| G-05 | QRY-07 | DateTime.AddMilliseconds(double) | Not started | P1 completion | Both modes / Provider | Translate server-side predicates/composition; define contracts for parameters/constants/columns, NULL, positive/negative values, precision, and range; never silently discard ticks | [Temporal methods][temporal] |
-| G-06 | QRY-07 | DateTime.AddMicroseconds(double) | Not started | P1 completion | Both modes / Provider | Translate server-side predicates/composition; define contracts for parameters/constants/columns, NULL, positive/negative values, precision, and range; never silently discard ticks | [Temporal methods][temporal] |
-| G-07 | QRY-07 | DateTime.AddTicks(long) | Not started | P1 completion | Both modes / Provider | Translate server-side predicates/composition; define contracts for parameters/constants/columns, NULL, positive/negative values, precision, and range; never silently discard ticks | [Temporal methods][temporal] |
+| G-03 | QRY-07 | DateTime.AddMinutes(double) | Implemented | P1 completion | Both modes / Provider | Same exact whole/fraction tick conversion, NULL/range guards, parameters/columns, composition and promoted results as G-01; no MySQL TIME carrier | [Temporal methods][temporal] |
+| G-04 | QRY-07 | DateTime.AddSeconds(double) | Implemented | P1 completion | Both modes / Provider | Same contracts as G-03; signed subsecond values retain separate binary fractional multiplication before integer tick arithmetic | [Temporal methods][temporal] |
+| G-05 | QRY-07 | DateTime.AddMilliseconds(double) | Implemented | P1 completion | Both modes / Provider | Same contracts as G-03; MySQL rejects offsets with sub-microsecond ticks by returning NULL | [Temporal methods][temporal] |
+| G-06 | QRY-07 | DateTime.AddMicroseconds(double) | Implemented | P1 completion | Both modes / Provider | Same contracts as G-03; Oracle retains 100ns offsets and MySQL returns NULL for unrepresentable ticks | [Temporal methods][temporal] |
+| G-07 | QRY-07 | DateTime.AddTicks(long) | Implemented | P1 completion | Both modes / Provider | Exact Int64 constants/refreshed parameters/nullable columns without Double conversion; offsets outside +/-DateTime.MaxValue.Ticks return NULL, including Int64 extrema without ABS overflow. Same result promotion, MySQL precision and server result-overflow contracts as G-03 | [Temporal methods][temporal] |
 | G-08 | QRY-07 | DateTime.Subtract(DateTime) returning TimeSpan | Not started | P1 completion | Both modes / Provider | Correctly map differences between dates, negative values/NULL, result ranges, and long durations | [Temporal methods][temporal] |
 | G-09 | QRY-07 | TimeOnly.Add(TimeSpan) | Not started | P1 completion | Both modes / Provider | Correct 24-hour wrapping, positive/negative durations, NULL, and precision | [Temporal methods][temporal] |
 | G-10 | QRY-07 | TimeOnly.AddHours(double) | Not started | P1 completion | Both modes / Provider | Define wrapping, fraction-to-tick precision, and dynamic parameter/column contracts | [Temporal methods][temporal] |

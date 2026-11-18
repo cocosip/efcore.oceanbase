@@ -77,6 +77,38 @@ public sealed class DateTimeCalendarAddFunctionalTests
         Assert.DoesNotContain(":_ob__ob_value", capture.Sql[0]);
     }
 
+    [Theory]
+    [InlineData(OceanBaseCompatibilityMode.MySql, false)]
+    [InlineData(OceanBaseCompatibilityMode.MySql, true)]
+    [InlineData(OceanBaseCompatibilityMode.Oracle, false)]
+    [InlineData(OceanBaseCompatibilityMode.Oracle, true)]
+    public async Task Minute_through_tick_additions_keep_Double_and_Int64_parameters(
+        OceanBaseCompatibilityMode mode, bool async)
+    {
+        using var table = new DataTable();
+        table.Columns.Add("Value", typeof(object));
+        var expected = new DateTime(2024, 3, 1).AddTicks(mode == OceanBaseCompatibilityMode.MySql ? 10 : 1);
+        table.Rows.Add(expected);
+        table.Rows.Add(DBNull.Value);
+        var capture = new Capture(table);
+        await using var context = Create(mode, capture);
+        var amount = 0.5;
+        var ticks = 9007199254740993L;
+        var query = context.Rows.Where(row => row.Stamp.AddMinutes(amount).AddSeconds(amount)
+                .AddMilliseconds(amount).AddMicroseconds(amount).AddTicks(ticks) > new DateTime(2000, 1, 1))
+            .OrderBy(row => row.Id).Select(row => (DateTime?)row.OptionalStamp!.Value.AddTicks(ticks));
+        Assert.Equal([expected, null], async ? await query.ToListAsync() : query.ToList());
+        Assert.Contains((object)amount, capture.Parameters[0]);
+        Assert.Contains((object)ticks, capture.Parameters[0]);
+        amount = -1.25;
+        ticks = -9007199254740993L;
+        Assert.Equal([expected, null], async ? await query.ToListAsync() : query.ToList());
+        Assert.Contains((object)amount, capture.Parameters[1]);
+        Assert.Contains((object)ticks, capture.Parameters[1]);
+        Assert.Equal(capture.Sql[0], capture.Sql[1]);
+        Assert.DoesNotContain("__oceanbase_internal", capture.Sql[0]);
+    }
+
     private static async Task Run(OceanBaseCompatibilityMode mode, bool async, bool years)
     {
         using var table = new DataTable();

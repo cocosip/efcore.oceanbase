@@ -9,6 +9,7 @@ namespace OceanBase.EntityFrameworkCore.Query
     {
         private Expression GenerateDateTimeNumericAdd(SqlFunctionExpression expression)
         {
+            var ticks = expression.Name == OceanBaseTemporalMethodTranslator.DateTimeAddTicksMarker;
             if (expression is not { IsBuiltIn: true, Schema: null, Instance: null, Arguments.Count: 2,
                     IsNullable: true, ArgumentsPropagateNullability: [false, false], Type: var resultType,
                     TypeMapping: { } resultMapping }
@@ -18,16 +19,29 @@ namespace OceanBase.EntityFrameworkCore.Query
                 || inputType != typeof(DateTime)
                 || !OceanBaseTemporalMethodTranslator.IsDateTimeCalendarMapping(inputMapping, _mode)
                 || expression.Arguments[1] is not { Type: var amountType, TypeMapping: { } amountMapping }
-                || amountType != typeof(double) || !OceanBaseTemporalMethodTranslator.IsNumericOffsetMapping(amountMapping, _mode))
+                || (ticks ? amountType != typeof(long) || !OceanBaseTemporalMethodTranslator.IsTickOffsetMapping(amountMapping, _mode)
+                    : amountType != typeof(double) || !OceanBaseTemporalMethodTranslator.IsNumericOffsetMapping(amountMapping, _mode)))
                 throw new InvalidOperationException("Invalid internal DateTime numeric-add expression.");
 
-            var ticksPerUnit = expression.Name == OceanBaseTemporalMethodTranslator.DateTimeAddDaysMarker
-                ? TimeSpan.TicksPerDay : TimeSpan.TicksPerHour;
+            var ticksPerUnit = expression.Name switch
+            {
+                OceanBaseTemporalMethodTranslator.DateTimeAddDaysMarker => TimeSpan.TicksPerDay,
+                OceanBaseTemporalMethodTranslator.DateTimeAddHoursMarker => TimeSpan.TicksPerHour,
+                OceanBaseTemporalMethodTranslator.DateTimeAddMinutesMarker => TimeSpan.TicksPerMinute,
+                OceanBaseTemporalMethodTranslator.DateTimeAddSecondsMarker => TimeSpan.TicksPerSecond,
+                OceanBaseTemporalMethodTranslator.DateTimeAddMillisecondsMarker => TimeSpan.TicksPerMillisecond,
+                OceanBaseTemporalMethodTranslator.DateTimeAddMicrosecondsMarker => TimeSpan.TicksPerMicrosecond,
+                _ => 1L
+            };
             var scale = ticksPerUnit.ToString(CultureInfo.InvariantCulture);
             var amount = expression.Arguments[1];
-            Sql.Append("(CASE WHEN ABS(");
+            var limit = (DateTime.MaxValue.Ticks / ticksPerUnit).ToString(CultureInfo.InvariantCulture);
+            Sql.Append(ticks ? "(CASE WHEN " : "(CASE WHEN ABS(");
             Visit(amount);
-            Sql.Append(") <= ").Append((DateTime.MaxValue.Ticks / ticksPerUnit).ToString(CultureInfo.InvariantCulture)).Append(" THEN ");
+            // BETWEEN avoids ABS(Int64.MinValue) overflow before the range guard can reject it.
+            if (ticks) Sql.Append(" BETWEEN -").Append(limit).Append(" AND ").Append(limit);
+            else Sql.Append(") <= ").Append(limit);
+            Sql.Append(" THEN ");
             if (_mode == OceanBaseCompatibilityMode.MySql)
             {
                 // A CLR tick below MySQL's microsecond precision must not be rounded away.
@@ -64,6 +78,13 @@ namespace OceanBase.EntityFrameworkCore.Query
 
             void AppendTicks()
             {
+                if (ticks)
+                {
+                    Sql.Append("CAST(");
+                    Visit(amount);
+                    Sql.Append(_mode == OceanBaseCompatibilityMode.MySql ? " AS DECIMAL(19,0))" : " AS NUMBER(19,0))");
+                    return;
+                }
                 // .NET AddUnits truncates the whole and fractional parts separately, before adding integer ticks.
                 Sql.Append("(CAST(");
                 AppendTruncatedAmount();
