@@ -14,6 +14,9 @@ and the release checklist to assess release readiness. Module plans, duplicate g
 logs have been merged and removed. Git retains implementation history; ignored `artifacts/` retains
 raw local test evidence.
 
+The [interactive samples](../samples/README.md) demonstrate entity shapes, everyday EF Core queries
+and writes, and generation and application of migrations against OceanBase.
+
 Write documentation in English and organize it by lasting topic across all EF Core versions. New
 independent topics are allowed; small features do not get their own documents. See the root
 [AGENTS.md](../AGENTS.md) for these rules.

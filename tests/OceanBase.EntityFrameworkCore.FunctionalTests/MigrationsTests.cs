@@ -69,11 +69,15 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
             Assert.Contains(capture.Commands, c => c.Sql.StartsWith("CREATE TABLE", StringComparison.Ordinal) && c.Sql.Contains("Rows", StringComparison.Ordinal));
             Assert.All(capture.Commands, c => Assert.Equal(async, c.Async));
             if (mode == OceanBaseCompatibilityMode.Oracle)
-                Assert.All(capture.Commands.Where(c => !c.Sql.StartsWith("BEGIN", StringComparison.Ordinal)),
+                Assert.All(capture.Commands.Where(c => !c.Sql.StartsWith("BEGIN", StringComparison.Ordinal)
+                    && !c.Sql.StartsWith("DECLARE", StringComparison.Ordinal)),
                     c => Assert.False(c.Sql.TrimEnd().EndsWith(';'), c.Sql));
             var count = capture.Commands.Count;
             if (async) await context.Database.MigrateAsync(); else context.Database.Migrate();
             Assert.DoesNotContain(capture.Commands.Skip(count), c => c.Sql.Contains("ALTER TABLE", StringComparison.Ordinal));
+            if (mode == OceanBaseCompatibilityMode.Oracle)
+                Assert.DoesNotContain(capture.Commands.Skip(count), c => c.Sql.Contains("CREATE TABLE", StringComparison.Ordinal)
+                    && c.Sql.Contains("__EFMigrationsHistoryLock", StringComparison.Ordinal));
             var migrator = context.GetService<IMigrator>();
             if (async) await migrator.MigrateAsync(Migration.InitialDatabase); else migrator.Migrate(Migration.InitialDatabase);
             Assert.Empty(capture.Applied);
@@ -323,6 +327,7 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
             public Exception? ReleaseFailure { get; init; }
             public Exception? ClaimFailure { get; init; }
             private bool _history;
+            private bool _lockTable;
             private string? _owner;
 
             private int Execute(DbCommand command, bool async)
@@ -331,6 +336,7 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
                 Commands.Add(new(sql, async));
                 if (sql.Contains("__EFMigrationsHistoryLock", StringComparison.Ordinal))
                 {
+                    if (sql.Contains("CREATE TABLE", StringComparison.Ordinal)) _lockTable = true;
                     if (sql.StartsWith("INSERT", StringComparison.Ordinal))
                     {
                         if (LockHeld) return 0;
@@ -368,6 +374,8 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
             private object Scalar(DbCommand command, bool async)
             {
                 Commands.Add(new(command.CommandText, async));
+                if (command.CommandText.StartsWith("SELECT COUNT", StringComparison.Ordinal)
+                    && command.CommandText.Contains("__EFMigrationsHistoryLock", StringComparison.Ordinal)) return _lockTable ? 1 : 0;
                 return command.CommandText.StartsWith("SELECT COUNT", StringComparison.Ordinal) ? _history ? 1 : 0 : Scope;
             }
             public override InterceptionResult<object> ScalarExecuting(DbCommand command, CommandEventData data, InterceptionResult<object> result)

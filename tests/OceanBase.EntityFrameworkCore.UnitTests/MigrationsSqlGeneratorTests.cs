@@ -403,6 +403,11 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
                 Assert.Contains(quoted, sql);
                 Assert.Contains(quoted, history.GetInsertScript(new HistoryRow("id'\\", "10.0.0")));
                 if (mode == OceanBaseCompatibilityMode.MySql) Assert.Contains("CREATE TABLE IF NOT EXISTS", sql);
+                else
+                {
+                    Assert.Contains("SELECT COUNT(*) INTO ob_count FROM ALL_TABLES WHERE OWNER = N'app'", sql);
+                    Assert.Contains("IF ob_count = 0 THEN", sql);
+                }
             }
             ((IDbContextOptionsBuilderInfrastructure)options).AddOrUpdateExtension(extension.WithMigrationsHistoryTableSchema("other"));
             using var other = new DbContext(options.Options);
