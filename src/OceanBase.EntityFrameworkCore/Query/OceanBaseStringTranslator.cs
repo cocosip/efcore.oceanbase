@@ -40,6 +40,8 @@ namespace OceanBase.EntityFrameworkCore.Query
         private static readonly MethodInfo SubstringStartLength = typeof(string).GetMethod(nameof(string.Substring), [typeof(int), typeof(int)])!;
         private static readonly MethodInfo RemoveStart = typeof(string).GetMethod(nameof(string.Remove), [typeof(int)])!;
         private static readonly MethodInfo RemoveStartCount = typeof(string).GetMethod(nameof(string.Remove), [typeof(int), typeof(int)])!;
+        private static readonly MethodInfo ReplaceText = typeof(string).GetMethod(nameof(string.Replace), [typeof(string), typeof(string)])!;
+        private static readonly MethodInfo ReplaceCharacters = typeof(string).GetMethod(nameof(string.Replace), [typeof(char), typeof(char)])!;
         internal const string OracleSearchMarker = "__oceanbase_internal_string_search";
 
         public SqlExpression? Translate(SqlExpression? instance, MethodInfo method, IReadOnlyList<SqlExpression> arguments,
@@ -49,13 +51,17 @@ namespace OceanBase.EntityFrameworkCore.Query
             var isFunction = Functions.TryGetValue(method, out var function);
             var isSubstring = method == SubstringStart || method == SubstringStartLength;
             var isRemove = method == RemoveStart || method == RemoveStartCount;
-            if (instance is null || !isSearch && !isFunction && !isSubstring && !isRemove)
+            var isReplace = method == ReplaceText || method == ReplaceCharacters;
+            if (instance is null || !isSearch && !isFunction && !isSubstring && !isRemove && !isReplace)
                 return null;
 
             instance = sqlExpressionFactory.ApplyDefaultTypeMapping(instance);
             var mapping = instance.TypeMapping!;
             if (mapping.Converter?.ProviderClrType is { } providerType && providerType != typeof(string))
                 return null;
+
+            if (isReplace)
+                return TranslateReplace(instance, arguments, mapping, method == ReplaceCharacters);
 
             if (isRemove || function is "TRIM" or "LTRIM" or "RTRIM")
             {
@@ -100,6 +106,41 @@ namespace OceanBase.EntityFrameworkCore.Query
             // Oracle all-space trim can return NULL for required input; do not simplify result null tests.
             return sqlExpressionFactory.Function(function!, [instance], nullable: true,
                 argumentsPropagateNullability: [false], typeof(string), mapping);
+        }
+
+        private SqlExpression? TranslateReplace(SqlExpression instance, IReadOnlyList<SqlExpression> arguments,
+            RelationalTypeMapping mapping, bool characters)
+        {
+            var factory = sqlExpressionFactory;
+            var text = mappingSource.FindMapping(typeof(string), storeTypeName: null, unicode: mapping.IsUnicode)!;
+            var tokenMapping = characters ? (RelationalTypeMapping)text.WithComposedConverter(new CharToStringConverter()) : text;
+            var oldValue = factory.ApplyTypeMapping(arguments[0], tokenMapping);
+            var newValue = factory.ApplyTypeMapping(arguments[1], tokenMapping);
+            if (characters && (oldValue.TypeMapping?.Converter is not CharToStringConverter
+                || newValue.TypeMapping?.Converter is not CharToStringConverter)
+                || oldValue.TypeMapping?.Converter?.ProviderClrType is { } oldCarrier && oldCarrier != typeof(string)
+                || newValue.TypeMapping?.Converter?.ProviderClrType is { } newCarrier && newCarrier != typeof(string))
+                return null;
+
+            var lengthFunction = mode == OceanBaseCompatibilityMode.MySql ? "CHAR_LENGTH" : "LENGTH";
+            var oldLength = factory.Function(lengthFunction, [oldValue], nullable: true,
+                argumentsPropagateNullability: [false], typeof(int));
+            var valid = factory.GreaterThan(oldLength, factory.Constant(0));
+            if (characters)
+            {
+                var newLength = factory.Function(lengthFunction, [newValue], nullable: true,
+                    argumentsPropagateNullability: [false], typeof(int));
+                valid = factory.AndAlso(valid, factory.IsNotNull(newLength));
+            }
+            else if (mode == OceanBaseCompatibilityMode.MySql)
+            {
+                newValue = factory.Coalesce(newValue, factory.Constant("", text), newValue.TypeMapping);
+            }
+
+            var resultMapping = mapping.IsFixedLength ? TrimResultMapping(mappingSource, mapping) : mapping;
+            var replaced = factory.Function("REPLACE", [instance, oldValue, newValue], nullable: true,
+                argumentsPropagateNullability: [false, false, false], typeof(string), resultMapping);
+            return factory.Case([new CaseWhenClause(valid, replaced)], factory.Constant(null, typeof(string), resultMapping));
         }
 
         internal static RelationalTypeMapping TrimResultMapping(IRelationalTypeMappingSource mappings, RelationalTypeMapping source)

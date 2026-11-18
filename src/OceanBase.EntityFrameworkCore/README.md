@@ -169,6 +169,7 @@ when portable placement is required; this does not configure string collation.
 
 String translations support ordinary equality, two/three/four-string concat,
 single-string and char Contains/StartsWith/EndsWith/IndexOf, Length, both integer Substring/Remove overloads,
+ordinary string and char Replace,
 parameterless ToLower/ToUpper and Trim/TrimStart/TrimEnd with no argument, char or char[]. Length and
 substring bounds count native characters rather than CLR UTF-16 units. Substring
 uses native negative/out-of-range/zero-length rules; parameterless trim removes ordinary spaces,
@@ -222,6 +223,15 @@ and count in [0,length-start]; invalid or NULL SQL bounds/source return NULL.
 Results use variable text mappings, preserving national/LOB families and applying
 the receiver's inverse converter once. Oracle guarded empty results are NULL,
 including LOBs; bare Substring has its own native empty-value contract.
+
+Replace searches for literal tokens in stored text with native matching, which is
+case-sensitive in the tested profiles. A NULL source or NULL/empty old token
+returns SQL NULL. In Replace(string,string), NULL or empty replacement text deletes
+matches. In Replace(char,char), either NULL SQL operand returns NULL. Scalar
+tokens use plain text mappings independent of the receiver converter. Text-backed
+char columns use the ordinary char-to-string converter. Results can grow beyond
+the source value and use variable national/LOB mappings with the receiver's
+inverse converter applied once. Oracle scalar empty results become NULL.
 
 First/FirstOrDefault/Single/SingleOrDefault and ordinary predicate overloads have
 sync/async native coverage for empty, one and multiple rows with entity, scalar,

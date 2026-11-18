@@ -229,6 +229,43 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
         [Theory]
         [InlineData(OceanBaseCompatibilityMode.MySql)]
         [InlineData(OceanBaseCompatibilityMode.Oracle)]
+        public void Replace_translates_ordinary_signatures_and_guards_search_tokens(OceanBaseCompatibilityMode mode)
+        {
+            using var context = CreateContext(mode);
+            var oldCharacter = 'x';
+            var sql = context.Rows.Where(row => row.Required.Replace(oldCharacter, 'y').Replace("yy", null) == "body")
+                .ToQueryString();
+            Assert.Contains("REPLACE(", sql);
+            Assert.Contains(Length(mode), sql);
+            Assert.Contains("CASE", sql);
+            Assert.Throws<InvalidOperationException>(() => context.Rows.Where(row =>
+                row.Required.Replace("x", "y", StringComparison.OrdinalIgnoreCase) == "body").ToQueryString());
+            Assert.Throws<InvalidOperationException>(() => context.Rows.Where(row =>
+                row.BinaryConverted.Replace("x", "y") == "body").ToQueryString());
+            Assert.Throws<InvalidOperationException>(() => context.Rows.Where(row =>
+                row.Required.Replace(row.NumericCharacter, 'x') == "body").ToQueryString());
+            Assert.Throws<InvalidOperationException>(() => context.Rows.Where(row =>
+                row.Required.Replace('x', row.ExpandedCharacter) == "body").ToQueryString());
+        }
+
+        [Theory]
+        [InlineData("TEXT")]
+        [InlineData("MEDIUMTEXT")]
+        [InlineData("LONGTEXT")]
+        public void Replace_keeps_explicit_MySql_lob_mapping_with_size_metadata(string storeType)
+        {
+            using var context = CreateContext(OceanBaseCompatibilityMode.MySql);
+            var mapping = context.GetService<IRelationalTypeMappingSource>().FindMapping(typeof(string), storeTypeName: storeType, size: 64)!;
+            var factory = context.GetService<ISqlExpressionFactory>();
+            var replaced = context.GetService<IMethodCallTranslatorProvider>().Translate(context.Model, factory.Constant("x", mapping),
+                typeof(string).GetMethod(nameof(string.Replace), [typeof(string), typeof(string)])!, [factory.Constant("x"), factory.Constant("expanded")],
+                context.GetService<IDiagnosticsLogger<DbLoggerCategory.Query>>());
+            Assert.Equal(mapping.StoreType, Assert.IsType<CaseExpression>(replaced).TypeMapping!.StoreType);
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle)]
         public void Explicit_trim_translates_six_signatures_and_keeps_null_results(OceanBaseCompatibilityMode mode)
         {
             using var context = CreateContext(mode);

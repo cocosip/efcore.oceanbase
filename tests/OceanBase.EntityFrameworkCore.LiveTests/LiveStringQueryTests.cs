@@ -559,6 +559,74 @@ namespace OceanBase.EntityFrameworkCore.LiveTests
 
         [Theory]
         [MemberData(nameof(Cases))]
+        public async Task Replace_preserves_literal_tokens_nulls_and_variable_text(
+            OceanBaseCompatibilityMode mode, bool async, bool nulls)
+            => await WithTable(mode, async, nulls, async (context, seed, stage) =>
+            {
+                var rows = context.Set<Row>().OrderBy(row => row.Id);
+                string? oldValue = "Ab";
+                string? newValue = "longer";
+                var query = rows.Select(row => new
+                {
+                    row.Id, Plain = (string?)row.Plain!.Replace(oldValue!, newValue),
+                    National = (string?)row.National!.Replace(oldValue!, newValue),
+                    Fixed = (string?)row.Fixed!.Replace(oldValue!, newValue),
+                    NationalFixed = (string?)row.NationalFixed!.Replace(oldValue!, newValue),
+                    Converted = (string?)row.Converted!.Replace(oldValue!, newValue)
+                });
+                foreach (var tokens in new (string? Old, string? New)[]
+                {
+                    ("Ab", "abcdefghijklmnop"), ("ab", "!"), ("%_\\'", "海🌊"), ("海🌊", "x"),
+                    ("AbC", null), ("AbC", ""), ("", "x"), (null, "x"), ("Ab", "longer")
+                })
+                {
+                    stage("Replace string tokens, case sensitivity, deletion, refreshed values and converted receivers");
+                    (oldValue, newValue) = tokens;
+                    Assert.Equal(seed.Select(row => new
+                    {
+                        row.Id, Plain = Replaced(row.Plain, oldValue, newValue, mode),
+                        National = Replaced(row.National, oldValue, newValue, mode),
+                        Fixed = Replaced(row.Fixed, oldValue, newValue, mode),
+                        NationalFixed = Replaced(row.NationalFixed, oldValue, newValue, mode),
+                        Converted = Decode(Replaced(Encode(row.Converted), oldValue, newValue, mode))
+                    }), await Read(query, async));
+                }
+                stage("Replace char parameters, nullable columns and predicate composition");
+                var oldCharacter = 'A';
+                var chars = rows.Select(row => new
+                {
+                    row.Id, Captured = (string?)row.Plain!.Replace(oldCharacter, 'z'),
+                    OldColumn = (string?)row.Plain!.Replace(row.Character!.Value, 'z'),
+                    NewColumn = (string?)row.Plain!.Replace('A', row.Character!.Value),
+                    OldString = (string?)row.Plain!.Replace(row.Needle!, "z"), NewString = (string?)row.Plain!.Replace("Ab", row.Other)
+                });
+                foreach (var character in new[] { 'A', '海', '\'', '\\' })
+                {
+                    oldCharacter = character;
+                    Assert.Equal(seed.Select(row => new
+                    {
+                        row.Id, Captured = Replaced(row.Plain, character.ToString(), "z", mode),
+                        OldColumn = Replaced(row.Plain, row.Character?.ToString(), "z", mode),
+                        NewColumn = row.Character is null ? null : Replaced(row.Plain, "A", row.Character.ToString(), mode),
+                        OldString = Replaced(row.Plain, row.Needle, "z", mode), NewString = Replaced(row.Plain, "Ab", row.Other, mode)
+                    }), await Read(chars, async));
+                    Assert.Equal(seed.Where(row => Replaced(row.Plain, character.ToString(), "z", mode)?.Contains('z') == true)
+                        .Select(row => row.Id), await Read(rows.Where(row => row.Plain!.Replace(oldCharacter, 'z').Contains('z'))
+                            .Select(row => row.Id), async));
+                }
+                stage("Replace expands LOBs and finds tokens beyond scalar text limits");
+                var rowWithLob = Assert.Single(await Read(rows.AsTracking().Where(row => row.Id == 1), async));
+                rowWithLob.Large = new string('v', 4001) + "海🌊end";
+                Assert.Equal(1, async ? await context.SaveChangesAsync() : context.SaveChanges());
+                var lob = Assert.Single(await Read(rows.Where(row => row.Id == 1).Select(row => row.Large!.Replace("海🌊", "🌊🌊🌊")), async));
+                Assert.Equal(new string('v', 4001) + "🌊🌊🌊end", lob);
+            });
+
+        private static string? Replaced(string? source, string? oldValue, string? newValue, OceanBaseCompatibilityMode mode)
+            => source is null || string.IsNullOrEmpty(oldValue) ? null : Normalize(source.Replace(oldValue, newValue), mode);
+
+        [Theory]
+        [MemberData(nameof(Cases))]
         public async Task IndexOf_preserves_native_positions_ranges_nulls_and_contextual_search_converters(
             OceanBaseCompatibilityMode mode, bool async, bool nulls)
             => await WithTable(mode, async, nulls, async (context, seed, stage) =>
