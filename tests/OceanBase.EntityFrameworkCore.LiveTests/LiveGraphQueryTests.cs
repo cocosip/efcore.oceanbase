@@ -97,6 +97,17 @@ namespace OceanBase.EntityFrameworkCore.LiveTests
                         Assert.Equal(1, optional[3].Parent!.Id);
                         Identity(optional[0].Parent!, optional[3].Parent!, tracking != QueryTrackingBehavior.NoTracking);
                         if (tracking != QueryTrackingBehavior.TrackAll) Assert.Empty(context.ChangeTracker.Entries());
+
+                        stage($"optional composite reference across tenants {tracking} split={split}");
+                        context.ChangeTracker.Clear();
+                        var acrossTenants = context.Set<Optional>().IgnoreQueryFilters(["Tenant"]).Include(row => row.Parent);
+                        var visible = await Read(Shape(acrossTenants, tracking, split).OrderBy(row => row.TenantId).ThenBy(row => row.Id), async);
+                        Assert.Equal(new (int Tenant, int Id, int? ParentTenant, int? ParentId)[]
+                        {
+                            (1, 1, 1, 1), (1, 2, null, null), (1, 3, null, null), (1, 4, 1, 1),
+                            (2, 1, 2, 1), (2, 2, null, null)
+                        }, visible.Select(row => (row.TenantId, row.Id, row.Parent?.TenantId, row.Parent?.Id)));
+                        if (tracking != QueryTrackingBehavior.TrackAll) Assert.Empty(context.ChangeTracker.Entries());
                     }
             });
 
@@ -242,6 +253,7 @@ namespace OceanBase.EntityFrameworkCore.LiveTests
                         var needle = Hostile;
                         var query = Shape(context.Set<Parent>().Where(row => row.Name == needle).Include(row => row.Children)
                             .ThenInclude(row => row.Detail), tracking, split).OrderBy(row => row.Id);
+                        string[]? baselineSql = null;
                         foreach (var (tenant, name) in new[] { (1, Hostile), (1, "empty"), (1, "missing"), (2, Hostile), (1, Hostile) })
                         {
                             stage($"graph predicate {tracking} split={split} tenant={tenant}");
@@ -252,9 +264,17 @@ namespace OceanBase.EntityFrameworkCore.LiveTests
                             var actual = await Read(query, async);
                             Assert.Equal(Parents().Where(parent => parent.TenantId == tenant && !parent.IsDeleted && parent.Name == needle)
                                 .Select(parent => parent.Id), actual.Select(parent => parent.Id));
-                            Assert.NotEmpty(capture.Items);
-                            Assert.All(capture.Items, command => Assert.DoesNotContain(Hostile, command.Sql, StringComparison.Ordinal));
-                            Assert.Contains(capture.Items, command => command.Values.Contains(needle));
+                            if (split && actual.Length != 0) Assert.True(capture.Items.Count > 1);
+                            else Assert.Single(capture.Items);
+                            var sql = capture.Items.Select(command => command.Sql).ToArray();
+                            baselineSql ??= sql;
+                            Assert.Equal(split && actual.Length == 0 ? baselineSql.Take(1) : baselineSql, sql);
+                            Assert.All(capture.Items, command =>
+                            {
+                                Assert.DoesNotContain(Hostile, command.Sql, StringComparison.Ordinal);
+                                Assert.Equal(needle, Assert.Single(command.Values.OfType<string>().Distinct()));
+                                Assert.Contains(tenant, command.Values);
+                            });
                             foreach (var parent in actual)
                                 Assert.Equal(Children().Where(child => child.TenantId == tenant && child.ParentCode == parent.Code && !child.IsDeleted)
                                     .Select(child => child.Id).Order(), parent.Children.Select(child => child.Id).Order());

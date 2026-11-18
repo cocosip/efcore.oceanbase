@@ -215,6 +215,7 @@ public sealed class LiveAggregateQueryTests
                 Filtered = group.Where(row => row.Int32 > 0).Select(row => row.Int32).Distinct().Sum(),
                 DistinctAverage = group.Where(row => row.Int32 > 0).Select(row => row.Int32).Distinct().Average()
             }).OrderBy(group => group.Bucket ?? -1).ThenBy(group => group.Tag).ToArray();
+            Assert.Equal(4, expected.Length);
             Assert.Equal(expected, await Read(grouped, async));
             var minimum = 1;
             var skip = 0;
@@ -260,8 +261,8 @@ public sealed class LiveAggregateQueryTests
         {
             var floor = 0;
             var skip = 0;
-            var take = 3;
-            foreach (var bounds in new[] { (0, 0, 3), (1, 0, 3), (0, 1, 1), (6, 0, 3), (0, 0, 3) })
+            var take = 4;
+            foreach (var bounds in new[] { (0, 0, 4), (1, 0, 4), (0, 1, 1), (6, 0, 4), (0, 0, 4) })
             {
                 (floor, skip, take) = bounds;
                 stage($"grouped collections floor={floor} skip={skip} take={take}");
@@ -406,7 +407,7 @@ public sealed class LiveAggregateQueryTests
         var stamp = value.HasValue ? new DateTime(2026, 11, 1, 10, 30, 0).AddDays(value.Value).AddTicks(1234560) : (DateTime?)null;
         return new Row
         {
-            Id = id, Bucket = id is 2 or 6 ? null : id is 1 or 4 ? 2 : 1, Tag = id is 2 or 6 ? 7 : 8,
+            Id = id, Bucket = id is 2 or 6 ? null : id is 1 or 4 ? 2 : 1, Tag = id is 2 or 5 or 6 ? 7 : 8,
             SByte = (sbyte?)value, Byte = value.HasValue ? (byte)Math.Abs(value.Value) : null,
             Int16 = (short?)value, UInt16 = value.HasValue ? (ushort)Math.Abs(value.Value) : null,
             Int32 = value, UInt32 = value.HasValue ? (uint)Math.Abs(value.Value) : null, Int64 = value,

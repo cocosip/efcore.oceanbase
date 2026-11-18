@@ -325,6 +325,7 @@ namespace OceanBase.EntityFrameworkCore.LiveTests
             context.Add(row);
             Assert.Equal(1, async ? await context.SaveChangesAsync() : context.SaveChanges());
             Assert.Equal(SeedStamp, row.DefaultStamp);
+            Assert.Equal(DateTimeKind.Unspecified, row.DefaultStamp.Kind);
             Assert.Equal(SeedDay, row.DefaultDay);
             Assert.Equal(SeedClock, row.DefaultClock);
             Assert.Equal(SeedDuration, row.DefaultDuration);
