@@ -168,12 +168,12 @@ descending reverses those positions. Use explicit null-rank/coalesce expressions
 when portable placement is required; this does not configure string collation.
 
 String translations support ordinary equality, two/three/four-string concat,
-single-string and char Contains/StartsWith/EndsWith, Length, both integer Substring overloads,
+single-string and char Contains/StartsWith/EndsWith, Length, both integer Substring/Remove overloads,
 parameterless ToLower/ToUpper and parameterless Trim/TrimStart/TrimEnd. Length and
 substring bounds count native characters rather than CLR UTF-16 units. Substring
 uses native negative/out-of-range/zero-length rules; trim removes ordinary spaces,
 and case conversion follows the database. StringComparison, culture/Invariant,
-explicit trim-character and Remove overloads are not translated in
+and explicit trim-character overloads are not translated in
 predicates; EF may evaluate permitted final client projections.
 
 Search treats percent, underscore, quotes and backslashes as text. NULL source or
@@ -194,6 +194,12 @@ text-backed char columns retain their own mappings, including nullable column
 needles. Numeric/binary-backed chars are not translated. Text validation rejects
 lone UTF-16 surrogates rather than searching half of a supplementary character.
 These overloads follow the same native collation and NULL policy as string search.
+
+Remove uses native character counts in stored text. Start must be in [0,length]
+and count in [0,length-start]; invalid or NULL SQL bounds/source return NULL.
+Results use variable text mappings, preserving national/LOB families and applying
+the receiver's inverse converter once. Oracle guarded empty results are NULL,
+including LOBs; bare Substring has its own native empty-value contract.
 
 First/FirstOrDefault/Single/SingleOrDefault and ordinary predicate overloads have
 sync/async native coverage for empty, one and multiple rows with entity, scalar,

@@ -38,6 +38,8 @@ namespace OceanBase.EntityFrameworkCore.Query
         };
         private static readonly MethodInfo SubstringStart = typeof(string).GetMethod(nameof(string.Substring), [typeof(int)])!;
         private static readonly MethodInfo SubstringStartLength = typeof(string).GetMethod(nameof(string.Substring), [typeof(int), typeof(int)])!;
+        private static readonly MethodInfo RemoveStart = typeof(string).GetMethod(nameof(string.Remove), [typeof(int)])!;
+        private static readonly MethodInfo RemoveStartCount = typeof(string).GetMethod(nameof(string.Remove), [typeof(int), typeof(int)])!;
         internal const string OracleSearchMarker = "__oceanbase_internal_string_search";
 
         public SqlExpression? Translate(SqlExpression? instance, MethodInfo method, IReadOnlyList<SqlExpression> arguments,
@@ -46,13 +48,27 @@ namespace OceanBase.EntityFrameworkCore.Query
             var isSearch = SearchMethods.TryGetValue(method, out var search);
             var isFunction = Functions.TryGetValue(method, out var function);
             var isSubstring = method == SubstringStart || method == SubstringStartLength;
-            if (instance is null || !isSearch && !isFunction && !isSubstring)
+            var isRemove = method == RemoveStart || method == RemoveStartCount;
+            if (instance is null || !isSearch && !isFunction && !isSubstring && !isRemove)
                 return null;
 
             instance = sqlExpressionFactory.ApplyDefaultTypeMapping(instance);
             var mapping = instance.TypeMapping!;
             if (mapping.Converter?.ProviderClrType is { } providerType && providerType != typeof(string))
                 return null;
+
+            if (isRemove || function is "TRIM" or "LTRIM" or "RTRIM")
+            {
+                // Shortening fixed text returns variable text; keep national/LOB families and value conversion.
+                mapping = mappingSource.FindMapping(typeof(string),
+                    storeTypeName: mapping.StoreTypeNameBase.Trim().ToUpperInvariant() is "CLOB" or "NCLOB" ? mapping.StoreType : null,
+                    unicode: mapping.IsUnicode, size: mapping.Size, fixedLength: false)!;
+                if (instance.TypeMapping!.Converter is { } converter)
+                    mapping = (RelationalTypeMapping)mapping.WithComposedConverter(converter);
+            }
+
+            if (isRemove)
+                return TranslateRemove(instance, arguments, mapping);
 
             if (isSubstring)
             {
@@ -85,19 +101,39 @@ namespace OceanBase.EntityFrameworkCore.Query
                         needle is SqlConstantExpression { Value: "" } && needle.TypeMapping?.Converter is null);
             }
 
-            if (function is "TRIM" or "LTRIM" or "RTRIM")
-            {
-                // Trimming fixed text returns variable text; keep national/LOB families and value conversion.
-                mapping = mappingSource.FindMapping(typeof(string),
-                    storeTypeName: mapping.StoreTypeNameBase.Trim().ToUpperInvariant() is "CLOB" or "NCLOB" ? mapping.StoreType : null,
-                    unicode: mapping.IsUnicode, size: mapping.Size, fixedLength: false)!;
-                if (instance.TypeMapping!.Converter is { } converter)
-                    mapping = (RelationalTypeMapping)mapping.WithComposedConverter(converter);
-            }
-
             // Oracle all-space trim can return NULL for required input; do not simplify result null tests.
             return sqlExpressionFactory.Function(function!, [instance], nullable: true,
                 argumentsPropagateNullability: [false], typeof(string), mapping);
+        }
+
+        private SqlExpression TranslateRemove(SqlExpression source, IReadOnlyList<SqlExpression> arguments,
+            RelationalTypeMapping mapping)
+        {
+            var factory = sqlExpressionFactory;
+            var longMapping = mappingSource.FindMapping(typeof(long))!;
+            var zero = factory.Constant(0L, longMapping);
+            var one = factory.Constant(1L, longMapping);
+            var start = factory.ApplyDefaultTypeMapping(arguments[0]);
+            var length = factory.Function(mode == OceanBaseCompatibilityMode.MySql ? "CHAR_LENGTH" : "LENGTH",
+                [source], nullable: true, argumentsPropagateNullability: [false], typeof(long), longMapping);
+            var valid = factory.AndAlso(factory.IsNotNull(source),
+                factory.AndAlso(factory.GreaterThanOrEqual(start, zero), factory.LessThanOrEqual(start, length)));
+            var function = mode == OceanBaseCompatibilityMode.MySql ? "SUBSTRING" : "SUBSTR";
+            var prefix = factory.Function(function, [source, one, start], nullable: true,
+                argumentsPropagateNullability: [false, false, false], typeof(string), mapping);
+            SqlExpression result = prefix;
+            if (arguments.Count == 2)
+            {
+                var count = factory.ApplyDefaultTypeMapping(arguments[1]);
+                valid = factory.AndAlso(valid, factory.AndAlso(factory.GreaterThanOrEqual(count, zero),
+                    factory.LessThanOrEqual(count, factory.Subtract(length, start, longMapping))));
+                var end = factory.Add(factory.Add(start, count, longMapping), one, longMapping);
+                var suffix = factory.Function(function, [source, end], nullable: true,
+                    argumentsPropagateNullability: [false, false], typeof(string), mapping);
+                result = factory.Function("CONCAT", [prefix, suffix], nullable: true,
+                    argumentsPropagateNullability: [false, false], typeof(string), mapping);
+            }
+            return factory.Case([new CaseWhenClause(valid, result)], factory.Constant(null, typeof(string), mapping));
         }
 
         internal static SqlExpression BuildSearch(ISqlExpressionFactory factory, OceanBaseCompatibilityMode mode,

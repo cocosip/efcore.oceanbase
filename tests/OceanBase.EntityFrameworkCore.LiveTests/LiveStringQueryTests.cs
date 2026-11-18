@@ -256,6 +256,65 @@ namespace OceanBase.EntityFrameworkCore.LiveTests
 
         [Theory]
         [MemberData(nameof(Cases))]
+        public async Task Remove_preserves_native_characters_valid_ranges_and_null_results(
+            OceanBaseCompatibilityMode mode, bool async, bool nulls)
+            => await WithTable(mode, async, nulls, async (context, seed, stage) =>
+            {
+                var start = 0;
+                var count = 0;
+                var rows = context.Set<Row>();
+                var query = rows.OrderBy(row => row.Id).Select(row => new
+                {
+                    row.Id, Tail = (string?)row.Plain!.Remove(start), Range = (string?)row.Plain!.Remove(start, count),
+                    National = (string?)row.National!.Remove(start, count), Fixed = (string?)row.Fixed!.Remove(start, count),
+                    NationalFixed = (string?)row.NationalFixed!.Remove(start), Lob = (string?)row.Large!.Remove(start, count),
+                    LobTail = (string?)row.Large!.Remove(start), IsNull = row.Required.Remove(start, count) == null
+                });
+                var filtered = rows.Where(row => row.Plain!.Remove(start, count) == null).OrderBy(row => row.Id).Select(row => row.Id);
+                foreach (var bounds in new[] { (0, 0), (0, 1), (1, 2), (2, 1), (-1, 1), (int.MaxValue, int.MaxValue),
+                    (int.MinValue, int.MinValue), (0, -1), (0, int.MaxValue), (100, 2), (0, 0) })
+                {
+                    (start, count) = bounds;
+                    stage($"remove start={start} count={count}");
+                    Assert.Equal(seed.Select(row => new
+                    {
+                        row.Id, Tail = Remove(row.Plain, start, null, mode, false), Range = Remove(row.Plain, start, count, mode, true),
+                        National = Remove(row.National, start, count, mode, true), Fixed = Remove(row.Fixed, start, count, mode, true),
+                        NationalFixed = Remove(row.NationalFixed, start, null, mode, false), Lob = Remove(row.Large, start, count, mode, true),
+                        LobTail = Remove(row.Large, start, null, mode, false), IsNull = Remove(row.Required, start, count, mode, true) is null
+                    }), await Read(query, async));
+                    Assert.Equal(seed.Where(row => Remove(row.Plain, start, count, mode, true) is null).Select(row => row.Id), await Read(filtered, async));
+                }
+                stage("nullable native bounds, full removal, end index and composition");
+                var columns = rows.OrderBy(row => row.Id).Select(row => new
+                {
+                    row.Id, Value = (string?)row.Plain!.Remove(row.RemoveStart!.Value, row.RemoveCount!.Value),
+                    Tail = (string?)row.Plain!.Remove(row.RemoveStart!.Value),
+                    All = (string?)row.Plain!.Remove(0, row.Plain.Length), End = (string?)row.Plain!.Remove(row.Plain.Length),
+                    EmptyLob = (string?)row.Large!.Substring(0, 0).Remove(0),
+                    EmptyLobRange = (string?)row.Large!.Substring(0, 0).Remove(0, 0),
+                    Composed = row.Plain!.Remove(1, 1).ToUpper().Contains('海')
+                });
+                Assert.Equal(seed.Select(row => new
+                {
+                    row.Id, Value = Remove(row.Plain, row.RemoveStart, row.RemoveCount, mode, true),
+                    Tail = Remove(row.Plain, row.RemoveStart, null, mode, false),
+                    All = Remove(row.Plain, 0, Characters(row.Plain), mode, true), End = Remove(row.Plain, Characters(row.Plain), null, mode, false),
+                    EmptyLob = mode == OceanBaseCompatibilityMode.Oracle || row.Large is null ? null : "",
+                    EmptyLobRange = mode == OceanBaseCompatibilityMode.Oracle || row.Large is null ? null : "",
+                    Composed = Match(Remove(row.Plain, 1, 1, mode, true)?.ToUpperInvariant(), "海", 0, context)
+                }), await Read(columns, async));
+                stage("stored-text converter result ownership");
+                var converted = Assert.Single(await Read(rows.Where(row => row.Id == 1).Select(row => new
+                {
+                    Tail = (string?)row.Converted!.Remove(2), Range = (string?)row.Converted!.Remove(1, 2)
+                }), async));
+                Assert.Equal(Decode(Remove(Encode(seed[0].Converted), 2, null, mode, false)), converted.Tail);
+                Assert.Equal(Decode(Remove(Encode(seed[0].Converted), 1, 2, mode, true)), converted.Range);
+            });
+
+        [Theory]
+        [MemberData(nameof(Cases))]
         public async Task Fixed_and_national_functions_keep_padding_characters_and_result_families(
             OceanBaseCompatibilityMode mode, bool async, bool nulls)
             => await WithTable(mode, async, nulls, async (context, seed, stage) =>
@@ -320,7 +379,7 @@ namespace OceanBase.EntityFrameworkCore.LiveTests
                     rows.Where(row => row.Required.Trim(' ') == "a"),
                     rows.Where(row => row.Required.TrimStart(new[] { ' ' }) == "a"),
                     rows.Where(row => row.Required.TrimEnd(' ') == "a"),
-                    rows.Where(row => row.Required.Remove(1) == "a"),
+                    rows.Where(row => row.BinaryConverted!.Remove(1) == "a"),
                     rows.Where(row => row.BinaryConverted!.ToLower() == "a"),
                     rows.Where(row => row.BinaryConverted!.Substring(0, 1) == "a")
                 ];
@@ -438,6 +497,16 @@ namespace OceanBase.EntityFrameworkCore.LiveTests
         private static string? Encode(string? value) => value is null ? null : value + "!";
         private static string? Decode(string? value) => value is null ? null : value[..Math.Max(0, value.Length - 1)];
 
+        private static string? Remove(string? value, int? start, int? count, OceanBaseCompatibilityMode mode, bool ranged)
+        {
+            if (value is null || start is null || start < 0) return null;
+            var characters = value.EnumerateRunes().ToArray();
+            if (start > characters.Length || ranged && (count is null || count < 0 || count > characters.Length - start)) return null;
+            var result = string.Concat(characters.Take(start.Value));
+            if (ranged) result += string.Concat(characters.Skip(start.Value + count!.Value));
+            return Normalize(result, mode);
+        }
+
         private static string? Substring(string? source, int start, int? length, OceanBaseCompatibilityMode mode, bool lob = false)
         {
             if (source is null) return null;
@@ -507,7 +576,7 @@ namespace OceanBase.EntityFrameworkCore.LiveTests
                 Id = index + 1, Plain = text, Required = string.IsNullOrEmpty(text) ? " " : text, National = text,
                 Fixed = fixedTexts[index], NationalFixed = fixedTexts[index], Needle = needles[index], Other = index % 2 == 0 ? "tail" : null,
                 Converted = text, BinaryConverted = text == "" ? "binary" : text, Large = text, Start = index - 2, Length = index % 4 - 1,
-                Character = characters[index]
+                Character = characters[index], RemoveStart = index == 5 ? null : index - 2, RemoveCount = index == 6 ? null : index % 4 - 1
             }).ToArray();
         }
 
@@ -557,6 +626,8 @@ namespace OceanBase.EntityFrameworkCore.LiveTests
             public int Start { get; set; }
             public int Length { get; set; }
             public char? Character { get; set; }
+            public int? RemoveStart { get; set; }
+            public int? RemoveCount { get; set; }
         }
     }
 }

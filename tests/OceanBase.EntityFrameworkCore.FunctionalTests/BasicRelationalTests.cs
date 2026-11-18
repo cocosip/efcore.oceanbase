@@ -2015,6 +2015,46 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
         }
 
         [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false, true)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true, true)]
+        public async Task Remove_commands_refresh_bounds_and_decode_converted_results_once(
+            OceanBaseCompatibilityMode mode, bool async, bool relationalNulls)
+        {
+            using var table = new DataTable();
+            table.Columns.Add("Tail", typeof(string));
+            table.Columns.Add("Range", typeof(string));
+            table.Rows.Add("he", "he!");
+            table.Rows.Add(DBNull.Value, DBNull.Value);
+            var commands = new CommandCapture { Results = table };
+            await using var context = CreateContext(mode, commands, relationalNulls);
+            var start = 1;
+            var count = 1;
+            var query = context.Set<ShortTextRow>().Where(row => row.Caption!.Remove(start, count) == null)
+                .Select(row => new { Tail = row.Converted.Remove(start), Range = row.Converted.Remove(start, count) });
+            foreach (var bounds in new[] { (1, 2), (0, 0), (int.MaxValue, int.MaxValue), (int.MinValue, -1), (1, 2) })
+            {
+                (start, count) = bounds;
+                commands.Values.Clear();
+                var rows = async ? await query.ToListAsync() : query.ToList();
+                Assert.Equal("h", rows[0].Tail);
+                Assert.Equal("he", rows[0].Range);
+                Assert.Null(rows[1].Tail);
+                Assert.Null(rows[1].Range);
+                Assert.All(commands.Values, value => Assert.Contains(Convert.ToInt32(value), new[] { start, count }));
+                Assert.Contains(commands.Values, value => Convert.ToInt32(value) == start);
+                Assert.Contains(commands.Values, value => Convert.ToInt32(value) == count);
+                Assert.Contains(" IS NULL", commands.Sql[^1]);
+                Assert.Contains("CASE", commands.Sql[^1]);
+            }
+        }
+
+        [Theory]
         [InlineData(OceanBaseCompatibilityMode.MySql, false)]
         [InlineData(OceanBaseCompatibilityMode.MySql, true)]
         [InlineData(OceanBaseCompatibilityMode.Oracle, false)]

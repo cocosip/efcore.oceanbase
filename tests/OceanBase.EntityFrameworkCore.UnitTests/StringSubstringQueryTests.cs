@@ -143,7 +143,72 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
                 context.Rows.Where(row => row.BinaryConverted.Substring(1) == "x").ToQueryString()).Message);
             Assert.Contains("BinaryConverted", context.Rows.Select(row => row.BinaryConverted.Substring(1)).ToQueryString());
             Assert.Contains("could not be translated", Assert.Throws<InvalidOperationException>(() =>
-                context.Rows.Where(row => row.Required.Remove(1) == "x").ToQueryString()).Message);
+                context.Rows.Where(row => row.BinaryConverted.Remove(1) == "x").ToQueryString()).Message);
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true)]
+        public void Remove_guards_native_bounds_and_translates_composition(OceanBaseCompatibilityMode mode, bool relationalNulls)
+        {
+            using var context = CreateContext(mode, relationalNulls);
+            var start = int.MaxValue;
+            var count = int.MaxValue;
+            var query = context.Rows.Where(row => row.Required.Remove(start, count) == null
+                || row.Optional!.Remove(row.Start).ToUpper().Contains('x'));
+            foreach (var bounds in new[] { (int.MaxValue, int.MaxValue), (int.MinValue, -1), (0, 0), (1, 2) })
+            {
+                (start, count) = bounds;
+                var sql = query.ToQueryString();
+                Assert.Contains("CASE", sql);
+                Assert.Contains(" IS NULL", sql);
+                Assert.Contains(">= 0", sql);
+                Assert.Contains("<=", sql);
+                Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? "CHAR_LENGTH(" : "LENGTH(", sql);
+                Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? "SUBSTRING(" : "SUBSTR(", sql);
+                Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? "CONCAT(" : " || ", sql);
+                Assert.Contains("UPPER(", sql);
+                Assert.Contains("INSTR(", sql);
+            }
+            var extreme = context.Rows.Where(row => row.Required.Remove(int.MaxValue, int.MaxValue) == "x").ToQueryString();
+            Assert.Contains("2147483647", extreme);
+            Assert.Contains(" + 1", extreme);
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle)]
+        public void Remove_result_uses_variable_text_and_retains_converter_once(OceanBaseCompatibilityMode mode)
+        {
+            using var context = CreateContext(mode);
+            var factory = context.GetService<ISqlExpressionFactory>();
+            var translator = context.GetService<IMethodCallTranslatorProvider>();
+            var logger = context.GetService<IDiagnosticsLogger<DbLoggerCategory.Query>>();
+            foreach (var name in new[] { nameof(Row.Required), nameof(Row.Fixed), nameof(Row.National), nameof(Row.Converted) })
+            {
+                var mapping = (RelationalTypeMapping)context.Model.FindEntityType(typeof(Row))!.FindProperty(name)!.GetTypeMapping();
+                foreach (var arity in new[] { 1, 2 })
+                {
+                    var method = typeof(string).GetMethod(nameof(string.Remove), arity == 1 ? [typeof(int)] : [typeof(int), typeof(int)])!;
+                    var arguments = arity == 1 ? new[] { factory.Constant(1) } : new[] { factory.Constant(1), factory.Constant(1) };
+                    var result = Assert.IsType<CaseExpression>(translator.Translate(context.Model,
+                        factory.Constant("abc!", mapping), method, arguments, logger));
+                    Assert.False(result.TypeMapping!.IsFixedLength);
+                    Assert.Equal(mapping.IsUnicode, result.TypeMapping.IsUnicode);
+                    Assert.Same(mapping.Converter, result.TypeMapping.Converter);
+                    Assert.True(result.ElseResult is null or SqlConstantExpression { Value: null });
+                    if (arity == 2)
+                    {
+                        var concat = Assert.IsType<SqlFunctionExpression>(result.WhenClauses[0].Result);
+                        var suffix = Assert.IsType<SqlFunctionExpression>(concat.Arguments![1]);
+                        Assert.Equal(typeof(long), suffix.Arguments![1].TypeMapping!.ClrType);
+                    }
+                }
+            }
+            var sql = context.Rows.Where(row => row.Converted.Remove(1, 1) == "x").ToQueryString();
+            Assert.Contains("x!", sql);
         }
 
         private static TestContext CreateContext(OceanBaseCompatibilityMode mode, bool relationalNulls = false)
