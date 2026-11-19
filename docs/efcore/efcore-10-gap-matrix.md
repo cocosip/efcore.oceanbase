@@ -16,9 +16,13 @@ explicitly unsupported features, dependencies, and capabilities to confirm. Pre-
 
 Current counts: 50 G records (0 Not started, 0 In development, 29 Implemented, 2 Blocked, 19 Unsupported, 0 Deferred). The inventory also retains 2 Implemented F records, 11 external dependencies (B-01 through B-10 and C-03), 1 Blocked and 2 To confirm capability investigations, and 4 Deferred D groups.
 
-## Development order
+## Development checkpoint and order
 
-Prioritize missing Provider functionality before the pre-release acceptance campaign.
+Provider feature development is paused pending the next OceanBaseConnector release. The published
+0.3.1 package remains the dependency baseline. After the update, validate the public Connector API
+against the target OceanBase version and tenant mode before implementing the affected Provider work.
+Start with B-10, G-36, C-03 and the sequence metadata portion of D-06. Track any remaining driver,
+environment or server limitations in their owning rows.
 
 1. G-01..11 complete the selected P0/P1 temporal additions and differences. Preserve DateTime's
    separate whole/fraction tick truncation, exact Int64 duration results and TimeOnly's whole-product
@@ -39,15 +43,13 @@ Prioritize missing Provider functionality before the pre-release acceptance camp
    non-truncating character padding. G-30 implements table and column comment DDL, and G-29
    accepts model trigger metadata. G-37 preserves the MySQL DATETIME update clause in scaffolded
    models and DDL. G-36 preserves MySQL BTREE prefix indexes. Expression and other non-ordinary
-   indexes require a complete public catalog contract. Continue with the remaining Provider features,
+   indexes require a complete public catalog contract. After the pause, select remaining Provider features
    selected by application value and Provider feasibility rather than a commitment to every BCL method.
    Investigate C items before classifying them as missing code;
    retain Unsupported/Deferred contracts and resolve B dependencies at their owning layer.
 
-Each implementation still needs focused SQL/mapping/behavior regression tests and relevant inventory
-updates. Schedule the full live/specification/platform/package/release acceptance campaign after the
-selected feature work; its pending gates do not take precedence over this development queue.
-Acceptance requirements remain in the [release checklist](efcore-10-release-checklist.md).
+Each implementation needs focused SQL, mapping and behavior regression tests and relevant inventory
+updates. See the [release checklist](efcore-10-release-checklist.md) for acceptance progress and pending gates.
 
 ## Provider gaps and current limitations
 
@@ -88,7 +90,7 @@ Acceptance requirements remain in the [release checklist](efcore-10-release-chec
 | G-33 | SCH-02/DEF-01 | Filtered index DDL | Unsupported | Current scope limitation | Both modes / Provider + Server | Provide an equivalent approach supported by the target OB version; Filter is currently explicitly rejected | [DDL][schema] |
 | G-34 | DEF-01 | Automatic alteration of identity/computed columns | Blocked | Extension | Both modes / Provider + Server | MySQL supports a bounded `AUTO_INCREMENT` toggle on an unchanged signed `INT`/`BIGINT` sole primary key. The OceanBase 4.4.2 `MODIFY` resolver rejects adding identity to an existing Oracle column and preserves identity when the clause is omitted. Its generated-column checks reject changes to the expression or storage kind. The remaining transitions require supported reversible DDL or a rebuild strategy that preserves data, dependencies and key allocation | [Migrations][migrations], [identity resolver][ob-identity-resolver], [generated-column checks][ob-generated-column-checks] |
 | G-35 | DEF-01 | Table migration across namespaces | Unsupported | Current scope limitation | Both modes / Provider | Establish explicit permission/ownership and data migration contracts; ordinary rename is implemented | [Migrations][migrations] |
-| G-36 | DEF-02 | Reverse engineering of expression/prefix and other non-ordinary indexes | Blocked | Extension | Both modes / Provider + Connector metadata | MySQL BTREE prefix indexes preserve per-column lengths, order and uniqueness in C# and DDL. Connector 0.3.1 does not expose expression text through IndexColumns. Close the remaining gap after the public catalog supplies exact member expressions and the facts needed to distinguish and recreate the selected index kinds | [Reverse engineering][scaffold] |
+| G-36 | DEF-02 | Reverse engineering of expression/prefix and other non-ordinary indexes | Blocked | Extension | Both modes / Provider + Connector metadata | MySQL BTREE prefix indexes preserve per-column lengths, order and uniqueness in C# and DDL. An Oracle server catalog control returned the index expression. Connector 0.3.1 reports the index member but omits the expression in `GetSchema("IndexColumns")`. Close the remaining gap after the public catalog supplies exact member expressions and the facts needed to distinguish and recreate the selected index kinds | [Reverse engineering][scaffold] |
 | G-37 | DEF-02 | Reverse engineering of known ON UPDATE column behavior for supported mappings | Implemented | Extension | MySQL / Provider | Preserve catalog `ON UPDATE CURRENT_TIMESTAMP[(p)]` on non-key DATETIME and TIMESTAMP columns in scaffolded C#, write readback, and DDL. Use update-only generation unless the catalog establishes an insert default. Required additions without an insert default require an explicit backfill. Oracle metadata is unknown for this behavior | [Reverse engineering][scaffold], [DDL][schema] |
 | G-38 | DEF-02 | Reverse engineering of foreign key ON UPDATE actions | Unsupported | Current scope limitation | Both modes / Provider + Server | Establish a contract expressible by the EF model and target OB version; currently only NO ACTION/RESTRICT are accepted | [Reverse engineering][scaffold] |
 | G-39 | QRY-07 | Math/MathF.Acosh | Implemented | Extension | Both modes / Provider | Translates both signatures for finite stored inputs at or above 1 with Double intermediates and existing result normalization. SQL NULL and finite inputs below 1 produce SQL NULL | [Math methods][math] |
@@ -130,7 +132,7 @@ The Provider must not bypass them by changing the wire protocol, narrowing mappi
 | B-08 | QRY-03 | MySQL | Blocked | Collection roots associated with bounded/fixed text properties produce collation error 1267; require an equivalent collation approach, without truncating through a narrower CAST or changing comparison rules | Provider SQL + Server |
 | B-09 | SQL-02 | MySQL | Unsupported | Positional adaptation for text commands supports Input only. Repeated streams require a safe reuse contract. Mapped routine calls use the separate Connector procedure path in DEF-06 | Provider + Connector |
 | B-10 | DEF-04 | Oracle | Blocked | Connector 0.3.1 accepts text parameters for writes to native JSON columns. Binding `OceanBaseDbType.Json` and reading a native JSON column with either `GetValue` or `GetString` throw `NotSupportedException`. Establish a public native JSON reader and binding contract, then verify EF writes, reads and NULL semantics | Connector public API |
-| C-03 | DEF-02 | Oracle | Blocked | Connector 0.3.1 exposes `IS_IDENTITY` in `GetSchema("Columns")`. The catalog lacks the generation mode and sequence options, so the Provider scaffolds `ValueGeneratedOnAdd` with a warning. Full fidelity requires public catalog fields for those facts and Provider mapping that preserves them in generated C# and DDL | Connector public catalog + Provider |
+| C-03 | DEF-02 | Oracle | Blocked | An Oracle `GENERATED BY DEFAULT AS IDENTITY` column produced a key. Connector 0.3.1 `GetSchema("Columns")` returned SQL NULL for `IS_IDENTITY` and lacks generation mode and sequence options. The direct `USER_TAB_IDENTITY_COLS` query returned 942 in the tested environment. The Provider scaffolds `ValueGeneratedOnAdd` with a warning when identity is known. Full fidelity requires reliable public identity metadata and Provider mapping that preserves it in generated C# and DDL | Connector public catalog + Provider. Server catalog availability and permissions remain to be confirmed |
 
 ## Capability investigations
 
@@ -148,7 +150,7 @@ After investigation, record the result under Provider gaps, Connector/server dep
 | --- | --- | --- | --- | --- |
 | D-04 | DEF-04 | Deferred | Oracle native JSON columns, JSON path queries and partial-document updates, mapped primitive collections/arrays, complex/JSON-owned types and additional element types for single JSON parameter roots | Resolve B-10 for native Oracle columns and establish SQL/shape contracts for the remaining cases. DEF-04 covers MySQL scalar documents and their reverse engineering. G-21 covers standalone signed-integer JSON parameters |
 | D-05 | DEF-05 | Deferred | Provider integration for Spatial, XML, native enum, OBJECT, LOB locators and general REF CURSOR mapping | Define Connector public capabilities and OceanBase type contracts. See DEF-06 for the Oracle stored-procedure result cursor |
-| D-06 | DEF-06 | Deferred | Multi-row and multiple routine results, functions beyond input-only UPDATE/DELETE with an integer row count, MySQL TPC sequence defaults and sequence reverse engineering. Both modes support the single-result procedure profile in DEF-06. Oracle TPC sequence defaults are tracked by G-28 | Define an EF write mapping for other routine shapes. MySQL rejected column sequence defaults with error 1064, so any server-generated TPC profile there needs an equivalent server feature and reliable key readback. Sequence reverse engineering requires the original start value, which Connector 0.3.1 does not expose through `GetSchema("Sequences")` |
+| D-06 | DEF-06 | Deferred | Multi-row and multiple routine results, functions beyond input-only UPDATE/DELETE with an integer row count, MySQL TPC sequence defaults and sequence reverse engineering. Both modes support the single-result procedure profile in DEF-06. Oracle TPC sequence defaults are tracked by G-28 | Define an EF write mapping for other routine shapes. MySQL mode on OceanBase 4.4.2.2 returned 1064 for the tested column sequence default. Confirm a supported server syntax and reliable key readback. For sequence reverse engineering, establish whether the server retains the declared start after `NEXTVAL` advances it, then verify access through the public Connector catalog. Connector 0.3.1 `GetSchema("Sequences")` does not expose the declared start |
 | D-10 | DEF-10 | Deferred | Full-text/vector/search functions and advanced batching optimizations | Target server versions, separate feature implementations, and performance goals |
 
 Do not remove data precision/NULL/ownership validation or intentional rejections while completing features. Update feature group, gap, and acceptance statuses separately.
