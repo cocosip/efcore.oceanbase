@@ -76,11 +76,13 @@ public abstract class OceanBaseUpdateSqlGeneratorTests(OceanBaseCompatibilityMod
 
     [ConditionalFact]
     public override void GenerateNextSequenceValueOperation_returns_statement_with_sanitized_sequence()
-        => AssertSequenceRejected("sequence" + CloseDelimiter + "; --", null);
+        => AssertSequenceSql("sequence" + CloseDelimiter + "; --", null,
+            $"{OpenDelimiter}sequence{CloseDelimiter}{CloseDelimiter}; --{CloseDelimiter}.NEXTVAL");
 
     [ConditionalFact]
     public override void GenerateNextSequenceValueOperation_correctly_handles_schemas()
-        => AssertSequenceRejected("mysequence", "dbo");
+        => AssertSequenceSql("mysequence", "dbo",
+            $"{OpenDelimiter}dbo{CloseDelimiter}.{OpenDelimiter}mysequence{CloseDelimiter}.NEXTVAL");
 
     [ConditionalFact]
     public void Append_operations_report_batch_mapping_and_transaction_requirements()
@@ -103,17 +105,11 @@ public abstract class OceanBaseUpdateSqlGeneratorTests(OceanBaseCompatibilityMod
         Assert.False(delete);
     }
 
-    private void AssertSequenceRejected(string name, string? schema)
+    private void AssertSequenceSql(string name, string? schema, string expression)
     {
         var generator = CreateSqlGenerator();
-        Assert.Contains("sequence", Assert.Throws<NotSupportedException>(
-            () => generator.GenerateNextSequenceValueOperation(name, schema)).Message, StringComparison.OrdinalIgnoreCase);
-        Assert.Throws<NotSupportedException>(() => generator.GenerateObtainNextSequenceValueOperation(name, schema));
-        var builder = new StringBuilder("existing command");
-        Assert.Throws<NotSupportedException>(() => generator.AppendNextSequenceValueOperation(builder, name, schema));
-        Assert.Equal("existing command", builder.ToString());
-        Assert.Throws<NotSupportedException>(() => generator.AppendObtainNextSequenceValueOperation(builder, name, schema));
-        Assert.Equal("existing command", builder.ToString());
+        Assert.Equal($"SELECT {expression} FROM DUAL", generator.GenerateNextSequenceValueOperation(name, schema));
+        Assert.Equal(expression, generator.GenerateObtainNextSequenceValueOperation(name, schema));
     }
 
     private void AssertSql(StringBuilder builder, string expected, string? returning = null)

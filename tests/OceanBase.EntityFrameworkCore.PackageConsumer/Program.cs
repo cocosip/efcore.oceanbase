@@ -5,7 +5,6 @@ using System.Linq;
 using System.Linq.Expressions;
 using System.Numerics;
 using System.Reflection;
-using System.Text;
 using System.Transactions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
@@ -112,22 +111,11 @@ namespace PackageConsumer
                         throw new Exception("Packed provider changed ordinary literal newlines or CHAR semantics.");
                 }
                 var updateGenerator = context.GetService<IUpdateSqlGenerator>();
-                var sequenceBuilder = new StringBuilder("existing command");
-                Action[] sequenceOperations =
-                [
-                    () => updateGenerator.GenerateNextSequenceValueOperation("sequence\"; --", null),
-                    () => updateGenerator.GenerateObtainNextSequenceValueOperation("sequence", "dbo"),
-                    () => updateGenerator.AppendNextSequenceValueOperation(sequenceBuilder, "sequence", "dbo"),
-                    () => updateGenerator.AppendObtainNextSequenceValueOperation(sequenceBuilder, "sequence", null)
-                ];
-                foreach (var operation in sequenceOperations)
-                {
-                    try { operation(); }
-                    catch (NotSupportedException) { continue; }
-                    throw new Exception("Packed provider emitted unsupported sequence SQL.");
-                }
-                if (sequenceBuilder.ToString() != "existing command")
-                    throw new Exception("Rejected sequence generation modified the command buffer.");
+                var delimiter = mode == OceanBaseCompatibilityMode.MySql ? '`' : '"';
+                var nextValue = $"{delimiter}dbo{delimiter}.{delimiter}sequence{delimiter}.NEXTVAL";
+                if (updateGenerator.GenerateNextSequenceValueOperation("sequence", "dbo") != $"SELECT {nextValue} FROM DUAL"
+                    || updateGenerator.GenerateObtainNextSequenceValueOperation("sequence", "dbo") != nextValue)
+                    throw new Exception("Packed provider generated unexpected sequence SQL.");
                 if (context.Database.GetDbConnection() is not OceanBaseConnector.OceanBaseConnection)
                     throw new Exception("Database facade did not resolve the packed provider connection.");
                 var explicitName = mode == OceanBaseCompatibilityMode.MySql ? "@named" : ":named";

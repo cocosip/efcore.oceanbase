@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Migrations.Operations;
 using Microsoft.EntityFrameworkCore.Storage;
+using Microsoft.EntityFrameworkCore.Update;
 using Microsoft.Extensions.Configuration;
 using OceanBaseConnector;
 using Xunit;
@@ -48,7 +49,7 @@ public sealed class LiveSequenceTests
             await using var context = new SequenceContext(options, name);
             var creator = context.GetService<IRelationalDatabaseCreator>();
             var generator = context.GetService<IMigrationsSqlGenerator>();
-            var sql = context.GetService<ISqlGenerationHelper>();
+            var updateSql = context.GetService<IUpdateSqlGenerator>();
             var activeName = name;
             var created = false;
             try
@@ -66,7 +67,7 @@ public sealed class LiveSequenceTests
                     Assert.Equal("19", Assert.IsType<OceanBaseDecimal>(rows.Rows[0]["MAXIMUM_VALUE"]).ToString());
                 }
                 Assert.Equal(7, await NextValue());
-                Assert.Equal(10, await NextValue());
+                Assert.Equal(10, await NextValue(schema));
 
                 stage = "apply migration and inverse migration";
                 await ChangeIncrement(2);
@@ -129,9 +130,9 @@ public sealed class LiveSequenceTests
             Task<int> Execute(string sql) => async ? context.Database.ExecuteSqlRawAsync(sql)
                 : Task.FromResult(context.Database.ExecuteSqlRaw(sql));
 
-            async Task<long> NextValue()
+            async Task<long> NextValue(string? schemaName = null)
             {
-                catalog.CommandText = "SELECT " + sql.DelimitIdentifier(activeName) + ".NEXTVAL FROM DUAL";
+                catalog.CommandText = updateSql.GenerateNextSequenceValueOperation(activeName, schemaName);
                 var value = async ? await catalog.ExecuteScalarAsync() : catalog.ExecuteScalar();
                 return value is OceanBaseDecimal number ? decimal.ToInt64(number.ToDecimal()) : Assert.IsType<long>(value);
             }

@@ -68,7 +68,7 @@ For gaps and development status, see the [Gap Matrix](efcore-10-gap-matrix.md). 
 | DEF-03 | ExecuteUpdate/Delete, EF10 setter lambdas, joined/paged bulk operations and snapshot rewrites | Partial | Partial | [Bulk][bulk] | G-25; see DEF-04 for JSON |
 | DEF-04 | Explicit MySQL `string` → `JSON` scalar columns with schema creation, projection, whole-document `SaveChanges` writes and reverse engineering | Partial | Deferred | [Mappings][mappings], [Reverse engineering][scaffold] | B-10/D-04; captured collection parameters are covered separately by G-21 |
 | DEF-05 | Provider integration for Spatial/XML/native enums/OBJECT, LOB locators and REF CURSOR | Deferred | Deferred | [Mappings][mappings] | D-05; ordinary enum converters/scalar LOBs are implemented |
-| DEF-06 | Standalone Int64 model sequence DDL, sequence-backed value allocation and stored-procedure INSERT/UPDATE/DELETE mappings | Partial | Partial | [Sequence DDL][sequence], [Modification batches][modification-batch] | Both modes create, alter, restart and drop sequences. Oracle also renames unqualified sequences in the current schema. Both modes execute the procedure profile below. D-06 tracks remaining procedure and key-allocation shapes |
+| DEF-06 | Standalone Int64 model sequence DDL, sequence-backed value allocation and stored-procedure INSERT/UPDATE/DELETE mappings | Partial | Partial | [Sequence DDL][sequence], [Update SQL generator][update-sql], [Modification batches][modification-batch] | Both modes create, alter, restart and drop sequences and generate standalone `SELECT ... NEXTVAL FROM DUAL` commands with delimited identifiers. Oracle also renames unqualified sequences in the current schema. Both modes execute the procedure profile below. D-06 tracks remaining procedure and key-allocation shapes |
 | DEF-07 | TPH/TPT/TPC, entity/table splitting and many-to-many skip navigations | Partial | Partial | [Inherited generated values][annotations] | G-28; ordinary models/CRUD are implemented |
 | DEF-08 | Split-query buffering, compiled models, lazy proxies/ILazyLoader, and compiled models generated with both lazy-loading and change-tracking proxies | Implemented | Implemented | [Compiled model][compiled] | Enable the proxy options during model generation and at runtime. Streaming nested lazy loading is unsupported. See C-01/C-04 for extended capabilities |
 | DEF-09 | HasData, sync/async seeding callbacks and retry/recovery orchestration for known outcomes | Partial | Partial | [Retry][retry] | G-40; unknown outcomes, commits and cleanup are not replayed |
@@ -137,6 +137,7 @@ Do not duplicate acceptance pass counts, individual fix histories or the full co
 [conventions]: ../../src/OceanBase.EntityFrameworkCore/Metadata/Conventions/OceanBaseConventionSetBuilder.cs
 [schema]: ../../src/OceanBase.EntityFrameworkCore/Storage/OceanBaseSchemaSqlGenerator.cs
 [sequence]: ../../src/OceanBase.EntityFrameworkCore/Storage/OceanBaseSequenceSql.cs
+[update-sql]: ../../src/OceanBase.EntityFrameworkCore/Update/OceanBaseUpdateSqlGenerator.cs
 [modification-batch]: ../../src/OceanBase.EntityFrameworkCore/Update/OceanBaseModificationCommandBatch.cs
 [mappings]: ../../src/OceanBase.EntityFrameworkCore/Storage/OceanBaseTypeMappingSource.cs
 [commands]: ../../src/OceanBase.EntityFrameworkCore/Storage/OceanBaseRelationalCommandBuilderFactory.cs
