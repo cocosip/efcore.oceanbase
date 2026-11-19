@@ -16,6 +16,142 @@ namespace OceanBase.EntityFrameworkCore.LiveTests
         [InlineData(OceanBaseCompatibilityMode.MySql, true)]
         [InlineData(OceanBaseCompatibilityMode.Oracle, false)]
         [InlineData(OceanBaseCompatibilityMode.Oracle, true)]
+        public Task SaveChanges_reads_routine_result_columns_and_validates_cardinality(OceanBaseCompatibilityMode mode, bool async)
+            => LiveStorageTable.WithTable<ResultContext>(mode, async, false,
+                (options, table) => new ResultContext(new DbContextOptionsBuilder<ResultContext>(options)
+                    .ReplaceService<IModelCacheKeyFactory, CacheKey>().EnableDetailedErrors(async).Options, table),
+                async (context, _, stage) =>
+                {
+                    var mysql = mode == OceanBaseCompatibilityMode.MySql;
+                    var sql = context.GetService<ISqlGenerationHelper>();
+                    var table = sql.DelimitIdentifier(context.Table);
+                    var id = sql.DelimitIdentifier(nameof(Row.Id));
+                    var value = sql.DelimitIdentifier(nameof(Row.Value));
+                    var stamp = sql.DelimitIdentifier(nameof(Row.Stamp));
+                    var seed = $"INSERT INTO {table} ({id}, {value}) VALUES (17, 2)";
+                    await context.Database.ExecuteSqlRawAsync(seed);
+                    var created = new List<string>();
+                    Exception? failure = null;
+                    try
+                    {
+                        stage("create procedures for result-column writes");
+                        var insert = $"INSERT INTO {table} ({value}, {stamp}) VALUES (p_value, p_value+100)";
+                        await Create("I", mysql
+                            ? "(IN p_value INT) BEGIN " + insert + "; SELECT LAST_INSERT_ID(), p_value+100; END"
+                            : "(p_value IN INTEGER, p_result OUT SYS_REFCURSOR) AS n INTEGER; BEGIN " + insert
+                                + $" RETURNING {id} INTO n; OPEN p_result FOR SELECT n, p_value+100 FROM DUAL; END;");
+                        var update = $"UPDATE {table} SET {value}=p_value, {stamp}=p_value+100 WHERE {id}=p_id AND {value}=p_original;";
+                        await Create("R", mysql
+                            ? "(IN p_value INT, IN p_id INT, IN p_original INT) BEGIN DECLARE n INT; " + update
+                                + " SET n = ROW_COUNT(); SELECT p_value + 100 AS stamp_value WHERE n = 1 AND p_value <> 14"
+                                + " UNION ALL SELECT p_value + 100 WHERE p_value = 13; IF p_value = 15 THEN SELECT 1; END IF; END"
+                            : "(p_value IN INTEGER, p_id IN INTEGER, p_original IN INTEGER, p_result OUT SYS_REFCURSOR) AS n INTEGER; BEGIN "
+                                + update + " n := SQL%ROWCOUNT; IF p_value = 15 THEN OPEN p_result FOR SELECT 1, 2 FROM DUAL CONNECT BY LEVEL <= 200;"
+                                + " ELSIF p_value = 16 THEN OPEN p_result FOR SELECT LEVEL FROM DUAL CONNECT BY LEVEL <= 200;"
+                                + " ELSIF p_value = 18 THEN OPEN p_result FOR SELECT 'invalid' FROM DUAL CONNECT BY LEVEL <= 200;"
+                                + " ELSIF p_value = 19 THEN OPEN p_result FOR SELECT 119 FROM DUAL CONNECT BY LEVEL <= 200;"
+                                + " ELSE OPEN p_result FOR SELECT p_value + 100 AS stamp_value"
+                                + " FROM DUAL WHERE n = 1 AND p_value <> 14 UNION ALL SELECT p_value + 100 FROM DUAL WHERE p_value = 13; END IF; END;");
+                        var delete = $"DELETE FROM {table} WHERE {id}=p_id AND {value}=p_original;";
+                        await Create("D", mysql
+                            ? "(IN p_id INT, IN p_original INT) BEGIN " + delete + " SELECT ROW_COUNT(); END"
+                            : "(p_id IN INTEGER, p_original IN INTEGER, p_result OUT SYS_REFCURSOR) AS n INTEGER; BEGIN "
+                                + delete + " n := SQL%ROWCOUNT; OPEN p_result FOR SELECT n FROM DUAL; END;");
+
+                        stage("read generated key and stamp from an insert result");
+                        var inserted = new Row { Value = 3 };
+                        context.Add(inserted);
+                        Assert.Equal(1, await Save());
+                        Assert.True(inserted.Id > 0 && inserted.Id != 17);
+                        Assert.Equal(103, inserted.Stamp);
+                        context.ChangeTracker.Clear();
+                        Assert.Equal(103, (await context.Set<Row>().FindAsync(inserted.Id))!.Stamp);
+
+                        stage("propagate result columns on update");
+                        var row = await Find();
+                        row.Value = 5;
+                        Assert.Equal(1, await Save());
+                        Assert.Equal(105, row.Stamp);
+
+                        stage("reject stale row and preserve result state");
+                        context.Entry(row).Property(item => item.Value).OriginalValue = -1;
+                        row.Value = 7;
+                        Assert.Same(row, Assert.Single((await Assert.ThrowsAsync<DbUpdateConcurrencyException>(Save)).Entries).Entity);
+                        Assert.Equal(105, row.Stamp);
+
+                        stage("roll back when the routine returns multiple rows or signals a concurrency miss");
+                        foreach (var invalid in new[] { 13, 14, 15 })
+                        {
+                            context.ChangeTracker.Clear();
+                            row = await Find();
+                            Assert.Equal((5, 105), (row.Value, row.Stamp));
+                            row.Value = invalid;
+                            if (invalid == 14) await Assert.ThrowsAsync<DbUpdateConcurrencyException>(Save);
+                            else await Assert.ThrowsAsync<DbUpdateException>(Save);
+                            Assert.Equal(105, row.Stamp);
+                        }
+                        context.ChangeTracker.Clear();
+                        row = await Find();
+                        Assert.Equal((5, 105), (row.Value, row.Stamp));
+                        stage("reuse connection after invalid results");
+                        row.Value = 8;
+                        Assert.Equal(1, await Save());
+                        Assert.Equal(108, row.Stamp);
+
+                        stage("preserve a caller transaction and its earlier write after malformed results");
+                        await using (var transaction = await context.Database.BeginTransactionAsync())
+                        {
+                            row.Value = 9;
+                            Assert.Equal(1, await Save());
+                            foreach (var invalid in mysql ? new[] { 13, 15 } : new[] { 15, 16, 18, 19 })
+                            {
+                                row.Value = invalid;
+                                var error = await Assert.ThrowsAsync<DbUpdateException>(Save);
+                                if (invalid == 18 && async) Assert.Contains(nameof(Row.Stamp), error.InnerException!.Message);
+                                if (invalid == 19 && !async) Assert.IsType<NotSupportedException>(error.InnerException);
+                                context.ChangeTracker.Clear();
+                                row = await Find();
+                                Assert.Equal((9, 109), (row.Value, row.Stamp));
+                            }
+                            await transaction.CommitAsync();
+                        }
+
+                        stage("enforce affected-row result on delete");
+                        context.Entry(row).Property(item => item.Value).OriginalValue = -1;
+                        context.Remove(row);
+                        await Assert.ThrowsAsync<DbUpdateConcurrencyException>(Save);
+                        context.ChangeTracker.Clear();
+                        context.Remove(await Find());
+                        Assert.Equal(1, await Save());
+                        Assert.Null(await context.Set<Row>().FindAsync(17));
+                    }
+                    catch (Exception error)
+                    {
+                        failure = error;
+                        throw;
+                    }
+                    finally
+                    {
+                        await DropRoutines(context, sql, "PROCEDURE", created, failure);
+                    }
+
+                    async Task Create(string suffix, string body)
+                    {
+                        var name = context.Table + suffix;
+                        var create = "CREATE PROCEDURE " + sql.DelimitIdentifier(name) + " " + body;
+                        await context.Database.ExecuteSqlRawAsync(create);
+                        created.Add(name);
+                    }
+
+                    Task<int> Save() => async ? context.SaveChangesAsync() : Task.FromResult(context.SaveChanges());
+                    async Task<Row> Find() => (await context.Set<Row>().FindAsync(17))!;
+                });
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true)]
         public Task SaveChanges_uses_function_returns_for_update_and_delete_concurrency(OceanBaseCompatibilityMode mode, bool async)
             => LiveStorageTable.WithTable<FunctionContext>(mode, async, false,
                 (options, table) => new FunctionContext(new DbContextOptionsBuilder<FunctionContext>(options)
@@ -292,6 +428,34 @@ namespace OceanBase.EntityFrameworkCore.LiveTests
             }
         }
 
+        private sealed class ResultContext(DbContextOptions<ResultContext> options, string table) : DbContext(options)
+        {
+            internal string Table => table;
+
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                var row = modelBuilder.Entity<Row>().ToTable(table);
+                row.Property(item => item.Value).IsConcurrencyToken();
+                row.Property(item => item.Stamp).HasDefaultValue(0).ValueGeneratedOnAddOrUpdate()
+                    .HasConversion(value => value, value => RejectInvalidStamp(value));
+                row.InsertUsingStoredProcedure(table + "I", procedure => procedure
+                    .HasParameter(item => item.Value)
+                    .HasResultColumn(item => item.Id).HasResultColumn(item => item.Stamp));
+                row.UpdateUsingStoredProcedure(table + "R", procedure => procedure
+                    .HasParameter(item => item.Value)
+                    .HasOriginalValueParameter(item => item.Id)
+                    .HasOriginalValueParameter(item => item.Value)
+                    .HasResultColumn(item => item.Stamp, column => column.HasName("stamp_value")));
+                row.DeleteUsingStoredProcedure(table + "D", procedure => procedure
+                    .HasOriginalValueParameter(item => item.Id)
+                    .HasOriginalValueParameter(item => item.Value)
+                    .HasRowsAffectedResultColumn());
+            }
+
+            private static int RejectInvalidStamp(int value)
+                => value == 119 ? throw new NotSupportedException("The routine returned an invalid stamp.") : value;
+        }
+
         private sealed class Row
         {
             public int Id { get; set; }
@@ -302,7 +466,12 @@ namespace OceanBase.EntityFrameworkCore.LiveTests
         private sealed class CacheKey : IModelCacheKeyFactory
         {
             public object Create(DbContext context, bool designTime)
-                => (context is FunctionContext function ? function.Table : ((Context)context).Table, designTime);
+                => (context switch
+                {
+                    FunctionContext function => function.Table,
+                    ResultContext result => result.Table,
+                    _ => ((Context)context).Table
+                }, designTime);
         }
     }
 }

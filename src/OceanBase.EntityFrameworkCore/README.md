@@ -23,6 +23,11 @@ Oracle generated-value writes use `RETURNING INTO`. Explicitly configure the Con
 with `Use Oracle Prepare Execute=true` for those writes; the Connector default is disabled. The provider
 does not silently enable that protocol option. Ordinary input-only writes do not need this option.
 
+Mapped write procedures can return generated properties or the integer affected-row count in a
+single result set with at most one row. In MySQL mode, return it from the procedure. In Oracle mode,
+enable `Use Oracle Prepare Execute=true` and declare a final `OUT SYS_REFCURSOR` argument in the
+procedure DDL, omitting that argument from the EF mapping.
+
 This is a development provider. Local tests cover model/type mappings, SQL generation, intercepted query/write
 pipelines and package consumption. OceanBase 4.4.2.2 direct connections have narrow live query and bounded
 text/default/HasData/tracked-write coverage in both modes. Wider mapping, transaction and schema acceptance

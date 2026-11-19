@@ -88,8 +88,14 @@ An INSERT routine must report failure by raising an error. Provision the routine
 Routines must keep their writes inside the EF transaction. The default automatic transaction policy
 opens one for procedure writes. With `AutoTransactionBehavior.Never`, supply an active EF transaction
 for procedure batches. Ordinary batches in a mixed save can commit independently under that setting.
-Oracle requires `UseOraclePrepareExecute=true`. MySQL requires prepared-statement multi-result support
-from the connection. Routine result sets remain deferred.
+Map generated properties with `HasResultColumn` or the integer affected-row count with
+`HasRowsAffectedResultColumn`. Return one result set with the mapped columns in order and at most one
+row. When generated columns are mapped, return one row for a successful write and no rows for a
+concurrency miss. With an affected-row result, return one integer column with 1 for a successful
+write and 0 for a miss. Oracle requires `UseOraclePrepareExecute=true`. Add a final
+`OUT SYS_REFCURSOR` argument in Oracle procedure DDL and leave it out of the EF argument mapping.
+In MySQL, return the result directly from the procedure and use a connection with prepared-statement
+multi-result support. Multiple result sets and multi-row results remain outside this profile.
 
 ## Implemented query API scope
 
