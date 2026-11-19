@@ -131,14 +131,14 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
         [Theory]
         [InlineData(OceanBaseCompatibilityMode.MySql)]
         [InlineData(OceanBaseCompatibilityMode.Oracle)]
-        public void Parameter_mode_explicit_parameter_and_conflicting_mappings_remain_boundaries(OceanBaseCompatibilityMode mode)
+        public void Explicit_single_parameter_mode_uses_Json_table_for_signed_integer_roots(OceanBaseCompatibilityMode mode)
         {
             using var context = CreateContext(mode);
             int[] values = [1, 2];
-            Assert.Throws<InvalidOperationException>(() => context.Rows.Where(row => EF.Parameter(values)
+            Assert.Contains("JSON_TABLE(", context.Rows.Where(row => EF.Parameter(values)
                 .Where(value => value > row.Id).Contains(row.Id)).ToQueryString());
             using var parameterContext = CreateContext(mode, collectionMode: ParameterTranslationMode.Parameter);
-            Assert.Throws<InvalidOperationException>(() => parameterContext.Rows.Where(row => values
+            Assert.Contains("JSON_TABLE(", parameterContext.Rows.Where(row => values
                 .Where(value => value > row.Id).Contains(row.Id)).ToQueryString());
             Assert.Contains("JOIN", context.Rows.Join(values, row => row.Converted, value => value, (row, value) => value).ToQueryString());
             values = null!;
@@ -146,6 +146,36 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             var error = Assert.Throws<InvalidOperationException>(() => context.Rows.Where(row => values.AsQueryable()
                 .Where(value => value > row.Id).Contains(row.Id)).ToQueryString());
             Assert.IsType<ArgumentNullException>(error.InnerException);
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle)]
+        public void Single_json_collection_parameters_reject_contextual_converters_in_composed_queries(OceanBaseCompatibilityMode mode)
+        {
+            using var context = CreateContext(mode, collectionMode: ParameterTranslationMode.Parameter);
+            int[] values = [3, 20];
+            Assert.Throws<NotSupportedException>(() => context.Rows
+                .Join(values, row => row.Converted, value => value, (row, value) => value).ToQueryString());
+            Assert.Throws<NotSupportedException>(() => context.Rows
+                .Where(row => values.Any(value => value == row.Converted && value > 0)).ToQueryString());
+            Assert.Throws<NotSupportedException>(() => context.Rows
+                .Where(row => values.Any(value => value == row.Converted || value == row.Id)).ToQueryString());
+            Assert.Throws<NotSupportedException>(() => context.Rows
+                .Where(row => values.Any(value => value == row.Id || value == row.Converted)).ToQueryString());
+            Assert.Throws<NotSupportedException>(() => context.Rows
+                .Where(row => values.Any(value => value + row.Id == row.Converted)).ToQueryString());
+            Assert.Throws<NotSupportedException>(() => context.Rows
+                .Where(row => EF.Parameter(values).Take(3).Any(value => value == row.Converted && value > 0)).ToQueryString());
+            Assert.Throws<NotSupportedException>(() => context.Rows
+                .Where(row => EF.Parameter(values).Select(value => value + row.Id).Contains(row.Converted)).ToQueryString());
+
+            Assert.Contains("JSON_TABLE(", context.Rows
+                .Where(row => row.Converted > 0 && EF.Parameter(values).Contains(row.Id)).ToQueryString());
+            Assert.Contains("JSON_TABLE(", context.Rows
+                .Where(row => EF.Parameter(values).Contains(row.Converted == 7 ? row.Id : row.Id + 1)).ToQueryString());
+            Assert.Contains("JSON_TABLE(", context.Rows
+                .Where(row => EF.Parameter(values).Any(value => value == row.Id) == (row.Converted == 7)).ToQueryString());
         }
 
         [Theory]

@@ -414,6 +414,12 @@ expands them into scalar parameters rather than sending a JSON array. Other sing
 non-target carriers and null-converting converters are not supported by this path. Boolean roots preserve
 the provider Boolean carrier in MySQL and the decimal Boolean carrier in Oracle.
 
+Explicit single-parameter collection mode, or `EF.Parameter` with collection mode left unconfigured,
+supports captured Int32 and Int64 arrays/lists, including nullable elements. EF serializes the collection
+as a single JSON-text parameter and the server expands it with `JSON_TABLE`. This path preserves element
+order for ordered operators, duplicates and SQL NULL elements. It requires server support for
+`JSON_TABLE` and follows the size limit for text parameters. It does not map stored JSON or collection columns.
+
 Oracle collection roots normalize every parameter/constant UNION ALL branch to the
 common carrier; MySQL casts the first branch. Oracle variable non-LOB text uses
 TO_CHAR/TO_NCHAR to preserve query values beyond a contextual column's length

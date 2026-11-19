@@ -122,8 +122,9 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             using var constants = CreateContext(mode, relationalNulls, ParameterTranslationMode.Constant);
             Assert.Contains("-2147483648, 7, 2147483647", constants.Rows.Where(row => Enumerable.Contains(values, row.Id)).ToQueryString());
             using var parameters = CreateContext(mode, relationalNulls, ParameterTranslationMode.Parameter);
-            Assert.Contains(" IN (", parameters.Rows.Where(row => Enumerable.Contains(values, row.Id)).ToQueryString());
-            Assert.Throws<InvalidOperationException>(() => context.Rows.Where(row => Enumerable.Contains(EF.Parameter(values), row.Id)).ToQueryString());
+            Assert.Contains("JSON_TABLE(", parameters.Rows.Where(row => Enumerable.Contains(values, row.Id)).ToQueryString());
+            Assert.Contains("JSON_TABLE(", context.Rows.Where(row => Enumerable.Contains(EF.Parameter(values), row.Id)).ToQueryString());
+            Assert.Throws<NotSupportedException>(() => parameters.Rows.Where(row => values.Contains(row.Converted)).ToQueryString());
         }
 
         [Theory]

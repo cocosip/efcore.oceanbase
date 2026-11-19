@@ -33,6 +33,43 @@ namespace OceanBase.EntityFrameworkCore.LiveTests
 
         [Theory]
         [MemberData(nameof(Cases))]
+        public Task Single_json_parameter_preserves_signed_integer_collection_values(
+            OceanBaseCompatibilityMode mode, bool async, bool relationalNulls)
+            => WithTable(mode, async, relationalNulls, async (context, stage) =>
+            {
+                var rows = context.Set<Row>();
+                int?[] scores = [10, null, 40, 10];
+                var matching = rows.OrderBy(row => row.Id).Where(row => scores.Contains(row.Score)).Select(row => row.Id);
+                stage("bind one JSON parameter for nullable integer membership");
+                Assert.Contains("JSON_TABLE(", matching.ToQueryString());
+                Assert.Equal(relationalNulls ? new[] { 1, 4 } : [1, 3, 4, 6], await Read(matching, async));
+                scores = [20];
+                Assert.Equal(new[] { 2 }, await Read(matching, async));
+                scores = [];
+                Assert.Empty(await Read(matching, async));
+
+                stage("read JSON ordinality and signed Int64 extrema");
+                List<long?> values = [long.MinValue, null, long.MaxValue, long.MinValue];
+                var singleRow = rows.Where(row => row.Id == 1);
+                var projected = singleRow.Select(row => EF.Parameter(values).ElementAt(0));
+                Assert.Equal(long.MinValue, Assert.Single(await Read(projected, async)));
+                values[0] = long.MaxValue;
+                Assert.Equal(long.MaxValue, Assert.Single(await Read(projected, async)));
+                values[0] = null;
+                Assert.Null(Assert.Single(await Read(projected, async)));
+                values[3] = long.MaxValue;
+                var duplicates = singleRow.Select(row => EF.Parameter(values).Count(value => value == long.MaxValue));
+                Assert.Equal(2, Assert.Single(await Read(duplicates, async)));
+
+                stage("join a JSON collection and execute an independent converted predicate");
+                int[] keys = [4, 2, 4, 10];
+                var joined = rows.Join(keys, row => row.Id, key => key, (row, key) => new { row.Rank, Key = key })
+                    .Where(row => row.Rank == Rank.Mid).OrderBy(row => row.Key).Select(row => row.Key);
+                Assert.Equal(new[] { 4, 4 }, await Read(joined, async));
+            }, ParameterTranslationMode.Parameter);
+
+        [Theory]
+        [MemberData(nameof(Cases))]
         public Task Explicit_scalar_defaults_use_only_a_missing_row(OceanBaseCompatibilityMode mode, bool async, bool relationalNulls)
             => WithTable(mode, async, relationalNulls, async (context, stage) =>
             {

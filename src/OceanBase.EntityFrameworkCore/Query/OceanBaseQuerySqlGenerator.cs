@@ -20,6 +20,25 @@ namespace OceanBase.EntityFrameworkCore.Query
 
         protected override string AliasSeparator => _mode == OceanBaseCompatibilityMode.Oracle ? " " : " AS ";
 
+        protected override Expression VisitTableValuedFunction(TableValuedFunctionExpression function)
+        {
+            if (function.FindAnnotation(OceanBaseQueryableMethodTranslatingExpressionVisitorFactory.JsonCollectionAnnotation)
+                ?.Value is not bool isInt32)
+                return base.VisitTableValuedFunction(function);
+
+            var helper = Dependencies.SqlGenerationHelper;
+            var storeType = _mode == OceanBaseCompatibilityMode.Oracle
+                ? (isInt32 ? "NUMBER(10)" : "NUMBER(19)") : (isInt32 ? "INT" : "BIGINT");
+            Sql.Append("JSON_TABLE(");
+            Visit(function.Arguments[0]);
+            Sql.Append(", '$[*]' COLUMNS (").Append(helper.DelimitIdentifier("_ord")).Append(" FOR ORDINALITY, ")
+                .Append(helper.DelimitIdentifier("Value")).Append(" ").Append(storeType)
+                .Append(" PATH '$'");
+            Sql.Append(_mode == OceanBaseCompatibilityMode.Oracle ? " ERROR ON ERROR NULL ON EMPTY))" : " ERROR ON ERROR))")
+                .Append(AliasSeparator).Append(helper.DelimitIdentifier(function.Alias));
+            return function;
+        }
+
         protected override void GenerateValues(ValuesExpression valuesExpression)
         {
             var rows = valuesExpression.RowValues

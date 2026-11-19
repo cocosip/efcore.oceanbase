@@ -19,6 +19,7 @@ namespace OceanBase.EntityFrameworkCore.Query
         : IQueryableMethodTranslatingExpressionVisitorFactory
     {
         internal const string EmptyElementTypeAnnotation = "OceanBase:EmptyInlineElementType";
+        internal const string JsonCollectionAnnotation = "OceanBase:JsonCollection";
 
         public QueryableMethodTranslatingExpressionVisitor Create(QueryCompilationContext queryCompilationContext)
             => new Visitor(dependencies, relationalDependencies, (RelationalQueryCompilationContext)queryCompilationContext);
@@ -160,7 +161,10 @@ namespace OceanBase.EntityFrameworkCore.Query
                     .ParameterizedCollectionMode;
                 var collectionModeConfigured = _queryCompilationContext.ContextOptions
                     .FindExtension<OceanBaseOptionsExtension>()?.ParameterizedCollectionModeConfigured == true;
-                if (!collectionModeConfigured || configuredCollectionMode == ParameterTranslationMode.Parameter)
+                var singleParameter = collectionModeConfigured
+                    ? configuredCollectionMode == ParameterTranslationMode.Parameter
+                    : parameter.TranslationMode == ParameterTranslationMode.Parameter;
+                if (!singleParameter && !collectionModeConfigured)
                 {
                     return null;
                 }
@@ -179,8 +183,26 @@ namespace OceanBase.EntityFrameworkCore.Query
                 }
 
                 var alias = _queryCompilationContext.SqlAliasManager.GenerateTableAlias(tableAlias);
-                var values = new ValuesExpression(alias, parameter, ["_ord", "Value"]);
-                var valueColumn = new ColumnExpression("Value", alias, UnwrapNullable(elementType), elementMapping, parameter.IsNullable);
+                TableExpressionBase values;
+                var scalarType = UnwrapNullable(elementType);
+                var nullable = parameter.IsNullable;
+                if (singleParameter)
+                {
+                    if ((scalarType != typeof(int) && scalarType != typeof(long))
+                        || elementMapping.Converter is not null
+                        || RelationalDependencies.TypeMappingSource.FindMapping(parameter.Type, RelationalDependencies.Model,
+                            elementMapping) is not { Converter.ProviderClrType: var carrier } mapping || carrier != typeof(string))
+                        return null;
+                    var jsonParameter = parameter.ApplyTypeMapping(mapping);
+                    values = new TableValuedFunctionExpression(alias, "JSON_TABLE", [jsonParameter])
+                        .AddAnnotation(JsonCollectionAnnotation, scalarType == typeof(int));
+                    nullable = Nullable.GetUnderlyingType(elementType) is not null;
+                }
+                else
+                {
+                    values = new ValuesExpression(alias, parameter, ["_ord", "Value"]);
+                }
+                var valueColumn = new ColumnExpression("Value", alias, scalarType, singleParameter ? null : elementMapping, nullable);
                 var ordinalMapping = RelationalDependencies.TypeMappingSource.FindMapping(
                     typeof(int), RelationalDependencies.Model, null)
                     ?? throw new InvalidOperationException("An integer mapping is required for collection ordinals.");
@@ -196,12 +218,12 @@ namespace OceanBase.EntityFrameworkCore.Query
                     },
                     _queryCompilationContext.SqlAliasManager);
                 select.AppendOrdering(new OrderingExpression(ordinalColumn, ascending: true));
-                select.AddToProjection(valueColumn);
+                if (!singleParameter) select.AddToProjection(valueColumn);
 
                 Expression projection = new ProjectionBindingExpression(
                     select,
                     new ProjectionMember(),
-                    parameter.IsNullable ? MakeNullable(elementType) : elementType);
+                    nullable ? MakeNullable(elementType) : elementType);
                 if (projection.Type != elementType)
                 {
                     projection = Expression.Convert(projection, elementType);
