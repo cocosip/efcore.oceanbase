@@ -210,9 +210,10 @@ namespace OceanBase.EntityFrameworkCore.LiveTests
                     var stamp = oracle ? value.Value : value.Value.ToUniversalTime();
                     var expected = new[] { stamp.AddDays(increment), stamp.AddHours(increment), stamp.AddMinutes(increment),
                         stamp.AddSeconds(increment), stamp.AddMilliseconds(increment), stamp.AddMicroseconds(increment) };
-                    foreach (var (wanted, found) in expected.Zip(row))
+                    foreach (var (wanted, found, index) in expected.Zip(row, Enumerable.Range(0, expected.Length)))
                         if (!oracle && wanted.UtcTicks % 10 != 0) Assert.Null(found);
-                        else Assert.True(found?.EqualsExact(wanted));
+                        else Assert.True(found?.EqualsExact(wanted),
+                            $"Offset arithmetic operation {index}, increment {increment:R}: expected {wanted:O}, actual {found:O}.");
                 }
             }
 

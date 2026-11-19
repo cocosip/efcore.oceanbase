@@ -116,7 +116,7 @@ namespace OceanBase.EntityFrameworkCore.Query
             Sql.Append(_mode == OceanBaseCompatibilityMode.MySql ? " AS DECIMAL(19,0)) * " : " AS NUMBER(19,0)) * ");
             Sql.Append(scale).Append(" + CAST(");
             Sql.Append(_mode == OceanBaseCompatibilityMode.MySql ? "TRUNCATE((" : "TRUNC((");
-            Visit(amount);
+            AppendBinaryAmount();
             Sql.Append(" - ");
             AppendTruncatedAmount();
             Sql.Append(") * ").Append(scale).Append(_mode == OceanBaseCompatibilityMode.MySql ? "E0" : "D");
@@ -125,8 +125,16 @@ namespace OceanBase.EntityFrameworkCore.Query
             void AppendTruncatedAmount()
             {
                 Sql.Append(_mode == OceanBaseCompatibilityMode.MySql ? "TRUNCATE(" : "TRUNC(");
-                Visit(amount);
+                AppendBinaryAmount();
                 Sql.Append(_mode == OceanBaseCompatibilityMode.MySql ? ", 0)" : ")");
+            }
+
+            void AppendBinaryAmount()
+            {
+                // Oracle can evaluate Double binds as NUMBER unless the expression declares BINARY_DOUBLE.
+                if (_mode == OceanBaseCompatibilityMode.Oracle) Sql.Append("CAST(");
+                Visit(amount);
+                if (_mode == OceanBaseCompatibilityMode.Oracle) Sql.Append(" AS BINARY_DOUBLE)");
             }
         }
 
