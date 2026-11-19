@@ -26,6 +26,27 @@ namespace OceanBase.EntityFrameworkCore.Query
 
         private sealed class ReferenceDefaults(ITypeMappingSource mappings, Expression root) : ExpressionVisitor
         {
+            protected override Expression VisitUnary(UnaryExpression node)
+            {
+                var visited = (UnaryExpression)base.VisitUnary(node);
+                if (visited.NodeType != ExpressionType.Convert || visited.Type != typeof(char?)
+                    || visited.Operand is not MethodCallExpression call || call.Type != typeof(char)
+                    || call.Method.DeclaringType != typeof(Queryable)
+                    || call.Method.Name is not (nameof(Queryable.FirstOrDefault) or nameof(Queryable.LastOrDefault))
+                    || call.Arguments.Count != 1 || call.Arguments[0] is not MethodCallExpression asQueryable
+                    || asQueryable.Method.DeclaringType != typeof(Queryable)
+                    || asQueryable.Method.Name != nameof(Queryable.AsQueryable)
+                    || asQueryable.Arguments[0].Type != typeof(string))
+                    return visited;
+
+                // Keep CLR UTF-16 indexing after materialization, including surrogate code units.
+                return Expression.Call(typeof(ReferenceDefaults), nameof(ReadCharacter), Type.EmptyTypes,
+                    asQueryable.Arguments[0], Expression.Constant(call.Method.Name == nameof(Queryable.LastOrDefault)));
+            }
+
+            private static char? ReadCharacter(string? text, bool last)
+                => text is null ? null : text.Length == 0 ? default(char) : last ? text[^1] : text[0];
+
             protected override Expression VisitMethodCall(MethodCallExpression node)
             {
                 var visited = (MethodCallExpression)base.VisitMethodCall(node);

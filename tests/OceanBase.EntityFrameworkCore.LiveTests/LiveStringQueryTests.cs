@@ -26,6 +26,29 @@ namespace OceanBase.EntityFrameworkCore.LiveTests
 
         [Theory]
         [MemberData(nameof(Cases))]
+        public Task Nullable_string_character_projections_preserve_nulls_and_utf16(
+            OceanBaseCompatibilityMode mode, bool async, bool nulls)
+            => WithTable(mode, async, nulls, async (context, seed, stage) =>
+            {
+                stage("project nullable first and last UTF-16 code units");
+                var query = context.Set<Row>().OrderBy(row => row.Id).Select(row => new
+                {
+                    First = (char?)row.Plain!.FirstOrDefault(),
+                    Last = (char?)row.Plain!.LastOrDefault(),
+                    UnicodeLast = (char?)row.Fixed!.TrimEnd().LastOrDefault(),
+                    ConvertedLast = (char?)row.Converted!.LastOrDefault()
+                });
+                Assert.Equal(seed.Select(row => new
+                {
+                    First = row.Plain is { } plain ? (char?)plain.FirstOrDefault() : null,
+                    Last = row.Plain is { } text ? (char?)text.LastOrDefault() : null,
+                    UnicodeLast = row.Fixed is { } fixedText ? (char?)fixedText.TrimEnd().LastOrDefault() : null,
+                    ConvertedLast = row.Converted is { } converted ? (char?)converted.LastOrDefault() : null
+                }), await Read(query, async));
+            });
+
+        [Theory]
+        [MemberData(nameof(Cases))]
         public async Task Captured_and_literal_searches_keep_text_metacharacters_null_guards_and_current_values(
             OceanBaseCompatibilityMode mode, bool async, bool nulls)
             => await WithTable(mode, async, nulls, async (context, seed, stage) =>
