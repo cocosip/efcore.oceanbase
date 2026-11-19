@@ -60,18 +60,63 @@ namespace OceanBase.EntityFrameworkCore.Migrations
                 }
             }
             var commands = new List<MigrationCommand>();
-            foreach (var operation in operations)
-                foreach (var command in base.Generate(new[] { operation }, model, options))
+            var combinedRestarts = new HashSet<int>();
+            for (var index = 0; index < operations.Count; index++)
+            {
+                if (combinedRestarts.Contains(index)) continue;
+                var operation = operations[index];
+                if (operation is AlterSequenceOperation alter
+                    && FindRestart(index, alter) is var restartIndex && restartIndex >= 0)
                 {
-                    var sql = command.CommandText;
+                    var restart = (RestartSequenceOperation)operations[restartIndex];
+                    ValidateAnnotations(alter);
+                    ValidateAnnotations(restart);
+                    ValidateScope(alter.Schema);
+                    if (restart.StartValue is { } start)
+                        OceanBaseSequenceSql.ValidateStart(start, alter.IncrementBy, alter.MinValue, alter.MaxValue);
+                    var builder = new MigrationCommandListBuilder(Dependencies);
+                    builder.Append("ALTER SEQUENCE ").Append(Q(alter.Name, alter.Schema))
+                        .Append(OceanBaseSequenceSql.Options(alter.IncrementBy, alter.MinValue, alter.MaxValue, alter.IsCyclic));
+                    AppendRestart(builder, restart.StartValue);
+                    Finish(builder);
+                    AddCommand(builder.GetCommandList()[0].CommandText, operation);
+                    combinedRestarts.Add(restartIndex);
+                    continue;
+                }
+                foreach (var command in base.Generate(new[] { operation }, model, options))
+                    AddCommand(command.CommandText, operation);
+            }
+            return commands;
+
+            int FindRestart(int index, AlterSequenceOperation alter)
+            {
+                // EF sorts sequence alterations before restarts. Keep other migration operations in their original order.
+                for (var next = index + 1; next < operations.Count; next++)
+                {
+                    switch (operations[next])
+                    {
+                        case RestartSequenceOperation restart:
+                            if (restart.Name == alter.Name && restart.Schema == alter.Schema) return next;
+                            break;
+                        case AlterSequenceOperation other:
+                            if (other.Name == alter.Name && other.Schema == alter.Schema) return -1;
+                            break;
+                        default:
+                            return -1;
+                    }
+                }
+                return -1;
+            }
+
+            void AddCommand(string sql, MigrationOperation operation)
+            {
                     // Native Oracle SQL commands are not SQL*Plus batches; PL/SQL/raw SQL retains its own terminator.
                     if (Oracle && operation is not SqlOperation) sql = sql.TrimEnd().TrimEnd(';');
                     if (!Oracle && operation is SqlOperation && options.HasFlag(MigrationsSqlGenerationOptions.Script))
                         sql = sql.TrimEnd() + "\n;\n";
                     commands.Add(new MigrationCommand(Dependencies.CommandBuilderFactory.Create().Append(sql).Build(),
                         Dependencies.CurrentContext.Context, Dependencies.Logger, transactionSuppressed: true));
-                }
-            return commands;
+            }
         }
 
         protected override void Generate(MigrationOperation operation, IModel? model, MigrationCommandListBuilder builder)
@@ -83,9 +128,34 @@ namespace OceanBase.EntityFrameworkCore.Migrations
                     if (ensure.Name != _options.SchemaManagementScope)
                         throw Unsupported("creating schemas; provision the namespace and explicitly select it first");
                     return;
-                case CreateSequenceOperation or AlterSequenceOperation or RestartSequenceOperation or RenameSequenceOperation
-                    or DropSequenceOperation or DropSchemaOperation:
-                    throw Unsupported("sequence strategies or namespace creation/deletion");
+                case CreateSequenceOperation sequence:
+                    ValidateScope(sequence.Schema);
+                    builder.Append(OceanBaseSequenceSql.Create(Q(sequence.Name, sequence.Schema), sequence.ClrType,
+                        sequence.StartValue, sequence.IncrementBy, sequence.MinValue, sequence.MaxValue, sequence.IsCyclic));
+                    Finish(builder);
+                    return;
+                case AlterSequenceOperation sequence:
+                    ValidateScope(sequence.Schema);
+                    builder.Append("ALTER SEQUENCE ").Append(Q(sequence.Name, sequence.Schema))
+                        .Append(OceanBaseSequenceSql.Options(sequence.IncrementBy, sequence.MinValue, sequence.MaxValue, sequence.IsCyclic));
+                    Finish(builder);
+                    return;
+                case RestartSequenceOperation sequence:
+                    ValidateScope(sequence.Schema);
+                    builder.Append("ALTER SEQUENCE ").Append(Q(sequence.Name, sequence.Schema));
+                    AppendRestart(builder, sequence.StartValue);
+                    Finish(builder);
+                    return;
+                case RenameSequenceOperation sequence when Oracle && sequence.Schema is null && sequence.NewSchema is null:
+                    builder.Append("RENAME ").Append(Q(sequence.Name)).Append(" TO ")
+                        .Append(Q(sequence.NewName ?? throw Unsupported("renaming a sequence without a target name")));
+                    Finish(builder);
+                    return;
+                case DropSequenceOperation sequence:
+                    ValidateScope(sequence.Schema);
+                    break;
+                case RenameSequenceOperation or DropSchemaOperation:
+                    throw Unsupported("this sequence rename or namespace creation/deletion");
                 case AlterDatabaseOperation database when database.Collation is not null || database.OldDatabase.Collation is not null
                     || database[DatabaseCollationAnnotation] is not null || database.OldDatabase[DatabaseCollationAnnotation] is not null:
                     var ownedDatabase = !Oracle && _options.DatabaseManagementEnabled ? _options.SchemaManagementScope : null;
@@ -123,6 +193,13 @@ namespace OceanBase.EntityFrameworkCore.Migrations
             ValidateScope(schema);
             if (operation is AddForeignKeyOperation foreign) ValidateScope(foreign.PrincipalSchema);
             base.Generate(operation, model, builder);
+        }
+
+        private static void AppendRestart(MigrationCommandListBuilder builder, long? start)
+        {
+            if (start is { } value)
+                builder.Append(" START WITH ").Append(OceanBaseSequenceSql.Number(value));
+            builder.Append(" RESTART");
         }
 
         private void ValidateScope(string? schema)

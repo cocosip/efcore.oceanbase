@@ -116,7 +116,26 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
         }
 
         [Theory]
-        [InlineData("sequence")]
+        [InlineData(OceanBaseCompatibilityMode.MySql, "`")]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, "\"")]
+        public void Model_sequences_precede_tables_and_match_migration_sql(OceanBaseCompatibilityMode mode, string quote)
+        {
+            using var context = Create(mode, "sequence");
+            var script = context.Database.GenerateCreateScript();
+            var name = quote + "Extra" + quote;
+            var create = $"CREATE SEQUENCE {name} START WITH 7 INCREMENT BY 3 MINVALUE 1 MAXVALUE 19 NOCYCLE NOCACHE";
+            Assert.StartsWith(create + ";", script);
+            var model = context.GetService<IDesignTimeModel>().Model;
+            var differ = context.GetService<IMigrationsModelDiffer>();
+            var generator = context.GetService<IMigrationsSqlGenerator>();
+            var up = generator.Generate(differ.GetDifferences(null, model.GetRelationalModel()), model);
+            Assert.Equal(mode == OceanBaseCompatibilityMode.MySql ? create + ";" : create, up[0].CommandText.TrimEnd());
+            Assert.True(up[0].TransactionSuppressed);
+            var down = generator.Generate(differ.GetDifferences(model.GetRelationalModel(), null));
+            Assert.Equal("DROP SEQUENCE " + name, down[^1].CommandText.TrimEnd().TrimEnd(';'));
+        }
+
+        [Theory]
         [InlineData("filter")]
         [InlineData("unknown-default")]
         [InlineData("unknown-computed")]
@@ -253,7 +272,9 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
                         modelBuilder.Entity<Child>().ToTable("External", t => t.ExcludeFromMigrations());
                         modelBuilder.Entity<Parent>().HasNoKey().ToView("ViewRows");
                         break;
-                    case "sequence": modelBuilder.HasSequence<int>("Extra"); break;
+                    case "sequence":
+                        modelBuilder.HasSequence<long>("Extra").StartsAt(7).IncrementsBy(3).HasMin(1).HasMax(19);
+                        break;
                     case "seed": row.HasData(new Generated { Id = 1, Caption = "seed" }); break;
                     case "trigger": row.ToTable(t => t.HasTrigger("Trigger")); break;
                     case "baseline": break;

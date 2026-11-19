@@ -564,8 +564,20 @@ administrative removal. Generated scripts require external serialization and sto
 scripts target SQL*Plus-style clients, disable variable substitution, exit on SQL errors and commit the final
 history changes; rollback cannot undo DDL. MySQL scripts require autocommit. Raw migration SQL is trusted,
 single-statement server input; client directives and multi-statement raw batches are outside this contract.
-Native DDL/locking beyond the documented checks, script-client execution, sequence/HiLo and reverse
-engineering of triggers remain outside the verified scope.
+Native DDL/locking beyond the documented checks, script-client execution and trigger reverse engineering
+remain outside the verified scope.
+
+`HasSequence<long>` declares a standalone model sequence. Both compatibility modes support create-script
+generation, schema creation and migrations for creation, alteration, restart and drop. Oracle supports
+renaming an unqualified sequence in the current schema. MySQL sequence rename and qualified Oracle
+sequence rename are rejected. Sequence DDL uses Int64 bounds and `NOCACHE`. Keep an alteration and its
+restart in a consecutive group of sequence alterations and restarts so the provider can change the bounds
+and restart value in one statement. Sequence DDL commits implicitly.
+
+When the model declares a sequence, `EnsureCreated` treats an existing sequence in the selected namespace
+as existing schema. MySQL requires read access to `oceanbase.DBA_SEQUENCES` for this check.
+`CreateTables` creates the declared objects in the selected namespace. Sequence reverse engineering,
+HiLo and sequence-backed entity key allocation remain outside this profile.
 
 TPT (`UseTptMappingStrategy`, with a table for each mapped type) has a locally tested schema/query/write
 workflow in both modes. The root table generates an int/long identity once; intermediate and leaf tables store

@@ -41,6 +41,29 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
 
         [Theory]
         [MemberData(nameof(Modes))]
+        public void Sequence_range_and_start_changes_use_one_statement(OceanBaseCompatibilityMode mode)
+        {
+            using var context = Create(mode, scoped: true);
+            var generator = context.GetService<IMigrationsSqlGenerator>();
+            var operations = new MigrationOperation[]
+            {
+                new AlterSequenceOperation { Name = "Numbering", Schema = "app", MinValue = 20, MaxValue = 40, IncrementBy = 5 },
+                new AlterSequenceOperation { Name = "OtherNumbers", MinValue = 50, MaxValue = 80, IncrementBy = 2 },
+                new RestartSequenceOperation { Name = "Numbering", Schema = "app", StartValue = 25 },
+                new RestartSequenceOperation { Name = "OtherNumbers", StartValue = 52 }
+            };
+            var commands = generator.Generate(operations);
+            Assert.Equal(2, commands.Count);
+            var name = mode == OceanBaseCompatibilityMode.Oracle ? "\"app\".\"Numbering\"" : "`app`.`Numbering`";
+            Assert.Equal($"ALTER SEQUENCE {name} INCREMENT BY 5 MINVALUE 20 MAXVALUE 40 NOCYCLE START WITH 25 RESTART",
+                commands[0].CommandText.TrimEnd().TrimEnd(';'));
+            Assert.EndsWith("INCREMENT BY 2 MINVALUE 50 MAXVALUE 80 NOCYCLE START WITH 52 RESTART",
+                commands[1].CommandText.TrimEnd().TrimEnd(';'));
+            Assert.All(commands, command => Assert.True(command.TransactionSuppressed));
+        }
+
+        [Theory]
+        [MemberData(nameof(Modes))]
         public void Identity_toggle_requires_an_unchanged_single_integer_primary_key_in_MySql(OceanBaseCompatibilityMode mode)
         {
             using var context = Create(mode, scoped: true);
@@ -314,7 +337,7 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             using var context = Create(mode, scoped: true);
             foreach (var operation in new MigrationOperation[]
             {
-                new CreateSequenceOperation { Name = "Sequence" },
+                new CreateSequenceOperation { Name = "Sequence", Schema = "other" },
                 new DropSchemaOperation { Name = "app" },
                 new EnsureSchemaOperation { Name = "other" },
                 new DropTableOperation { Name = "Rows", Schema = "other" },

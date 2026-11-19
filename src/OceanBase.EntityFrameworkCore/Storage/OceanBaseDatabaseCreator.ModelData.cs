@@ -15,7 +15,8 @@ namespace OceanBase.EntityFrameworkCore.Storage;
 
 internal sealed partial class OceanBaseDatabaseCreator
 {
-    private sealed record CreationPlan(IReadOnlyList<string> Schema, IReadOnlyList<string> Data, bool ChangesDatabaseCollation);
+    private sealed record CreationPlan(IReadOnlyList<string> Schema, IReadOnlyList<string> Data,
+        bool ChangesDatabaseCollation, bool CreatesSequences);
 
     private CreationPlan BuildCreationPlan(IModel model)
     {
@@ -24,7 +25,9 @@ internal sealed partial class OceanBaseDatabaseCreator
             ? options.FindExtension<OceanBaseOptionsExtension>()!.SchemaManagementScope : null;
         var schema = new OceanBaseSchemaSqlGenerator(context.GetService<ISqlGenerationHelper>(), _mode).Generate(model, ownedDatabase);
         var changesDatabaseCollation = model.GetCollation() is not null;
-        if (!model.GetEntityTypes().Any(entity => entity.GetSeedData().Any())) return new(schema, [], changesDatabaseCollation);
+        var createsSequences = model.GetSequences().Any();
+        if (!model.GetEntityTypes().Any(entity => entity.GetSeedData().Any()))
+            return new(schema, [], changesDatabaseCollation, createsSequences);
         var includedTables = model.GetRelationalModel().Tables.Where(table => !table.IsExcludedFromMigrations)
             .Select(table => (table.Name, table.Schema)).ToHashSet();
         var operations = context.GetService<IMigrationsModelDiffer>().GetDifferences(null, model.GetRelationalModel())
@@ -37,7 +40,7 @@ internal sealed partial class OceanBaseDatabaseCreator
             }).ToArray();
         var data = context.GetService<IMigrationsSqlGenerator>().Generate(operations, model)
             .Select(command => command.CommandText.TrimEnd().TrimEnd(';')).ToArray();
-        return new(schema, data, changesDatabaseCollation);
+        return new(schema, data, changesDatabaseCollation, createsSequences);
     }
 
     private void ApplyModelData(IReadOnlyList<string> statements)

@@ -1,6 +1,6 @@
 # EF Core 10 Release Acceptance Checklist
 
-Updated: 2026-11-18. This checklist records only tests, evidence and release gates; **do not use it to count unimplemented features**.
+Updated 2026-11-19. This checklist records tests, evidence and release gates.
 See the [feature inventory](efcore-10-feature-matrix.md) for code scope and the [gap inventory](efcore-10-gap-matrix.md) for individual development states.
 The local package and tooling evidence below applies to candidate `a65e4a9`. The final release revision is pending.
 
@@ -32,7 +32,7 @@ The local package and tooling evidence below applies to candidate `a65e4a9`. The
 
 Preserve the original 53 Required acceptance IDs and conditions. The mode columns below record only historical closure results from the original checklist;
 they are neither code-implementation states nor pass conclusions for the current dependency/final revision. Update only the relevant evidence row each time; do not add module documents.
-Existing DEF-01/02/03/07/08/09 functionality still requires R-03/R-05 checks; deferred DEF-04/05/06/10 capabilities are excluded from positive-support acceptance, while their rejection contracts remain required.
+Existing DEF-01/02/03/06/07/08/09 functionality still requires R-03/R-05 checks. D-04/05/06/10 define the deferred capabilities and their rejection contracts.
 
 | ID | Acceptance condition | MySQL history | Oracle history | Current evidence gates |
 | --- | --- | --- | --- | --- |
@@ -94,6 +94,7 @@ Existing DEF-01/02/03/07/08/09 functionality still requires R-03/R-05 checks; de
 
 | Layer | Latest result | Boundary / entry point |
 | --- | --- | --- |
+| Standalone Int64 sequences, EF 10.0.0 | Four native sequence cases passed, covering both modes and sync/async. CLI-generated two-sequence migrations passed initial application, upgrade, downgrade, reapplication, rollback to zero and object cleanup via `MigrateAsync` in both modes. The Windows solution regression passed 6,924 tests with 16 specification skips. | Connector 0.3.1, OceanBase 4.4.2.2, direct TLS Disabled. Tests check catalog metadata, sequence values before and after option changes, disjoint bounds and Oracle unqualified rename. See `artifacts/sequence-release/`, `artifacts/sequence-tooling/` and `artifacts/sequence-tooling-oracle/`. Dedicated empty-namespace `EnsureCreated`, script-client application and migration bundle application remain pending. |
 | DateTimeOffset arithmetic, EF10.0.0 | Offline translation and supplied-reader checks passed for UTC differences, tick and duration adjustments, six Double-based additions, and month and year additions in both modes. Live execution pending. | `artifacts/offset-calendar/local/` records the combined local regression with Connector 0.3.1. The difference profile stopped before executing SQL in both modes. The direct Connector controls reported that the endpoint did not advertise the required TLS capability. |
 | MySQL database-default collation, EF10.0.0 | Release regression passed 6,915 tests with 16 existing specification skips. Cases cover the initial model diff, named upgrades and downgrades, invalid rollback names, and the sync/async database ownership and populated-table checks. | `artifacts/database-collation/final/`. OceanBaseConnector 0.3.1. Live catalog and script execution remain pending. |
 | MySQL primary-key `AUTO_INCREMENT` toggle, EF10.0.0 | Release regression passed 6,917 tests with 16 existing specification skips. The migration tests verify forward and reverse SQL and rejection of conflicting operations, missing models, and Oracle toggles. | `artifacts/identity-toggle/final/`. OceanBaseConnector 0.3.1. The live fixture builds, but native execution remains pending. |

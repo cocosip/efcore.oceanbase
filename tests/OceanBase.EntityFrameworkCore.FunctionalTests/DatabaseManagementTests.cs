@@ -759,7 +759,7 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
             protected override void OnModelCreating(ModelBuilder model)
             {
                 if (!Empty) model.Entity<Row>().ToTable("Rows", CrossScope ? "other" : null);
-                if (Sequence) model.HasSequence<long>("UnsupportedSequence");
+                if (Sequence) model.HasSequence<int>("UnsupportedSequence");
                 if (Collation is not null) model.UseCollation(Collation);
             }
         }

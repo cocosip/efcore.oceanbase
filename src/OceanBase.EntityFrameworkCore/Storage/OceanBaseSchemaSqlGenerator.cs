@@ -15,16 +15,17 @@ namespace OceanBase.EntityFrameworkCore.Storage
 
         public IReadOnlyList<string> Generate(IModel model, string? ownedMySqlDatabase)
         {
-            if (model.GetSequences().Any())
-            {
-                throw Unsupported("model sequences");
-            }
             ValidateTpcKeyGeneration(model.GetEntityTypes());
             var tables = model.GetRelationalModel().Tables.Where(t => !t.IsExcludedFromMigrations)
                 .OrderBy(t => t.Schema, StringComparer.Ordinal).ThenBy(t => t.Name, StringComparer.Ordinal).ToArray();
             var commands = new List<string>();
             if (model.GetCollation() is { } collation)
                 commands.Add(DatabaseCollationStatement(sql, ownedMySqlDatabase, collation));
+            foreach (var sequence in model.GetSequences().OrderBy(s => s.Schema, StringComparer.Ordinal).ThenBy(s => s.Name, StringComparer.Ordinal))
+            {
+                commands.Add(OceanBaseSequenceSql.Create(sql.DelimitIdentifier(sequence.Name, sequence.Schema), sequence.Type,
+                    sequence.StartValue, sequence.IncrementBy, sequence.MinValue, sequence.MaxValue, sequence.IsCyclic));
+            }
             foreach (var table in tables)
             {
                 var identities = table.Columns.Where(IsIdentity).ToArray();

@@ -75,20 +75,24 @@ namespace OceanBase.EntityFrameworkCore.Storage
             ? "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_type = 'BASE TABLE'"
             : "SELECT COUNT(*) FROM ALL_TABLES WHERE OWNER = SYS_CONTEXT('USERENV', 'CURRENT_SCHEMA')");
 
+        private IRelationalCommand SequenceProbe() => commands.Build(_mode == OceanBaseCompatibilityMode.MySql
+            ? "SELECT COUNT(*) FROM oceanbase.DBA_SEQUENCES WHERE BINARY SEQUENCE_OWNER = BINARY DATABASE()"
+            : "SELECT COUNT(*) FROM ALL_SEQUENCES WHERE SEQUENCE_OWNER = SYS_CONTEXT('USERENV', 'CURRENT_SCHEMA')");
+
         private RelationalCommandParameterObject Parameters()
             => new(connection, null, null, currentContext.Context, logger, CommandSource.Unknown);
 
-        public bool HasTables() => ReadTableCount(TableProbe().ExecuteScalar(Parameters()));
+        public bool HasTables() => ReadObjectCount(TableProbe().ExecuteScalar(Parameters()));
 
         public async Task<bool> HasTablesAsync(CancellationToken cancellationToken = default)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            return ReadTableCount(await TableProbe().ExecuteScalarAsync(Parameters(), cancellationToken).ConfigureAwait(false));
+            return ReadObjectCount(await TableProbe().ExecuteScalarAsync(Parameters(), cancellationToken).ConfigureAwait(false));
         }
 
-        private static bool ReadTableCount(object? value)
+        private static bool ReadObjectCount(object? value)
             => value is null or DBNull
-                ? throw new InvalidOperationException("The OceanBase table probe returned no count.")
+                ? throw new InvalidOperationException("The OceanBase schema probe returned no count.")
                 : (long)OceanBaseNumericConversion.ConvertValue(value, typeof(long)) > 0;
 
         private static NotSupportedException SchemaNotSupported()
@@ -156,6 +160,8 @@ namespace OceanBase.EntityFrameworkCore.Storage
                 throw new NotSupportedException("OceanBase schema DDL cannot run inside a caller transaction in this profile.");
             }
             var model = currentContext.Context.GetService<IDesignTimeModel>().Model;
+            if (model.GetSequences().Any(sequence => sequence.Schema is not null && sequence.Schema != scope))
+                throw new NotSupportedException("The model contains a sequence outside the declared schema management scope.");
             var tables = model.GetRelationalModel().Tables.Where(t => !t.IsExcludedFromMigrations);
             if (tables.Any(t => t.Schema is not null && !string.Equals(t.Schema, scope, StringComparison.Ordinal)
                 || t.ForeignKeyConstraints.Any(f => f.PrincipalTable.Schema is not null
@@ -198,6 +204,8 @@ namespace OceanBase.EntityFrameworkCore.Storage
                     if (onlyIfEmpty) return false;
                     throw DatabaseCollationRequiresEmptyDatabase();
                 }
+                if (onlyIfEmpty && plan.CreatesSequences && ReadObjectCount(SequenceProbe().ExecuteScalar(Parameters())))
+                    return false;
                 foreach (var statement in plan.Schema) commands.Build(statement).ExecuteNonQuery(Parameters());
                 ApplyModelData(plan.Data);
                 return true;
@@ -232,6 +240,9 @@ namespace OceanBase.EntityFrameworkCore.Storage
                     if (onlyIfEmpty) return false;
                     throw DatabaseCollationRequiresEmptyDatabase();
                 }
+                if (onlyIfEmpty && plan.CreatesSequences && ReadObjectCount(
+                    await SequenceProbe().ExecuteScalarAsync(Parameters(), cancellationToken).ConfigureAwait(false)))
+                    return false;
                 foreach (var statement in plan.Schema)
                 {
                     await commands.Build(statement).ExecuteNonQueryAsync(Parameters(), cancellationToken).ConfigureAwait(false);

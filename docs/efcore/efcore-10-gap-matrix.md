@@ -1,6 +1,6 @@
 # EF Core 10 Feature Gap Matrix
 
-Updated: 2026-11-18; corresponds to the [55 feature groups](efcore-10-feature-matrix.md). This matrix tracks only code capability gaps,
+Updated 2026-11-19. This matrix corresponds to the [55 feature groups](efcore-10-feature-matrix.md) and tracks only code capability gaps,
 explicitly unsupported features, dependencies, and capabilities to confirm. Pre-release tests, acceptance coverage, and review evidence belong only in the [release checklist](efcore-10-release-checklist.md).
 
 ## Statuses and counts
@@ -147,7 +147,7 @@ After investigation, record the result under Provider gaps, Connector/server dep
 | --- | --- | --- | --- | --- |
 | D-04 | DEF-04 | Deferred | Mapping/query/update for JSON, mapped primitive collections/arrays, and complex/JSON-owned types | Separate native type/SQL contracts and implementation; captured collection IN parameters are already supported |
 | D-05 | DEF-05 | Deferred | Provider integration for Spatial, XML, native enum, OBJECT, LOB locators, and REF CURSOR | Define Connector public capabilities and OceanBase type contracts; ordinary enum/CLOB/BLOB scalars are outside this group |
-| D-06 | DEF-06 | Deferred | Stored procedure INSERT/UPDATE/DELETE mapping, sequence/HiLo, and TPC allocation strategies | Design parameter/return-value/key strategies; preserve current rejecting entry points |
+| D-06 | DEF-06 | Deferred | Stored-procedure INSERT/UPDATE/DELETE mappings, HiLo and TPC key allocation. Standalone Int64 model sequence DDL is implemented in both modes | Establish parameter/return-value and sequence-based key contracts. Reverse engineering requires the original sequence start value, which Connector 0.3.1 does not expose through `GetSchema("Sequences")` |
 | D-10 | DEF-10 | Deferred | Full-text/vector/search functions and advanced batching optimizations | Target server versions, separate feature implementations, and performance goals |
 
 Do not remove data precision/NULL/ownership validation or intentional rejections while completing features. Update feature group, gap, and acceptance statuses separately.
