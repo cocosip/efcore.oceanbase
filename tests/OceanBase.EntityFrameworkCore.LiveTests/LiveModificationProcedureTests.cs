@@ -16,6 +16,89 @@ namespace OceanBase.EntityFrameworkCore.LiveTests
         [InlineData(OceanBaseCompatibilityMode.MySql, true)]
         [InlineData(OceanBaseCompatibilityMode.Oracle, false)]
         [InlineData(OceanBaseCompatibilityMode.Oracle, true)]
+        public Task SaveChanges_uses_function_returns_for_update_and_delete_concurrency(OceanBaseCompatibilityMode mode, bool async)
+            => LiveStorageTable.WithTable<FunctionContext>(mode, async, false,
+                (options, table) => new FunctionContext(new DbContextOptionsBuilder<FunctionContext>(options)
+                    .ReplaceService<IModelCacheKeyFactory, CacheKey>().Options, table),
+                async (context, _, stage) =>
+                {
+                    var mysql = mode == OceanBaseCompatibilityMode.MySql;
+                    var name = context.Table;
+                    var sql = context.GetService<ISqlGenerationHelper>();
+                    var table = sql.DelimitIdentifier(name);
+                    var id = sql.DelimitIdentifier(nameof(Row.Id));
+                    var value = sql.DelimitIdentifier(nameof(Row.Value));
+                    stage("seed row and create owned functions");
+                    var insert = $"INSERT INTO {table} ({id}, {value}) VALUES (17, 2)";
+                    await context.Database.ExecuteSqlRawAsync(insert);
+                    var created = new List<string>();
+                    Exception? failure = null;
+                    try
+                    {
+                        await Create(name + "U", mysql ? "p_value INT, p_id INT, p_original INT" : "p_value IN INTEGER, p_id IN INTEGER, p_original IN INTEGER",
+                            $"UPDATE {table} SET {value}=p_value WHERE {id}=p_id AND {value}=p_original;");
+                        await Create(name + "D", mysql ? "p_original INT, p_id INT" : "p_original IN INTEGER, p_id IN INTEGER",
+                            $"DELETE FROM {table} WHERE {id}=p_id AND {value}=p_original;");
+
+                        stage("update through a function and roll it back");
+                        await using (var transaction = await context.Database.BeginTransactionAsync())
+                        {
+                            var row = await Find();
+                            row.Value = 7;
+                            Assert.Equal(1, await Save());
+                            await transaction.RollbackAsync();
+                        }
+
+                        context.ChangeTracker.Clear();
+                        var persisted = await Find();
+                        Assert.Equal(2, persisted.Value);
+                        stage("reject stale update and delete through return value zero");
+                        context.Entry(persisted).Property(row => row.Value).OriginalValue = -1;
+                        persisted.Value = 9;
+                        Assert.Same(persisted, Assert.Single((await Assert.ThrowsAsync<DbUpdateConcurrencyException>(Save)).Entries).Entity);
+                        context.Remove(persisted);
+                        Assert.Same(persisted, Assert.Single((await Assert.ThrowsAsync<DbUpdateConcurrencyException>(Save)).Entries).Entity);
+
+                        stage("update and delete through both functions");
+                        context.ChangeTracker.Clear();
+                        persisted = await Find();
+                        persisted.Value = 5;
+                        Assert.Equal(1, await Save());
+                        context.ChangeTracker.Clear();
+                        persisted = await Find();
+                        Assert.Equal(5, persisted.Value);
+                        context.Remove(persisted);
+                        Assert.Equal(1, await Save());
+                        Assert.False(await context.Set<Row>().AnyAsync());
+                    }
+                    catch (Exception error)
+                    {
+                        failure = error;
+                        throw;
+                    }
+                    finally
+                    {
+                        await DropRoutines(context, sql, "FUNCTION", created, failure);
+                    }
+
+                    async Task Create(string function, string parameters, string body)
+                    {
+                        var declaration = mysql ? "RETURNS INT MODIFIES SQL DATA BEGIN" : "RETURN INTEGER AS BEGIN";
+                        var rows = mysql ? "ROW_COUNT()" : "SQL%ROWCOUNT";
+                        var create = $"CREATE FUNCTION {sql.DelimitIdentifier(function)} ({parameters}) {declaration} {body} RETURN {rows}; END";
+                        await context.Database.ExecuteSqlRawAsync(create);
+                        created.Add(function);
+                    }
+
+                    Task<int> Save() => async ? context.SaveChangesAsync() : Task.FromResult(context.SaveChanges());
+                    async Task<Row> Find() => (await context.Set<Row>().FindAsync(17))!;
+                });
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true)]
         public Task SaveChanges_uses_procedure_outputs_for_writeback_and_concurrency(OceanBaseCompatibilityMode mode, bool async)
             => LiveStorageTable.WithTable<Context>(mode, async, false,
                 (options, table) => new Context(new DbContextOptionsBuilder<Context>(options)
@@ -108,25 +191,7 @@ namespace OceanBase.EntityFrameworkCore.LiveTests
                     }
                     finally
                     {
-                        var cleanupFailures = new List<Exception>();
-                        foreach (var name in created)
-                        {
-                            var drop = "DROP PROCEDURE " + sql.DelimitIdentifier(name);
-                            try
-                            {
-                                await context.Database.ExecuteSqlRawAsync(drop);
-                            }
-                            catch (Exception error)
-                            {
-                                cleanupFailures.Add(new InvalidOperationException($"Could not drop owned procedure {name}.", error));
-                            }
-                        }
-
-                        if (cleanupFailures.Count > 0)
-                        {
-                            if (failure is not null) cleanupFailures.Insert(0, failure);
-                            throw new AggregateException(cleanupFailures);
-                        }
+                        await DropRoutines(context, sql, "PROCEDURE", created, failure);
                     }
 
                     async Task Create(string suffix, string[] inputs, bool returnsStamp, string body)
@@ -153,6 +218,51 @@ namespace OceanBase.EntityFrameworkCore.LiveTests
                     Task<int> Save() => async ? context.SaveChangesAsync() : Task.FromResult(context.SaveChanges());
                     async Task<Row> Find() => (await context.Set<Row>().FindAsync(17))!;
                 });
+
+        private static async Task DropRoutines(DbContext context, ISqlGenerationHelper sql, string kind, List<string> names, Exception? failure)
+        {
+            var cleanupFailures = new List<Exception>();
+            foreach (var name in names)
+            {
+                var drop = $"DROP {kind} {sql.DelimitIdentifier(name)}";
+                try
+                {
+                    await context.Database.ExecuteSqlRawAsync(drop);
+                }
+                catch (Exception error)
+                {
+                    cleanupFailures.Add(new InvalidOperationException($"Could not drop owned {kind} {name}.", error));
+                }
+            }
+
+            if (cleanupFailures.Count > 0)
+            {
+                if (failure is not null) cleanupFailures.Insert(0, failure);
+                throw new AggregateException(cleanupFailures);
+            }
+        }
+
+        private sealed class FunctionContext(DbContextOptions<FunctionContext> options, string table) : DbContext(options)
+        {
+            internal string Table => table;
+
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                var row = modelBuilder.Entity<Row>().ToTable(table);
+                row.Ignore(value => value.Stamp);
+                row.Property(value => value.Id).ValueGeneratedNever();
+                row.Property(value => value.Value).IsConcurrencyToken();
+                row.UpdateUsingStoredProcedure(table + "U", procedure => procedure
+                    .HasParameter(value => value.Value)
+                    .HasOriginalValueParameter(value => value.Id)
+                    .HasOriginalValueParameter(value => value.Value)
+                    .HasRowsAffectedReturnValue());
+                row.DeleteUsingStoredProcedure(table + "D", procedure => procedure
+                    .HasOriginalValueParameter(value => value.Value)
+                    .HasOriginalValueParameter(value => value.Id)
+                    .HasRowsAffectedReturnValue());
+            }
+        }
 
         private sealed class Context(DbContextOptions<Context> options, string table) : DbContext(options)
         {
@@ -191,7 +301,8 @@ namespace OceanBase.EntityFrameworkCore.LiveTests
 
         private sealed class CacheKey : IModelCacheKeyFactory
         {
-            public object Create(DbContext context, bool designTime) => (((Context)context).Table, designTime);
+            public object Create(DbContext context, bool designTime)
+                => (context is FunctionContext function ? function.Table : ((Context)context).Table, designTime);
         }
     }
 }

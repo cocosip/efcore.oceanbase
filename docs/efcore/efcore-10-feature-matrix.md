@@ -78,7 +78,9 @@ For gaps and development status, see the [Gap Matrix](efcore-10-gap-matrix.md). 
 
 Map existing routines with `InsertUsingStoredProcedure`, `UpdateUsingStoredProcedure` and
 `DeleteUsingStoredProcedure`. The Connector binds parameters in declaration order.
-Use OUT parameters for generated values and for the affected-row count on UPDATE and DELETE.
+Use OUT parameters for generated values. For the affected-row count on UPDATE and DELETE, map an
+OUT parameter or an integer function return with `HasRowsAffectedReturnValue()`. The function
+profile has input-only arguments.
 Generated values can also use INOUT parameters. EF's current/original-value mapping supplies the input
 and the routine supplies the store-generated value. An omitted current value is sent as SQL NULL.
 An INSERT routine must report failure by raising an error. Provision the routines separately.
@@ -87,7 +89,7 @@ Routines must keep their writes inside the EF transaction. The default automatic
 opens one for procedure writes. With `AutoTransactionBehavior.Never`, supply an active EF transaction
 for procedure batches. Ordinary batches in a mixed save can commit independently under that setting.
 Oracle requires `UseOraclePrepareExecute=true`. MySQL requires prepared-statement multi-result support
-from the connection. Result sets and return values remain deferred.
+from the connection. Routine result sets remain deferred.
 
 ## Implemented query API scope
 

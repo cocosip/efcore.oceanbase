@@ -118,18 +118,34 @@ namespace OceanBase.EntityFrameworkCore.Update
         private IRelationalCommand BuildProcedure(IReadOnlyModificationCommand command, IStoreStoredProcedure procedure)
         {
             var columns = command.ColumnModifications;
-            if (procedure.ResultColumns.Any() || procedure.ReturnValue is not null
-                || command.EntityState != EntityState.Added && command.RowsAffectedColumn is not IStoreStoredProcedureParameter)
+            if (procedure.ResultColumns.Any()
+                || command.EntityState != EntityState.Added
+                && command.RowsAffectedColumn is not (IStoreStoredProcedureParameter or IStoreStoredProcedureReturnValue))
             {
-                throw new NotSupportedException("OceanBase stored-procedure mappings require output parameters for generated values and for update/delete row counts.");
+                throw new NotSupportedException("OceanBase routine mappings require output parameters for generated values and an output parameter or function return value for update/delete row counts.");
+            }
+
+            if (procedure.ReturnValue is not null && (command.EntityState == EntityState.Added
+                || procedure.Parameters.Any(parameter => parameter.Direction != ParameterDirection.Input)))
+            {
+                throw new NotSupportedException("OceanBase rows-affected function mappings support update/delete with input-only arguments.");
             }
 
             var builder = _dependencies.CommandBuilderFactory.Create();
             builder.Append(_dependencies.SqlGenerationHelper.DelimitIdentifier(procedure.Name, procedure.Schema));
             OceanBaseRelationalCommandBuilderFactory.ConfigureStoredProcedure(builder);
             using var parameterCommand = new OceanBaseCommand();
-            foreach (var column in columns.OrderBy(column => ((IStoreStoredProcedureParameter)column.Column!).Position))
+            foreach (var column in columns.OrderBy(column => column.Column is IStoreStoredProcedureParameter parameter ? parameter.Position : -1))
             {
+                if (column.Column is IStoreStoredProcedureReturnValue)
+                {
+                    const string returnName = "ob_result";
+                    _rowsAffected = column.TypeMapping!.CreateParameter(
+                        parameterCommand, returnName, null, column.IsNullable, ParameterDirection.ReturnValue);
+                    builder.AddRawParameter(returnName, _rowsAffected);
+                    continue;
+                }
+
                 var metadata = (IStoreStoredProcedureParameter)column.Column!;
                 object? input = null;
                 if (metadata.Direction is ParameterDirection.Input or ParameterDirection.InputOutput)
@@ -306,7 +322,7 @@ namespace OceanBase.EntityFrameworkCore.Update
 
             if (_rowsAffected.Value is null or DBNull)
             {
-                throw new InvalidOperationException("The OceanBase stored procedure did not set its rows-affected output parameter.");
+                throw new InvalidOperationException("The OceanBase routine did not supply its rows-affected value.");
             }
 
             return (int)OceanBaseNumericConversion.ConvertValue(_rowsAffected.Value, typeof(int));
