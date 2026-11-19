@@ -90,6 +90,35 @@ public sealed class ReverseEngineeringTests
         Assert.DoesNotContain("OceanBase:Identity", code.ContextFile.Code);
     }
 
+    [Fact]
+    public void MySql_json_catalog_column_keeps_its_store_type_and_maps_to_string()
+    {
+        using var services = Services();
+        using var connection = new CatalogConnection(OceanBaseCompatibilityMode.MySql)
+        {
+            Rewrite = (name, rows) =>
+            {
+                if (name == "Columns")
+                {
+                    var document = rows.NewRow();
+                    document.ItemArray = rows.Rows.Cast<DataRow>().Single(row => (string)row["COLUMN_NAME"] == "Note").ItemArray;
+                    document["COLUMN_NAME"] = "Document";
+                    document["ORDINAL_POSITION"] = 5;
+                    document["TYPE_DECLARATION"] = "json";
+                    rows.Rows.Add(document);
+                }
+            }
+        };
+        var database = services.GetRequiredService<IDatabaseModelFactory>()
+            .Create(connection, new DatabaseModelFactoryOptions());
+        var model = services.GetRequiredService<IScaffoldingModelFactory>()
+            .Create(database, new ModelReverseEngineerOptions { UseDatabaseNames = true });
+        var property = model.GetEntityTypes().Single(entity => entity.GetTableName() == "Children").FindProperty("Document")!;
+        Assert.Equal(typeof(string), property.ClrType);
+        Assert.Equal("json", property.GetColumnType());
+        Assert.True(property.IsNullable);
+    }
+
     [Theory]
     [InlineData(OceanBaseCompatibilityMode.MySql, false)]
     [InlineData(OceanBaseCompatibilityMode.MySql, true)]

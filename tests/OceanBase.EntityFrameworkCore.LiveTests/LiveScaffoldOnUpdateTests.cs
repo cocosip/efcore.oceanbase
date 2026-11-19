@@ -4,6 +4,7 @@ using System.Data;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Text.Json;
 using System.Threading.Tasks;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
@@ -26,7 +27,7 @@ public sealed class LiveScaffoldOnUpdateTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public Task Directory_on_update_round_trips_through_model_ddl_and_writes(bool async)
+    public Task Directory_on_update_and_json_round_trip_through_model_ddl_and_writes(bool async)
         => LiveStorageTable.WithTable<SourceContext>(OceanBaseCompatibilityMode.MySql, async, noBackslashEscapes: false,
             (options, table) => new SourceContext(new DbContextOptionsBuilder<SourceContext>(options)
                 .ReplaceService<IModelCacheKeyFactory, CacheKey>().Options, table), async (source, _, stage) =>
@@ -57,6 +58,8 @@ public sealed class LiveScaffoldOnUpdateTests
                 var database = services.GetRequiredService<IDatabaseModelFactory>()
                     .Create(connection, new DatabaseModelFactoryOptions(tables: [catalogName]));
                 var catalog = Assert.Single(database.Tables);
+                var document = catalog.Columns.Single(column => column.Name == "Document");
+                Assert.Equal("json", document.StoreType, ignoreCase: true);
                 var updated = catalog.Columns.Single(column => column.Name == "Updated");
                 var touched = catalog.Columns.Single(column => column.Name == "Touched");
                 Assert.Equal(ValueGenerated.OnUpdate, updated.ValueGenerated);
@@ -78,18 +81,25 @@ public sealed class LiveScaffoldOnUpdateTests
                 optionsBuilder.UseOceanBase(connection, OceanBaseCompatibilityMode.MySql);
                 using var context = (DbContext)Activator.CreateInstance(contextType, optionsBuilder.Options)!;
                 var currentModel = context.GetService<IDesignTimeModel>().Model;
+                var documentProperty = Assert.Single(currentModel.GetEntityTypes()).FindProperty("Document")!;
+                Assert.Equal(typeof(string), documentProperty.ClrType);
+                Assert.Equal("json", documentProperty.GetColumnType(), ignoreCase: true);
+                Assert.True(documentProperty.IsNullable);
 
                 stage("generate create and migration SQL from scaffolded model");
                 Assert.Contains("ON UPDATE CURRENT_TIMESTAMP(6)", context.Database.GenerateCreateScript());
                 var operations = context.GetService<IMigrationsModelDiffer>().GetDifferences(null, currentModel.GetRelationalModel());
-                var updateColumns = Assert.Single(operations.OfType<CreateTableOperation>()).Columns
-                    .Where(column => column.Name is "Updated" or "Touched").ToArray();
-                Assert.Equal(2, updateColumns.Length);
+                var columns = Assert.Single(operations.OfType<CreateTableOperation>()).Columns
+                    .Where(column => column.Name is "Updated" or "Touched" or "Document").ToArray();
+                Assert.Equal(3, columns.Length);
+                var generatedDocument = Assert.Single(columns, column => column.Name == "Document");
+                Assert.Equal("json", generatedDocument.ColumnType, ignoreCase: true);
+                Assert.True(generatedDocument.IsNullable);
                 var generator = context.GetService<IMigrationsSqlGenerator>();
-                var commands = generator.Generate(updateColumns, currentModel);
-                Assert.All(commands, command => Assert.Contains("ON UPDATE CURRENT_TIMESTAMP(6)", command.CommandText));
-                if (async) await source.Database.ExecuteSqlRawAsync(source.DropTimestampsSql);
-                else source.Database.ExecuteSqlRaw(source.DropTimestampsSql);
+                var commands = generator.Generate(columns, currentModel);
+                Assert.Equal(2, commands.Count(command => command.CommandText.Contains("ON UPDATE CURRENT_TIMESTAMP(6)", StringComparison.Ordinal)));
+                if (async) await source.Database.ExecuteSqlRawAsync(source.DropScaffoldedColumnsSql);
+                else source.Database.ExecuteSqlRaw(source.DropScaffoldedColumnsSql);
                 var relational = context.GetService<IRelationalConnection>();
                 foreach (var command in commands)
                 {
@@ -104,6 +114,7 @@ public sealed class LiveScaffoldOnUpdateTests
                 entry.Property("Id").CurrentValue = 1;
                 entry.Property("Amount").CurrentValue = 2;
                 entry.Property("Updated").CurrentValue = initial;
+                entry.Property("Document").CurrentValue = "{\"name\":\"海\"}";
                 entry.State = EntityState.Added;
                 Assert.Equal(1, async ? await context.SaveChangesAsync() : context.SaveChanges());
                 Assert.Equal(initial, entry.Property("Updated").CurrentValue);
@@ -112,6 +123,7 @@ public sealed class LiveScaffoldOnUpdateTests
 
                 stage("update and read back both timestamps");
                 entry.Property("Amount").CurrentValue = 3;
+                entry.Property("Document").CurrentValue = "{\"name\":\"é海\"}";
                 Assert.Equal(1, async ? await context.SaveChangesAsync() : context.SaveChanges());
                 var updatedValue = Assert.IsType<DateTime>(entry.Property("Updated").CurrentValue);
                 var touchedValue = Assert.IsType<DateTime>(entry.Property("Touched").CurrentValue);
@@ -121,6 +133,8 @@ public sealed class LiveScaffoldOnUpdateTests
                 else entry.Reload();
                 Assert.Equal(updatedValue, entry.Property("Updated").CurrentValue);
                 Assert.Equal(touchedValue, entry.Property("Touched").CurrentValue);
+                using var json = JsonDocument.Parse(Assert.IsType<string>(entry.Property("Document").CurrentValue));
+                Assert.Equal("é海", json.RootElement.GetProperty("name").GetString());
             });
 
     private static Assembly Compile(ScaffoldedModel model)
@@ -144,13 +158,14 @@ public sealed class LiveScaffoldOnUpdateTests
         public string AddTimestampsSql => $"ALTER TABLE `{table}` "
             + "ADD COLUMN `Updated` DATETIME(6) NULL ON UPDATE CURRENT_TIMESTAMP(6), "
             + "ADD COLUMN `Touched` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6)";
-        public string DropTimestampsSql => $"ALTER TABLE `{table}` DROP COLUMN `Updated`, DROP COLUMN `Touched`";
+        public string DropScaffoldedColumnsSql => $"ALTER TABLE `{table}` DROP COLUMN `Updated`, DROP COLUMN `Touched`, DROP COLUMN `Document`";
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             var row = modelBuilder.SharedTypeEntity<Dictionary<string, object>>(table);
             row.IndexerProperty<int>("Id").ValueGeneratedNever();
             row.IndexerProperty<int>("Amount");
+            row.IndexerProperty<string>("Document").HasColumnType("json").IsRequired(false);
             row.HasKey("Id");
         }
     }

@@ -33,7 +33,7 @@ namespace OceanBase.EntityFrameworkCore.Design
                     case "DECIMAL": case "NUMERIC": return typeof(decimal);
                     case "FLOAT": return typeof(float);
                     case "DOUBLE": case "DOUBLE PRECISION": case "REAL": return typeof(double);
-                    case "CHAR": case "VARCHAR": case "TINYTEXT": case "TEXT": case "MEDIUMTEXT": case "LONGTEXT": return typeof(string);
+                    case "CHAR": case "VARCHAR": case "TINYTEXT": case "TEXT": case "MEDIUMTEXT": case "LONGTEXT": case "JSON": return typeof(string);
                     case "BINARY": case "VARBINARY": case "TINYBLOB": case "BLOB": case "MEDIUMBLOB": case "LONGBLOB": return typeof(byte[]);
                     case "DATE": return typeof(DateOnly);
                     case "DATETIME": case "TIMESTAMP": return typeof(DateTime);
