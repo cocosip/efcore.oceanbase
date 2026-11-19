@@ -125,22 +125,33 @@ public sealed class TpcSchemaTests
         }
     }
 
-    [Fact]
-    public void Tpc_sequence_default_survives_the_dictionary_based_migration_target_model()
+    [Theory]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    [InlineData(true, false)]
+    public void Sequence_key_configuration_survives_the_dictionary_based_migration_target_model(bool hiLo, bool tpc)
     {
         using var context = Create<int>(OceanBaseCompatibilityMode.Oracle, generation: "sequence");
         var builder = new ModelBuilder();
         builder.HasDefaultSchema("app");
         builder.HasSequence<long>("Ids", "app").HasMax(int.MaxValue);
-        var root = builder.Entity("SnapshotRoot").UseTpcMappingStrategy().ToTable("RootRows");
-        root.Property<int>("AssetId").HasColumnType("NUMBER(10)")
-            .HasDefaultValueSql("\"app\".\"Ids\".NEXTVAL").ValueGeneratedOnAdd();
+        var root = builder.Entity("SnapshotRoot").ToTable("RootRows");
+        var key = root.Property<int>("AssetId").HasColumnType("NUMBER(10)");
+        if (hiLo) key.UseOceanBaseHiLo("Ids", "app");
+        else key.HasDefaultValueSql("\"app\".\"Ids\".NEXTVAL").ValueGeneratedOnAdd();
         root.HasKey("AssetId");
-        builder.Entity("SnapshotLeaf").HasBaseType("SnapshotRoot").ToTable("LeafRows");
+        if (tpc)
+        {
+            root.UseTpcMappingStrategy();
+            builder.Entity("SnapshotLeaf").HasBaseType("SnapshotRoot").ToTable("LeafRows");
+        }
         var target = context.GetService<IModelRuntimeInitializer>().Initialize(builder.FinalizeModel());
         var operations = context.GetService<IMigrationsModelDiffer>().GetDifferences(null, target.GetRelationalModel());
-        Assert.Contains(context.GetService<IMigrationsSqlGenerator>().Generate(operations, target), command =>
-            command.CommandText.Contains("DEFAULT (\"app\".\"Ids\".NEXTVAL)", StringComparison.Ordinal));
+        var sql = string.Concat(context.GetService<IMigrationsSqlGenerator>().Generate(operations, target)
+            .Select(command => command.CommandText));
+        Assert.DoesNotContain("AS IDENTITY", sql);
+        if (hiLo) Assert.DoesNotContain(".NEXTVAL", sql);
+        else Assert.Contains("DEFAULT (\"app\".\"Ids\".NEXTVAL)", sql);
     }
 
     [Theory]

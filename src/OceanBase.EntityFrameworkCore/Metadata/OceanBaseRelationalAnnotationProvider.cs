@@ -79,7 +79,7 @@ namespace OceanBase.EntityFrameworkCore.Metadata
         {
             if (property.ValueGenerated != ValueGenerated.OnAdd
                 || (property.ClrType != typeof(long) && property.ClrType != typeof(int))
-                || (property.Sentinel is not (0 or 0L) && !(property.Sentinel is null && property.DeclaringType.IsPropertyBag))
+                || !HasDefaultSequenceKeySentinel(property)
                 || property.GetValueGeneratorFactory() is not null || property.GetTypeMapping().Converter is not null
                 || property.TryGetDefaultValue(out _) || property.GetComputedColumnSql() is not null
                 || property.GetDefaultValueSql() is not { } defaultSql)
@@ -101,6 +101,10 @@ namespace OceanBase.EntityFrameworkCore.Metadata
                 && (sequence.Schema is not null || mapping.Column.Table.Schema is null)) ? sequence : null;
         }
 
+        private static bool HasDefaultSequenceKeySentinel(IProperty property)
+            // Migration models use dictionary indexers, whose missing member defaults to null.
+            => property.Sentinel is 0 or 0L || property.Sentinel is null && property.DeclaringType.IsPropertyBag;
+
         internal static ISequence? FindHiLoSequence(IProperty property)
         {
             if (property[HiLoSequenceName] is not string name) return null;
@@ -109,11 +113,11 @@ namespace OceanBase.EntityFrameworkCore.Metadata
             if (!property.IsPrimaryKey() || property.ValueGenerated != ValueGenerated.OnAdd
                 || (property.ClrType != typeof(int) && property.ClrType != typeof(long))
                 || property.GetTypeMapping().Converter is not null || property.GetValueGeneratorFactory() is not null
-                || property.Sentinel is not (0 or 0L) || property.TryGetDefaultValue(out _)
+                || !HasDefaultSequenceKeySentinel(property) || property.TryGetDefaultValue(out _)
                 || property.GetDefaultValueSql() is not null || property.GetComputedColumnSql() is not null)
             {
                 throw new NotSupportedException("OceanBase HiLo requires an Int32 or Int64 primary-key property with "
-                    + "ValueGeneratedOnAdd, a zero sentinel, and no converter, custom generator or server-generated expression: " + propertyName);
+                    + "ValueGeneratedOnAdd, a default sentinel, and no converter, custom generator or server-generated expression: " + propertyName);
             }
 
             var sequence = property.DeclaringType.Model.FindSequence(name, property[HiLoSequenceSchema] as string);
