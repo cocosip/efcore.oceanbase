@@ -22,7 +22,8 @@ namespace OceanBase.EntityFrameworkCore.Update
             if (!_modelValidated)
             {
                 Metadata.OceanBaseRelationalAnnotationProvider.ValidateTpcKeyGeneration(
-                    _dependencies.CurrentContext.Context.Model.GetEntityTypes());
+                    _dependencies.CurrentContext.Context.Model, _mode == OceanBaseCompatibilityMode.Oracle,
+                    _dependencies.SqlGenerationHelper);
                 _modelValidated = true;
             }
             return new OceanBaseModificationCommandBatch(_dependencies, _mode);

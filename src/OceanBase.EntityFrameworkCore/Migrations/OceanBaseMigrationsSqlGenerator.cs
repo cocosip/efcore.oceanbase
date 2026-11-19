@@ -45,7 +45,8 @@ namespace OceanBase.EntityFrameworkCore.Migrations
             }
             if (model is not null)
             {
-                OceanBaseRelationalAnnotationProvider.ValidateTpcKeyGeneration(model.GetEntityTypes());
+                ValidateTpcKeyGeneration(model, Oracle, Dependencies.SqlGenerationHelper);
+                if (Oracle) ValidateTpcSequenceChanges(operations, model);
                 foreach (var table in model.GetRelationalModel().Tables.Where(t => !t.IsExcludedFromMigrations))
                 {
                     foreach (var column in table.Columns)
@@ -116,6 +117,35 @@ namespace OceanBase.EntityFrameworkCore.Migrations
                         sql = sql.TrimEnd() + "\n;\n";
                     commands.Add(new MigrationCommand(Dependencies.CommandBuilderFactory.Create().Append(sql).Build(),
                         Dependencies.CurrentContext.Context, Dependencies.Logger, transactionSuppressed: true));
+            }
+        }
+
+        private void ValidateTpcSequenceChanges(IReadOnlyList<MigrationOperation> operations, IModel model)
+        {
+            foreach (var property in TpcKeyProperties(model))
+            {
+                if (FindSharedOracleSequenceDefault(property, model, Dependencies.SqlGenerationHelper) is not { } sequence)
+                    continue;
+
+                var columns = property.GetTableColumnMappings().Select(mapping => mapping.Column).ToArray();
+                var sequenceChanged = operations.Any(operation => operation switch
+                {
+                    RestartSequenceOperation restart => Matches(restart.Name, restart.Schema),
+                    AlterSequenceOperation alter => Matches(alter.Name, alter.Schema),
+                    DropSequenceOperation drop => Matches(drop.Name, drop.Schema),
+                    RenameSequenceOperation rename => Matches(rename.Name, rename.Schema)
+                        || Matches(rename.NewName ?? rename.Name, rename.NewSchema ?? rename.Schema),
+                    _ => false
+                });
+                var defaultChanged = operations.OfType<AlterColumnOperation>().Any(alter =>
+                    alter.OldColumn.DefaultValueSql != alter.DefaultValueSql && columns.Any(column =>
+                        column.Name == alter.Name && column.Table.Name == alter.Table && column.Table.Schema == alter.Schema));
+                if (sequenceChanged || defaultChanged)
+                    throw Unsupported("changing a shared TPC sequence or its default on existing columns; use an explicit data-preserving migration");
+
+                bool Matches(string name, string? schema)
+                    => sequence.Name == name && (sequence.Schema ?? _options.SchemaManagementScope)
+                        == (schema ?? _options.SchemaManagementScope);
             }
         }
 

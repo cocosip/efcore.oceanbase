@@ -15,7 +15,7 @@ namespace OceanBase.EntityFrameworkCore.Storage
 
         public IReadOnlyList<string> Generate(IModel model, string? ownedMySqlDatabase)
         {
-            ValidateTpcKeyGeneration(model.GetEntityTypes());
+            ValidateTpcKeyGeneration(model, Oracle, sql);
             var tables = model.GetRelationalModel().Tables.Where(t => !t.IsExcludedFromMigrations)
                 .OrderBy(t => t.Schema, StringComparer.Ordinal).ThenBy(t => t.Name, StringComparer.Ordinal).ToArray();
             var commands = new List<string>();

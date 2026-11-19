@@ -13,6 +13,34 @@ namespace OceanBase.EntityFrameworkCore.LiveTests;
 public sealed class LiveSequenceKeyTests
 {
     [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public Task Oracle_reads_shared_sequence_defaults_and_propagates_Tpc_keys(bool async)
+        => LiveStorageTable.WithTable<StoreKeyContext>(OceanBaseCompatibilityMode.Oracle, async, false,
+            (options, name) => new StoreKeyContext(new DbContextOptionsBuilder<StoreKeyContext>(options)
+                .ReplaceService<IModelCacheKeyFactory, KeyModelCacheKey>().Options, name),
+            async (context, _, stage) =>
+            {
+                stage("insert both TPC types and a dependent");
+                var left = new LeftRow();
+                var right = new RightRow();
+                var link = new Link { Id = 1, Principal = left };
+                context.AddRange(right, link);
+                Assert.True(context.Entry(left).Property(row => row.Id).IsTemporary);
+                Assert.True(context.Entry(right).Property(row => row.Id).IsTemporary);
+                Assert.Equal(3, async ? await context.SaveChangesAsync() : context.SaveChanges());
+                Assert.Equal(new long[] { 101, 105 }, new[] { left.Id, right.Id }.Order());
+                Assert.Equal(left.Id, link.PrincipalId);
+
+                stage("reload stored keys and relationship");
+                context.ChangeTracker.Clear();
+                var keys = context.Set<Row>().Select(row => row.Id).OrderBy(id => id);
+                Assert.Equal(new long[] { 101, 105 }, async ? await keys.ToArrayAsync() : keys.ToArray());
+                var links = context.Set<Link>().Include(item => item.Principal);
+                Assert.Equal(left.Id, (async ? await links.SingleAsync() : links.Single()).Principal.Id);
+            }, ["L", "R", "D"], "S", async ? ApplyModelMigration : null);
+
+    [Theory]
     [InlineData(OceanBaseCompatibilityMode.MySql, false)]
     [InlineData(OceanBaseCompatibilityMode.MySql, true)]
     [InlineData(OceanBaseCompatibilityMode.Oracle, false)]
@@ -97,7 +125,7 @@ public sealed class LiveSequenceKeyTests
                 await Assert.ThrowsAsync<InvalidOperationException>(async () => await context.AddAsync(new IntRow()));
             }, sequenceSuffix: "S", createObjects: ApplyModelMigration);
 
-    private static async Task ApplyModelMigration(IntKeyContext context)
+    private static async Task ApplyModelMigration(DbContext context)
     {
         var model = context.GetService<IDesignTimeModel>().Model;
         var operations = context.GetService<IMigrationsModelDiffer>().GetDifferences(null, model.GetRelationalModel());
@@ -123,7 +151,29 @@ public sealed class LiveSequenceKeyTests
     private sealed class KeyModelCacheKey : IModelCacheKeyFactory
     {
         public object Create(DbContext context, bool designTime)
-            => (context.GetType(), context is KeyContext tpc ? tpc.Name : ((IntKeyContext)context).Name, designTime);
+            => (context.GetType(), context switch
+            {
+                KeyContext key => key.Name,
+                StoreKeyContext key => key.Name,
+                _ => ((IntKeyContext)context).Name
+            }, designTime);
+    }
+
+    private sealed class StoreKeyContext(DbContextOptions<StoreKeyContext> options, string name) : DbContext(options)
+    {
+        internal string Name => name;
+
+        protected override void OnModelCreating(ModelBuilder modelBuilder)
+        {
+            modelBuilder.HasSequence<long>(name + "S").StartsAt(101).IncrementsBy(4);
+            modelBuilder.Entity<Row>().UseTpcMappingStrategy().Property(row => row.Id)
+                .HasDefaultValueSql("\"" + name + "S\".NEXTVAL").ValueGeneratedOnAdd();
+            modelBuilder.Entity<LeftRow>().ToTable(name + "L");
+            modelBuilder.Entity<RightRow>().ToTable(name + "R");
+            var link = modelBuilder.Entity<Link>().ToTable(name + "D");
+            link.Property(item => item.Id).ValueGeneratedNever();
+            link.HasOne(item => item.Principal).WithMany().HasForeignKey(item => item.PrincipalId);
+        }
     }
 
     private sealed class IntKeyContext(DbContextOptions<IntKeyContext> options, string name) : DbContext(options)
@@ -141,4 +191,10 @@ public sealed class LiveSequenceKeyTests
     private sealed class LeftRow : Row;
     private sealed class RightRow : Row;
     private sealed class IntRow { public int Id { get; set; } }
+    private sealed class Link
+    {
+        public int Id { get; set; }
+        public long PrincipalId { get; set; }
+        public LeftRow Principal { get; set; } = null!;
+    }
 }

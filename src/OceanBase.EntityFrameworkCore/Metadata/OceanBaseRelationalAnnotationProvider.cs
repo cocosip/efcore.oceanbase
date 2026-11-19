@@ -6,6 +6,7 @@ using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Storage;
 
 namespace OceanBase.EntityFrameworkCore.Metadata
 {
@@ -49,24 +50,55 @@ namespace OceanBase.EntityFrameworkCore.Metadata
                 && (!defaultTimestamp.Success || Precision(defaultTimestamp) == Precision(store));
         }
 
-        internal static void ValidateTpcKeyGeneration(IEnumerable<IEntityType> entityTypes)
+        internal static void ValidateTpcKeyGeneration(IModel model, bool oracle, ISqlGenerationHelper sql)
         {
-            foreach (var property in entityTypes.Where(e => e.GetMappingStrategy() == "TPC")
-                .SelectMany(e => e.FindPrimaryKey()?.Properties ?? []).Distinct())
+            foreach (var property in TpcKeyProperties(model))
             {
                 var providerType = property.GetTypeMapping().Converter?.ProviderClrType ?? property.ClrType;
                 var clientGuid = property.ValueGenerated == ValueGenerated.OnAdd && property.ClrType == typeof(Guid)
                     && providerType != typeof(int) && providerType != typeof(long)
                     && !property.TryGetDefaultValue(out _) && property.GetDefaultValueSql() is null;
                 if (FindHiLoSequence(property) is not null
-                    || (property.GetComputedColumnSql() is null && (property.ValueGenerated == ValueGenerated.Never || clientGuid)))
+                    || (property.GetComputedColumnSql() is null && (property.ValueGenerated == ValueGenerated.Never || clientGuid))
+                    || oracle && FindSharedOracleSequenceDefault(property, model, sql) is not null)
                     continue;
                 throw new NotSupportedException("TPC keys must be unique across the entire hierarchy. Configure "
                     + property.DeclaringType.DisplayName() + "." + property.Name
                     + " with ValueGeneratedNever and assign unique keys without a computed expression, "
                     + "or use HiLo or client-generated Guid keys without an integer store conversion. "
-                    + "Independent table identities and store-generated TPC keys are not supported.");
+                    + "Oracle also supports a shared noncyclic model sequence default across the concrete tables. "
+                    + "Independent table identities are not supported.");
             }
+        }
+
+        internal static IEnumerable<IProperty> TpcKeyProperties(IModel model)
+            => model.GetEntityTypes().Where(entity => entity.GetMappingStrategy() == "TPC")
+                .SelectMany(entity => entity.FindPrimaryKey()?.Properties ?? []).Distinct();
+
+        internal static ISequence? FindSharedOracleSequenceDefault(IProperty property, IModel model, ISqlGenerationHelper sql)
+        {
+            if (property.ValueGenerated != ValueGenerated.OnAdd
+                || (property.ClrType != typeof(long) && property.ClrType != typeof(int))
+                || (property.Sentinel is not (0 or 0L) && !(property.Sentinel is null && property.DeclaringType.IsPropertyBag))
+                || property.GetValueGeneratorFactory() is not null || property.GetTypeMapping().Converter is not null
+                || property.TryGetDefaultValue(out _) || property.GetComputedColumnSql() is not null
+                || property.GetDefaultValueSql() is not { } defaultSql)
+                return null;
+
+            var sequence = model.GetSequences().FirstOrDefault(sequence =>
+                string.Equals(sql.DelimitIdentifier(sequence.Name, sequence.Schema) + ".NEXTVAL", defaultSql, StringComparison.Ordinal));
+            if (sequence is null || sequence.Type != typeof(long) || sequence.IsCyclic || sequence.IncrementBy <= 0
+                || sequence.StartValue <= 0 || sequence.MinValue is <= 0
+                || sequence.StartValue < sequence.MinValue || sequence.StartValue > sequence.MaxValue
+                || property.ClrType == typeof(int) && (sequence.StartValue > int.MaxValue || (sequence.MaxValue ?? long.MaxValue) > int.MaxValue))
+                return null;
+
+            var storeType = property.ClrType == typeof(int) ? "NUMBER(10)" : "NUMBER(19)";
+            return property.GetTableColumnMappings().All(mapping =>
+                mapping.TypeMapping.Converter is null && mapping.Column.ComputedColumnSql is null
+                && mapping.Column.DefaultValueSql == defaultSql
+                && string.Equals(mapping.Column.StoreType, storeType, StringComparison.OrdinalIgnoreCase)
+                && (sequence.Schema is not null || mapping.Column.Table.Schema is null)) ? sequence : null;
         }
 
         internal static ISequence? FindHiLoSequence(IProperty property)

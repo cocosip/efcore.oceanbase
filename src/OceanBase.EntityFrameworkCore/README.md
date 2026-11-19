@@ -625,9 +625,26 @@ TPC (`UseTpcMappingStrategy`) has a locally tested schema/migrations/query/CRUD 
 Concrete tables repeat inherited columns; abstract types have no table. Use application-assigned keys
 (`ValueGeneratedNever`, including composite keys) unique across the whole hierarchy, client-generated
 Guid keys without an integer store conversion, or a shared HiLo sequence on the hierarchy root.
-Independent table identities, computed keys (even with
-ValueGeneratedNever) and store-generated TPC keys are rejected in schema/migration
-generation and before the first write batch, including when saving unrelated entities in that model.
+Oracle also supports shared sequence defaults for ordinary tracked inserts. Configure the hierarchy root
+with `HasDefaultValueSql` and `ValueGeneratedOnAdd` and declare the sequence in the model.
+
+```csharp
+modelBuilder.HasSequence<long>("OrderNumbers").StartsAt(1);
+modelBuilder.Entity<Order>().UseTpcMappingStrategy().Property(order => order.Id)
+    .HasDefaultValueSql("\"OrderNumbers\".NEXTVAL").ValueGeneratedOnAdd();
+```
+
+Match the quoted sequence name in the default exactly. Include the quoted schema when declaring the
+sequence in an explicit schema or mapping any concrete table to one. The sequence must be ascending,
+positive and noncyclic. Use `NUMBER(19)` for Int64 or `NUMBER(10)` for Int32, with an explicit maximum
+of `int.MaxValue` or lower for Int32. Oracle returns the generated key for relationship fixup and dependent
+inserts. Reserve disjoint ranges across all concrete tables for explicit and seeded keys. Keep the physical
+defaults and sequence aligned with the model. Use an explicit data-preserving migration for changes to the
+shared sequence or its existing column defaults. Quiesce writers and preserve the allocation range across
+all concrete tables during that transition.
+
+MySQL supports assigned keys, client Guid and HiLo. Schema generation, migrations and the first write
+batch reject independent table identities, computed keys and generated defaults outside the Oracle profile.
 Base queries use EF's UNION ALL expansion; OfType, inherited filters, concrete collection Includes,
 nullable concurrency and automatic multi-entity transactions have local coverage. HiLo allocates disjoint
 keys in the tested profile. Cross-table uniqueness constraints, polymorphic foreign-key enforcement and
