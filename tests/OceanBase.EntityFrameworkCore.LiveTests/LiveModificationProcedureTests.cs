@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.EntityFrameworkCore.Storage;
 using Xunit;
 
@@ -29,15 +30,19 @@ namespace OceanBase.EntityFrameworkCore.LiveTests
                     var stamp = sql.DelimitIdentifier(nameof(Row.Stamp));
                     var affected = mode == OceanBaseCompatibilityMode.MySql
                         ? "SET p_rows = ROW_COUNT();" : "p_rows := SQL%ROWCOUNT;";
-                    var generated = mode == OceanBaseCompatibilityMode.MySql ? "SET p_stamp = p_value + 100;" : "p_stamp := p_value + 100;";
+                    var generated = mode == OceanBaseCompatibilityMode.MySql
+                        ? "SET p_stamp = COALESCE(p_stamp, p_value + 100);"
+                        : "p_stamp := COALESCE(p_stamp, p_value + 100);";
                     var created = new List<string>();
                     Exception? failure = null;
                     try
                     {
                         await Create("I", ["p_key", "p_value"], true,
-                            $"INSERT INTO {table} ({id}, {value}, {stamp}) VALUES (p_key, p_value, p_value + 100); {generated}");
+                            $"{generated} INSERT INTO {table} ({id}, {value}, {stamp}) VALUES (p_key, p_value, p_stamp);");
+                        var accumulated = mode == OceanBaseCompatibilityMode.MySql
+                            ? "SET p_stamp = p_stamp + p_value;" : "p_stamp := p_stamp + p_value;";
                         await Create("U", ["p_value", "p_key", "p_original"], true,
-                            $"UPDATE {table} SET {value}=p_value, {stamp}=p_value+100 WHERE {id}=p_key AND {value}=p_original; {affected} {generated} "
+                            $"{accumulated} UPDATE {table} SET {value}=p_value, {stamp}=p_stamp WHERE {id}=p_key AND {value}=p_original; {affected} "
                             + (mode == OceanBaseCompatibilityMode.MySql
                                 ? "IF p_value=13 THEN SET p_rows=2; END IF;"
                                 : "IF p_value=13 THEN p_rows:=2; END IF;"));
@@ -68,7 +73,7 @@ namespace OceanBase.EntityFrameworkCore.LiveTests
                         {
                             row.Value = 5;
                             Assert.Equal(1, await Save());
-                            Assert.Equal(105, row.Stamp);
+                            Assert.Equal(107, row.Stamp);
                             await transaction.RollbackAsync();
                         }
                         context.Database.AutoTransactionBehavior = AutoTransactionBehavior.WhenNeeded;
@@ -133,7 +138,11 @@ namespace OceanBase.EntityFrameworkCore.LiveTests
                         if (suffix != "I")
                             parameters.Add(mode == OceanBaseCompatibilityMode.MySql ? "OUT p_rows INT" : "p_rows OUT NUMBER");
                         if (returnsStamp)
-                            parameters.Add(mode == OceanBaseCompatibilityMode.MySql ? "OUT p_stamp INT" : "p_stamp OUT NUMBER");
+                        {
+                            parameters.Add(mode == OceanBaseCompatibilityMode.MySql
+                                ? "INOUT p_stamp INT"
+                                : "p_stamp IN OUT NUMBER");
+                        }
                         var declaration = mode == OceanBaseCompatibilityMode.MySql ? ") BEGIN " : ") AS BEGIN ";
                         var create = "CREATE PROCEDURE " + sql.DelimitIdentifier(name)
                             + " (" + string.Join(", ", parameters) + declaration + body + " END";
@@ -154,17 +163,18 @@ namespace OceanBase.EntityFrameworkCore.LiveTests
                 var row = modelBuilder.Entity<Row>().ToTable(table);
                 row.Property(value => value.Id).ValueGeneratedNever();
                 row.Property(value => value.Value).IsConcurrencyToken();
-                row.Property(value => value.Stamp).HasDefaultValue(0).ValueGeneratedOnAddOrUpdate();
+                row.Property(value => value.Stamp).HasDefaultValue(0).ValueGeneratedOnAddOrUpdate()
+                    .Metadata.SetBeforeSaveBehavior(PropertySaveBehavior.Save);
                 row.InsertUsingStoredProcedure(table + "I", procedure => procedure
                     .HasParameter(value => value.Id, parameter => parameter.HasName("p_arg"))
                     .HasParameter(value => value.Value, parameter => parameter.HasName("P_ARG"))
-                    .HasParameter(value => value.Stamp, parameter => parameter.HasName("p_stamp").IsOutput()));
+                    .HasParameter(value => value.Stamp, parameter => parameter.HasName("p_stamp").IsInputOutput()));
                 row.UpdateUsingStoredProcedure(table + "U", procedure => procedure
                     .HasParameter(value => value.Value, parameter => parameter.HasName("p_value"))
                     .HasOriginalValueParameter(value => value.Id, parameter => parameter.HasName("p_key"))
                     .HasOriginalValueParameter(value => value.Value, parameter => parameter.HasName("p_original"))
                     .HasRowsAffectedParameter(parameter => parameter.HasName("p_rows"))
-                    .HasParameter(value => value.Stamp, parameter => parameter.HasName("p_stamp").IsOutput()));
+                    .HasOriginalValueParameter(value => value.Stamp, parameter => parameter.HasName("p_stamp").IsInputOutput()));
                 row.DeleteUsingStoredProcedure(table + "D", procedure => procedure
                     .HasOriginalValueParameter(value => value.Value, parameter => parameter.HasName("p_original"))
                     .HasOriginalValueParameter(value => value.Id, parameter => parameter.HasName("p_key"))

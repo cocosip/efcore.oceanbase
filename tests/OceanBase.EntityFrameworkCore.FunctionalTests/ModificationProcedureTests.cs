@@ -22,7 +22,7 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
                 .ReplaceService<IRelationalConnection, TransactionTests.TestConnection>()
                 .AddInterceptors(capture).Options);
             var connection = Assert.IsType<TransactionTests.NativeConnection>(context.Database.GetDbConnection());
-            var row = new Row { Id = 1, Value = 2 };
+            var row = new Row { Id = 1, Value = 2, Stamp = 4 };
             context.Attach(row);
             row.Value = 3;
 
@@ -31,9 +31,10 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
             Assert.Equal(CommandSource.SaveChanges, capture.Source);
             Assert.Equal(CommandType.StoredProcedure, capture.Type);
             Assert.Same(Assert.Single(connection.Transactions), capture.Transaction);
-            Assert.Equal(new[] { 3, 1, 2 }, capture.Inputs);
+            Assert.Equal(new[] { 3, 1, 2, 4 }, capture.Inputs);
             Assert.Equal(new[] { ParameterDirection.Input, ParameterDirection.Input,
-                ParameterDirection.Input, ParameterDirection.Output }, capture.Directions);
+                ParameterDirection.Input, ParameterDirection.Output, ParameterDirection.InputOutput }, capture.Directions);
+            Assert.Equal(5, row.Stamp);
         }
 
         private sealed class CaptureProcedure : DbCommandInterceptor
@@ -54,9 +55,10 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
                 Transaction = command.Transaction;
                 var parameters = command.Parameters.Cast<DbParameter>().ToArray();
                 Directions = parameters.Select(parameter => parameter.Direction).ToArray();
-                Inputs = parameters.Where(parameter => parameter.Direction == ParameterDirection.Input)
+                Inputs = parameters.Where(parameter => parameter.Direction is ParameterDirection.Input or ParameterDirection.InputOutput)
                     .Select(parameter => (int)parameter.Value!).ToArray();
                 Assert.Single(parameters, parameter => parameter.Direction == ParameterDirection.Output).Value = 1;
+                Assert.Single(parameters, parameter => parameter.Direction == ParameterDirection.InputOutput).Value = 5;
                 return InterceptionResult<int>.SuppressWithResult(-1);
             }
         }
@@ -68,11 +70,13 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
                 var row = modelBuilder.Entity<Row>();
                 row.Property(value => value.Id).ValueGeneratedNever();
                 row.Property(value => value.Value).IsConcurrencyToken();
+                row.Property(value => value.Stamp).ValueGeneratedOnAddOrUpdate();
                 row.UpdateUsingStoredProcedure("UpdateRow", procedure => procedure
                     .HasParameter(value => value.Value)
                     .HasOriginalValueParameter(value => value.Id)
                     .HasOriginalValueParameter(value => value.Value)
-                    .HasRowsAffectedParameter());
+                    .HasRowsAffectedParameter()
+                    .HasOriginalValueParameter(value => value.Stamp, parameter => parameter.IsInputOutput()));
             }
         }
 
@@ -80,6 +84,7 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
         {
             public int Id { get; set; }
             public int Value { get; set; }
+            public int Stamp { get; set; }
         }
     }
 }

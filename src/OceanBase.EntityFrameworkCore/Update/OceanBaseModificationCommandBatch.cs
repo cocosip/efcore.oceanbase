@@ -131,15 +131,17 @@ namespace OceanBase.EntityFrameworkCore.Update
             foreach (var column in columns.OrderBy(column => ((IStoreStoredProcedureParameter)column.Column!).Position))
             {
                 var metadata = (IStoreStoredProcedureParameter)column.Column!;
-                if (metadata.Direction is not (ParameterDirection.Input or ParameterDirection.Output))
-                {
-                    throw new NotSupportedException("OceanBase stored-procedure mappings support input and output parameters.");
-                }
-
                 object? input = null;
-                if (metadata.Direction == ParameterDirection.Input)
+                if (metadata.Direction is ParameterDirection.Input or ParameterDirection.InputOutput)
                 {
-                    input = column.UseOriginalValue ? column.OriginalValue : column.Value;
+                    if (column.UseOriginalValue)
+                    {
+                        input = column.OriginalValue;
+                    }
+                    else if (column.UseCurrentValue)
+                    {
+                        input = column.Value;
+                    }
                 }
                 // The connector binds procedure arguments by position.
                 var name = "ob_arg_" + metadata.Position;
