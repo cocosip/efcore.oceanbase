@@ -134,8 +134,8 @@ namespace OceanBase.EntityFrameworkCore.LiveTests
                     Assert.Throws<InvalidOperationException>(() => all.SingleOrDefault(row => row.Id <= 2));
                 }
                 var emptyValues = all.Where(row => row.Id < 0).Select(row => row.Value);
-                Assert.Throws<InvalidOperationException>(() => emptyValues.FirstOrDefault(-99));
-                Assert.Throws<InvalidOperationException>(() => emptyValues.SingleOrDefault(-99));
+                Assert.Equal(-99, emptyValues.FirstOrDefault(-99));
+                Assert.Equal(-99, emptyValues.SingleOrDefault(-99));
                 Assert.Equal(Seed(), await List(all, async));
                 Assert.Empty(context.ChangeTracker.Entries());
             });
