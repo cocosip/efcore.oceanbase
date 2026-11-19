@@ -570,7 +570,7 @@ namespace OceanBase.EntityFrameworkCore.LiveTests
                     }
                     foreach (var value in new[] { double.MaxValue, -double.MaxValue })
                     {
-                        stage(name + " extreme finite literals (parameter transport remains B-01)");
+                        stage(name + " extreme finite literals");
                         await Check(context, async, Expression.Lambda<Func<Row, TimeOnly?>>(Expression.Convert(
                             Expression.Call(source, method, Expression.Constant(value)), typeof(TimeOnly?)), row),
                             seed => seed.Clock.HasValue ? Expected(seed.Clock.Value, value) : null);

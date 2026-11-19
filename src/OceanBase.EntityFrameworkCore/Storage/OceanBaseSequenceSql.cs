@@ -6,13 +6,24 @@ namespace OceanBase.EntityFrameworkCore.Storage;
 internal static class OceanBaseSequenceSql
 {
     internal static string Create(string identifier, Type type, long start, int increment,
-        long? min, long? max, bool cyclic)
+        long? min, long? max, bool cyclic, bool noCache = true)
     {
         if (type != typeof(long))
             throw new NotSupportedException("OceanBase model sequences require the Int64 CLR type.");
         ValidateStart(start, increment, min, max);
         return "CREATE SEQUENCE " + identifier + " START WITH " + Number(start)
-            + Options(increment, min, max, cyclic) + " NOCACHE";
+            + Options(increment, min, max, cyclic) + (noCache ? " NOCACHE" : "");
+    }
+
+    internal static string AllocationOptions(bool oracle, object? cache, object? ordered, bool creating = false)
+    {
+        if (cache is not null && (!oracle || cache is not long count || count < 0 || count == 1)
+            || ordered is not null && (!oracle || ordered is not bool))
+            throw new NotSupportedException("Sequence cache/order annotations require valid Oracle allocation options.");
+        var allocation = creating ? " NOCACHE" : "";
+        if (cache is long size) allocation = size == 0 ? " NOCACHE" : " CACHE " + Number(size);
+        if (ordered is bool order) allocation += order ? " ORDER" : " NOORDER";
+        return allocation;
     }
 
     internal static void ValidateStart(long start, int increment, long? min, long? max)

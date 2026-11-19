@@ -149,7 +149,7 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
 
         [Theory]
         [MemberData(nameof(TransactionTests.Modes), MemberType = typeof(TransactionTests))]
-        public async Task Repeated_caller_parameter_preserves_the_documented_mode_boundary_and_recovers(
+        public async Task Repeated_caller_parameter_binds_each_position_and_recovers(
             OceanBaseCompatibilityMode mode, bool async)
         {
             var commands = new Commands { Results = EntityTable() };
@@ -159,21 +159,13 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
                 ? Raw + " WHERE RowKey > @named OR Maybe = @named"
                 : Raw + " WHERE RowKey > :named OR Maybe = :named";
             var query = context.Set<Row>().FromSqlRaw(sql, parameter).AsNoTracking();
-            if (mode == OceanBaseCompatibilityMode.MySql)
-            {
-                var error = await Assert.ThrowsAsync<NotSupportedException>(() => Run(query, async));
-                Assert.Contains("clone contract", error.Message);
-                Assert.Empty(commands.Items);
-                Assert.Empty(commands.Readers);
-                Assert.Equal(1, commands.Opens);
-            }
-            else
-            {
-                Assert.Equal(2, (await Run(query, async)).Count);
-                Assert.Equal(new object?[] { 3, 3 }, Assert.Single(commands.Items).Inputs);
-            }
+            Assert.Equal(2, (await Run(query, async)).Count);
+            Assert.Equal(new object?[] { 3, 3 }, Assert.Single(commands.Items).Inputs);
+            parameter.Value = 7;
+            Assert.Equal(2, (await Run(query, async)).Count);
+            Assert.Equal(new object?[] { 7, 7 }, commands.Items[^1].Inputs);
             Assert.Equal("named", parameter.ParameterName);
-            Assert.Equal(3, parameter.Value);
+            Assert.Equal(7, parameter.Value);
             AssertClean(context, commands);
             Assert.Equal(2, (await Run(context.Set<Row>().FromSqlRaw(Raw).AsNoTracking(), async)).Count);
             AssertClean(context, commands);

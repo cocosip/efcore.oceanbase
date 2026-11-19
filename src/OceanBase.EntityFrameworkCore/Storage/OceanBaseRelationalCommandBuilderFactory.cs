@@ -98,12 +98,20 @@ namespace OceanBase.EntityFrameworkCore.Storage
                         {
                             if (original.Value is Stream)
                                 throw new NotSupportedException("A stream cannot be consumed by repeated MySQL parameter positions.");
+                            if (original is OceanBaseConnector.OceanBaseParameter native)
+                            {
+                                ordered.Add(native.Clone());
+                                continue;
+                            }
                             using var scratch = new OceanBaseConnector.OceanBaseCommand();
-                            if (!AddMappedParameter(name, scratch, values))
-                                throw new NotSupportedException("Repeated caller-owned MySQL parameters require a public connector clone contract; use distinct parameter instances.");
-                            var repeated = scratch.Parameters[0];
-                            scratch.Parameters.Clear();
-                            ordered.Add(repeated);
+                            if (AddMappedParameter(name, scratch, values))
+                            {
+                                var repeated = scratch.Parameters[0];
+                                scratch.Parameters.Clear();
+                                ordered.Add(repeated);
+                            }
+                            else
+                                throw new NotSupportedException("Repeated MySQL parameters require OceanBaseParameter or distinct parameter instances.");
                         }
                     }
                     command.Parameters.Clear();

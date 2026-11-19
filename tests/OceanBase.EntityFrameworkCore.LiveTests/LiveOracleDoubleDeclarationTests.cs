@@ -68,7 +68,7 @@ public sealed class LiveOracleDoubleDeclarationTests
     [InlineData(false, true)]
     [InlineData(true, false)]
     [InlineData(true, true)]
-    public async Task Oracle_4422_native_column_declaration_does_not_resolve_parameter_range_loss(bool async, bool explicitType)
+    public async Task Native_double_parameters_and_literals_preserve_the_same_range(bool async, bool explicitType)
         => await WithTable(async, async (context, observer, stage) =>
         {
             stage("versioned native parameter versus literal storage");
@@ -84,22 +84,11 @@ public sealed class LiveOracleDoubleDeclarationTests
                 var row = new Row { Id = 1, Native = explicitType ? null : value, Explicit = explicitType ? value : null };
                 context.Add(row);
                 var writes = observer.ParameterWrites;
-                if (value == double.MinValue || value == double.MaxValue)
-                {
-                    var error = async ? await Assert.ThrowsAsync<DbUpdateException>(() => context.SaveChangesAsync())
-                        : Assert.Throws<DbUpdateException>(() => context.SaveChanges());
-                    Assert.Equal(1426, Assert.IsType<OceanBaseException>(error.InnerException).ServerErrorCode);
-                    Assert.Same(row, Assert.Single(error.Entries).Entity);
-                    context.ChangeTracker.Clear();
-                    Assert.False(async ? await context.Set<Row>().AnyAsync() : context.Set<Row>().Any());
-                }
-                else
-                {
-                    Assert.Equal(1, async ? await context.SaveChangesAsync() : context.SaveChanges());
-                    context.ChangeTracker.Clear();
-                    var stored = async ? await context.Set<Row>().SingleAsync() : context.Set<Row>().Single();
-                    Assert.Equal(value == 1E-120d ? value : 0d, explicitType ? stored.Explicit : stored.Native);
-                }
+                Assert.Equal(1, async ? await context.SaveChangesAsync() : context.SaveChanges());
+                context.ChangeTracker.Clear();
+                var stored = async ? await context.Set<Row>().SingleAsync() : context.Set<Row>().Single();
+                Assert.Equal(BitConverter.DoubleToInt64Bits(value),
+                    BitConverter.DoubleToInt64Bits((explicitType ? stored.Explicit : stored.Native)!.Value));
                 Assert.Equal(writes + 1, observer.ParameterWrites);
                 context.ChangeTracker.Clear();
                 await Execute(context, "DELETE FROM \"" + context.Table + "\"", async);
@@ -118,7 +107,7 @@ public sealed class LiveOracleDoubleDeclarationTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task Oracle_4422_parameter_precision_does_not_resolve_native_range_loss(bool async)
+    public async Task Native_double_parameter_precision_preserves_range(bool async)
         => await WithTable(async, async (context, _, stage) =>
         {
             stage("direct public Connector parameter precision control");
@@ -130,19 +119,9 @@ public sealed class LiveOracleDoubleDeclarationTests
             {
                 var sql = "INSERT INTO \"" + context.Table + "\" (\"Id\", \"Explicit\") VALUES (1, :p)";
                 var parameter = new OceanBaseParameter { ParameterName = "p", DbType = DbType.Double, Precision = precision, Value = value };
-                if (value == double.MaxValue)
-                {
-                    var error = async ? await Assert.ThrowsAsync<OceanBaseException>(() => context.Database.ExecuteSqlRawAsync(sql, parameter))
-                        : Assert.Throws<OceanBaseException>(() => context.Database.ExecuteSqlRaw(sql, parameter));
-                    Assert.Equal(1426, error.ServerErrorCode);
-                    Assert.False(async ? await context.Set<Row>().AnyAsync() : context.Set<Row>().Any());
-                }
-                else
-                {
-                    Assert.Equal(1, async ? await context.Database.ExecuteSqlRawAsync(sql, parameter) : context.Database.ExecuteSqlRaw(sql, parameter));
-                    var stored = async ? await context.Set<Row>().SingleAsync() : context.Set<Row>().Single();
-                    Assert.Equal(value == 1E-120d ? value : 0d, stored.Explicit);
-                }
+                Assert.Equal(1, async ? await context.Database.ExecuteSqlRawAsync(sql, parameter) : context.Database.ExecuteSqlRaw(sql, parameter));
+                var stored = async ? await context.Set<Row>().SingleAsync() : context.Set<Row>().Single();
+                Assert.Equal(BitConverter.DoubleToInt64Bits(value), BitConverter.DoubleToInt64Bits(stored.Explicit!.Value));
                 context.ChangeTracker.Clear();
                 await Execute(context, "DELETE FROM \"" + context.Table + "\"", async);
             }

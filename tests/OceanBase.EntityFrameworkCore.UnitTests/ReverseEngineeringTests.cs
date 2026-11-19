@@ -90,11 +90,13 @@ public sealed class ReverseEngineeringTests
         Assert.DoesNotContain("OceanBase:Identity", code.ContextFile.Code);
     }
 
-    [Fact]
-    public void MySql_json_catalog_column_keeps_its_store_type_and_maps_to_string()
+    [Theory]
+    [InlineData(OceanBaseCompatibilityMode.MySql)]
+    [InlineData(OceanBaseCompatibilityMode.Oracle)]
+    public void Json_catalog_column_keeps_its_store_type_and_maps_to_string(OceanBaseCompatibilityMode mode)
     {
         using var services = Services();
-        using var connection = new CatalogConnection(OceanBaseCompatibilityMode.MySql)
+        using var connection = new CatalogConnection(mode)
         {
             Rewrite = (name, rows) =>
             {

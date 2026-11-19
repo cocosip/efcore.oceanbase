@@ -123,11 +123,8 @@ public sealed class LiveNumericStorageTests
             stage("native floating endpoints/subnormals/nulls");
             var singles = new float?[] { null, 0f, float.MinValue, float.MaxValue, float.Epsilon,
                 -float.Epsilon, BitConverter.Int32BitsToSingle(0x00800000), MathF.BitIncrement(1f) };
-            // Oracle Double parameter extremes/underflow have a separate unresolved-boundary test.
-            var doubles = mode == OceanBaseCompatibilityMode.MySql
-                ? new double?[] { null, 0d, double.MinValue, double.MaxValue, double.Epsilon,
-                    -double.Epsilon, BitConverter.Int64BitsToDouble(0x0010000000000000), Math.BitIncrement(1d) }
-                : new double?[] { null, 0d, -1.25d, 12345.6789d, 1E-20d, -1E-20d, 1E20d, Math.BitIncrement(1d) };
+            var doubles = new double?[] { null, 0d, double.MinValue, double.MaxValue, double.Epsilon,
+                -double.Epsilon, BitConverter.Int64BitsToDouble(0x0010000000000000), Math.BitIncrement(1d) };
             for (var index = 0; index < singles.Length; index++)
             {
                 stage($"floating index={index}");
@@ -174,37 +171,22 @@ public sealed class LiveNumericStorageTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task Oracle_4422_double_parameter_extremes_fail_and_subnormals_lose_value(bool async)
+    public async Task Oracle_double_parameters_preserve_extremes_subnormals_and_converters(bool async)
         => await WithTable(OceanBaseCompatibilityMode.Oracle, async, async (context, observer, stage) =>
         {
-            stage("unresolved Oracle Double parameter boundary");
-            if (async) await context.Database.OpenConnectionAsync();
-            else context.Database.OpenConnection();
-            Assert.Contains("4.4.2.2", context.Database.GetDbConnection().ServerVersion, StringComparison.Ordinal);
-            foreach (var converted in new[] { false, true })
-            foreach (var value in new[] { double.MinValue, double.MaxValue })
-            {
-                var row = new Row { Id = 99, Double = converted ? null : value, ConvertedDouble = converted ? new Measurement(value) : null };
-                context.Add(row);
-                var writes = observer.ParameterWrites;
-                var error = async ? await Assert.ThrowsAsync<DbUpdateException>(() => context.SaveChangesAsync())
-                    : Assert.Throws<DbUpdateException>(() => context.SaveChanges());
-                Assert.Equal(1426, Assert.IsType<OceanBaseException>(error.InnerException).ServerErrorCode);
-                Assert.Same(row, Assert.Single(error.Entries).Entity);
-                Assert.Equal(writes + 1, observer.ParameterWrites);
-                context.ChangeTracker.Clear();
-                Assert.False(async ? await context.Set<Row>().AnyAsync() : context.Set<Row>().Any());
-            }
-            foreach (var value in new[] { double.Epsilon, -double.Epsilon, BitConverter.Int64BitsToDouble(0x0010000000000000) })
+            stage("Oracle Double parameter range and converter fidelity");
+            foreach (var value in new[] { double.MinValue, double.MaxValue, double.Epsilon, -double.Epsilon,
+                BitConverter.Int64BitsToDouble(0x0010000000000000) })
             {
                 var row = new Row { Id = 1, Double = value, ConvertedDouble = new Measurement(value) };
                 context.Add(row);
+                var writes = observer.ParameterWrites;
                 Assert.Equal(1, async ? await context.SaveChangesAsync() : context.SaveChanges());
+                Assert.Equal(writes + 1, observer.ParameterWrites);
                 context.ChangeTracker.Clear();
                 var stored = async ? await context.Set<Row>().SingleAsync() : context.Set<Row>().Single();
-                Assert.Equal(0d, stored.Double);
-                Assert.Equal(new Measurement(0d), stored.ConvertedDouble);
-                Assert.NotEqual(value, stored.Double);
+                Assert.Equal(BitConverter.DoubleToInt64Bits(value), BitConverter.DoubleToInt64Bits(stored.Double!.Value));
+                Assert.Equal(new Measurement(value), stored.ConvertedDouble);
                 context.Remove(stored);
                 Assert.Equal(1, async ? await context.SaveChangesAsync() : context.SaveChanges());
             }

@@ -148,7 +148,7 @@ public sealed class LiveScaffoldOnUpdateTests
                 Assert.Equal("é海", json.RootElement.GetProperty("name").GetString());
             });
 
-    private static Assembly Compile(ScaffoldedModel model)
+    internal static Assembly Compile(ScaffoldedModel model)
     {
         var references = ((string)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES")!).Split(Path.PathSeparator)
             .Concat(AppDomain.CurrentDomain.GetAssemblies().Where(assembly => !assembly.IsDynamic && assembly.Location.Length > 0)

@@ -39,7 +39,7 @@ public sealed class LiveAggregateQueryTests
 
     [Theory]
     [MemberData(nameof(NumericCases))]
-    public async Task Numeric_aggregates_keep_results_and_characterize_default_MySql_decimal_metadata_boundary(
+    public async Task Numeric_aggregates_keep_results_including_default_MySql_decimal(
         OceanBaseCompatibilityMode mode, bool async, Type type, bool faceted)
         => await (Task)typeof(LiveAggregateQueryTests).GetMethod(nameof(CheckNumeric), BindingFlags.Static | BindingFlags.NonPublic)!
             .MakeGenericMethod(type).Invoke(null, [mode, async, faceted])!;
@@ -66,15 +66,8 @@ public sealed class LiveAggregateQueryTests
             var summable = typeof(T) == typeof(int) || typeof(T) == typeof(long) || typeof(T) == typeof(float)
                 || typeof(T) == typeof(double) || typeof(T) == typeof(decimal);
             var defaultMySqlDecimal = mode == OceanBaseCompatibilityMode.MySql && typeof(T) == typeof(decimal) && !faceted;
-            if (defaultMySqlDecimal)
-            {
-                await MetadataFailure(() => Scalar<T?, T?>(values, "Sum", async));
-                await MetadataFailure(() => Scalar<T, T>(required, "Sum", async));
-                await MetadataFailure(() => Scalar<T?, T?>(values, "Average", async));
-                await MetadataFailure(() => Scalar<T, T>(required, "Average", async));
-                await DirectDecimalMetadataBoundary(context, async);
-            }
-            else if (summable)
+            if (defaultMySqlDecimal) await DirectDecimalMetadata(context, async);
+            if (summable)
             {
                 var sum = expected.Where(value => value.HasValue).Sum(value => Convert.ToDecimal(value!.Value));
                 Assert.Equal((T)Convert.ChangeType(sum, typeof(T)), await Scalar<T?, T?>(values, "Sum", async));
@@ -104,16 +97,8 @@ public sealed class LiveAggregateQueryTests
                 await Assert.ThrowsAsync<InvalidOperationException>(() => Scalar<T, T>(emptyRequired, "Max", async));
                 if (summable)
                 {
-                    if (defaultMySqlDecimal)
-                    {
-                        await MetadataFailure(() => Scalar<T?, T?>(absent, "Sum", async));
-                        await MetadataFailure(() => Scalar<T, T>(emptyRequired, "Sum", async));
-                    }
-                    else
-                    {
-                        Assert.Equal(default(T), await Scalar<T?, T?>(absent, "Sum", async));
-                        Assert.Equal(default(T), await Scalar<T, T>(emptyRequired, "Sum", async));
-                    }
+                    Assert.Equal(default(T), await Scalar<T?, T?>(absent, "Sum", async));
+                    Assert.Equal(default(T), await Scalar<T, T>(emptyRequired, "Sum", async));
                     if (typeof(T) == typeof(int) || typeof(T) == typeof(long))
                     {
                         Assert.Null(await Scalar<T?, double?>(absent, "Average", async));
@@ -166,7 +151,7 @@ public sealed class LiveAggregateQueryTests
             }
         });
 
-    private static async Task DirectDecimalMetadataBoundary(QueryContext context, bool async)
+    private static async Task DirectDecimalMetadata(QueryContext context, bool async)
     {
         if (async) await context.Database.OpenConnectionAsync();
         else context.Database.OpenConnection();
@@ -180,12 +165,11 @@ public sealed class LiveAggregateQueryTests
             await using var reader = async ? await command.ExecuteReaderAsync() : command.ExecuteReader();
             Assert.True(async ? await reader.ReadAsync() : reader.Read());
             Assert.Equal(aggregate == "SUM" ? 17m : 4.25m, decimal.Parse(reader.GetString(1), CultureInfo.InvariantCulture));
-            foreach (var read in new Func<object>[] { () => reader.GetValue(0), () => reader.GetProviderSpecificValue(0),
-                () => reader.GetFieldValue<OceanBaseDecimal>(0) })
-            {
-                var error = Assert.Throws<NotSupportedException>(read);
-                Assert.Equal("The declared decimal metadata exceeds the supported mode limits.", error.Message);
-            }
+            var expectedValue = aggregate == "SUM" ? 17m : 4.25m;
+            Assert.Equal(expectedValue, reader.GetDecimal(0));
+            Assert.Equal(expectedValue, Assert.IsType<OceanBaseDecimal>(reader.GetValue(0)).ToDecimal());
+            Assert.Equal(expectedValue, Assert.IsType<OceanBaseDecimal>(reader.GetProviderSpecificValue(0)).ToDecimal());
+            Assert.Equal(expectedValue, reader.GetFieldValue<OceanBaseDecimal>(0).ToDecimal());
             do { while (async ? await reader.ReadAsync() : reader.Read()) { } }
             while (async ? await reader.NextResultAsync() : reader.NextResult());
         }
@@ -376,12 +360,6 @@ public sealed class LiveAggregateQueryTests
         var expression = Expression.Call(method, query.Expression);
         return async ? await ((IAsyncQueryProvider)query.Provider).ExecuteAsync<Task<TResult>>(expression)
             : query.Provider.Execute<TResult>(expression);
-    }
-
-    private static async Task MetadataFailure(Func<Task> execute)
-    {
-        var error = await Assert.ThrowsAsync<NotSupportedException>(execute);
-        Assert.Equal("The declared decimal metadata exceeds the supported mode limits.", error.Message);
     }
 
     private static Task<T[]> Read<T>(IQueryable<T> query, bool async) => async ? query.ToArrayAsync() : Task.FromResult(query.ToArray());

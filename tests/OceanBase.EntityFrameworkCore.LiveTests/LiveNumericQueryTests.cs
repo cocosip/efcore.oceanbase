@@ -306,9 +306,7 @@ namespace OceanBase.EntityFrameworkCore.LiveTests
                     {
                         stage(property + "/" + name);
                         var method = typeof(Math).GetMethod(name, [type, type])!;
-                        if (mode == OceanBaseCompatibilityMode.MySql && property == nameof(Row.Decimal))
-                            await Assert.ThrowsAsync<NotSupportedException>(() => CheckCall(context, async, method, property, [1m], true));
-                        else await CheckCall(context, async, method, property, [Convert.ChangeType(1, type)], true);
+                        await CheckCall(context, async, method, property, [Convert.ChangeType(1, type)], true);
                     }
                     stage(property + "/Clamp");
                     await CheckCall(context, async, typeof(Math).GetMethod("Clamp", [type, type, type])!, property,
@@ -326,7 +324,7 @@ namespace OceanBase.EntityFrameworkCore.LiveTests
                 {
                     I = EF.Functions.Least(row.Int32, 1), L = EF.Functions.Greatest(row.Int64, 1L),
                     F = EF.Functions.Least(row.Single, 1f), B = EF.Functions.Greatest(row.Double, 1d),
-                    D = EF.Functions.Least(row.Faceted, 1m), DMax = EF.Functions.Greatest(row.Faceted, 1m)
+                    D = EF.Functions.Least(row.Decimal, 1m), DMax = EF.Functions.Greatest(row.Decimal, 1m)
                 });
                 Assert.Contains("LEAST(", extrema.ToQueryString());
                 Assert.Contains("GREATEST(", extrema.ToQueryString());
@@ -336,12 +334,12 @@ namespace OceanBase.EntityFrameworkCore.LiveTests
                     L = row.Int64.HasValue ? (long?)Math.Max(row.Int64.Value, 1L) : null,
                     F = row.Single.HasValue ? (float?)Math.Min(row.Single.Value, 1f) : null,
                     B = row.Double.HasValue ? (double?)Math.Max(row.Double.Value, 1d) : null,
-                    D = row.Faceted.HasValue ? (decimal?)Math.Min(row.Faceted.Value, 1m) : null,
-                    DMax = row.Faceted.HasValue ? (decimal?)Math.Max(row.Faceted.Value, 1m) : null
+                    D = row.Decimal.HasValue ? (decimal?)Math.Min(row.Decimal.Value, 1m) : null,
+                    DMax = row.Decimal.HasValue ? (decimal?)Math.Max(row.Decimal.Value, 1m) : null
                 }), await Read(extrema, async));
                 if (mode == OceanBaseCompatibilityMode.MySql)
                 {
-                    stage("direct default Decimal extrema metadata boundary");
+                    stage("direct default Decimal extrema metadata and exact readers");
                     if (async) await context.Database.OpenConnectionAsync();
                     else context.Database.OpenConnection();
                     try
@@ -354,9 +352,10 @@ namespace OceanBase.EntityFrameworkCore.LiveTests
                             await using var reader = async ? await command.ExecuteReaderAsync() : command.ExecuteReader();
                             while (async ? await reader.ReadAsync() : reader.Read())
                             {
-                                Assert.Throws<NotSupportedException>(() => reader.GetValue(0));
-                                Assert.Throws<NotSupportedException>(() => reader.GetProviderSpecificValue(0));
-                                Assert.Throws<NotSupportedException>(() => reader.GetFieldValue<OceanBaseDecimal>(0));
+                                var exact = reader.GetFieldValue<OceanBaseDecimal>(0);
+                                Assert.Equal(exact, Assert.IsType<OceanBaseDecimal>(reader.GetValue(0)));
+                                Assert.Equal(exact, Assert.IsType<OceanBaseDecimal>(reader.GetProviderSpecificValue(0)));
+                                Assert.Equal(exact.ToDecimal(), reader.GetDecimal(0));
                             }
                             while (async ? await reader.NextResultAsync() : reader.NextResult())
                             {

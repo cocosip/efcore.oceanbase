@@ -95,9 +95,13 @@ namespace OceanBase.EntityFrameworkCore.Storage
 
         protected override void ConfigureParameter(DbParameter parameter)
         {
-            if (_mode == OceanBaseCompatibilityMode.Oracle)
+            var type = StoreTypeNameBase.Trim().ToUpperInvariant();
+            if (type == "JSON")
             {
-                var type = StoreTypeNameBase.Trim().ToUpperInvariant();
+                ((OceanBaseParameter)parameter).OceanBaseDbType = OceanBaseDbType.Json;
+            }
+            else if (_mode == OceanBaseCompatibilityMode.Oracle)
+            {
                 if (type is "NCHAR" or "NVARCHAR2")
                 {
                     ((OceanBaseParameter)parameter).OceanBaseDbType = type == "NCHAR"
@@ -162,7 +166,7 @@ namespace OceanBase.EntityFrameworkCore.Storage
 
             var type = match.Groups["type"].Value.ToUpperInvariant();
             var oracle = mode == OceanBaseCompatibilityMode.Oracle;
-            if (oracle ? type is not ("CHAR" or "VARCHAR2" or "NCHAR" or "NVARCHAR2" or "CLOB" or "NCLOB")
+            if (oracle ? type is not ("CHAR" or "VARCHAR2" or "NCHAR" or "NVARCHAR2" or "CLOB" or "NCLOB" or "JSON")
                 : type is not ("CHAR" or "VARCHAR" or "TINYTEXT" or "TEXT" or "MEDIUMTEXT" or "LONGTEXT" or "JSON"))
             {
                 throw new ArgumentException("The text store type is not supported in this compatibility mode.");
@@ -171,7 +175,7 @@ namespace OceanBase.EntityFrameworkCore.Storage
             var fixedLength = type is "CHAR" or "NCHAR";
             var bounded = fixedLength || type is "VARCHAR" or "VARCHAR2" or "NVARCHAR2";
             if (parameters.FixedLength != fixedLength
-                || oracle && parameters.Unicode != (type is "NCHAR" or "NVARCHAR2" or "NCLOB")
+                || oracle && parameters.Unicode != (type is "NCHAR" or "NVARCHAR2" or "NCLOB" or "JSON")
                 || type == "JSON" && (!parameters.Unicode || parameters.Size is not null)
                 || match.Groups["unit"].Success && (!oracle || type is not ("CHAR" or "VARCHAR2"))
                 || !bounded && match.Groups["size"].Success)

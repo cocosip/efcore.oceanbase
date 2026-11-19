@@ -1,6 +1,8 @@
+using System.Linq;
 using Microsoft.EntityFrameworkCore.Design;
 using Microsoft.EntityFrameworkCore.Design.Internal;
 using Microsoft.EntityFrameworkCore.Scaffolding;
+using Microsoft.EntityFrameworkCore.Scaffolding.Internal;
 using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
@@ -26,6 +28,11 @@ namespace OceanBase.EntityFrameworkCore.Design
                 .TryAdd<IRelationalAnnotationProvider, RelationalAnnotationProvider>()
                 .TryAddCoreServices();
 #pragma warning disable EF1001 // Provider extension seam for compiled model mapping construction.
+            serviceCollection.TryAddSingleton<IScaffoldingModelFactory, OceanBaseScaffoldingModelFactory>();
+            serviceCollection.TryAddSingleton<OceanBaseCSharpModelGenerator>();
+            serviceCollection.TryAddSingleton<IModelCodeGeneratorSelector>(services => new ModelCodeGeneratorSelector(
+                services.GetServices<IModelCodeGenerator>().Select(generator => generator.GetType() == typeof(CSharpModelGenerator)
+                    ? services.GetRequiredService<OceanBaseCSharpModelGenerator>() : generator)));
             new EntityFrameworkRelationalDesignServicesBuilder(serviceCollection)
                 .TryAdd<ICSharpRuntimeAnnotationCodeGenerator, OceanBaseRuntimeAnnotationCodeGenerator>()
                 .TryAdd<IDatabaseModelFactory, OceanBaseDatabaseModelFactory>()

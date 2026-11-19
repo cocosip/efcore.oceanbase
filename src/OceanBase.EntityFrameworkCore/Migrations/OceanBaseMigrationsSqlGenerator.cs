@@ -27,6 +27,7 @@ namespace OceanBase.EntityFrameworkCore.Migrations
         public override IReadOnlyList<MigrationCommand> Generate(IReadOnlyList<MigrationOperation> operations, IModel? model = null,
             MigrationsSqlGenerationOptions options = MigrationsSqlGenerationOptions.Default)
         {
+            operations = OrderExpressionIndexChanges(operations);
             if (!Oracle)
             {
                 var tablesWithDroppedIndexes = new HashSet<(string? Schema, string Table)>();
@@ -53,6 +54,7 @@ namespace OceanBase.EntityFrameworkCore.Migrations
                         if (column.DefaultValue is null && column.DefaultValueSql is null && column.ComputedColumnSql is null
                             && column.PropertyMappings.Any(m => m.Property.ValueGenerated is not (ValueGenerated.Never or ValueGenerated.OnUpdateSometimes)
                                 && !(column[OnUpdateSqlAnnotation] is not null && m.Property.ValueGenerated == ValueGenerated.OnUpdate)
+                                && !OceanBaseRelationalAnnotationProvider.IsIdentity(column)
                                 && !(m.Property.IsPrimaryKey() && (m.Property.ClrType == typeof(Guid)
                                     || m.Property.ValueGenerated == ValueGenerated.OnAdd
                                     && (m.TypeMapping.Converter?.ProviderClrType ?? m.Property.ClrType) is var type
@@ -78,6 +80,7 @@ namespace OceanBase.EntityFrameworkCore.Migrations
                     var builder = new MigrationCommandListBuilder(Dependencies);
                     builder.Append("ALTER SEQUENCE ").Append(Q(alter.Name, alter.Schema))
                         .Append(OceanBaseSequenceSql.Options(alter.IncrementBy, alter.MinValue, alter.MaxValue, alter.IsCyclic));
+                    AppendSequenceOptions(alter, builder);
                     AppendRestart(builder, restart.StartValue);
                     Finish(builder);
                     AddCommand(builder.GetCommandList()[0].CommandText, operation);
@@ -161,13 +164,15 @@ namespace OceanBase.EntityFrameworkCore.Migrations
                 case CreateSequenceOperation sequence:
                     ValidateScope(sequence.Schema);
                     builder.Append(OceanBaseSequenceSql.Create(Q(sequence.Name, sequence.Schema), sequence.ClrType,
-                        sequence.StartValue, sequence.IncrementBy, sequence.MinValue, sequence.MaxValue, sequence.IsCyclic));
+                        sequence.StartValue, sequence.IncrementBy, sequence.MinValue, sequence.MaxValue, sequence.IsCyclic, noCache: false));
+                    AppendSequenceOptions(sequence, builder, creating: true);
                     Finish(builder);
                     return;
                 case AlterSequenceOperation sequence:
                     ValidateScope(sequence.Schema);
                     builder.Append("ALTER SEQUENCE ").Append(Q(sequence.Name, sequence.Schema))
                         .Append(OceanBaseSequenceSql.Options(sequence.IncrementBy, sequence.MinValue, sequence.MaxValue, sequence.IsCyclic));
+                    AppendSequenceOptions(sequence, builder);
                     Finish(builder);
                     return;
                 case RestartSequenceOperation sequence:
@@ -206,7 +211,7 @@ namespace OceanBase.EntityFrameworkCore.Migrations
                         ValidateScope(foreignKey.PrincipalSchema);
                     }
                     var identities = table.Columns.Where(IsIdentity).ToArray();
-                    if (identities.Length > 1 || identities.Length == 1
+                    if (identities.Length > 1 || !Oracle && identities.Length == 1
                         && (table.PrimaryKey is null || !table.PrimaryKey.Columns.Contains(identities[0].Name)
                             || !Oracle && table.PrimaryKey.Columns[0] != identities[0].Name))
                         throw Unsupported("multiple identities or an identity outside the leading primary key");
@@ -232,6 +237,14 @@ namespace OceanBase.EntityFrameworkCore.Migrations
             builder.Append(" RESTART");
         }
 
+        private void AppendSequenceOptions(MigrationOperation operation, MigrationCommandListBuilder builder, bool creating = false)
+        {
+            var previous = (operation as AlterSequenceOperation)?.OldSequence;
+            var cache = operation[SequenceCacheAnnotation] ?? (previous?[SequenceCacheAnnotation] is null ? null : (object)0L);
+            var ordered = operation[SequenceOrderedAnnotation] ?? (previous?[SequenceOrderedAnnotation] is null ? null : (object)false);
+            builder.Append(OceanBaseSequenceSql.AllocationOptions(Oracle, cache, ordered, creating));
+        }
+
         private void ValidateScope(string? schema)
         {
             if (_options.SchemaManagementScope is { } scope && schema is not null && schema != scope)
@@ -249,6 +262,12 @@ namespace OceanBase.EntityFrameworkCore.Migrations
                 throw Unsupported("identity columns without required integer storage");
             if (column.DefaultValue is DBNull || column.DefaultValueSql is { } sql && string.IsNullOrWhiteSpace(sql))
                 throw Unsupported("unspecified defaults");
+            if (column[IdentityGenerationAnnotation] is { } generation
+                && (!Oracle || !IsIdentity(column) || generation is not ("ALWAYS" or "BY DEFAULT" or "BY DEFAULT ON NULL")))
+                throw Unsupported("this identity generation mode");
+            if (column[IdentityOptionsAnnotation] is { } identityOptions
+                && (!Oracle || !IsIdentity(column) || identityOptions is not string options || string.IsNullOrWhiteSpace(options)))
+                throw Unsupported("identity options without an Oracle identity column");
         }
 
         private static void ValidateAnnotations(MigrationOperation operation)
@@ -256,9 +275,17 @@ namespace OceanBase.EntityFrameworkCore.Migrations
             if (operation.GetAnnotations().Any(annotation => annotation.Name switch
                 {
                     IdentityAnnotation => operation is not ColumnOperation || annotation.Value is not bool,
+                    IdentityGenerationAnnotation or IdentityOptionsAnnotation => operation is not ColumnOperation || annotation.Value is not string,
+                    SequenceCacheAnnotation => operation is not SequenceOperation || annotation.Value is not long,
+                    SequenceOrderedAnnotation => operation is not SequenceOperation || annotation.Value is not bool,
                     OnUpdateSqlAnnotation => operation is not ColumnOperation || annotation.Value is not string,
                     IndexPrefixLengthsAnnotation => operation is not CreateIndexOperation || annotation.Value is not int[],
                     DatabaseCollationAnnotation => operation is not AlterDatabaseOperation || annotation.Value is not string,
+                    _ when annotation.Name.StartsWith(ExpressionIndexPrefix, StringComparison.Ordinal) =>
+                        operation is not (CreateTableOperation or AlterTableOperation)
+                        || annotation.Name.Length == ExpressionIndexPrefix.Length
+                        || annotation.Value is not string[] members || members.Length < 2
+                        || members[0] is not ("UNIQUE" or "NONUNIQUE") || members.Any(string.IsNullOrWhiteSpace),
                     _ => true
                 }))
                 throw Unsupported("unrecognized migration annotations");
@@ -276,6 +303,7 @@ namespace OceanBase.EntityFrameworkCore.Migrations
 
             if (!terminate) return;
             Finish(builder);
+            CreateExpressionIndexes(operation.Name, operation.Schema, operation.GetAnnotations(), builder);
             if (!Oracle) return;
 
             if (operation.Comment is not null)
@@ -296,6 +324,51 @@ namespace OceanBase.EntityFrameworkCore.Migrations
             builder.Append("ALTER TABLE ").Append(Q(operation.Name, operation.Schema))
                 .Append(" COMMENT = ").Append(CommentLiteral(operation.Comment));
             Finish(builder);
+        }
+
+        private IReadOnlyList<MigrationOperation> OrderExpressionIndexChanges(IReadOnlyList<MigrationOperation> operations)
+        {
+            var before = new List<MigrationOperation>();
+            var after = new List<MigrationOperation>();
+            foreach (var operation in operations.OfType<AlterTableOperation>())
+            {
+                ValidateAnnotations(operation);
+                var current = operation.GetAnnotations().Where(annotation => annotation.Name.StartsWith(ExpressionIndexPrefix, StringComparison.Ordinal))
+                    .ToDictionary(annotation => annotation.Name, annotation => annotation);
+                var previous = operation.OldTable.GetAnnotations().Where(annotation => annotation.Name.StartsWith(ExpressionIndexPrefix, StringComparison.Ordinal))
+                    .ToDictionary(annotation => annotation.Name, annotation => annotation);
+                var changed = current.Keys.Union(previous.Keys).Where(name => !StructuralComparisons.StructuralEqualityComparer.Equals(
+                    current.GetValueOrDefault(name)?.Value, previous.GetValueOrDefault(name)?.Value)).ToArray();
+                if (changed.Any(name => current.ContainsKey(name) && previous.GetValueOrDefault(name)?.Value is string[] { Length: > 0 } members && members[0] == "UNIQUE"))
+                    throw Unsupported("rebuilding a unique expression index with the same name; create its replacement with a distinct name before dropping it");
+                var preservingUniqueness = changed.Any(name => previous.GetValueOrDefault(name)?.Value is string[] { Length: > 0 } members && members[0] == "UNIQUE")
+                    && changed.Any(current.ContainsKey);
+                if (preservingUniqueness && operations.Any(candidate => candidate is ColumnOperation column && column.Table == operation.Name && column.Schema == operation.Schema
+                    || candidate is DropColumnOperation drop && drop.Table == operation.Name && drop.Schema == operation.Schema
+                    || candidate is RenameColumnOperation rename && rename.Table == operation.Name && rename.Schema == operation.Schema
+                    || candidate is RenameTableOperation table && table.NewName == operation.Name && table.NewSchema == operation.Schema))
+                    throw Unsupported("replacing unique expression indexes together with table/column changes; create the replacement in a separate migration before dropping the original");
+                foreach (var name in changed.Where(current.ContainsKey))
+                {
+                    var target = preservingUniqueness ? before : after;
+                    target.Add(new SqlOperation { Sql = ExpressionIndexSql(Dependencies.SqlGenerationHelper, Oracle, operation.Name, operation.Schema, current[name]), SuppressTransaction = true });
+                }
+                foreach (var name in changed.Where(previous.ContainsKey))
+                {
+                    if (!Oracle) throw Unsupported("MySQL expression indexes");
+                    before.Add(new SqlOperation { Sql = "DROP INDEX " + Q(name[ExpressionIndexPrefix.Length..], operation.Schema), SuppressTransaction = true });
+                }
+            }
+            return before.Concat(operations).Concat(after).ToArray();
+        }
+
+        private void CreateExpressionIndexes(string table, string? schema, IEnumerable<IAnnotation> annotations, MigrationCommandListBuilder builder)
+        {
+            foreach (var annotation in annotations.Where(annotation => annotation.Name.StartsWith(ExpressionIndexPrefix, StringComparison.Ordinal)))
+            {
+                builder.Append(ExpressionIndexSql(Dependencies.SqlGenerationHelper, Oracle, table, schema, annotation));
+                Finish(builder);
+            }
         }
 
         protected override void Generate(AddColumnOperation operation, IModel? model, MigrationCommandListBuilder builder,
@@ -332,7 +405,7 @@ namespace OceanBase.EntityFrameworkCore.Migrations
                 throw Unsupported("this ON UPDATE clause");
             builder.Append(Q(name)).Append(" ").Append(type);
             if (operation.Collation is { } collation) builder.Append(" COLLATE ").Append(Q(collation));
-            if (Oracle && IsIdentity(operation)) builder.Append(" GENERATED BY DEFAULT AS IDENTITY");
+            builder.Append(IdentityClause(Oracle, IsIdentity(operation), operation[IdentityGenerationAnnotation], operation[IdentityOptionsAnnotation]));
             DefaultValue(operation.DefaultValue, operation.DefaultValueSql, type, builder);
             if (Oracle && operation is AlterColumnOperation alter && operation.DefaultValue is null && operation.DefaultValueSql is null
                 && (alter.OldColumn.DefaultValue is not null || alter.OldColumn.DefaultValueSql is not null))
@@ -444,6 +517,8 @@ namespace OceanBase.EntityFrameworkCore.Migrations
                 && column.Collation == old.Collation && column.DefaultValueSql == old.DefaultValueSql
                 && StructuralComparisons.StructuralEqualityComparer.Equals(column.DefaultValue, old.DefaultValue)
                 && column.ComputedColumnSql == old.ComputedColumnSql && column.IsStored == old.IsStored
+                && Equals(column[IdentityGenerationAnnotation], old[IdentityGenerationAnnotation])
+                && Equals(column[IdentityOptionsAnnotation], old[IdentityOptionsAnnotation])
                 && Equals(column[OnUpdateSqlAnnotation], old[OnUpdateSqlAnnotation]);
 
         private static void ValidateOnUpdateBackfill(ColumnOperation operation)

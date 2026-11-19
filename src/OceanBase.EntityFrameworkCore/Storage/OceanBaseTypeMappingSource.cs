@@ -101,17 +101,17 @@ namespace OceanBase.EntityFrameworkCore.Storage
             var storeTypes = OceanBaseTypeMappings.For(_compatibilityMode);
             var oracle = _compatibilityMode == OceanBaseCompatibilityMode.Oracle;
 
-            if (!oracle && (clrType is null || clrType == typeof(string))
+            if ((clrType is null || clrType == typeof(string))
                 && string.Equals(mappingInfo.StoreTypeNameBase?.Trim(), "JSON", StringComparison.OrdinalIgnoreCase))
             {
                 if (mappingInfo.Precision is not null || mappingInfo.Scale is not null)
                 {
-                    throw new ArgumentException("MySQL JSON does not support precision or scale.");
+                    throw new ArgumentException("JSON does not support precision or scale.");
                 }
 
                 if (mappingInfo.IsKeyOrIndex || mappingInfo.IsUnicode == false)
                 {
-                    throw new ArgumentException("MySQL JSON requires Unicode text and cannot be a key or index column.");
+                    throw new ArgumentException("JSON requires Unicode text and cannot be a key or index column.");
                 }
 
                 return new OceanBaseStringTypeMapping(mappingInfo.StoreTypeName!, DbType.String, true,
@@ -149,8 +149,7 @@ namespace OceanBase.EntityFrameworkCore.Storage
 #pragma warning disable EF1001
         protected override RelationalTypeMapping? FindCollectionMapping(RelationalTypeMappingInfo info,
             Type modelType, Type? providerType, CoreTypeMapping? elementMapping)
-            => _compatibilityMode == OceanBaseCompatibilityMode.MySql
-                && string.Equals(info.StoreTypeNameBase?.Trim(), "JSON", StringComparison.OrdinalIgnoreCase)
+            => string.Equals(info.StoreTypeNameBase?.Trim(), "JSON", StringComparison.OrdinalIgnoreCase)
                 ? null
                 : base.FindCollectionMapping(info, modelType, providerType, elementMapping);
 #pragma warning restore EF1001

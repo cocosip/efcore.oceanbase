@@ -11,6 +11,8 @@ namespace OceanBase.EntityFrameworkCore.LiveTests
         [Theory]
         [InlineData(OceanBaseCompatibilityMode.MySql, false)]
         [InlineData(OceanBaseCompatibilityMode.MySql, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true)]
         public Task Explicit_json_column_round_trips_text_and_both_kinds_of_null(OceanBaseCompatibilityMode mode, bool async)
             => LiveStorageTable.WithTable<Context>(mode, async, false,
                 (options, table) => new Context(new DbContextOptionsBuilder<Context>(options)
@@ -18,13 +20,14 @@ namespace OceanBase.EntityFrameworkCore.LiveTests
                 async (context, _, stage) =>
                 {
                     stage("insert and read JSON text and SQL NULL");
-                    var row = new Row { Id = 1, Document = "{\"text\":\"é海\",\"missing\":null}" };
+                    var text = "é海🌊" + new string('x', 5000);
+                    var row = new Row { Id = 1, Document = JsonSerializer.Serialize(new { text, missing = (string?)null }) };
                     context.AddRange(row, new Row { Id = 2 });
                     Assert.Equal(2, async ? await context.SaveChangesAsync() : context.SaveChanges());
                     context.ChangeTracker.Clear();
                     var document = await Find(context, 1, async);
                     using var parsed = JsonDocument.Parse(document.Document!);
-                    Assert.Equal("é海", parsed.RootElement.GetProperty("text").GetString());
+                    Assert.Equal(text, parsed.RootElement.GetProperty("text").GetString());
                     Assert.Equal(JsonValueKind.Null, parsed.RootElement.GetProperty("missing").ValueKind);
                     Assert.Null((await Find(context, 2, async)).Document);
 
@@ -33,6 +36,13 @@ namespace OceanBase.EntityFrameworkCore.LiveTests
                     Assert.Equal(1, async ? await context.SaveChangesAsync() : context.SaveChanges());
                     context.ChangeTracker.Clear();
                     Assert.Equal("null", (await Find(context, 1, async)).Document);
+
+                    stage("update the stored JSON null to SQL NULL");
+                    var updated = await Find(context, 1, async);
+                    updated.Document = null;
+                    Assert.Equal(1, async ? await context.SaveChangesAsync() : context.SaveChanges());
+                    context.ChangeTracker.Clear();
+                    Assert.Null((await Find(context, 1, async)).Document);
                 });
 
         private static async Task<Row> Find(Context context, int id, bool async)

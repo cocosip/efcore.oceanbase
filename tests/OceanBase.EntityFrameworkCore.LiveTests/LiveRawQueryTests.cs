@@ -189,7 +189,7 @@ namespace OceanBase.EntityFrameworkCore.LiveTests
 
         [Theory]
         [MemberData(nameof(Cases))]
-        public Task Repeated_caller_parameter_preserves_native_ownership_and_the_mode_boundary(OceanBaseCompatibilityMode mode, bool async)
+        public Task Repeated_caller_parameter_preserves_native_ownership_and_refreshes_each_position(OceanBaseCompatibilityMode mode, bool async)
             => WithTable(mode, async, async (context, capture, stage) =>
             {
                 stage("repeated caller-owned native parameter");
@@ -197,20 +197,16 @@ namespace OceanBase.EntityFrameworkCore.LiveTests
                 var name = mode == OceanBaseCompatibilityMode.MySql ? "@floor" : ":floor";
                 var sql = Select(context) + " WHERE " + Quote(context, KeyColumn) + " > " + name + " OR " + Quote(context, "Maybe") + " = " + name;
                 var query = context.Set<Row>().FromSqlRaw(sql, parameter).OrderBy(row => row.Id);
-                var count = capture.Items.Count;
+                parameter.Value = 7;
+                Assert.Equal(new[] { 1 }, (await Read(query, async)).Select(row => row.Id));
+                parameter.Value = 2;
+                Assert.Equal(new[] { 3 }, (await Read(query, async)).Select(row => row.Id));
+                Assert.All(capture.Items[^1].Values, value => Assert.Equal(2, value));
                 if (mode == OceanBaseCompatibilityMode.MySql)
-                {
-                    var error = await Assert.ThrowsAsync<NotSupportedException>(() => Read(query, async));
-                    Assert.Contains("clone contract", error.Message, StringComparison.Ordinal);
-                    Assert.Equal(count, capture.Items.Count);
-                }
+                    Assert.Equal(2, capture.Items[^1].Values.Length);
                 else
                 {
-                    parameter.Value = 7;
-                    Assert.Equal(new[] { 1 }, (await Read(query, async)).Select(row => row.Id));
-                    parameter.Value = 2;
-                    Assert.Equal(new[] { 3 }, (await Read(query, async)).Select(row => row.Id));
-                    Assert.Equal(2, Assert.Single(capture.Items[^1].Values));
+                    Assert.Single(capture.Items[^1].Values);
                     Assert.Equal(2, capture.Items[^1].Sql.Split(name, StringSplitOptions.None).Length - 1);
                 }
                 Assert.Equal("floor", parameter.ParameterName);

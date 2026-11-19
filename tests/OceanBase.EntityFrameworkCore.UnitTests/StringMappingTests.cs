@@ -15,14 +15,25 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
 {
     public sealed class StringMappingTests
     {
-        [Fact]
-        public void MySql_json_rejects_incompatible_facets_and_Oracle_json_remains_unsupported()
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle)]
+        public void Scalar_json_uses_native_binding_and_rejects_incompatible_facets(OceanBaseCompatibilityMode mode)
         {
-            using var mySql = CreateContext(OceanBaseCompatibilityMode.MySql);
-            var source = Source(mySql);
+            using var context = CreateContext(mode);
+            var source = Source(context);
             var mapping = source.FindMapping(typeof(string), "JSON");
             Assert.NotNull(mapping);
             Assert.Equal(DbType.String, mapping.DbType);
+            using var command = new OceanBaseCommand();
+            var document = "{\"text\":\"海🌊\",\"null\":null}";
+            var parameter = Assert.IsType<OceanBaseParameter>(mapping.CreateParameter(command, "json", document));
+            Assert.Equal(OceanBaseDbType.Json, parameter.OceanBaseDbType);
+            Assert.Equal(document, parameter.Value);
+            Assert.Equal("null", mapping.CreateParameter(command, "jsonNull", "null").Value);
+            Assert.Equal(DBNull.Value, mapping.CreateParameter(command, "sqlNull", null).Value);
+            var clone = mapping.WithStoreTypeAndSize("JSON", null);
+            Assert.Equal(OceanBaseDbType.Json, Assert.IsType<OceanBaseParameter>(clone.CreateParameter(command, "clone", document)).OceanBaseDbType);
             Assert.Null(source.FindMapping(typeof(List<int>), "JSON"));
             Assert.Throws<ArgumentException>(() => source.FindMapping(typeof(string), "JSON", precision: 1));
             Assert.Throws<ArgumentException>(() => source.FindMapping(typeof(string), "JSON", scale: 1));
@@ -32,8 +43,6 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             Assert.Throws<ArgumentException>(() => source.FindMapping(typeof(string), "JSON", unicode: false));
             Assert.Throws<ArgumentException>(() => source.FindMapping(typeof(string), "JSON", keyOrIndex: true));
 
-            using var oracle = CreateContext(OceanBaseCompatibilityMode.Oracle);
-            Assert.Throws<ArgumentException>(() => Source(oracle).FindMapping(typeof(string), "JSON"));
         }
 
         [Theory]

@@ -1,7 +1,7 @@
 # OceanBase.EntityFrameworkCore
 
 Entity Framework Core 10 provider for OceanBase MySQL and Oracle compatibility modes, using the public
-OceanBaseConnector 0.3.1 API. The package targets .NET 10 and accepts EF Core 10 patch versions in `[10.0.0,11.0.0)`.
+OceanBaseConnector 0.4.0 API. The package targets .NET 10 and accepts EF Core 10 patch versions in `[10.0.0,11.0.0)`.
 Select the tenant's compatibility mode explicitly when configuring a context:
 
 ```csharp
@@ -28,27 +28,24 @@ single result set with at most one row. In MySQL mode, return it from the proced
 enable `Use Oracle Prepare Execute=true` and declare a final `OUT SYS_REFCURSOR` argument in the
 procedure DDL, omitting that argument from the EF mapping.
 
+MySQL text commands adapt named inputs to positional binds. Repeated caller-owned
+`OceanBaseParameter` inputs use the Connector's public `Clone()` API and retain their type and
+facets. A repeated or shared stream is rejected before execution; use an independent stream and
+parameter instance per position. Text-command parameters are Input-only. Stored procedures use
+their separate IN/OUT/INOUT binding path.
+
 This is a development provider. Local tests cover model/type mappings, SQL generation, intercepted query/write
 pipelines and package consumption. OceanBase 4.4.2.2 direct connections have narrow live query and bounded
 text/default/HasData/tracked-write coverage in both modes. Wider mapping, transaction and schema acceptance
 remains open. Passing these profiles does not establish release readiness or other deployments.
 
 Numeric acceptance includes all eight integer widths, nullable Boolean logic, exact decimal
-storage/facets/converters and native Single boundaries in both modes. MySQL Double boundaries also
-round-trip. Oracle Double parameters are **not accepted across the CLR range** with Connector 0.3.0
-on the tested 4.4.2.2 server: MinValue/MaxValue return 1426, and tested tiny nonzero values become
-zero. Direct Connector controls reproduce both behaviors, including explicit Prepare. Ordinary
-values and D-suffixed SQL literals have separate passing coverage; that does not establish safe
-Double parameter storage. This remains a Connector/server boundary requiring resolution before
-applications rely on those values; the provider does not silently substitute another carrier.
-
-Oracle CLR Double already defaults to `BINARY_DOUBLE`. Explicit `HasColumnType("BINARY_DOUBLE")`
-has the same tested parameter boundary; adding decimal precision is not a remedy for this native
-binary type. On the tested server, both declarations retain extrema and tiny values when written
-as D-suffixed literals, while Double parameters fail at extrema or lose tested values such as
-`1E-131` and `double.Epsilon`. Direct `DbType.Double` parameters with Precision 0 or 17 behave
-the same. These controls distinguish the parameter path from column scale without identifying
-whether the underlying cause belongs to the Connector or server.
+storage/facets/converters and native Single boundaries in both modes. Connector 0.4.0 enables
+Oracle binary Double parameter transport. The focused 4.4.2.2 regression covers CLR extrema,
+subnormals, `±1E-131`, ordinary values and converter-backed properties alongside D-suffixed
+literal controls. Oracle CLR Double defaults to `BINARY_DOUBLE`; explicit
+`HasColumnType("BINARY_DOUBLE")` uses the same carrier. Native binary floating types reject
+decimal precision facets. Server floating-point semantics still apply to arithmetic and signed zero.
 
 For a restricted decimal business domain, explicitly use a decimal property or a deliberate
 `HasConversion<decimal>().HasPrecision(18, 6)` mapping. The latter is tested for representable
@@ -73,11 +70,10 @@ MidpointRounding rules, and current captured digits/rules. Invalid options rejec
 execution; row-dependent options and unlisted signatures do not translate in predicates.
 Nullable same-carrier converters retain their stored-space arithmetic and apply the
 inverse once to results; they need not be equivalent to arithmetic in model space.
-With Connector 0.3.0 on tested MySQL 4.4.2.2, scalar LEAST/GREATEST over default
-DECIMAL(65,28) also fail public reader metadata validation. Explicit (18,6) has positive
-coverage only for that domain. The provider does not narrow default Decimal precision
-or replace numeric results with text to hide this boundary. Temporal query acceptance,
-wider converter/declaration combinations and other deployments remain open.
+Connector 0.4.0 supports the wide MySQL result metadata produced by scalar LEAST/GREATEST
+over default `DECIMAL(65,28)` operands. EF reads representable results through its existing
+CLR decimal mapping. Values outside CLR decimal's exact range raise a conversion error.
+Temporal query acceptance, wider converter/declaration combinations and other deployments remain open.
 
 Guid defaults use canonical 36-character text in MySQL and RAW(16) in Oracle. Binary Guid mappings
 use EF's `GuidToBytesConverter` / .NET `Guid.ToByteArray()` mixed-endian layout: the UUID
@@ -395,15 +391,29 @@ Supported scalar columns, keys, ordinary indexes, relationships and keyless view
 Unavailable behavior metadata produces design-time warnings requiring configuration review before writes or
 schema recreation. Known defaults with unavailable SQL use EF's `HasDefaultValue()` marker; unknown identity
 is not guessed from a key or sequence-looking default. This is a usable model scaffold, not a lossless DDL
-backup. Unsupported types and expression indexes reject explicitly. The Connector 0.3.1 catalog
-reports whether an Oracle column is an identity and omits its generation mode and sequence options.
-Review the scaffolded identity configuration before recreating the schema. Known MySQL BTREE prefix
+backup. Unsupported types and index kinds reject explicitly. Oracle identity definitions use
+Connector 0.4.0's public `GetOracleIdentityColumns` API. Supported Int32/Int64 columns preserve
+`ALWAYS`, `BY DEFAULT` or `BY DEFAULT ON NULL` and the server's sequence option SQL through
+the `OceanBase:IdentityGeneration` and `OceanBase:IdentityOptions` property annotations.
+This includes identity columns outside the primary key. Changes to these definitions require an
+explicit data-preserving migration. Known MySQL BTREE prefix
 indexes keep their member lengths, order and uniqueness through scaffolded C# and DDL. The
 `OceanBase:IndexPrefixLengths` annotation stores the lengths in
 index column order. A zero entry denotes a full column. Sort direction follows the catalog. OceanBase
 4.4.2.2 reports `ASC` for the tested prefix columns declared as `DESC`. A generated migration batch
 rejects creating a unique prefix index after dropping an index on the same table. Create the
 replacement first with a distinct name or use reviewed SQL that preserves uniqueness on failure.
+
+Oracle expression indexes preserve mixed ordinary/expression members, order and uniqueness in
+the table annotation `OceanBase:ExpressionIndex:<index-name>`. Its `string[]` value begins with
+`"UNIQUE"` or `"NONUNIQUE"`, followed by the native SQL for each member. Generated C#, relational
+models, create scripts and migrations preserve this annotation. Catalog expression recovery may
+require permission to read index DDL. The tested Oracle 4.4.2.2 server rejects descending index DDL.
+Replacing a unique expression index under the same name requires an explicit migration. A generated
+replacement with a distinct name is created before the old unique index is dropped.
+Keep that replacement separate from table/column changes so a failed replacement retains the
+original uniqueness constraint. Ordinary expression index creation follows added columns, and
+index removal precedes dropped columns.
 
 On MySQL, scaffolding preserves known `ON UPDATE CURRENT_TIMESTAMP` clauses on non-key `DATETIME` and `TIMESTAMP`
 columns with matching fractional precision. EF reads these values back after updates and ignores
@@ -430,10 +440,11 @@ as a single JSON-text parameter and the server expands it with `JSON_TABLE`. Thi
 order for ordered operators, duplicates and SQL NULL elements. It requires server support for
 `JSON_TABLE` and follows the size limit for text parameters.
 
-MySQL mode supports an explicit `string` property configured with `.HasColumnType("json")` for schema
-creation, projection and whole-document writes through `SaveChanges`. OceanBase validates the JSON text.
+Both modes support an explicit `string` property configured with `.HasColumnType("json")` for schema
+creation, projection, reverse engineering and whole-document writes through `SaveChanges`.
+Parameters use the Connector's native `OceanBaseDbType.Json` declaration. OceanBase validates the JSON text.
 Use CLR `null` for SQL NULL and the string `"null"` for a JSON null document. JSON path translation,
-partial-document updates, mapped collections, JSON-owned types and Oracle native JSON remain outside this profile.
+partial-document updates, mapped collections and JSON-owned types remain outside this profile.
 
 Oracle collection roots normalize every parameter/constant UNION ALL branch to the
 common carrier; MySQL casts the first branch. Oracle variable non-LOB text uses
@@ -487,12 +498,10 @@ Aggregate acceptance includes native numeric extrema, integral AVG promotion, ch
 nullable/composite/converted group keys, filtered/distinct aggregates, HAVING/paging and ordered
 group collections/first entities in both modes. Converter aggregates operate on stored values and
 apply the result converter once; arbitrary converters need not preserve arithmetic or ordering.
-With Connector 0.3.0 on OceanBase 4.4.2.2 MySQL mode, **default `DECIMAL(65,28)` SUM/AVG results
-are not accepted**: populated results fail with `NotSupportedException` for decimal metadata;
-compensated SUM also fails for empty/all-null inputs. Direct public Connector reader APIs reproduce
-the rejection, while a text diagnostic projection confirms the server result. Explicit `(18,4)`
-aggregate tests pass for their declared domain; this does not change the default mapping or provide
-a full-range workaround. Oracle default NUMBER aggregates pass the tested result domain.
+With Connector 0.4.0, MySQL `SUM` and `AVG` over the default `DECIMAL(65,28)` mapping accept
+wide result metadata, including compensated empty/all-null SUM results. The mapping retains its
+declared precision. EF decimal materialization requires an exactly representable CLR decimal value.
+Oracle default NUMBER aggregates pass the tested result domain.
 
 Integer `&`, `|`, `^`, `~`, `<<` and `>>` have per-mode SQL translations, including nullable values and
 C# small-integer promotions. Bitwise enum storage must be numeric. Shift counts use C# width masking,
@@ -591,14 +600,22 @@ remain outside the verified scope.
 `HasSequence<long>` declares a standalone model sequence. Both compatibility modes support create-script
 generation, schema creation and migrations for creation, alteration, restart and drop. Oracle supports
 renaming an unqualified sequence in the current schema. MySQL sequence rename and qualified Oracle
-sequence rename are rejected. Sequence DDL uses Int64 bounds and `NOCACHE`. Keep an alteration and its
+sequence rename are rejected. Sequence DDL uses Int64 bounds and defaults to `NOCACHE`. Oracle
+sequence annotations `OceanBase:SequenceCache` (Int64, zero for NOCACHE) and
+`OceanBase:SequenceOrdered` (Boolean) preserve explicit cache/order settings. Keep an alteration and its
 restart in a consecutive group of sequence alterations and restarts so the provider can change the bounds
 and restart value in one statement. Sequence DDL commits implicitly.
 
 When the model declares a sequence, `EnsureCreated` treats an existing sequence in the selected namespace
 as existing schema. MySQL requires read access to `oceanbase.DBA_SEQUENCES` for this check.
-`CreateTables` creates the declared objects in the selected namespace. Sequence reverse engineering
-remains outside this profile.
+`CreateTables` creates the declared objects in the selected namespace. Oracle reverse engineering
+uses the public Connector sequence-start API and preserves the start after values have been consumed,
+increment, bounds, cycle, cache and ordering. Sequences outside the supported Int64 bounds or EF
+increment range are omitted with a warning. MySQL sequence reverse engineering remains deferred
+until a reliable declaration-start metadata contract is available.
+Sequence discovery covers each selected namespace, including when tables are explicitly selected.
+EF10 scaffolding preserves allocation annotations through provider design-time services. The
+private EF.Design build reference is excluded from the runtime package dependencies.
 
 Configure `UseOceanBaseHiLo` on an Int32 or Int64 primary key to allocate permanent keys from a shared
 model sequence in either compatibility mode. For TPC, configure the key on the hierarchy root.

@@ -14,6 +14,11 @@ namespace OceanBase.EntityFrameworkCore.Metadata
         : RelationalAnnotationProvider(dependencies)
     {
         internal const string IdentityAnnotation = "OceanBase:Identity";
+        internal const string IdentityGenerationAnnotation = "OceanBase:IdentityGeneration";
+        internal const string IdentityOptionsAnnotation = "OceanBase:IdentityOptions";
+        internal const string ExpressionIndexPrefix = "OceanBase:ExpressionIndex:";
+        internal const string SequenceCacheAnnotation = "OceanBase:SequenceCache";
+        internal const string SequenceOrderedAnnotation = "OceanBase:SequenceOrdered";
         internal const string OnUpdateSqlAnnotation = "OceanBase:OnUpdateSql";
         internal const string IndexPrefixLengthsAnnotation = "OceanBase:IndexPrefixLengths";
         internal const string DatabaseCollationAnnotation = "OceanBase:DatabaseCollation";
@@ -37,6 +42,25 @@ namespace OceanBase.EntityFrameworkCore.Metadata
 
         internal static string IndexPrefixSql(int[]? lengths, int position)
             => lengths is not null && lengths[position] > 0 ? "(" + lengths[position].ToString(CultureInfo.InvariantCulture) + ")" : "";
+
+        internal static string IdentityClause(bool oracle, bool identity, object? generation, object? options)
+        {
+            if (generation is null && options is null && (!oracle || !identity)) return "";
+            if (!oracle || !identity || generation is not (null or "ALWAYS" or "BY DEFAULT" or "BY DEFAULT ON NULL")
+                || options is not null && (options is not string text || string.IsNullOrWhiteSpace(text)))
+                throw new NotSupportedException("Identity definitions require a valid Oracle identity column.");
+            return " GENERATED " + ((string?)generation ?? "BY DEFAULT") + " AS IDENTITY" + (options is null ? "" : " " + (string)options);
+        }
+
+        internal static string ExpressionIndexSql(ISqlGenerationHelper sql, bool oracle, string table, string? schema, IAnnotation annotation)
+        {
+            if (!oracle || annotation.Name.Length == ExpressionIndexPrefix.Length || annotation.Value is not string[] members
+                || members.Length < 2 || members[0] is not ("UNIQUE" or "NONUNIQUE") || members.Any(string.IsNullOrWhiteSpace))
+                throw new NotSupportedException("Expression indexes require an Oracle table, a name, uniqueness and nonempty SQL members.");
+            return (members[0] == "UNIQUE" ? "CREATE UNIQUE INDEX " : "CREATE INDEX ")
+                + sql.DelimitIdentifier(annotation.Name[ExpressionIndexPrefix.Length..], schema) + " ON "
+                + sql.DelimitIdentifier(table, schema) + " (" + string.Join(", ", members.Skip(1)) + ")";
+        }
 
         internal static bool IsSupportedOnUpdate(string? sql, string? storeType, string? defaultSql)
         {
@@ -137,6 +161,12 @@ namespace OceanBase.EntityFrameworkCore.Metadata
             if (!designTime) yield break;
             if (IsIdentity(column))
                 yield return new Annotation(IdentityAnnotation, true);
+            foreach (var name in new[] { IdentityGenerationAnnotation, IdentityOptionsAnnotation })
+            {
+                var values = column.PropertyMappings.Select(mapping => mapping.Property[name]).Distinct().ToArray();
+                if (values.Length > 1) throw new NotSupportedException("Conflicting OceanBase identity definitions for " + column.Name + ".");
+                if (values.SingleOrDefault() is { } value) yield return new Annotation(name, value);
+            }
             var updates = column.PropertyMappings.Select(mapping => mapping.Property[OnUpdateSqlAnnotation])
                 .Where(value => value is not null).Distinct().ToArray();
             if (updates.Length > 1)
@@ -156,9 +186,29 @@ namespace OceanBase.EntityFrameworkCore.Metadata
             yield return new Annotation(IndexPrefixLengthsAnnotation, declared);
         }
 
+        public override IEnumerable<IAnnotation> For(ITable table, bool designTime)
+        {
+            if (!designTime) yield break;
+            foreach (var group in table.EntityTypeMappings.SelectMany(mapping => mapping.TypeBase.GetAnnotations())
+                .Where(annotation => annotation.Name.StartsWith(ExpressionIndexPrefix, StringComparison.Ordinal)).GroupBy(annotation => annotation.Name))
+            {
+                var first = group.First();
+                if (group.Any(annotation => !System.Collections.StructuralComparisons.StructuralEqualityComparer.Equals(annotation.Value, first.Value)))
+                    throw new NotSupportedException("Conflicting OceanBase expression index definitions for " + table.Name + ".");
+                yield return new Annotation(first.Name, first.Value);
+            }
+        }
+
+        public override IEnumerable<IAnnotation> For(ISequence sequence, bool designTime)
+        {
+            if (!designTime) yield break;
+            foreach (var name in new[] { SequenceCacheAnnotation, SequenceOrderedAnnotation })
+                if (sequence[name] is { } value) yield return new Annotation(name, value);
+        }
+
         internal static bool IsIdentity(IColumn column)
             => column.DefaultValue is null && column.DefaultValueSql is null && column.ComputedColumnSql is null
-                && column.PropertyMappings.Any(mapping => mapping.Property.IsPrimaryKey()
+                && column.PropertyMappings.Any(mapping => (mapping.Property.IsPrimaryKey() || mapping.Property[IdentityGenerationAnnotation] is not null)
                     && mapping.Property.ValueGenerated == ValueGenerated.OnAdd
                     && mapping.Property[HiLoSequenceName] is null
                     && !IsKeyPropagation(mapping)
