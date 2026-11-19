@@ -153,7 +153,7 @@ namespace OceanBase.EntityFrameworkCore.Storage
         {
             var storeType = parameters.StoreType.Trim();
             var match = Regex.Match(storeType,
-                @"\A(?<type>CHAR|VARCHAR|VARCHAR2|NCHAR|NVARCHAR2|TINYTEXT|TEXT|MEDIUMTEXT|LONGTEXT|CLOB|NCLOB)(?:\s*\(\s*(?<size>\d+)\s*(?<unit>CHAR|BYTE)?\s*\))?\z",
+                @"\A(?<type>CHAR|VARCHAR|VARCHAR2|NCHAR|NVARCHAR2|TINYTEXT|TEXT|MEDIUMTEXT|LONGTEXT|CLOB|NCLOB|JSON)(?:\s*\(\s*(?<size>\d+)\s*(?<unit>CHAR|BYTE)?\s*\))?\z",
                 RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
             if (!match.Success || parameters.Precision is not null || parameters.Scale is not null)
             {
@@ -163,7 +163,7 @@ namespace OceanBase.EntityFrameworkCore.Storage
             var type = match.Groups["type"].Value.ToUpperInvariant();
             var oracle = mode == OceanBaseCompatibilityMode.Oracle;
             if (oracle ? type is not ("CHAR" or "VARCHAR2" or "NCHAR" or "NVARCHAR2" or "CLOB" or "NCLOB")
-                : type is not ("CHAR" or "VARCHAR" or "TINYTEXT" or "TEXT" or "MEDIUMTEXT" or "LONGTEXT"))
+                : type is not ("CHAR" or "VARCHAR" or "TINYTEXT" or "TEXT" or "MEDIUMTEXT" or "LONGTEXT" or "JSON"))
             {
                 throw new ArgumentException("The text store type is not supported in this compatibility mode.");
             }
@@ -172,6 +172,7 @@ namespace OceanBase.EntityFrameworkCore.Storage
             var bounded = fixedLength || type is "VARCHAR" or "VARCHAR2" or "NVARCHAR2";
             if (parameters.FixedLength != fixedLength
                 || oracle && parameters.Unicode != (type is "NCHAR" or "NVARCHAR2" or "NCLOB")
+                || type == "JSON" && (!parameters.Unicode || parameters.Size is not null)
                 || match.Groups["unit"].Success && (!oracle || type is not ("CHAR" or "VARCHAR2"))
                 || !bounded && match.Groups["size"].Success)
             {

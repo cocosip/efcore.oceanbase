@@ -14,7 +14,7 @@ explicitly unsupported features, dependencies, and capabilities to confirm. Pre-
 - The current known unavailable/rejected capabilities are based on the code and package README. Supporting every BCL method is not an implicit Provider commitment.
   Add newly discovered valid requirements to their owning row or give them a new stable ID. Rejection of invalid inputs or malformed models/catalogs is validation, not a missing feature.
 
-Current counts: 50 G records (0 Not started, 0 In development, 27 Implemented, 2 Blocked, 20 Unsupported, 1 Deferred). The inventory also retains 2 Implemented F records, 10 external dependencies (B-01 through B-09 and C-03), 1 Blocked and 2 To confirm capability investigations, and 4 Deferred D groups.
+Current counts: 50 G records (0 Not started, 0 In development, 27 Implemented, 2 Blocked, 20 Unsupported, 1 Deferred). The inventory also retains 2 Implemented F records, 11 external dependencies (B-01 through B-10 and C-03), 1 Blocked and 2 To confirm capability investigations, and 4 Deferred D groups.
 
 ## Development order
 
@@ -129,6 +129,7 @@ The Provider must not bypass them by changing the wire protocol, narrowing mappi
 | B-07 | SQL-01 | Oracle | Blocked | Identifiers containing embedded double quotes return 600 for EF/direct CREATE or SELECT; backtick-only/ordinary name controls succeed; do not change correct escaping to conceal server behavior | Server; recheck by version |
 | B-08 | QRY-03 | MySQL | Blocked | Collection roots associated with bounded/fixed text properties produce collation error 1267; require an equivalent collation approach, without truncating through a narrower CAST or changing comparison rules | Provider SQL + Server |
 | B-09 | SQL-02/DEF-06 | MySQL | Unsupported | Current Provider command adaptation supports only Input; repeated streams also cannot be safely reused; Output/InputOutput/ReturnValue require public driver contracts and explicit Provider integration | Provider + Connector |
+| B-10 | DEF-04 | Oracle | Blocked | Connector 0.3.1 accepts text parameters for writes to native JSON columns. Binding `OceanBaseDbType.Json` and reading a native JSON column with either `GetValue` or `GetString` throw `NotSupportedException`. Establish a public native JSON reader and binding contract, then verify EF writes, reads and NULL semantics | Connector public API |
 | C-03 | DEF-02 | Oracle | Blocked | Connector 0.3.1 exposes `IS_IDENTITY` in `GetSchema("Columns")`. The catalog lacks the generation mode and sequence options, so the Provider scaffolds `ValueGeneratedOnAdd` with a warning. Full fidelity requires public catalog fields for those facts and Provider mapping that preserves them in generated C# and DDL | Connector public catalog + Provider |
 
 ## Capability investigations
@@ -145,7 +146,7 @@ After investigation, record the result under Provider gaps, Connector/server dep
 
 | ID | Related feature group | Status | Unavailable functionality | Conditions for lifting deferral |
 | --- | --- | --- | --- | --- |
-| D-04 | DEF-04 | Deferred | Mapping/query/update for JSON, mapped primitive collections/arrays, complex/JSON-owned types and additional element types for single JSON parameter roots | Establish type/SQL contracts for each mapping and element shape. G-21 covers standalone signed-integer JSON parameters |
+| D-04 | DEF-04 | Deferred | Oracle native JSON columns, JSON path queries and partial-document updates, mapped primitive collections/arrays, complex/JSON-owned types and additional element types for single JSON parameter roots | Resolve B-10 for native Oracle columns and establish SQL/shape contracts for the remaining cases. DEF-04 covers MySQL scalar documents. G-21 covers standalone signed-integer JSON parameters |
 | D-05 | DEF-05 | Deferred | Provider integration for Spatial, XML, native enum, OBJECT, LOB locators, and REF CURSOR | Define Connector public capabilities and OceanBase type contracts; ordinary enum/CLOB/BLOB scalars are outside this group |
 | D-06 | DEF-06 | Deferred | Stored-procedure INSERT/UPDATE/DELETE mappings, HiLo and TPC key allocation. Standalone Int64 model sequence DDL is implemented in both modes | Establish parameter/return-value and sequence-based key contracts. Reverse engineering requires the original sequence start value, which Connector 0.3.1 does not expose through `GetSchema("Sequences")` |
 | D-10 | DEF-10 | Deferred | Full-text/vector/search functions and advanced batching optimizations | Target server versions, separate feature implementations, and performance goals |

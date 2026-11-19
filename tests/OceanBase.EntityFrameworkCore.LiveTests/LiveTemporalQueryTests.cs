@@ -254,17 +254,29 @@ namespace OceanBase.EntityFrameworkCore.LiveTests
                 await Check(context, async, row => (int?)(row.Stamp.HasValue ? row.Stamp.Value.Year : -1), row => row.Stamp?.Year ?? -1);
                 await Check(context, async, row => (long?)((row.Duration ?? TimeSpan.Zero).Ticks), row => (row.Duration ?? TimeSpan.Zero).Ticks);
                 await Check(context, async, row => (DateOnly?)(row.Day ?? new DateOnly(2024, 1, 1)).AddMonths(1), row => (row.Day ?? new DateOnly(2024, 1, 1)).AddMonths(1));
-                stage("unsupported temporal predicates reject before ADO");
                 var rows = context.Set<Row>();
-                IQueryable[] rejected = [rows.Where(row => row.Stamp!.Value.AddDays(1) > new DateTime(2000, 1, 1)),
-                    rows.Where(row => row.Clock!.Value.AddHours(1) > TimeOnly.MinValue),
-                    rows.Where(row => DateTimeOffset.Now > row.Zoned)];
+                stage("supported temporal arithmetic in predicates");
+                var day = new DateTime(2000, 1, 1);
+                await CheckPredicate(rows.Where(row => row.Stamp!.Value.AddDays(1) > day),
+                    Seed(mode).Where(row => row.Stamp?.AddDays(1) > day));
+                await CheckPredicate(rows.Where(row => row.Clock!.Value.AddHours(1) > TimeOnly.MinValue),
+                    Seed(mode).Where(row => row.Clock?.AddHours(1) > TimeOnly.MinValue));
+
+                stage("unsupported temporal predicates reject before ADO");
+                IQueryable[] rejected = [rows.Where(row => DateTimeOffset.Now > row.Zoned)];
                 if (mode == OceanBaseCompatibilityMode.MySql)
                     rejected = rejected.Concat(new IQueryable[] { rows.Where(row => row.Zoned!.Value.Offset > TimeSpan.Zero),
                         rows.Where(row => row.Zoned!.Value.TotalOffsetMinutes > 0), rows.Where(row => row.Zoned!.Value.Ticks > 0),
                         rows.Where(row => row.Zoned!.Value.DateTime > new DateTime(2000, 1, 1)) }).ToArray();
                 foreach (var query in rejected) Assert.Throws<InvalidOperationException>(() => query.ToQueryString());
                 Assert.Equal(Seed(mode).Length, async ? await rows.CountAsync() : rows.Count());
+
+                async Task CheckPredicate(IQueryable<Row> query, IEnumerable<Row> expected)
+                {
+                    var ids = query.OrderBy(row => row.Id).Select(row => row.Id);
+                    Assert.Equal(expected.OrderBy(row => row.Id).Select(row => row.Id),
+                        async ? await ids.ToListAsync() : ids.ToList());
+                }
             });
 
         [Theory]

@@ -418,7 +418,12 @@ Explicit single-parameter collection mode, or `EF.Parameter` with collection mod
 supports captured Int32 and Int64 arrays/lists, including nullable elements. EF serializes the collection
 as a single JSON-text parameter and the server expands it with `JSON_TABLE`. This path preserves element
 order for ordered operators, duplicates and SQL NULL elements. It requires server support for
-`JSON_TABLE` and follows the size limit for text parameters. It does not map stored JSON or collection columns.
+`JSON_TABLE` and follows the size limit for text parameters.
+
+MySQL mode supports an explicit `string` property configured with `.HasColumnType("json")` for schema
+creation, projection and whole-document writes through `SaveChanges`. OceanBase validates the JSON text.
+Use CLR `null` for SQL NULL and the string `"null"` for a JSON null document. JSON path translation,
+partial-document updates, mapped collections, JSON-owned types and Oracle native JSON remain outside this profile.
 
 Oracle collection roots normalize every parameter/constant UNION ALL branch to the
 common carrier; MySQL casts the first branch. Oracle variable non-LOB text uses

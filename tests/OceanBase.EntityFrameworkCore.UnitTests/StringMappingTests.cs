@@ -15,6 +15,27 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
 {
     public sealed class StringMappingTests
     {
+        [Fact]
+        public void MySql_json_rejects_incompatible_facets_and_Oracle_json_remains_unsupported()
+        {
+            using var mySql = CreateContext(OceanBaseCompatibilityMode.MySql);
+            var source = Source(mySql);
+            var mapping = source.FindMapping(typeof(string), "JSON");
+            Assert.NotNull(mapping);
+            Assert.Equal(DbType.String, mapping.DbType);
+            Assert.Null(source.FindMapping(typeof(List<int>), "JSON"));
+            Assert.Throws<ArgumentException>(() => source.FindMapping(typeof(string), "JSON", precision: 1));
+            Assert.Throws<ArgumentException>(() => source.FindMapping(typeof(string), "JSON", scale: 1));
+            Assert.Throws<ArgumentException>(() => source.FindMapping(typeof(string), "JSON(50)"));
+            Assert.Throws<ArgumentException>(() => source.FindMapping(typeof(string), "JSON", size: 50));
+            Assert.Throws<ArgumentException>(() => source.FindMapping(typeof(string), "JSON", fixedLength: true));
+            Assert.Throws<ArgumentException>(() => source.FindMapping(typeof(string), "JSON", unicode: false));
+            Assert.Throws<ArgumentException>(() => source.FindMapping(typeof(string), "JSON", keyOrIndex: true));
+
+            using var oracle = CreateContext(OceanBaseCompatibilityMode.Oracle);
+            Assert.Throws<ArgumentException>(() => Source(oracle).FindMapping(typeof(string), "JSON"));
+        }
+
         [Theory]
         [InlineData("CHAR(32)")]
         [InlineData("VARCHAR(32)")]

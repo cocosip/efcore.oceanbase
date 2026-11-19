@@ -295,7 +295,7 @@ namespace OceanBase.EntityFrameworkCore.LiveTests
                     var expectedPositive = seed.Where(row => Membership(row.Bucket, input, relationalNulls) == true).Select(row => row.Id).ToArray();
                     Assert.Equal(expectedPositive, await Read(positive, async));
                     Assert.Equal(expectedPositive, await Read(listed, async));
-                    Assert.Throws<InvalidOperationException>(() => forced.ToQueryString());
+                    Assert.Equal(expectedPositive, await Read(forced, async));
                     Assert.Equal(seed.Where(row => Membership(row.Bucket, input, relationalNulls) == false).Select(row => row.Id), await Read(negative, async));
                 }
                 stage("inline null membership and explicit comparer rejection");
