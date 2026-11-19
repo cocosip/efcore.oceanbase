@@ -592,8 +592,24 @@ and restart value in one statement. Sequence DDL commits implicitly.
 
 When the model declares a sequence, `EnsureCreated` treats an existing sequence in the selected namespace
 as existing schema. MySQL requires read access to `oceanbase.DBA_SEQUENCES` for this check.
-`CreateTables` creates the declared objects in the selected namespace. Sequence reverse engineering,
-HiLo and sequence-backed entity key allocation remain outside this profile.
+`CreateTables` creates the declared objects in the selected namespace. Sequence reverse engineering
+remains outside this profile.
+
+Configure `UseOceanBaseHiLo` on an Int32 or Int64 primary key to allocate permanent keys from a shared
+model sequence in either compatibility mode. For TPC, configure the key on the hierarchy root.
+
+```csharp
+modelBuilder.HasSequence<long>("OrderNumbers").StartsAt(1).IncrementsBy(32);
+modelBuilder.Entity<Order>().Property(order => order.Id).UseOceanBaseHiLo("OrderNumbers");
+```
+
+EF obtains the first key of each block during tracking. Use `AddAsync` for asynchronous sequence access.
+The sequence must produce positive values, use a positive increment and have cycling disabled. The
+increment is also the block size. Each block allocation checks the catalog increment and cycle flag, so
+the account needs read access to the sequence metadata. Rollbacks and disposed contexts can leave gaps.
+Drain active contexts before restarting or changing a sequence used by HiLo. Reserve separate ranges
+for explicitly assigned or seeded keys. Keep the selected database or schema fixed for the lifetime of
+the context, including when using Oracle session commands to switch schemas.
 
 TPT (`UseTptMappingStrategy`, with a table for each mapped type) has a locally tested schema/query/write
 workflow in both modes. The root table generates an int/long identity once; intermediate and leaf tables store
@@ -607,14 +623,15 @@ and rollback remain unverified.
 
 TPC (`UseTpcMappingStrategy`) has a locally tested schema/migrations/query/CRUD profile in both modes.
 Concrete tables repeat inherited columns; abstract types have no table. Use application-assigned keys
-(`ValueGeneratedNever`, including composite keys) unique across the whole hierarchy, or client-generated
-Guid keys without an integer store conversion. Independent table identities, computed keys (even with
+(`ValueGeneratedNever`, including composite keys) unique across the whole hierarchy, client-generated
+Guid keys without an integer store conversion, or a shared HiLo sequence on the hierarchy root.
+Independent table identities, computed keys (even with
 ValueGeneratedNever) and store-generated TPC keys are rejected in schema/migration
 generation and before the first write batch, including when saving unrelated entities in that model.
 Base queries use EF's UNION ALL expansion; OfType, inherited filters, concrete collection Includes,
-nullable concurrency and automatic multi-entity transactions have local coverage. No sequence/range allocator
-or cross-table uniqueness/polymorphic FK enforcement is supplied. Native UNION typing, FKs and rollback
-remain unverified.
+nullable concurrency and automatic multi-entity transactions have local coverage. HiLo allocates disjoint
+keys in the tested profile. Cross-table uniqueness constraints, polymorphic foreign-key enforcement and
+broader native inheritance coverage remain outside this profile.
 
 Entity splitting (`SplitToTable`) and table splitting (related entities using the same `ToTable`) have a
 locally tested schema/migrations/query/CRUD profile in both modes. Only an entity's primary table generates

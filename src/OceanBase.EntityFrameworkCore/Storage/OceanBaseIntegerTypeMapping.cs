@@ -16,6 +16,7 @@ namespace OceanBase.EntityFrameworkCore.Storage
         public OceanBaseCompatibilityMode CompatibilityMode => _mode;
         private readonly decimal _minimum;
         private readonly decimal _maximum;
+        internal decimal Maximum => _maximum;
 
         public OceanBaseIntegerTypeMapping(string storeType, DbType dbType, OceanBaseCompatibilityMode mode,
             int? precision = null, int? scale = null, int? size = null, bool fixedLength = false)

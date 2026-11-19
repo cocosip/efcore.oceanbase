@@ -18,7 +18,8 @@ internal static class LiveStorageTable
 {
     internal static async Task WithTable<TContext>(OceanBaseCompatibilityMode mode, bool async, bool noBackslashEscapes,
         Func<DbContextOptions<TContext>, string, TContext> createContext,
-        Func<TContext, Commands, Action<string>, Task> run, string[]? tableSuffixes = null) where TContext : DbContext
+        Func<TContext, Commands, Action<string>, Task> run, string[]? tableSuffixes = null,
+        string? sequenceSuffix = null, Func<TContext, Task>? createObjects = null) where TContext : DbContext
     {
         if (Environment.GetEnvironmentVariable("OCEANBASE_RUN_LIVE_TESTS") != "1"
             || Environment.GetEnvironmentVariable("OCEANBASE_RUN_LIVE_SCHEMA_TESTS") != "1")
@@ -32,6 +33,7 @@ internal static class LiveStorageTable
             configured = new OceanBaseConnectionStringBuilder(configured) { UseOraclePrepareExecute = true }.ConnectionString;
         var table = "EFT_" + Guid.NewGuid().ToString("N")[..24];
         var tables = (tableSuffixes ?? [""]).Select(suffix => table + suffix).ToArray();
+        var sequence = sequenceSuffix is null ? null : table + sequenceSuffix;
         var observer = new Commands();
         var stage = "scope";
         Exception? failure = null;
@@ -58,11 +60,15 @@ internal static class LiveStorageTable
             var sqlHelper = context.GetService<ISqlGenerationHelper>();
             observer.CreateStatements = tables.ToDictionary(name => name,
                 name => "CREATE TABLE " + sqlHelper.DelimitIdentifier(name), StringComparer.Ordinal);
+            if (sequence is not null)
+                observer.CreateSequence = "CREATE SEQUENCE " + sqlHelper.DelimitIdentifier(sequence) + " ";
             stage = "CreateTables/defaults/HasData";
             var creator = context.GetService<IRelationalDatabaseCreator>();
-            if (async) await creator.CreateTablesAsync();
+            if (createObjects is not null) await createObjects(context);
+            else if (async) await creator.CreateTablesAsync();
             else creator.CreateTables();
             Assert.Equal(observer.CreateStatements.Count, observer.CreatedTables.Count);
+            Assert.Equal(sequence is not null, observer.CreatedSequence);
 
             await run(context, observer, value => stage = value);
         }
@@ -97,6 +103,26 @@ internal static class LiveStorageTable
                     cleanupFailures.Add(SafeFailure(mode, createdTable, "cleanup; inspect owned table", error, configured));
                 }
             }
+            if (sequence is not null && observer.CreatedSequence)
+            {
+                try
+                {
+                    await using var cleanup = new DbContext(new DbContextOptionsBuilder().UseOceanBase(configured, mode).Options);
+                    if (async) await cleanup.Database.OpenConnectionAsync();
+                    else cleanup.Database.OpenConnection();
+                    var drop = "DROP SEQUENCE " + cleanup.GetService<ISqlGenerationHelper>().DelimitIdentifier(sequence);
+                    if (async) await cleanup.Database.ExecuteSqlRawAsync(drop);
+                    else cleanup.Database.ExecuteSqlRaw(drop);
+                    var connection = cleanup.Database.GetDbConnection();
+                    using var catalog = async ? await connection.GetSchemaAsync("Sequences", [null, null, sequence])
+                        : connection.GetSchema("Sequences", [null, null, sequence]);
+                    Assert.Empty(catalog.Rows);
+                }
+                catch (Exception error)
+                {
+                    cleanupFailures.Add(SafeFailure(mode, sequence, "cleanup; inspect owned sequence", error, configured));
+                }
+            }
             if (cleanupFailures.Count != 0)
             {
                 if (failure is not null) cleanupFailures.Insert(0, failure);
@@ -128,6 +154,8 @@ internal static class LiveStorageTable
     {
         public Dictionary<string, string> CreateStatements { get; set; } = new(StringComparer.Ordinal);
         public List<string> CreatedTables { get; } = [];
+        public string? CreateSequence { get; set; }
+        public bool CreatedSequence { get; private set; }
         public int ParameterWrites { get; private set; }
 
         public override InterceptionResult<int> NonQueryExecuting(DbCommand command, CommandEventData eventData, InterceptionResult<int> result)
@@ -140,6 +168,8 @@ internal static class LiveStorageTable
             => ValueTask.FromResult(NonQueryExecuting(command, eventData, result));
         public override int NonQueryExecuted(DbCommand command, CommandExecutedEventData eventData, int result)
         {
+            if (CreateSequence is not null && command.CommandText.StartsWith(CreateSequence, StringComparison.Ordinal))
+                CreatedSequence = true;
             foreach (var (table, sql) in CreateStatements)
                 if (command.CommandText.StartsWith(sql + " (", StringComparison.Ordinal) && !CreatedTables.Contains(table))
                     CreatedTables.Add(table);

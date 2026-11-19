@@ -10,6 +10,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Query;
 using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.EntityFrameworkCore.Update;
+using Microsoft.EntityFrameworkCore.ValueGeneration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using OceanBase.EntityFrameworkCore.Metadata;
@@ -18,6 +19,7 @@ using OceanBase.EntityFrameworkCore.Migrations;
 using OceanBase.EntityFrameworkCore.Query;
 using OceanBase.EntityFrameworkCore.Storage;
 using OceanBase.EntityFrameworkCore.Update;
+using OceanBase.EntityFrameworkCore.ValueGeneration;
 using OceanBaseConnector;
 
 namespace OceanBase.EntityFrameworkCore.Internal
@@ -170,6 +172,7 @@ namespace OceanBase.EntityFrameworkCore.Internal
                 .TryAdd<IRelationalSqlTranslatingExpressionVisitorFactory, OceanBaseSqlTranslatingExpressionVisitorFactory>()
                 .TryAdd<IQueryTranslationPostprocessorFactory, OceanBaseQueryTranslationPostprocessorFactory>()
                 .TryAdd<IRelationalConnection, OceanBaseRelationalConnection>()
+                .TryAdd<IValueGeneratorSelector, OceanBaseValueGeneratorSelector>()
                 .TryAdd<IRelationalDatabaseCreator, OceanBaseDatabaseCreator>()
                 .TryAdd<IBatchExecutor, OceanBaseBatchExecutor>()
                 .TryAdd<IModificationCommandBatchFactory, OceanBaseModificationCommandBatchFactory>();

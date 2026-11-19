@@ -16,6 +16,8 @@ namespace OceanBase.EntityFrameworkCore.Metadata
         internal const string OnUpdateSqlAnnotation = "OceanBase:OnUpdateSql";
         internal const string IndexPrefixLengthsAnnotation = "OceanBase:IndexPrefixLengths";
         internal const string DatabaseCollationAnnotation = "OceanBase:DatabaseCollation";
+        internal const string HiLoSequenceName = "OceanBase:HiLoSequenceName";
+        internal const string HiLoSequenceSchema = "OceanBase:HiLoSequenceSchema";
 
         public override IEnumerable<IAnnotation> For(IRelationalModel model, bool designTime)
         {
@@ -56,14 +58,42 @@ namespace OceanBase.EntityFrameworkCore.Metadata
                 var clientGuid = property.ValueGenerated == ValueGenerated.OnAdd && property.ClrType == typeof(Guid)
                     && providerType != typeof(int) && providerType != typeof(long)
                     && !property.TryGetDefaultValue(out _) && property.GetDefaultValueSql() is null;
-                if (property.GetComputedColumnSql() is null && (property.ValueGenerated == ValueGenerated.Never || clientGuid))
+                if (FindHiLoSequence(property) is not null
+                    || (property.GetComputedColumnSql() is null && (property.ValueGenerated == ValueGenerated.Never || clientGuid)))
                     continue;
                 throw new NotSupportedException("TPC keys must be unique across the entire hierarchy. Configure "
                     + property.DeclaringType.DisplayName() + "." + property.Name
                     + " with ValueGeneratedNever and assign unique keys without a computed expression, "
-                    + "or use client-generated Guid keys without an integer store conversion. "
+                    + "or use HiLo or client-generated Guid keys without an integer store conversion. "
                     + "Independent table identities and store-generated TPC keys are not supported.");
             }
+        }
+
+        internal static ISequence? FindHiLoSequence(IProperty property)
+        {
+            if (property[HiLoSequenceName] is not string name) return null;
+
+            var propertyName = property.DeclaringType.DisplayName() + "." + property.Name;
+            if (!property.IsPrimaryKey() || property.ValueGenerated != ValueGenerated.OnAdd
+                || (property.ClrType != typeof(int) && property.ClrType != typeof(long))
+                || property.GetTypeMapping().Converter is not null || property.GetValueGeneratorFactory() is not null
+                || property.Sentinel is not (0 or 0L) || property.TryGetDefaultValue(out _)
+                || property.GetDefaultValueSql() is not null || property.GetComputedColumnSql() is not null)
+            {
+                throw new NotSupportedException("OceanBase HiLo requires an Int32 or Int64 primary-key property with "
+                    + "ValueGeneratedOnAdd, a zero sentinel, and no converter, custom generator or server-generated expression: " + propertyName);
+            }
+
+            var sequence = property.DeclaringType.Model.FindSequence(name, property[HiLoSequenceSchema] as string);
+            if (sequence is null || sequence.Type != typeof(long) || sequence.IncrementBy <= 0 || sequence.IsCyclic
+                || sequence.StartValue < 1 || sequence.MinValue is < 1
+                || (property.ClrType == typeof(int) && sequence.StartValue > int.MaxValue))
+            {
+                throw new NotSupportedException("OceanBase HiLo requires a declared ascending noncyclic Int64 sequence "
+                    + "that produces positive keys within the property range: " + propertyName);
+            }
+
+            return sequence;
         }
 
         public override IEnumerable<IAnnotation> For(IColumn column, bool designTime)
@@ -94,6 +124,7 @@ namespace OceanBase.EntityFrameworkCore.Metadata
             => column.DefaultValue is null && column.DefaultValueSql is null && column.ComputedColumnSql is null
                 && column.PropertyMappings.Any(mapping => mapping.Property.IsPrimaryKey()
                     && mapping.Property.ValueGenerated == ValueGenerated.OnAdd
+                    && mapping.Property[HiLoSequenceName] is null
                     && !IsKeyPropagation(mapping)
                     && (mapping.TypeMapping.Converter?.ProviderClrType ?? mapping.Property.ClrType) is var type
                     && (type == typeof(int) || type == typeof(long)));

@@ -135,7 +135,8 @@ namespace OceanBase.EntityFrameworkCore.Storage
                 if (property.ValueGenerated is not (ValueGenerated.Never or ValueGenerated.OnUpdateSometimes)
                     && column.DefaultValue is null && column.DefaultValueSql is null
                     && !(update is not null && property.ValueGenerated == ValueGenerated.OnUpdate)
-                    && !identity && !IsKeyPropagation(mapping) && !(property.IsPrimaryKey() && property.ClrType == typeof(Guid)))
+                    && !identity && !IsKeyPropagation(mapping) && FindHiLoSequence(property) is null
+                    && !(property.IsPrimaryKey() && property.ClrType == typeof(Guid)))
                 {
                     throw Unsupported("generated columns without an identity, default or computed expression");
                 }
