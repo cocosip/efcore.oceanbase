@@ -256,6 +256,7 @@ namespace OceanBase.EntityFrameworkCore.Storage
                 }
 
                 if (date) typeName = "DATE";
+                if (match.Groups["mysqlTimestamp"].Success) typeName = "TIMESTAMP";
                 var declaredPrecision = match.Groups["precision"].Success
                     ? OceanBaseTemporalTypeMapping.ReadFacet(match, "precision", 0) : (int?)null;
                 if (declaredPrecision is not null && info.Precision is not null && declaredPrecision != info.Precision)

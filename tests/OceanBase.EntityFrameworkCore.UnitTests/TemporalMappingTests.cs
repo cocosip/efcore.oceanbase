@@ -17,6 +17,7 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
         public static TheoryData<OceanBaseCompatibilityMode, Type, string> TemporalStorageCases => new()
         {
             { OceanBaseCompatibilityMode.MySql, typeof(DateTime), "DATETIME(3)" },
+            { OceanBaseCompatibilityMode.MySql, typeof(DateTime), "TIMESTAMP(3)" },
             { OceanBaseCompatibilityMode.MySql, typeof(DateTimeOffset), "DATETIME(3)" },
             { OceanBaseCompatibilityMode.MySql, typeof(DateOnly), "DATE" },
             { OceanBaseCompatibilityMode.MySql, typeof(TimeOnly), "TIME(3)" },
@@ -27,6 +28,22 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             { OceanBaseCompatibilityMode.Oracle, typeof(TimeOnly), "INTERVAL DAY(1) TO SECOND(3)" },
             { OceanBaseCompatibilityMode.Oracle, typeof(TimeSpan), "INTERVAL DAY(9) TO SECOND(3)" }
         };
+
+        [Fact]
+        public void MySql_timestamp_preserves_column_family_and_precision_without_enabling_offset_mapping()
+        {
+            using var context = CreateContext(OceanBaseCompatibilityMode.MySql);
+            var source = context.GetService<IRelationalTypeMappingSource>();
+            var implicitPrecision = source.FindMapping(typeof(DateTime), "timestamp")!;
+            Assert.Equal(0, implicitPrecision.Precision);
+            Assert.Equal("TIMESTAMP(3)", implicitPrecision.WithPrecisionAndScale(3, null).StoreType);
+            Assert.Equal("TIMESTAMP(6)", source.FindMapping(typeof(DateTime), " timestamp(3) ")!
+                .WithPrecisionAndScale(6, null).StoreType);
+            Assert.Equal("TIMESTAMP(6)", source.FindMapping(typeof(DateTime), "timestamp", precision: 6)!.StoreType);
+            Assert.Throws<ArgumentOutOfRangeException>(() => source.FindMapping(typeof(DateTime), "timestamp(7)"));
+            Assert.Throws<NotSupportedException>(() => source.FindMapping(typeof(DateTimeOffset), "timestamp(3)"));
+            Assert.Throws<NotSupportedException>(() => implicitPrecision.WithStoreTypeAndSize("datetime", null));
+        }
 
         [Theory]
         [MemberData(nameof(TemporalStorageCases))]

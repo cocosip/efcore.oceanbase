@@ -40,7 +40,7 @@ namespace OceanBase.EntityFrameworkCore.Metadata
             const string precision = @"(?:\((?<precision>[0-6])\))?\z";
             const string timestamp = @"\ACURRENT_TIMESTAMP" + precision;
             var update = Regex.Match(sql ?? "", timestamp, RegexOptions.CultureInvariant);
-            var store = Regex.Match(storeType ?? "", @"\ADATETIME" + precision, RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
+            var store = Regex.Match(storeType?.Trim() ?? "", @"\A(?:DATETIME|TIMESTAMP)" + precision, RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
             var defaultTimestamp = Regex.Match(defaultSql?.Trim() ?? "", timestamp, RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
             static string Precision(Match match) => match.Groups["precision"].Success ? match.Groups["precision"].Value : "0";
             return update.Success && store.Success && Precision(update) == Precision(store)

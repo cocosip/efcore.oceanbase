@@ -93,6 +93,12 @@ retain 100ns ticks. Query comparands and original concurrency values keep transp
 independently of column write facets. Oracle exact native results with subtick fractions,
 out-of-range durations or invalid clock/date-only values reject rather than silently truncate.
 
+Explicit MySQL `TIMESTAMP` columns map to `DateTimeKind.Unspecified` with fractional precision 0–6.
+OceanBase applies the session time zone on writes and reads and enforces its native range. Set the same
+session time zone for applications that need identical wall-clock values across connections. The default
+DateTime type remains `DATETIME(6)`. The DateTimeOffset mapping uses UTC DATETIME. Temporal LINQ member
+and method coverage on TIMESTAMP is limited to the signatures supported by the query translators.
+
 MySQL TIME accepts signed durations through exactly `838:59:59`, with fractional seconds
 below that endpoint. The provider rejects larger magnitudes for parameters, literals and
 writes: on the tested server, direct out-of-range TIME parameters such as `838:59:59.000001`
@@ -394,14 +400,13 @@ index column order. A zero entry denotes a full column. Sort direction follows t
 rejects creating a unique prefix index after dropping an index on the same table. Create the
 replacement first with a distinct name or use reviewed SQL that preserves uniqueness on failure.
 
-On MySQL, scaffolding preserves known `ON UPDATE CURRENT_TIMESTAMP` clauses on non-key `DATETIME`
+On MySQL, scaffolding preserves known `ON UPDATE CURRENT_TIMESTAMP` clauses on non-key `DATETIME` and `TIMESTAMP`
 columns with matching fractional precision. EF reads these values back after updates and ignores
 explicit assignments on update. A known insert default enables insert readback and also makes EF ignore
 explicit insert assignments. With no known default, the generated model writes the supplied insert value.
 Create scripts and migrations preserve the clause through the `OceanBase:OnUpdateSql` annotation.
 Schema recreation requires the SQL or value of any known default. Adding or making an update-only column
-required in an existing table requires an explicit backfill migration. MySQL `TIMESTAMP` is outside the current
-DateTime mapping. Oracle's catalog does not expose this behavior.
+required in an existing table requires an explicit backfill migration. Oracle's catalog does not expose this behavior.
 
 General query collection roots support all eight CLR integer types, decimal, Single, Double, nullable
 forms and integer-backed enums through scalar parameters or constants and SELECT/UNION ALL. Empty

@@ -79,13 +79,15 @@ namespace OceanBase.EntityFrameworkCore.Storage
                 var storeType = date ? "DATE" : typeof(T) == typeof(OceanBaseIntervalDayToSecond)
                     ? $"INTERVAL DAY({_leadingPrecision}) TO SECOND({precision})"
                     : _mode == OceanBaseCompatibilityMode.Oracle ? $"TIMESTAMP({precision})" + (typeof(T) == typeof(DateTimeOffset) ? " WITH TIME ZONE" : string.Empty)
-                    : typeof(T) == typeof(TimeSpan) ? $"TIME({precision})" : $"DATETIME({precision})";
+                    : $"{StoreTypeNameBase.Trim().ToUpperInvariant()}({precision})";
                 parameters = parameters.WithStoreTypeAndSize(storeType, parameters.Size);
             }
 
             var match = OceanBaseTemporalTypeMapping.MatchDeclaration(parameters.StoreType, _mode, date, duration,
                 typeof(T) == typeof(DateTimeOffset));
-            if (!match.Success)
+            var mysqlTimestamp = _mode == OceanBaseCompatibilityMode.MySql
+                && StoreTypeNameBase.Trim().Equals("TIMESTAMP", StringComparison.OrdinalIgnoreCase);
+            if (!match.Success || match.Groups["mysqlTimestamp"].Success != mysqlTimestamp)
             {
                 throw new NotSupportedException("The store declaration is incompatible with the current temporal transport.");
             }
@@ -238,7 +240,9 @@ namespace OceanBase.EntityFrameworkCore.Storage
                 : duration && oracle ? @"\AINTERVAL\s+DAY(?:\((?<days>\d+)\))?\s+TO\s+SECOND(?:\((?<precision>\d+)\))?\z"
                 : oracle ? zoned ? @"\ATIMESTAMP(?:\((?<precision>\d+)\))?\s+WITH\s+TIME\s+ZONE\z"
                     : @"\ATIMESTAMP(?:\((?<precision>\d+)\))?\z"
-                : duration ? @"\ATIME(?:\((?<precision>\d+)\))?\z" : @"\ADATETIME(?:\((?<precision>\d+)\))?\z";
+                : duration ? @"\ATIME(?:\((?<precision>\d+)\))?\z"
+                : zoned ? @"\ADATETIME(?:\((?<precision>\d+)\))?\z"
+                : @"\A(?:DATETIME|(?<mysqlTimestamp>TIMESTAMP))(?:\((?<precision>\d+)\))?\z";
             return Regex.Match(storeType.Trim(), pattern, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
         }
 

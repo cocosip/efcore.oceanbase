@@ -25,16 +25,18 @@ namespace OceanBase.EntityFrameworkCore.LiveTests;
 public sealed class LiveScaffoldOnUpdateTests
 {
     [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public Task Directory_on_update_and_json_round_trip_through_model_ddl_and_writes(bool async)
+    [InlineData(false, "DATETIME")]
+    [InlineData(true, "DATETIME")]
+    [InlineData(false, "TIMESTAMP")]
+    [InlineData(true, "TIMESTAMP")]
+    public Task Directory_on_update_and_json_round_trip_through_model_ddl_and_writes(bool async, string temporalType)
         => LiveStorageTable.WithTable<SourceContext>(OceanBaseCompatibilityMode.MySql, async, noBackslashEscapes: false,
             (options, table) => new SourceContext(new DbContextOptionsBuilder<SourceContext>(options)
                 .ReplaceService<IModelCacheKeyFactory, CacheKey>().Options, table), async (source, _, stage) =>
             {
                 stage("provision update-only and defaulted timestamps");
-                if (async) await source.Database.ExecuteSqlRawAsync(source.AddTimestampsSql);
-                else source.Database.ExecuteSqlRaw(source.AddTimestampsSql);
+                if (async) await source.Database.ExecuteSqlRawAsync(source.AddTimestampsSql(temporalType));
+                else source.Database.ExecuteSqlRaw(source.AddTimestampsSql(temporalType));
 
                 stage("scaffold table through Connector directory");
 #pragma warning disable EF1001
@@ -62,6 +64,8 @@ public sealed class LiveScaffoldOnUpdateTests
                 Assert.Equal("json", document.StoreType, ignoreCase: true);
                 var updated = catalog.Columns.Single(column => column.Name == "Updated");
                 var touched = catalog.Columns.Single(column => column.Name == "Touched");
+                Assert.Equal(temporalType + "(6)", updated.StoreType, ignoreCase: true);
+                Assert.Equal(temporalType + "(6)", touched.StoreType, ignoreCase: true);
                 Assert.Equal(ValueGenerated.OnUpdate, updated.ValueGenerated);
                 Assert.Equal(ValueGenerated.OnAddOrUpdate, touched.ValueGenerated);
                 Assert.Equal("CURRENT_TIMESTAMP(6)", updated["OceanBase:OnUpdateSql"]);
@@ -81,7 +85,9 @@ public sealed class LiveScaffoldOnUpdateTests
                 optionsBuilder.UseOceanBase(connection, OceanBaseCompatibilityMode.MySql);
                 using var context = (DbContext)Activator.CreateInstance(contextType, optionsBuilder.Options)!;
                 var currentModel = context.GetService<IDesignTimeModel>().Model;
-                var documentProperty = Assert.Single(currentModel.GetEntityTypes()).FindProperty("Document")!;
+                var entity = Assert.Single(currentModel.GetEntityTypes());
+                var documentProperty = entity.FindProperty("Document")!;
+                Assert.Equal(temporalType + "(6)", entity.FindProperty("Updated")!.GetColumnType(), ignoreCase: true);
                 Assert.Equal(typeof(string), documentProperty.ClrType);
                 Assert.Equal("json", documentProperty.GetColumnType(), ignoreCase: true);
                 Assert.True(documentProperty.IsNullable);
@@ -109,7 +115,7 @@ public sealed class LiveScaffoldOnUpdateTests
 
                 stage("insert with explicit update-only timestamp and defaulted timestamp");
                 var row = Activator.CreateInstance(Assert.Single(context.Model.GetEntityTypes()).ClrType)!;
-                var initial = new DateTime(2001, 1, 1);
+                var initial = new DateTime(2001, 1, 1).AddTicks(1234560);
                 var entry = context.Entry(row);
                 entry.Property("Id").CurrentValue = 1;
                 entry.Property("Amount").CurrentValue = 2;
@@ -117,9 +123,14 @@ public sealed class LiveScaffoldOnUpdateTests
                 entry.Property("Document").CurrentValue = "{\"name\":\"海\"}";
                 entry.State = EntityState.Added;
                 Assert.Equal(1, async ? await context.SaveChangesAsync() : context.SaveChanges());
-                Assert.Equal(initial, entry.Property("Updated").CurrentValue);
                 var inserted = Assert.IsType<DateTime>(entry.Property("Touched").CurrentValue);
                 Assert.True(inserted > initial);
+                if (async) await entry.ReloadAsync();
+                else entry.Reload();
+                var reloaded = Assert.IsType<DateTime>(entry.Property("Updated").CurrentValue);
+                Assert.Equal(DateTimeKind.Unspecified, reloaded.Kind);
+                Assert.Equal(initial, reloaded);
+                Assert.Equal(inserted, entry.Property("Touched").CurrentValue);
 
                 stage("update and read back both timestamps");
                 entry.Property("Amount").CurrentValue = 3;
@@ -155,9 +166,9 @@ public sealed class LiveScaffoldOnUpdateTests
     private sealed class SourceContext(DbContextOptions<SourceContext> options, string table) : DbContext(options)
     {
         public string Table => table;
-        public string AddTimestampsSql => $"ALTER TABLE `{table}` "
-            + "ADD COLUMN `Updated` DATETIME(6) NULL ON UPDATE CURRENT_TIMESTAMP(6), "
-            + "ADD COLUMN `Touched` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6)";
+        public string AddTimestampsSql(string temporalType) => $"ALTER TABLE `{table}` "
+            + $"ADD COLUMN `Updated` {temporalType}(6) NULL ON UPDATE CURRENT_TIMESTAMP(6), "
+            + $"ADD COLUMN `Touched` {temporalType}(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6)";
         public string DropScaffoldedColumnsSql => $"ALTER TABLE `{table}` DROP COLUMN `Updated`, DROP COLUMN `Touched`, DROP COLUMN `Document`";
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
