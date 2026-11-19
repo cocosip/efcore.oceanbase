@@ -26,6 +26,7 @@ namespace OceanBase.EntityFrameworkCore.Update
         private readonly List<(IColumnModification Column, DbParameter Parameter)> _outputs = [];
         private IRelationalCommand? _write;
         private IRelationalCommand? _read;
+        private DbParameter? _rowsAffected;
         private bool _complete;
         private bool _requiresTransaction;
         private bool _moreBatches;
@@ -53,9 +54,13 @@ namespace OceanBase.EntityFrameworkCore.Update
         {
             if (_complete) throw new InvalidOperationException("The command batch is already complete.");
             var command = _commands.Single();
-            if (command.StoreStoredProcedure is not null)
+            if (command.StoreStoredProcedure is { } procedure)
             {
-                throw new NotSupportedException("Stored-procedure update mappings are not supported yet.");
+                _write = BuildProcedure(command, procedure);
+                _requiresTransaction = true;
+                _complete = true;
+                _moreBatches = moreBatchesExpected;
+                return;
             }
 
             var sql = new StringBuilder();
@@ -108,6 +113,50 @@ namespace OceanBase.EntityFrameworkCore.Update
             _write = builder.Build();
             _complete = true;
             _moreBatches = moreBatchesExpected;
+        }
+
+        private IRelationalCommand BuildProcedure(IReadOnlyModificationCommand command, IStoreStoredProcedure procedure)
+        {
+            var columns = command.ColumnModifications;
+            if (procedure.ResultColumns.Any() || procedure.ReturnValue is not null
+                || command.EntityState != EntityState.Added && command.RowsAffectedColumn is not IStoreStoredProcedureParameter)
+            {
+                throw new NotSupportedException("OceanBase stored-procedure mappings require output parameters for generated values and for update/delete row counts.");
+            }
+
+            var builder = _dependencies.CommandBuilderFactory.Create();
+            builder.Append(_dependencies.SqlGenerationHelper.DelimitIdentifier(procedure.Name, procedure.Schema));
+            OceanBaseRelationalCommandBuilderFactory.ConfigureStoredProcedure(builder);
+            using var parameterCommand = new OceanBaseCommand();
+            foreach (var column in columns.OrderBy(column => ((IStoreStoredProcedureParameter)column.Column!).Position))
+            {
+                var metadata = (IStoreStoredProcedureParameter)column.Column!;
+                if (metadata.Direction is not (ParameterDirection.Input or ParameterDirection.Output))
+                {
+                    throw new NotSupportedException("OceanBase stored-procedure mappings support input and output parameters.");
+                }
+
+                object? input = null;
+                if (metadata.Direction == ParameterDirection.Input)
+                {
+                    input = column.UseOriginalValue ? column.OriginalValue : column.Value;
+                }
+                // The connector binds procedure arguments by position.
+                var name = "ob_arg_" + metadata.Position;
+                var parameter = column.TypeMapping!.CreateParameter(parameterCommand, name, input,
+                    column.IsNullable, metadata.Direction);
+                builder.AddRawParameter(name, parameter);
+                if (metadata == command.RowsAffectedColumn)
+                {
+                    _rowsAffected = parameter;
+                }
+                else if (column.IsRead)
+                {
+                    _outputs.Add((column, parameter));
+                }
+            }
+
+            return builder.Build();
         }
 
         private void AddInput(IRelationalCommandBuilder builder, IColumnModification column, string name, object? value)
@@ -169,8 +218,9 @@ namespace OceanBase.EntityFrameworkCore.Update
             if (!_complete) throw new InvalidOperationException("The command batch must be completed before execution.");
             try
             {
+                ValidateProcedureTransaction(connection);
                 ValidateWriteValues();
-                var affectedRows = _write!.ExecuteNonQuery(Parameters(connection));
+                var affectedRows = ResolveRowsAffected(_write!.ExecuteNonQuery(Parameters(connection)));
                 if (affectedRows != 1)
                 {
                     ThrowConcurrencyException($"Expected one affected row, but OceanBase reported {affectedRows}.");
@@ -203,8 +253,9 @@ namespace OceanBase.EntityFrameworkCore.Update
             if (!_complete) throw new InvalidOperationException("The command batch must be completed before execution.");
             try
             {
+                ValidateProcedureTransaction(connection);
                 ValidateWriteValues();
-                var affectedRows = await _write!.ExecuteNonQueryAsync(Parameters(connection), cancellationToken).ConfigureAwait(false);
+                var affectedRows = ResolveRowsAffected(await _write!.ExecuteNonQueryAsync(Parameters(connection), cancellationToken).ConfigureAwait(false));
                 if (affectedRows != 1)
                 {
                     await ThrowConcurrencyExceptionAsync(
@@ -235,6 +286,29 @@ namespace OceanBase.EntityFrameworkCore.Update
 
         private RelationalCommandParameterObject Parameters(IRelationalConnection connection)
             => new(connection, _values, null, _dependencies.CurrentContext.Context, _dependencies.Logger, CommandSource.SaveChanges);
+
+        private void ValidateProcedureTransaction(IRelationalConnection connection)
+        {
+            if (_commands[0].StoreStoredProcedure is not null && connection.CurrentTransaction is null)
+            {
+                throw new InvalidOperationException("OceanBase stored-procedure mappings require an active EF transaction to validate outputs before commit.");
+            }
+        }
+
+        private int ResolveRowsAffected(int commandResult)
+        {
+            if (_rowsAffected is null)
+            {
+                return _commands[0].StoreStoredProcedure is null ? commandResult : 1;
+            }
+
+            if (_rowsAffected.Value is null or DBNull)
+            {
+                throw new InvalidOperationException("The OceanBase stored procedure did not set its rows-affected output parameter.");
+            }
+
+            return (int)OceanBaseNumericConversion.ConvertValue(_rowsAffected.Value, typeof(int));
+        }
 
         private void ValidateWriteValues()
         {

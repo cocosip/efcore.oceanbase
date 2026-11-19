@@ -16,6 +16,22 @@ namespace OceanBase.EntityFrameworkCore.Storage
     {
         public IRelationalCommandBuilder Create() => new Builder(dependencies, mode);
 
+        internal static void ConfigureStoredProcedure(IRelationalCommandBuilder builder)
+            => builder.AddParameter(StoredProcedureParameter.Instance);
+
+        private sealed class StoredProcedureParameter : IRelationalParameter
+        {
+            internal static readonly StoredProcedureParameter Instance = new();
+
+            public string InvariantName => "__oceanbase_stored_procedure";
+
+            public void AddDbParameter(DbCommand command, object? value)
+                => command.CommandType = CommandType.StoredProcedure;
+
+            public void AddDbParameter(DbCommand command, IReadOnlyDictionary<string, object?>? values)
+                => command.CommandType = CommandType.StoredProcedure;
+        }
+
         private sealed class Builder(RelationalCommandBuilderDependencies dependencies, OceanBaseCompatibilityMode mode)
             : RelationalCommandBuilder(dependencies)
         {
@@ -54,7 +70,7 @@ namespace OceanBase.EntityFrameworkCore.Storage
 
             public void AddDbParameter(DbCommand command, IReadOnlyDictionary<string, object?>? values)
             {
-                if (command.Parameters.Count == 0) return;
+                if (command.Parameters.Count == 0 || command.CommandType == CommandType.StoredProcedure) return;
                 try
                 {
                     var indices = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
