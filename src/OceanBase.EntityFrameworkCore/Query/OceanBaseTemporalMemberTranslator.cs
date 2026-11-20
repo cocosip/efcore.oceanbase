@@ -7,6 +7,7 @@ using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Query;
 using Microsoft.EntityFrameworkCore.Query.SqlExpressions;
 using Microsoft.EntityFrameworkCore.Storage;
+using OceanBase.EntityFrameworkCore.Storage;
 using OceanBaseConnector;
 
 namespace OceanBase.EntityFrameworkCore.Query
@@ -403,6 +404,7 @@ namespace OceanBase.EntityFrameworkCore.Query
 
         private bool SupportsCarrier(Type receiver, RelationalTypeMapping mapping)
         {
+            if (OceanBaseTemporalTypeMapping.IsLocalTimeZone(mapping)) return false;
             var store = mapping.StoreTypeNameBase.Trim().ToUpperInvariant();
             var providerType = mapping.Converter?.ProviderClrType ?? receiver;
             providerType = Nullable.GetUnderlyingType(providerType) ?? providerType;
@@ -445,6 +447,7 @@ namespace OceanBase.EntityFrameworkCore.Query
 
         private static bool SupportsDate(Type receiver, RelationalTypeMapping mapping, OceanBaseCompatibilityMode mode)
         {
+            if (OceanBaseTemporalTypeMapping.IsLocalTimeZone(mapping)) return false;
             var store = mapping.StoreTypeNameBase.Trim().ToUpperInvariant();
             var providerType = mapping.Converter?.ProviderClrType ?? mapping.ClrType;
             providerType = Nullable.GetUnderlyingType(providerType) ?? providerType;

@@ -194,6 +194,10 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             {
                 Assert.Equal(DbType.Decimal, parameter.DbType);
                 Assert.Equal(1m, parameter.Value);
+                Assert.Equal("1", mapping.JsonValueReaderWriter!.ToJsonString(true));
+                Assert.Equal("0", mapping.JsonValueReaderWriter.ToJsonString(false));
+                Assert.Equal(true, mapping.JsonValueReaderWriter.FromJsonString("1"));
+                Assert.Equal(false, mapping.JsonValueReaderWriter.FromJsonString("0"));
             }
             else
             {

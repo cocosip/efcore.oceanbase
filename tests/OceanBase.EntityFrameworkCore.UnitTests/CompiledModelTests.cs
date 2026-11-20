@@ -77,6 +77,23 @@ public sealed class CompiledModelTests
             actual.FindProperty(nameof(Row.Code))!.GetTypeMapping()).ValidateWriteValue(new Code(new string('x', 13))));
     }
 
+    [Fact]
+    public void Generated_model_preserves_Oracle_local_timestamp_mapping_and_precision_clones()
+    {
+        using var context = new LocalTimestampContext(new DbContextOptionsBuilder<Context>()
+            .UseOceanBase("Server=offline", Mode.Oracle).EnableServiceProviderCaching(false).Options);
+        var (model, code) = Compile(context, Mode.Oracle);
+        using var compiled = Create(Mode.Oracle, model);
+        var mapping = compiled.Model.FindEntityType(typeof(Row))!.FindProperty("LocalMoment")!.GetRelationalTypeMapping();
+        Assert.Contains("TIMESTAMP(3) WITH LOCAL TIME ZONE", code);
+        Assert.Equal("TIMESTAMP(3) WITH LOCAL TIME ZONE", mapping.StoreType);
+        Assert.Equal("TIMESTAMP(7) WITH LOCAL TIME ZONE", mapping.WithPrecisionAndScale(7, null).StoreType);
+        var date = new DateTime(2024, 1, 15, 17, 45, 0).AddMilliseconds(123);
+        using var command = new OceanBaseCommand();
+        Assert.Equal(date, mapping.CreateParameter(command, "value", date).Value);
+        Assert.Contains("\"LocalMoment\"", compiled.Set<Row>().Where(row => EF.Property<DateTime>(row, "LocalMoment") == date).ToQueryString());
+    }
+
     [Theory]
     [InlineData(Mode.MySql, false)]
     [InlineData(Mode.MySql, true)]
@@ -170,6 +187,15 @@ public sealed class CompiledModelTests
                     UseMappingHints ? new ConverterMappingHints() : null));
         }
     }
+    private sealed class LocalTimestampContext(DbContextOptions<Context> options) : Context(options)
+    {
+        protected override void OnModelCreating(ModelBuilder model)
+        {
+            base.OnModelCreating(model);
+            model.Entity<Row>().Property<DateTime>("LocalMoment").HasColumnType("TIMESTAMP(3) WITH LOCAL TIME ZONE");
+        }
+    }
+
     public sealed class UnhintedContext(DbContextOptions<Context> options) : Context(options)
     {
         protected override bool UseMappingHints => false;

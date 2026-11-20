@@ -67,6 +67,7 @@ namespace PackageConsumer
                     .UseOceanBase("Server=localhost;Database=package_smoke", mode).Options;
                 using var context = new ConsumerContext(options, mode);
                 if (!context.Database.IsOceanBase()) throw new Exception("Provider registration failed.");
+                VerifyJsonAndLocalTimestamp(context, mode);
                 var textMapping = context.GetService<IRelationalTypeMappingSource>().FindMapping(typeof(string))!;
                 var nationalLiteral = textMapping.GenerateSqlLiteral("海🌊\\'\n");
                 var expectedLiteral = mode == OceanBaseCompatibilityMode.Oracle
@@ -1262,6 +1263,30 @@ namespace PackageConsumer
             Console.WriteLine($"{mode}: packed text/temporal MIN/MAX and null-converter boundary passed.");
         }
 
+        private static void VerifyJsonAndLocalTimestamp(ConsumerContext context, OceanBaseCompatibilityMode mode)
+        {
+            var path = "$.name";
+            var query = context.Set<Row>().Select(row => EF.Functions.OceanBaseJsonValue(row.Name, path));
+            if (!query.ToQueryString().Contains("JSON_VALUE(", StringComparison.Ordinal))
+                throw new Exception("Packed provider did not translate the public JSON path function.");
+            path = "$.other";
+            if (!query.ToQueryString().Contains("'$.other'", StringComparison.Ordinal))
+                throw new Exception("Packed provider did not refresh the captured JSON path.");
+            if (mode == OceanBaseCompatibilityMode.Oracle)
+            {
+                var mapping = context.GetService<IRelationalTypeMappingSource>()
+                    .FindMapping(typeof(DateTime), "TIMESTAMP(3) WITH LOCAL TIME ZONE")!;
+                if (mapping.WithPrecisionAndScale(7, null).StoreType != "TIMESTAMP(7) WITH LOCAL TIME ZONE")
+                    throw new Exception("Packed provider lost the local timestamp declaration on precision change.");
+                var date = new DateTime(2024, 1, 15, 17, 45, 0).AddTicks(1234567);
+                var native = new OceanBaseConnector.OceanBaseTimestampLocalTimeZone(new OceanBaseConnector.OceanBaseTimestamp(date), "+05:45");
+                var read = OceanBase.EntityFrameworkCore.Storage.OceanBaseCompiledModelTypeMappings.ReadTemporal<DateTime>(native);
+                if (read != date || read.Kind != DateTimeKind.Unspecified)
+                    throw new Exception("Packed provider lost the local timestamp session wall clock.");
+            }
+            Console.WriteLine($"{mode}: packed JSON path and scoped temporal mapping checks passed (offline).");
+        }
+
         private static void VerifyTextRoots(ConsumerContext context, OceanBaseCompatibilityMode mode)
         {
             string?[] values = ["one", null, "two"];
@@ -1281,7 +1306,7 @@ namespace PackageConsumer
 
             var empty = context.Set<Row>().Select(row => new string[] { }.Count(value => row.Id > 0)).ToQueryString();
             if (!empty.Contains("WHERE 1 = 0", StringComparison.Ordinal)
-                || !empty.Contains(mode == OceanBaseCompatibilityMode.MySql ? "CAST(NULL AS CHAR)" : "TO_NCHAR(NULL)",
+                || !empty.Contains(mode == OceanBaseCompatibilityMode.MySql ? "SELECT NULL AS `Value`" : "TO_NCHAR(NULL)",
                     StringComparison.Ordinal))
                 throw new Exception("Packed text collection root lost its typed empty relation: " + empty);
         }
@@ -1490,12 +1515,13 @@ namespace PackageConsumer
                 try
                 {
                     connection.Open();
-                    throw new Exception("Packed provider did not reject the unsupported ambient transaction.");
+                    throw new Exception("Packed provider enlisted a network-suppressed, closed native connection.");
                 }
-                catch (InvalidOperationException error) when (error.Message.Contains("AmbientTransactionWarning", StringComparison.Ordinal))
+                catch (InvalidOperationException error) when (error.Message.Contains("connection must be open", StringComparison.OrdinalIgnoreCase))
                 {
                 }
             }
+            // Native enlistment fails because SuppressNetwork leaves the Connector closed.
             // Package-only runtime probe: EF has no public open-count API.
             var openedCount = typeof(RelationalConnection).GetField("_openedCount", BindingFlags.Instance | BindingFlags.NonPublic)!;
             if ((int)openedCount.GetValue(connection)! != 0)

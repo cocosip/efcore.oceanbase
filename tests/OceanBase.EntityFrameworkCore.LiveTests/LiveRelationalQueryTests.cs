@@ -384,27 +384,49 @@ namespace OceanBase.EntityFrameworkCore.LiveTests
             });
 
         [Theory]
-        [MemberData(nameof(OracleCases))]
+        [MemberData(nameof(Cases))]
         public async Task Text_roots_preserve_query_values_beyond_contextual_column_lengths(OceanBaseCompatibilityMode mode, bool async, bool relationalNulls)
             => await WithTable(mode, async, relationalNulls, async (context, stage) =>
             {
-                string?[] sample = ["one", "alpha", new string('x', 17), null, new string('y', 2001)];
-                foreach (var property in new[] { nameof(Row.Label), "NationalLabel", "FixedLabel", "NationalFixed" })
+                string?[] sample = ["one", "ONE", "one ", "oné", "海", new string('x', 17), null, new string('y', 2001)];
+                var stored = Assert.Single(await Read(context.Set<Row>().Where(row => row.Id == 1).AsTracking(), async));
+                var properties = new List<string> { nameof(Row.Label), "NationalLabel", "FixedLabel", "NationalFixed" };
+                if (mode == OceanBaseCompatibilityMode.MySql) properties.Add("BinaryLabel");
+                foreach (var property in properties.Where(property => property != nameof(Row.Label)))
+                    context.Entry(stored).Property(property).CurrentValue = "one";
+                if (async) await context.SaveChangesAsync();
+                else context.SaveChanges();
+                context.ChangeTracker.Clear();
+                foreach (var property in properties)
                 {
                     string?[] values = sample;
                     var root = context.Set<Row>().Where(row => row.Id == 3).SelectMany(row => values.Where(value =>
                         value == EF.Property<string?>(row, property) || EF.Property<string?>(row, property) == null));
-                    foreach (var input in new[] { sample, Array.Empty<string?>(), sample.Reverse().ToArray() })
+                    foreach (var input in new[] { sample, Array.Empty<string?>(), sample.Reverse().ToArray(), [null, null] })
                     {
                         values = input;
                         stage("text query carrier property=" + property + ",length=" + input.Length);
-                        if (property is "FixedLabel" or "NationalFixed")
+                        if (mode == OceanBaseCompatibilityMode.Oracle && property is ("FixedLabel" or "NationalFixed"))
                         {
                             Assert.Contains("fixed-length text", Assert.Throws<NotSupportedException>(() => root.ToQueryString()).Message);
                             continue;
                         }
                         AssertMultiset(input, await Read(root, async));
                     }
+                    if (mode == OceanBaseCompatibilityMode.Oracle && property is ("FixedLabel" or "NationalFixed")) continue;
+                    stage("compare collection roots using native column semantics property=" + property);
+                    var expected = new List<string?>();
+                    foreach (var candidate in sample)
+                        if (Assert.Single(await Read(context.Set<Row>().Where(row => row.Id == 1)
+                            .Select(row => EF.Property<string?>(row, property) == candidate), async)))
+                            expected.Add(candidate);
+                    values = sample;
+                    var matched = context.Set<Row>().Where(row => row.Id == 1).SelectMany(row => values.Where(value =>
+                        value == EF.Property<string?>(row, property)));
+                    AssertMultiset(expected.ToArray(), await Read(matched, async));
+                    var constants = context.Set<Row>().Where(row => row.Id == 1).SelectMany(row => EF.Constant(values).Where(value =>
+                        value == EF.Property<string?>(row, property)));
+                    AssertMultiset(expected.ToArray(), await Read(constants, async));
                 }
             });
 
@@ -566,6 +588,8 @@ namespace OceanBase.EntityFrameworkCore.LiveTests
                 row.Property<string>("NationalLabel").HasMaxLength(4);
                 row.Property<string>("FixedLabel").HasMaxLength(4).IsUnicode(false).IsFixedLength();
                 row.Property<string>("NationalFixed").HasMaxLength(4).IsFixedLength();
+                if (mode == OceanBaseCompatibilityMode.MySql)
+                    row.Property<string>("BinaryLabel").HasMaxLength(4).UseCollation("utf8mb4_bin");
                 row.Property(value => value.Rank).HasConversion<string>().HasMaxLength(8).IsUnicode(false);
                 row.HasData(Seed());
             }

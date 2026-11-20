@@ -280,7 +280,11 @@ namespace OceanBase.EntityFrameworkCore.Query
                             ?? QueryCompilationContext.NotTranslatedExpression
                         : QueryCompilationContext.NotTranslatedExpression;
                 }
-                return base.VisitBinary(expression);
+                var translated = base.VisitBinary(expression);
+                return translated is SqlBinaryExpression { OperatorType: ExpressionType.Add or ExpressionType.Subtract } arithmetic
+                    && (arithmetic.Left.TypeMapping is { } leftTemporal && OceanBaseTemporalTypeMapping.IsLocalTimeZone(leftTemporal)
+                        || arithmetic.Right.TypeMapping is { } rightTemporal && OceanBaseTemporalTypeMapping.IsLocalTimeZone(rightTemporal))
+                    ? QueryCompilationContext.NotTranslatedExpression : translated;
             }
 
             protected override Expression VisitMethodCall(MethodCallExpression call)

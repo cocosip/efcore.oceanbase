@@ -185,6 +185,8 @@ public sealed class ReverseEngineeringTests
     [InlineData(OceanBaseCompatibilityMode.MySql, "bigint unsigned", typeof(ulong))]
     [InlineData(OceanBaseCompatibilityMode.Oracle, "DATE", typeof(DateTime))]
     [InlineData(OceanBaseCompatibilityMode.Oracle, "TIMESTAMP(9) WITH TIME ZONE", typeof(DateTimeOffset))]
+    [InlineData(OceanBaseCompatibilityMode.Oracle, "TIMESTAMP(9) WITH LOCAL TIME ZONE", typeof(DateTime))]
+    [InlineData(OceanBaseCompatibilityMode.Oracle, "TIMESTAMP(6) WITH LOCAL TIME ZONE", typeof(DateTime))]
     [InlineData(OceanBaseCompatibilityMode.Oracle, "TIMESTAMP(9)", typeof(DateTime))]
     [InlineData(OceanBaseCompatibilityMode.Oracle, "TIMESTAMP(6)", typeof(DateTime))]
     [InlineData(OceanBaseCompatibilityMode.Oracle, "CHAR(10 CHAR)", typeof(string))]

@@ -42,9 +42,13 @@ namespace OceanBase.EntityFrameworkCore.Storage
             }
         }
 
-        private sealed class PositionalCommand(RelationalCommandBuilderDependencies dependencies, IRelationalCommand template)
+        private sealed class PositionalCommand(RelationalCommandBuilderDependencies dependencies, IRelationalCommandTemplate template)
             : RelationalCommand(dependencies, template.CommandText, template.LogCommandText, WithBinding(template.Parameters))
         {
+            public override void PopulateFrom(IRelationalCommandTemplate commandTemplate)
+                => base.PopulateFrom(commandTemplate is PositionalCommand ? commandTemplate
+                    : new PositionalCommand(Dependencies, commandTemplate));
+
             public override DbCommand CreateDbCommand(RelationalCommandParameterObject parameterObject, Guid commandId, DbCommandMethod commandMethod)
             {
                 try { return base.CreateDbCommand(parameterObject, commandId, commandMethod); }
@@ -58,6 +62,7 @@ namespace OceanBase.EntityFrameworkCore.Storage
 
             private static IReadOnlyList<IRelationalParameter> WithBinding(IReadOnlyList<IRelationalParameter> parameters)
             {
+                if (parameters.Count > 0 && parameters[^1] is BindingParameter) return parameters;
                 var result = new List<IRelationalParameter>(parameters) { new BindingParameter(parameters) };
                 return result;
             }

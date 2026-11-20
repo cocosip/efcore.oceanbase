@@ -167,6 +167,13 @@ namespace OceanBase.EntityFrameworkCore.Internal
                 .TryAdd<IModelValidator, RelationalModelValidator>()
                 .TryAdd<ICompiledQueryCacheKeyGenerator, OceanBaseCompiledQueryCacheKeyGenerator>()
                 .TryAdd<IQueryCompilationContextFactory, OceanBaseQueryCompilationContextFactory>()
+                .TryAdd<IEvaluatableExpressionFilter, OceanBaseEvaluatableExpressionFilter>()
+                .TryAdd<IShapedQueryCompilingExpressionVisitorFactory>(s =>
+                    new OceanBaseShapedQueryCompilingExpressionVisitorFactory(
+                        s.GetRequiredService<ShapedQueryCompilingExpressionVisitorDependencies>(),
+                        s.GetRequiredService<RelationalShapedQueryCompilingExpressionVisitorDependencies>(),
+                        s.GetRequiredService<QuerySqlGeneratorDependencies>(),
+                        s.GetRequiredService<RelationalCommandBuilderDependencies>(), CompatibilityMode))
                 .TryAdd<IQueryableMethodTranslatingExpressionVisitorFactory, OceanBaseQueryableMethodTranslatingExpressionVisitorFactory>()
                 .TryAdd<IQueryTranslationPreprocessorFactory, OceanBaseQueryTranslationPreprocessorFactory>()
                 .TryAdd<IRelationalSqlTranslatingExpressionVisitorFactory, OceanBaseSqlTranslatingExpressionVisitorFactory>()

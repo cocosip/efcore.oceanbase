@@ -23,6 +23,7 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             { OceanBaseCompatibilityMode.MySql, typeof(TimeOnly), "TIME(3)" },
             { OceanBaseCompatibilityMode.MySql, typeof(TimeSpan), "TIME(3)" },
             { OceanBaseCompatibilityMode.Oracle, typeof(DateTime), "TIMESTAMP(3)" },
+            { OceanBaseCompatibilityMode.Oracle, typeof(DateTime), "TIMESTAMP(3) WITH LOCAL TIME ZONE" },
             { OceanBaseCompatibilityMode.Oracle, typeof(DateTimeOffset), "TIMESTAMP(3) WITH TIME ZONE" },
             { OceanBaseCompatibilityMode.Oracle, typeof(DateOnly), "DATE" },
             { OceanBaseCompatibilityMode.Oracle, typeof(TimeOnly), "INTERVAL DAY(1) TO SECOND(3)" },
@@ -43,6 +44,54 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             Assert.Throws<ArgumentOutOfRangeException>(() => source.FindMapping(typeof(DateTime), "timestamp(7)"));
             Assert.Throws<NotSupportedException>(() => source.FindMapping(typeof(DateTimeOffset), "timestamp(3)"));
             Assert.Throws<NotSupportedException>(() => implicitPrecision.WithStoreTypeAndSize("datetime", null));
+        }
+
+        [Fact]
+        public void Oracle_local_timestamp_preserves_session_wall_clock_and_declared_precision()
+        {
+            using var context = CreateContext(OceanBaseCompatibilityMode.Oracle);
+            var source = context.GetService<IRelationalTypeMappingSource>();
+            var mapping = source.FindMapping(typeof(DateTime), "timestamp with local time zone")!;
+            Assert.Equal(6, mapping.Precision);
+            Assert.Equal("TIMESTAMP(7) WITH LOCAL TIME ZONE", mapping.WithPrecisionAndScale(7, null).StoreType);
+            Assert.Equal("TIMESTAMP(9) WITH LOCAL TIME ZONE", source.FindMapping(typeof(DateTime),
+                "timestamp with local time zone", precision: 9)!.StoreType);
+            Assert.Throws<ArgumentException>(() => source.FindMapping(typeof(DateTime),
+                "TIMESTAMP(3) WITH LOCAL TIME ZONE", precision: 7));
+            Assert.Throws<ArgumentOutOfRangeException>(() => source.FindMapping(typeof(DateTime),
+                "TIMESTAMP(10) WITH LOCAL TIME ZONE"));
+            Assert.Throws<NotSupportedException>(() => mapping.WithStoreTypeAndSize("TIMESTAMP(6)", null));
+            Assert.Throws<NotSupportedException>(() => source.FindMapping(typeof(DateTime), "TIMESTAMP(6)")!
+                .WithStoreTypeAndSize("TIMESTAMP(6) WITH LOCAL TIME ZONE", null));
+            Assert.Throws<NotSupportedException>(() => source.FindMapping(typeof(DateTimeOffset), "TIMESTAMP WITH LOCAL TIME ZONE"));
+            Assert.Throws<NotSupportedException>(() => source.FindMapping(typeof(DateOnly), "TIMESTAMP WITH LOCAL TIME ZONE"));
+
+            var date = new DateTime(2024, 1, 15, 17, 45, 0).AddTicks(1234567);
+            using var command = new OceanBaseCommand();
+            var full = mapping.WithPrecisionAndScale(7, null);
+            var parameter = full.CreateParameter(command, "value", date);
+            Assert.Equal(DbType.DateTime2, parameter.DbType);
+            Assert.Equal((byte)7, parameter.Scale);
+            Assert.Equal(date, parameter.Value);
+            Assert.Equal("TIMESTAMP '2024-01-15 17:45:00.1234567'", full.GenerateSqlLiteral(date));
+            Assert.Throws<ArgumentException>(() => full.CreateParameter(command, "value", DateTime.SpecifyKind(date, DateTimeKind.Utc)));
+            Assert.Throws<ArgumentException>(() => ((IOceanBaseWriteValidation)mapping).ValidateWriteValue(date));
+
+            var native = new OceanBaseTimestampLocalTimeZone(new OceanBaseTimestamp(date), "+05:45");
+            var read = Assert.IsType<DateTime>(Read(full, native));
+            Assert.Equal(date, read);
+            Assert.Equal(DateTimeKind.Unspecified, read.Kind);
+            Assert.Equal(date, OceanBaseCompiledModelTypeMappings.ReadTemporal<DateTime>(native));
+            Assert.Throws<OverflowException>(() => Read(full, new OceanBaseTimestampLocalTimeZone(
+                new OceanBaseTimestamp(new DateTime(2024, 1, 15), 1, 9), "+00:00")));
+        }
+
+        [Fact]
+        public void MySql_rejects_local_timestamp_declarations()
+        {
+            using var context = CreateContext(OceanBaseCompatibilityMode.MySql);
+            Assert.Throws<NotSupportedException>(() => context.GetService<IRelationalTypeMappingSource>()
+                .FindMapping(typeof(DateTime), "TIMESTAMP(7) WITH LOCAL TIME ZONE"));
         }
 
         [Theory]
@@ -420,6 +469,7 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
         [InlineData(OceanBaseCompatibilityMode.MySql, typeof(DateTime), "DATETIME", 0)]
         [InlineData(OceanBaseCompatibilityMode.MySql, typeof(TimeSpan), "TIME", 0)]
         [InlineData(OceanBaseCompatibilityMode.Oracle, typeof(DateTime), "TIMESTAMP", 6)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, typeof(DateTime), "TIMESTAMP WITH LOCAL TIME ZONE", 6)]
         [InlineData(OceanBaseCompatibilityMode.Oracle, typeof(DateTime), "DATE", 0)]
         [InlineData(OceanBaseCompatibilityMode.Oracle, typeof(DateTimeOffset), "TIMESTAMP WITH TIME ZONE", 6)]
         [InlineData(OceanBaseCompatibilityMode.Oracle, typeof(TimeSpan), "INTERVAL DAY TO SECOND", 6)]
@@ -517,6 +567,7 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
         [Theory]
         [InlineData(OceanBaseCompatibilityMode.MySql, "DATETIME(3)", "DATETIME(6)", 6)]
         [InlineData(OceanBaseCompatibilityMode.Oracle, "TIMESTAMP(3)", "TIMESTAMP(7)", 7)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, "TIMESTAMP(3) WITH LOCAL TIME ZONE", "TIMESTAMP(7) WITH LOCAL TIME ZONE", 7)]
         public void Timestamp_precision_clone_updates_storage_and_parameter_metadata(
             OceanBaseCompatibilityMode mode, string original, string expected, int precision)
         {

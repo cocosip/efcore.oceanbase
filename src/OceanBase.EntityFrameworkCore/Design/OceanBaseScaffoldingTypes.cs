@@ -56,7 +56,7 @@ namespace OceanBase.EntityFrameworkCore.Design
                     case "BINARY_DOUBLE": return typeof(double);
                     case "CHAR": case "VARCHAR": case "VARCHAR2": case "NCHAR": case "NVARCHAR2": case "CLOB": case "NCLOB": case "JSON": return typeof(string);
                     case "RAW": case "BLOB": return typeof(byte[]);
-                    case "DATE": case "TIMESTAMP": return typeof(DateTime);
+                    case "DATE": case "TIMESTAMP": case "TIMESTAMP WITH LOCAL TIME ZONE": return typeof(DateTime);
                     case "TIMESTAMP WITH TIME ZONE": return typeof(DateTimeOffset);
                     case "INTERVAL DAY TO SECOND": return typeof(TimeSpan);
                 }

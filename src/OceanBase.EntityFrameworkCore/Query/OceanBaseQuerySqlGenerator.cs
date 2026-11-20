@@ -87,6 +87,12 @@ namespace OceanBase.EntityFrameworkCore.Query
                 Sql.Append(")");
                 return;
             }
+            if (_mode == OceanBaseCompatibilityMode.MySql && OceanBaseCollectionParameterExpandingVisitor.IsSupportedText(mapping))
+            {
+                // CAST AS CHAR gives the session collation the same priority as a contextual column's collation.
+                Visit(expression);
+                return;
+            }
             if (_mode == OceanBaseCompatibilityMode.Oracle
                 && OceanBaseCollectionParameterExpandingVisitor.IsSupportedText(mapping)
                 && mapping.StoreTypeNameBase.ToUpperInvariant() is "CHAR" or "NCHAR" or "VARCHAR2" or "NVARCHAR2")

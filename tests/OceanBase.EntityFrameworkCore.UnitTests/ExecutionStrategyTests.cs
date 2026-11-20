@@ -84,6 +84,34 @@ public sealed class ExecutionStrategyTests
     }
 
     [Theory]
+    [InlineData(OceanBaseCompatibilityMode.MySql)]
+    [InlineData(OceanBaseCompatibilityMode.Oracle)]
+    public void Ambient_transaction_started_during_operation_prevents_partial_replay(OceanBaseCompatibilityMode mode)
+    {
+        using var context = Create(mode);
+        var strategy = context.Database.CreateExecutionStrategy();
+        var failure = ServerError(mode == OceanBaseCompatibilityMode.MySql ? 1213 : 60);
+        System.Transactions.TransactionScope? scope = null;
+        var attempts = 0;
+        void Execute()
+        {
+            scope ??= new System.Transactions.TransactionScope(System.Transactions.TransactionScopeAsyncFlowOption.Enabled);
+            attempts++;
+            throw failure;
+        }
+        try
+        {
+            var actual = Record.Exception(() => strategy.Execute(Execute));
+            Assert.Same(failure, actual);
+            Assert.Equal(1, attempts);
+        }
+        finally
+        {
+            scope?.Dispose();
+        }
+    }
+
+    [Theory]
     [MemberData(nameof(Modes))]
     public async Task Defaults_do_not_retry_and_exhaustion_retains_the_last_error(OceanBaseCompatibilityMode mode, bool async)
     {

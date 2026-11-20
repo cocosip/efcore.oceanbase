@@ -1,5 +1,6 @@
 using System;
 using System.Data;
+using System.Linq;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Storage;
@@ -11,12 +12,26 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
 {
     public sealed class TemporalQueryMappingTests
     {
+        [Fact]
+        public void Oracle_local_timestamps_do_not_reuse_unzoned_calendar_translations()
+        {
+            using var context = new LocalContext(new DbContextOptionsBuilder<LocalContext>()
+                .UseOceanBase("Server=offline", OceanBaseCompatibilityMode.Oracle).EnableServiceProviderCaching(false).Options);
+            Assert.Throws<InvalidOperationException>(() => context.Set<LocalRow>().Where(row => row.Stamp.Year == 2024).ToQueryString());
+            Assert.Throws<InvalidOperationException>(() => context.Set<LocalRow>().Where(row => row.Stamp.Date == new DateTime(2024, 1, 1)).ToQueryString());
+            Assert.Throws<InvalidOperationException>(() => context.Set<LocalRow>().Where(row => row.Stamp.AddTicks(1) > row.Stamp).ToQueryString());
+            Assert.Throws<InvalidOperationException>(() => context.Set<LocalRow>().Where(row => row.Stamp + TimeSpan.FromHours(1) > row.Stamp).ToQueryString());
+            Assert.Throws<InvalidOperationException>(() => context.Set<LocalRow>().Where(row => row.Stamp - row.Stamp == TimeSpan.Zero).ToQueryString());
+            Assert.Throws<InvalidOperationException>(() => context.Set<LocalRow>().Where(row => DateOnly.FromDateTime(row.Stamp).Year == 2024).ToQueryString());
+        }
+
         [Theory]
         [InlineData(OceanBaseCompatibilityMode.MySql, typeof(DateTime), "DATETIME(3)")]
         [InlineData(OceanBaseCompatibilityMode.MySql, typeof(DateTimeOffset), "DATETIME(3)")]
         [InlineData(OceanBaseCompatibilityMode.MySql, typeof(TimeOnly), "TIME(3)")]
         [InlineData(OceanBaseCompatibilityMode.MySql, typeof(TimeSpan), "TIME(3)")]
         [InlineData(OceanBaseCompatibilityMode.Oracle, typeof(DateTime), "TIMESTAMP(3)")]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, typeof(DateTime), "TIMESTAMP(3) WITH LOCAL TIME ZONE")]
         [InlineData(OceanBaseCompatibilityMode.Oracle, typeof(DateTimeOffset), "TIMESTAMP(3) WITH TIME ZONE")]
         [InlineData(OceanBaseCompatibilityMode.Oracle, typeof(TimeOnly), "INTERVAL DAY(1) TO SECOND(3)")]
         [InlineData(OceanBaseCompatibilityMode.Oracle, typeof(TimeSpan), "INTERVAL DAY(1) TO SECOND(3)")]
@@ -96,5 +111,17 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             => new(new DbContextOptionsBuilder<TestContext>().UseOceanBase("Server=localhost;Database=test", mode).Options);
 
         private sealed class TestContext(DbContextOptions<TestContext> options) : DbContext(options);
+
+        private sealed class LocalContext(DbContextOptions<LocalContext> options) : DbContext(options)
+        {
+            protected override void OnModelCreating(ModelBuilder model)
+                => model.Entity<LocalRow>().Property(row => row.Stamp).HasColumnType("TIMESTAMP(7) WITH LOCAL TIME ZONE");
+        }
+
+        private sealed class LocalRow
+        {
+            public int Id { get; set; }
+            public DateTime Stamp { get; set; }
+        }
     }
 }

@@ -223,7 +223,7 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             using var context = CreateContext(mode);
             var text = context.Rows.Select(row => new string[] { }.Count(value => row.Id > 0)).ToQueryString();
             Assert.Contains("WHERE 1 = 0", text);
-            Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? "CAST(NULL AS CHAR)" : "TO_NCHAR(NULL)", text);
+            Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? "NULL AS `Value`" : "TO_NCHAR(NULL)", text);
             var temporal = context.Rows.Select(row => new DateTime[] { }.Count(value => row.Id > 0)).ToQueryString();
             Assert.Contains("WHERE 1 = 0", temporal);
             Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? "CAST(NULL AS DATETIME" : "CAST(NULL AS TIMESTAMP", temporal);

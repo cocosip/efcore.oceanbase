@@ -94,6 +94,15 @@ retain 100ns ticks. Query comparands and original concurrency values keep transp
 independently of column write facets. Oracle exact native results with subtick fractions,
 out-of-range durations or invalid clock/date-only values reject rather than silently truncate.
 
+Explicit Oracle `TIMESTAMP[(p)] WITH LOCAL TIME ZONE` columns map to `DateTimeKind.Unspecified`
+in the current session time zone. Writes interpret unzoned values in that session; reading from a
+session with a different offset changes the wall clock. The mapping preserves precision and the
+store declaration in migrations, generated models and reverse engineering; native fractions finer
+than 100ns reject instead of truncating. Set the session time zone consistently when wall-clock
+identity matters. This storage profile supports equality/ordering and excludes temporal member
+and arithmetic translations. It does not preserve a named zone, its DST rules or the original offset.
+`DateTimeOffset` continues to use `TIMESTAMP WITH TIME ZONE` and numeric offsets.
+
 Explicit MySQL `TIMESTAMP` columns map to `DateTimeKind.Unspecified` with fractional precision 0–6.
 OceanBase applies the session time zone on writes and reads and enforces its native range. Set the same
 session time zone for applications that need identical wall-clock values across connections. The default
@@ -321,6 +330,18 @@ DDL lifecycle operations and Migrate reject configured or active strategies beca
 use a separate context without retries for these operations. Offline script generation remains available.
 This local retry policy does not establish native failover or rollback acceptance.
 
+Single-resource `TransactionScope` and `Database.EnlistTransaction` are supported through Connector 0.4.0
+in both modes. Enable `TransactionScopeAsyncFlowOption.Enabled` when crossing awaits. EF retains its
+connection through transaction completion, preserves caller-open ownership and defers owned native disposal
+when a context is disposed or returned to its pool first. A context with an owned connection then acquires a separate connection.
+A reset or pooled context using a borrowed connection rejects reuse until the original transaction completes;
+it never takes ownership of that connection. Replacing an actively enlisted connection is rejected.
+Complete or dispose the transaction to release that native resource. Conflicting `RequiresNew` scopes on
+the same connection reject before enlistment. `EnlistTransaction(null)` follows the Connector
+rejection contract and preserves the existing enlistment. Distributed/multiple-resource participation is unsupported.
+An active ambient or explicitly enlisted transaction prevents partial operation retries. Directly closing
+or disposing the native connection still follows the Connector's transaction ownership contract.
+
 Split queries support ordinary collection Includes, sibling/nested collections, filtering and paging:
 
 ```csharp
@@ -367,7 +388,7 @@ Materialize the root query before accessing unloaded navigations. OceanBase supp
 reader per connection. Avoid concurrent use of a DbContext. The generated-model smoke test enables both
 `UseLazyLoadingProxies()` and `UseChangeTrackingProxies()` before `dbcontext optimize` and again at runtime
 with `UseModel`. Change-tracking proxy entities also require virtual mapped properties and collection
-navigations that notify on changes, such as `ObservableCollection<T>`. Native acceptance remains pending.
+navigations that notify on changes, such as `ObservableCollection<T>`. The scoped generated-model and both-proxy combination has native graph/loading, fixup, notification and persisted-update coverage in both modes.
 
 Ordinary EF compiled models support both compatibility modes, including provider scalar mappings and
 converters with or without mapping hints. Generate a model using the matching mode's design-time context:
@@ -380,9 +401,13 @@ Select the generated model with `UseModel(App.CompiledModels.AppDbContextModel.I
 `UseOceanBase`. Generate and select separate models for MySQL and Oracle; an incompatible mode fails during
 model initialization. Regenerate after model/provider changes. EF's compiled-model restrictions still apply,
 including unsupported query filters. The public compiled-model mapping helpers and interval JSON reader are
-infrastructure used by generated code; they do not add a JSON property mapping profile. NativeAOT, precompiled
-queries, combining lazy-loading proxies with compiled models and performance improvements have not been
-established by this workflow.
+infrastructure used by generated code; they do not add structured JSON property mappings. Experimental EF10
+managed precompiled queries have generator, C# compilation and native execution coverage for parameterized
+sync/async queries in both modes, including nullable and repeated parameters. A bounded Windows x64
+NativeAOT smoke test on EF 10.0.14 publishes and executes generated models and precompiled numeric/temporal
+queries, and checks built-in converted mappings with dynamic code disabled. Publishing still reports
+trim/AOT warnings; arbitrary converters, additional query shapes, other platforms and performance remain
+unverified. See C-01 in the gap matrix for the bounded scope.
 
 Database reverse engineering uses the driver's public `GetSchema` collections, including its typed column
 declarations and tri-state generation/default/update metadata. Scaffolding connections must specify
@@ -443,11 +468,18 @@ order for ordered operators, duplicates and SQL NULL elements. It requires serve
 Both modes support an explicit `string` property configured with `.HasColumnType("json")` for schema
 creation, projection, reverse engineering and whole-document writes through `SaveChanges`.
 Parameters use the Connector's native `OceanBaseDbType.Json` declaration. OceanBase validates the JSON text.
-Use CLR `null` for SQL NULL and the string `"null"` for a JSON null document. JSON path translation,
-partial-document updates, mapped collections and JSON-owned types remain outside this profile.
+Use CLR `null` for SQL NULL and the string `"null"` for a JSON null document.
+Query a document with `EF.Functions.OceanBaseJsonValue(row.Document, "$.name")`. The path must be a
+nonempty constant or an evaluatable captured value for each query; dynamic column paths reject.
+The function runs on the server, including constant documents, and returns text. Native JSON_VALUE
+semantics apply: MySQL defaults to 512 characters and Oracle to 4000 bytes; overflow, missing paths,
+JSON null, SQL NULL and malformed documents return SQL NULL. Invalid paths raise a native error.
+MySQL returns object/array values as serialized JSON, while Oracle returns SQL NULL for nonscalars.
+Partial-document updates, mapped collections and JSON-owned types remain outside this profile.
 
 Oracle collection roots normalize every parameter/constant UNION ALL branch to the
-common carrier; MySQL casts the first branch. Oracle variable non-LOB text uses
+common carrier; MySQL casts the first non-text branch. Text roots preserve native typed operands so
+column comparison rules are retained without a narrowing CAST or conflicting CAST collation. Oracle variable non-LOB text uses
 TO_CHAR/TO_NCHAR to preserve query values beyond a contextual column's length
 instead of narrowing them through CAST. Contextual CHAR/NCHAR collection roots reject
 before execution because a variable carrier changes fixed-width padding comparisons.
@@ -540,6 +572,11 @@ The current database/schema must match the declared name exactly, including case
 if any ordinary table exists; it does not reconcile or upgrade existing schemas. DDL is not atomic and a failure
 can leave partially created objects requiring manual cleanup. Caller transactions are rejected. This option
 enables supported table creation and migrations in that existing namespace.
+
+MySQL virtual computed columns support nullability and comment alterations when their expression, type,
+storage kind and other facets stay unchanged. Existing NULL computed values prevent a NOT NULL migration;
+no computed value is backfilled. Expression/storage/identity-definition transitions still require an explicit
+data-preserving migration supported by the target server. See G-34 in the gap matrix.
 
 Table and column comments configured with HasComment are included in create
 scripts and migrations. Migration diffs can add, replace or clear comments.

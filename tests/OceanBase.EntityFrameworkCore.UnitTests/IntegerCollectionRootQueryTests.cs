@@ -49,7 +49,7 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             using var context = Create<int>(mode, false, null);
             string?[] values = ["alpha", "beta", null];
             var query = context.Rows.SelectMany(row => values.Where(value => row.Id > 0));
-            Assert.Equal(mode == OceanBaseCompatibilityMode.Oracle ? 3 : 1,
+            Assert.Equal(mode == OceanBaseCompatibilityMode.Oracle ? 3 : 0,
                 Regex.Matches(query.ToQueryString(), mode == OceanBaseCompatibilityMode.Oracle ? @"TO_NCHAR\(" : @"CAST\(").Count);
         }
 

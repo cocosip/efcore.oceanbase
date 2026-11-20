@@ -5,6 +5,7 @@ using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.EntityFrameworkCore.Storage;
+using Microsoft.EntityFrameworkCore.Storage.Json;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using OceanBaseConnector;
 
@@ -137,10 +138,15 @@ namespace OceanBase.EntityFrameworkCore.Storage
             if (clrType == typeof(Guid)) return FindGuidMapping(mappingInfo);
             if (clrType == typeof(double)) return FindFloatingPointMapping<double>(mappingInfo, storeTypes.Double);
             if (clrType == typeof(float)) return FindFloatingPointMapping<float>(mappingInfo, storeTypes.Float);
-            if (clrType == typeof(bool)) return (RelationalTypeMapping)(oracle
-                ? FindIntegerMapping<decimal>(mappingInfo, storeTypes.Boolean, DbType.Decimal)
-                    .WithComposedConverter(new BoolToZeroOneConverter<decimal>())
-                : FindIntegerMapping<bool>(mappingInfo, storeTypes.Boolean, DbType.Boolean));
+            if (clrType == typeof(bool))
+            {
+                if (!oracle) return FindIntegerMapping<bool>(mappingInfo, storeTypes.Boolean, DbType.Boolean);
+                var converter = new BoolToZeroOneConverter<decimal>();
+                // EF cannot construct a converted JSON reader dynamically when NativeAOT initializes query services.
+                return (RelationalTypeMapping)FindIntegerMapping<decimal>(mappingInfo, storeTypes.Boolean, DbType.Decimal)
+                    .WithComposedConverter(converter, jsonValueReaderWriter:
+                        new JsonConvertedValueReaderWriter<bool, decimal>(JsonDecimalReaderWriter.Instance, converter));
+            }
 
             return base.FindMapping(mappingInfo);
         }
@@ -201,13 +207,20 @@ namespace OceanBase.EntityFrameworkCore.Storage
                 throw new ArgumentException("Guid storage requires compatible 36-character text or 16-byte binary facets.");
             }
 
-            return (RelationalTypeMapping)(binary
-                ? new OceanBaseByteArrayTypeMapping(storeType, size, _compatibilityMode, fixedLength)
-                    .WithComposedConverter(new GuidToBytesConverter())
-                : new OceanBaseStringTypeMapping(storeType,
-                    unicode ? fixedLength ? DbType.StringFixedLength : DbType.String
-                        : fixedLength ? DbType.AnsiStringFixedLength : DbType.AnsiString,
-                    unicode, size, fixedLength, _compatibilityMode).WithComposedConverter(new GuidToStringConverter()));
+            if (binary)
+            {
+                var converter = new GuidToBytesConverter();
+                return (RelationalTypeMapping)new OceanBaseByteArrayTypeMapping(storeType, size, _compatibilityMode, fixedLength)
+                    .WithComposedConverter(converter, jsonValueReaderWriter:
+                        new JsonConvertedValueReaderWriter<Guid, byte[]>(JsonByteArrayReaderWriter.Instance, converter));
+            }
+
+            var textConverter = new GuidToStringConverter();
+            return (RelationalTypeMapping)new OceanBaseStringTypeMapping(storeType,
+                unicode ? fixedLength ? DbType.StringFixedLength : DbType.String
+                    : fixedLength ? DbType.AnsiStringFixedLength : DbType.AnsiString,
+                unicode, size, fixedLength, _compatibilityMode).WithComposedConverter(textConverter, jsonValueReaderWriter:
+                    new JsonConvertedValueReaderWriter<Guid, string>(JsonStringReaderWriter.Instance, textConverter));
         }
 
         private RelationalTypeMapping FindBinaryMapping(in RelationalTypeMappingInfo info)
@@ -240,6 +253,7 @@ namespace OceanBase.EntityFrameworkCore.Storage
             var clock = clrType == typeof(TimeOnly);
             var duration = clock || clrType == typeof(TimeSpan);
             var zoned = clrType == typeof(DateTimeOffset);
+            var localTimeZone = false;
             var leading = clock ? 1 : 9;
             var precision = info.Precision ?? (dateOnly ? 0 : oracle ? 7 : 6);
             var typeName = dateOnly ? "DATE" : duration ? oracle ? "INTERVAL" : "TIME"
@@ -256,6 +270,7 @@ namespace OceanBase.EntityFrameworkCore.Storage
 
                 if (date) typeName = "DATE";
                 if (match.Groups["mysqlTimestamp"].Success) typeName = "TIMESTAMP";
+                localTimeZone = match.Groups["localTimeZone"].Success;
                 var declaredPrecision = match.Groups["precision"].Success
                     ? OceanBaseTemporalTypeMapping.ReadFacet(match, "precision", 0) : (int?)null;
                 if (declaredPrecision is not null && info.Precision is not null && declaredPrecision != info.Precision)
@@ -291,25 +306,37 @@ namespace OceanBase.EntityFrameworkCore.Storage
             }
 
             storeType ??= typeName == "DATE" ? "DATE" : duration && oracle ? $"INTERVAL DAY({leading}) TO SECOND({precision})"
-                : $"{typeName}({precision})" + (oracle && zoned ? " WITH TIME ZONE" : string.Empty);
+                : $"{typeName}({precision})" + (oracle && zoned ? " WITH TIME ZONE"
+                    : localTimeZone ? " WITH LOCAL TIME ZONE" : string.Empty);
             if (duration && oracle)
             {
                 var dayPrecision = (byte)leading;
                 var mapping = new OceanBaseTemporalTypeMapping<OceanBaseIntervalDayToSecond>(storeType, DbType.Object,
                     precision, _compatibilityMode, dayPrecision);
-                return (RelationalTypeMapping)(clock
-                    ? mapping.WithComposedConverter(new ValueConverter<TimeOnly, OceanBaseIntervalDayToSecond>(
+                if (clock)
+                {
+                    var converter = new ValueConverter<TimeOnly, OceanBaseIntervalDayToSecond>(
                         value => OceanBaseCompiledModelTypeMappings.ToInterval(value.ToTimeSpan()),
-                        value => TimeOnly.FromTimeSpan(value.ToTimeSpan())))
-                    : mapping.WithComposedConverter(new ValueConverter<TimeSpan, OceanBaseIntervalDayToSecond>(
-                        value => OceanBaseCompiledModelTypeMappings.ToInterval(value), value => value.ToTimeSpan())));
+                        value => TimeOnly.FromTimeSpan(value.ToTimeSpan()));
+                    return (RelationalTypeMapping)mapping.WithComposedConverter(converter, jsonValueReaderWriter:
+                        new JsonConvertedValueReaderWriter<TimeOnly, OceanBaseIntervalDayToSecond>(
+                            OceanBaseIntervalJsonReaderWriter.Instance, converter));
+                }
+
+                var durationConverter = new ValueConverter<TimeSpan, OceanBaseIntervalDayToSecond>(
+                    value => OceanBaseCompiledModelTypeMappings.ToInterval(value), value => value.ToTimeSpan());
+                return (RelationalTypeMapping)mapping.WithComposedConverter(durationConverter, jsonValueReaderWriter:
+                    new JsonConvertedValueReaderWriter<TimeSpan, OceanBaseIntervalDayToSecond>(
+                        OceanBaseIntervalJsonReaderWriter.Instance, durationConverter));
             }
 
             if (duration)
             {
                 var mapping = new OceanBaseTemporalTypeMapping<TimeSpan>(storeType, DbType.Time, precision, _compatibilityMode);
-                return clock ? (RelationalTypeMapping)mapping.WithComposedConverter(new ValueConverter<TimeOnly, TimeSpan>(
-                    value => value.ToTimeSpan(), value => TimeOnly.FromTimeSpan(value))) : mapping;
+                if (!clock) return mapping;
+                var converter = new ValueConverter<TimeOnly, TimeSpan>(value => value.ToTimeSpan(), value => TimeOnly.FromTimeSpan(value));
+                return (RelationalTypeMapping)mapping.WithComposedConverter(converter, jsonValueReaderWriter:
+                    new JsonConvertedValueReaderWriter<TimeOnly, TimeSpan>(JsonTimeSpanReaderWriter.Instance, converter));
             }
 
             if (oracle && zoned)
@@ -319,11 +346,23 @@ namespace OceanBase.EntityFrameworkCore.Storage
 
             var dateMapping = new OceanBaseTemporalTypeMapping<DateTime>(storeType,
                 typeName == "DATE" ? DbType.Date : DbType.DateTime2, precision, _compatibilityMode);
-            return dateOnly ? (RelationalTypeMapping)dateMapping.WithComposedConverter(new ValueConverter<DateOnly, DateTime>(
-                    value => value.ToDateTime(TimeOnly.MinValue), value => OceanBaseCompiledModelTypeMappings.ReadDateOnly(value)))
-                : zoned ? (RelationalTypeMapping)dateMapping.WithComposedConverter(new ValueConverter<DateTimeOffset, DateTime>(
-                    value => OceanBaseCompiledModelTypeMappings.ToUtcDateTime(value), value => OceanBaseCompiledModelTypeMappings.ReadUtcDateTime(value)))
-                : dateMapping;
+            if (dateOnly)
+            {
+                var converter = new ValueConverter<DateOnly, DateTime>(value => value.ToDateTime(TimeOnly.MinValue),
+                    value => OceanBaseCompiledModelTypeMappings.ReadDateOnly(value));
+                return (RelationalTypeMapping)dateMapping.WithComposedConverter(converter, jsonValueReaderWriter:
+                    new JsonConvertedValueReaderWriter<DateOnly, DateTime>(JsonDateTimeReaderWriter.Instance, converter));
+            }
+
+            if (zoned)
+            {
+                var converter = new ValueConverter<DateTimeOffset, DateTime>(
+                    value => OceanBaseCompiledModelTypeMappings.ToUtcDateTime(value), value => OceanBaseCompiledModelTypeMappings.ReadUtcDateTime(value));
+                return (RelationalTypeMapping)dateMapping.WithComposedConverter(converter, jsonValueReaderWriter:
+                    new JsonConvertedValueReaderWriter<DateTimeOffset, DateTime>(JsonDateTimeReaderWriter.Instance, converter));
+            }
+
+            return dateMapping;
         }
 
         private RelationalTypeMapping? FindDecimalMapping(in RelationalTypeMappingInfo info)

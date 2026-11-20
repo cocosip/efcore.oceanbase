@@ -56,11 +56,9 @@ namespace OceanBase.EntityFrameworkCore.Storage
             => _queryResult ? typeof(DbDataReader).GetMethod(nameof(DbDataReader.GetValue))! : base.GetDataReaderMethod();
 
         public override Expression CustomizeDataReaderExpression(Expression expression)
-            => _queryResult ? Expression.Call(typeof(OceanBaseDecimalTypeMapping).GetMethod(nameof(ReadQueryValue))!, expression)
+            => _queryResult ? Expression.Call(typeof(OceanBaseCompiledModelTypeMappings)
+                .GetMethod(nameof(OceanBaseCompiledModelTypeMappings.ReadNumeric))!.MakeGenericMethod(typeof(decimal)), expression)
                 : base.CustomizeDataReaderExpression(expression);
-
-        public static decimal ReadQueryValue(object value)
-            => (decimal)OceanBaseNumericConversion.ConvertValue(value, typeof(decimal));
 
         protected override void ConfigureParameter(DbParameter parameter)
         {

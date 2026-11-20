@@ -12,10 +12,10 @@ public sealed class GuidCollectionRootQueryTests
     private static readonly Guid Token = Guid.Parse("00112233-4455-6677-8899-aabbccddeeff");
 
     [Theory]
-    [InlineData(OceanBaseCompatibilityMode.MySql, "CHAR")]
-    [InlineData(OceanBaseCompatibilityMode.Oracle, "RAW")]
+    [InlineData(OceanBaseCompatibilityMode.MySql)]
+    [InlineData(OceanBaseCompatibilityMode.Oracle)]
     public void Guid_collection_roots_keep_the_declared_carrier_and_empty_metadata(
-        OceanBaseCompatibilityMode mode, string castType)
+        OceanBaseCompatibilityMode mode)
     {
         using var context = CreateContext(mode);
         Guid?[] values = [Token, null, Guid.Empty];
@@ -24,13 +24,18 @@ public sealed class GuidCollectionRootQueryTests
         var sql = query.ToQueryString();
 
         Assert.Contains("UNION ALL", sql, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains(castType, sql, StringComparison.OrdinalIgnoreCase);
+        if (mode == OceanBaseCompatibilityMode.Oracle) Assert.Contains("RAW", sql, StringComparison.OrdinalIgnoreCase);
+        else
+        {
+            Assert.Contains(Token.ToString(), sql, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain(" AS CHAR)", sql, StringComparison.OrdinalIgnoreCase);
+        }
         Assert.DoesNotContain("numeric, Boolean or text", sql, StringComparison.OrdinalIgnoreCase);
 
         values = [];
         sql = query.ToQueryString();
         Assert.Contains("WHERE 1 = 0", sql, StringComparison.Ordinal);
-        Assert.Contains(castType, sql, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(mode == OceanBaseCompatibilityMode.Oracle ? "RAW" : "NULL AS `Value`", sql, StringComparison.OrdinalIgnoreCase);
     }
 
     [Theory]

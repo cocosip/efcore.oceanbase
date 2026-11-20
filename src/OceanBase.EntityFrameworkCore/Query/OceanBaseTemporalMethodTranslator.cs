@@ -476,6 +476,7 @@ namespace OceanBase.EntityFrameworkCore.Query
 
         internal static bool IsDateTimeCalendarMapping(RelationalTypeMapping mapping, OceanBaseCompatibilityMode mode)
         {
+            if (OceanBaseTemporalTypeMapping.IsLocalTimeZone(mapping)) return false;
             var providerType = mapping.Converter?.ProviderClrType ?? mapping.ClrType;
             if ((Nullable.GetUnderlyingType(mapping.ClrType) ?? mapping.ClrType) != typeof(DateTime) || mapping.Converter?.ConvertsNulls == true
                 || (Nullable.GetUnderlyingType(providerType) ?? providerType) != typeof(DateTime))

@@ -5,10 +5,18 @@ using OceanBaseConnector;
 
 namespace OceanBase.EntityFrameworkCore.Storage;
 
-/// <summary>Construction helpers used by generated EF compiled models.</summary>
+/// <summary>Mapping and reader helpers used by generated EF code.</summary>
 /// <remarks>These infrastructure methods preserve provider mappings without exposing their internal types.</remarks>
 public static class OceanBaseCompiledModelTypeMappings
 {
+    /// <summary>Reads a numeric value for generated provider shaper expressions.</summary>
+    public static T ReadNumeric<T>(object value) where T : struct, IConvertible
+        => (T)OceanBaseNumericConversion.ConvertValue(value, typeof(T));
+
+    /// <summary>Reads a temporal value for generated provider shaper expressions.</summary>
+    public static T ReadTemporal<T>(object value) where T : struct
+        => (T)OceanBaseTemporalConversions.ConvertValue(value, typeof(T));
+
     /// <summary>Converts an exact duration for generated provider converter expressions.</summary>
     public static OceanBaseIntervalDayToSecond ToInterval(TimeSpan value) => OceanBaseTemporalConversions.ToInterval(value);
 

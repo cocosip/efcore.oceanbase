@@ -427,7 +427,8 @@ namespace OceanBase.EntityFrameworkCore.Migrations
             IModel? model, MigrationCommandListBuilder builder)
         {
             if (string.IsNullOrWhiteSpace(operation.ComputedColumnSql) || Oracle && operation.IsStored == true
-                || operation.DefaultValue is not null || operation.DefaultValueSql is not null || operation.Collation is not null
+                || operation.DefaultValue is not null && !(operation is AlterColumnOperation alter && IsComputedBackfillDefault(alter, model))
+                || operation.DefaultValueSql is not null || operation.Collation is not null
                 || operation[OnUpdateSqlAnnotation] is not null)
                 throw Unsupported("this computed-column expression or storage combination");
             builder.Append(Q(name));
@@ -464,7 +465,10 @@ namespace OceanBase.EntityFrameworkCore.Migrations
                 return;
             }
 
-            if (!commentOnly && (operation.ComputedColumnSql is not null || old.ComputedColumnSql is not null
+            var virtualNullabilityOnly = !Oracle && operation.ComputedColumnSql is not null && operation.IsStored != true
+                && !identityChanged && !IsIdentity(operation) && operation.IsNullable != old.IsNullable
+                && SameColumnDefinition(operation, old, ignoreNullability: true, ignoreDefault: IsComputedBackfillDefault(operation, model));
+            if (!commentOnly && !virtualNullabilityOnly && (operation.ComputedColumnSql is not null || old.ComputedColumnSql is not null
                 || identityChanged || IsIdentity(operation)))
             {
                 if (Oracle || !identityChanged || !sameDefinition || commentChanged || !IsMySqlIdentityToggle(operation, model))
@@ -509,13 +513,22 @@ namespace OceanBase.EntityFrameworkCore.Migrations
                 && table.Columns.All(member => member == key || !OceanBaseRelationalAnnotationProvider.IsIdentity(member));
         }
 
-        private static bool SameColumnDefinition(ColumnOperation column, ColumnOperation old)
+        // EF adds a CLR backfill default when requiring a column, including computed columns.
+        private static bool IsComputedBackfillDefault(AlterColumnOperation column, IModel? model)
+            => !column.IsNullable && column.OldColumn.IsNullable && column.OldColumn.DefaultValue is null
+                && column.ClrType.IsValueType && column.DefaultValue is not null
+                && Equals(column.DefaultValue, Activator.CreateInstance(column.ClrType))
+                && model?.GetRelationalModel().FindTable(column.Table, column.Schema)?.FindColumn(column.Name)
+                    is { ComputedColumnSql: not null, DefaultValue: null, DefaultValueSql: null } target
+                && target.ComputedColumnSql == column.ComputedColumnSql;
+
+        private static bool SameColumnDefinition(ColumnOperation column, ColumnOperation old, bool ignoreNullability = false, bool ignoreDefault = false)
             => column.ClrType == old.ClrType && column.ColumnType == old.ColumnType
                 && column.IsUnicode == old.IsUnicode && column.IsFixedLength == old.IsFixedLength
                 && column.MaxLength == old.MaxLength && column.Precision == old.Precision && column.Scale == old.Scale
-                && column.IsNullable == old.IsNullable && column.IsRowVersion == old.IsRowVersion
+                && (ignoreNullability || column.IsNullable == old.IsNullable) && column.IsRowVersion == old.IsRowVersion
                 && column.Collation == old.Collation && column.DefaultValueSql == old.DefaultValueSql
-                && StructuralComparisons.StructuralEqualityComparer.Equals(column.DefaultValue, old.DefaultValue)
+                && (ignoreDefault || StructuralComparisons.StructuralEqualityComparer.Equals(column.DefaultValue, old.DefaultValue))
                 && column.ComputedColumnSql == old.ComputedColumnSql && column.IsStored == old.IsStored
                 && Equals(column[IdentityGenerationAnnotation], old[IdentityGenerationAnnotation])
                 && Equals(column[IdentityOptionsAnnotation], old[IdentityOptionsAnnotation])

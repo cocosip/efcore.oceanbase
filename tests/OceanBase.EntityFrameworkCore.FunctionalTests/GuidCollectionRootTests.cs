@@ -45,10 +45,12 @@ public sealed class GuidCollectionRootTests
 
         Assert.Equal([Token, null], result);
         var sql = Assert.Single(capture.Sql);
-        Assert.Contains(mode == OceanBaseCompatibilityMode.Oracle ? "RAW" : "CHAR", sql,
-            StringComparison.OrdinalIgnoreCase);
+        if (mode == OceanBaseCompatibilityMode.Oracle) Assert.Contains("RAW", sql, StringComparison.OrdinalIgnoreCase);
+        else Assert.DoesNotContain(" AS CHAR)", sql, StringComparison.OrdinalIgnoreCase);
         Assert.NotEmpty(capture.Inputs);
         Assert.Contains(capture.Inputs, parameter => parameter.Value is string or byte[]);
+        if (mode == OceanBaseCompatibilityMode.MySql)
+            Assert.Contains(capture.Inputs, parameter => Equals(parameter.Value, Token.ToString()));
 
         empty();
         capture.Sql.Clear();

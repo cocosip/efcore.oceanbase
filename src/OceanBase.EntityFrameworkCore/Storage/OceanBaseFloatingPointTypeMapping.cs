@@ -54,10 +54,8 @@ namespace OceanBase.EntityFrameworkCore.Storage
             => typeof(DbDataReader).GetMethod(nameof(DbDataReader.GetValue))!;
 
         public override Expression CustomizeDataReaderExpression(Expression expression)
-            => Expression.Call(typeof(OceanBaseFloatingPointTypeMapping<T>).GetMethod(nameof(ReadValue))!, expression);
-
-        public static T ReadValue(object value)
-            => (T)OceanBaseNumericConversion.ConvertValue(value, typeof(T));
+            => Expression.Call(typeof(OceanBaseCompiledModelTypeMappings)
+                .GetMethod(nameof(OceanBaseCompiledModelTypeMappings.ReadNumeric))!.MakeGenericMethod(typeof(T)), expression);
 
         protected override void ConfigureParameter(DbParameter parameter)
         {
