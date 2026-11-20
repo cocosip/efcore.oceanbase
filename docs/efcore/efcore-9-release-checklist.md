@@ -10,7 +10,7 @@ EF9 acceptance. [Baseline acceptance scenarios](efcore-10-release-checklist.md#a
 - Record the exact fork revision of `efcore/10.0`, candidate revision, SDK, runtime, operating system and
   dependency resolution. The branch uses C# 13 and the .NET 9 runtime. CI uses the .NET 10 SDK to
   read the solution and build the `net9.0` projects.
-- Target `OceanBase.EntityFrameworkCore` 9.x with a `net9.0` asset and EF runtime dependencies in
+- Target `Sharp.OceanBase.EntityFrameworkCore` 9.x with a `net9.0` asset and EF runtime dependencies in
   `[9.0.0,10.0.0)`. Build against the floor. Use EF 9.0.0 and 9.0.23 to exercise the
   dependency range. Align test, Design, Proxies, specification and `dotnet-ef` versions with each run.
 - Verify the selected `OceanBaseConnector` asset and transitive dependencies. Connector 0.4.0 has a

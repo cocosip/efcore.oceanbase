@@ -107,7 +107,7 @@ Runtime/tooling evidence for DEF-01/02/03/06/07/08/09 is recorded under R-03/R-0
 | SCH-02 | EnsureCreated/GenerateCreateScript implement schema profile and key generation. For G-31, confirm the owned MySQL database's initial, changed and restored catalog defaults, inheritance by newly created columns, unchanged existing columns and populated EnsureCreated behavior. Apply forward and reverse migration scripts and check permissions and cleanup. Verify Oracle's explicit rejection offline. | R-03/R-05 |
 | SCH-03 | EnsureDeleted has an explicit ownership/deletion boundary, preserves tenant objects outside that boundary and fails clearly outside supported profile. | R-03/R-05 |
 | PKG-01 | Build net10.0 assets against OceanBaseConnector 0.4.0 with warnings as errors. | R-01/R-04 |
-| PKG-02 | Packed nuspec uses OceanBase.EntityFrameworkCore and EF ranges [10.0.0,11.0.0). | R-01/R-04 |
+| PKG-02 | Packed nuspec uses Sharp.OceanBase.EntityFrameworkCore and EF ranges [10.0.0,11.0.0). | R-01/R-04 |
 | PKG-03 | Isolated packed consumer restores/executes provider API without project/local connector references. | R-01/R-04 |
 | PKG-04 | Minimum EF10 and selected later EF10 patch restore, build and test without pinning the EF patch in the provider package. Check an EF11 restore against the upper bound. | R-01/R-04 |
 | TST-01 | Selected EF relational specification classes pass; exclusions map to checklist IDs and limitations. | R-02/R-03 |
