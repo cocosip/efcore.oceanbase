@@ -10,7 +10,7 @@
     <OceanBaseConsumerProxiesVersion Condition="'$(OceanBaseConsumerProxiesVersion)' == ''">8.0.0</OceanBaseConsumerProxiesVersion>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="OceanBase.EntityFrameworkCore" Version="$(OceanBaseProviderVersion)" />
+    <PackageReference Include="$(OceanBaseProviderPackageId)" Version="$(OceanBaseProviderVersion)" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Proxies" Version="$(OceanBaseConsumerProxiesVersion)" />
   </ItemGroup>
   <ItemGroup Condition="'$(OceanBaseConsumerEfCoreVersion)' != ''">
