@@ -10,7 +10,7 @@ EF8 acceptance. [Baseline acceptance scenarios](efcore-10-release-checklist.md#a
 - Record the exact fork revision of the completed `efcore/9.0` branch, candidate revision, SDK, runtime, operating system and
   dependency resolution. Use an SDK that reads the existing solution and install the .NET 8 runtime
   for `net8.0` tests. Treat later runtime targets as separate acceptance profiles.
-- Target `OceanBase.EntityFrameworkCore` 8.x with a `net8.0` asset and EF runtime dependencies in
+- Target `Sharp.OceanBase.EntityFrameworkCore` 8.x with a `net8.0` asset and EF runtime dependencies in
   `[8.0.0,9.0.0)`. Build against the floor. Use EF 8.0.0 and 8.0.34 to exercise the
   dependency range. Align test, Design, Proxies, specification and `dotnet-ef` versions with each run.
 - Verify the selected `OceanBaseConnector` asset and transitive dependencies. Connector 0.4.0 has a

@@ -36,22 +36,16 @@ to proxy routing/failover, certificate verification or distributed ambient trans
 | R-09 Sensitive information/cleanup | Passed for candidate-owned scope | Configured sensitive-value scans and candidate-owned cleanup checks pass. Historical or unidentified catalog objects remain as detailed below; no global/prefix deletion or zero-object global result is claimed |
 | R-10 Release operations | Held by user instruction | No tag, push or publication is authorized. Package major/dependency ranges and README scope are aligned. Local acceptance commits do not authorize release operations; a validation package is not a published release |
 
-## Remaining publication preparation
+## Stable release preparation
 
-The acceptance checkpoint is `4fab40c`; the tested implementation remains `e25988a`.
-The user reconfirmed on 2026-11-20 that Linux, TLS and HA acceptance may remain documented exclusions.
-They do not block this declared release scope. No further feature implementation is currently identified
-as a blocker within that scope; the deferred and unaccepted extensions below remain explicit limitations.
-
-- R-01/R-04: Produce the final stable package, currently configured as `10.0.0`, from the selected release
-  commit. The accepted `.1`/`.2`/`.3` artifacts are validation versions. Verify the final archive, dependencies,
-  README, source revision and hashes, then run isolated consumers on EF 10.0.0 and 10.0.14 and focused native
-  connection/CRUD/generated-value/migration smoke checks against that exact package. A documentation-only
-  checkpoint does not require repeating the full native suite; any runtime change requires affected regression.
-- R-04/R-10: Confirm that the selected version is available on the publication feed and complete an online
-  direct/transitive dependency vulnerability audit. The 2026-11-20 NuGet version lookup could not connect;
-  cached restores and prior package checks establish neither version availability nor a current online audit.
-- R-10: Tag, push and publish only after explicit user authorization. No release operation has been performed.
+The Windows package checkpoint `9636bd8` passed the Release solution, package archive and
+source revision checks, and isolated consumers on EF 10.0.0 and 10.0.14. The package-only
+live probes passed MySQL and Oracle direct connections and four MySQL computed-column migration
+cases with TLS disabled. NuGet.org had no package under the selected ID at the time of the check,
+and the resolved package and consumer dependencies had no matches in the live NuGet advisory feed.
+Evidence is under `artifacts/release-prep/ef10/` and `artifacts/release-prep/audit.log`.
+Hosted verification of `ci-cd.yml` and activation of the release repository's NuGet Trusted
+Publishing policy remain pending. See the [release policy](version-support-matrix.md#branches-cicd-and-publishing).
 
 ## Acceptance requirements by feature
 
@@ -107,7 +101,7 @@ Runtime/tooling evidence for DEF-01/02/03/06/07/08/09 is recorded under R-03/R-0
 | SCH-02 | EnsureCreated/GenerateCreateScript implement schema profile and key generation. For G-31, confirm the owned MySQL database's initial, changed and restored catalog defaults, inheritance by newly created columns, unchanged existing columns and populated EnsureCreated behavior. Apply forward and reverse migration scripts and check permissions and cleanup. Verify Oracle's explicit rejection offline. | R-03/R-05 |
 | SCH-03 | EnsureDeleted has an explicit ownership/deletion boundary, preserves tenant objects outside that boundary and fails clearly outside supported profile. | R-03/R-05 |
 | PKG-01 | Build net10.0 assets against OceanBaseConnector 0.4.0 with warnings as errors. | R-01/R-04 |
-| PKG-02 | Packed nuspec uses OceanBase.EntityFrameworkCore and EF ranges [10.0.0,11.0.0). | R-01/R-04 |
+| PKG-02 | Packed nuspec uses Sharp.OceanBase.EntityFrameworkCore and EF ranges [10.0.0,11.0.0). | R-01/R-04 |
 | PKG-03 | Isolated packed consumer restores/executes provider API without project/local connector references. | R-01/R-04 |
 | PKG-04 | Minimum EF10 and selected later EF10 patch restore, build and test without pinning the EF patch in the provider package. Check an EF11 restore against the upper bound. | R-01/R-04 |
 | TST-01 | Selected EF relational specification classes pass; exclusions map to checklist IDs and limitations. | R-02/R-03 |

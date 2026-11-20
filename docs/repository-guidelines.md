@@ -40,14 +40,13 @@ Existing tracked blobs are already LF-normalized; no bulk renormalization is nee
 Existing working files may retain their prior endings until rewritten or checked out again; Git still
 normalizes text when staging. Use an LF-capable editor. Do not discard local changes to refresh line endings.
 
-The current [CI workflow](../.github/workflows/ci.yml) triggers automatically on pushes and pull requests
-targeting `efcore/10.0`. It runs offline Release solution tests and the package-content gate on Windows
-and Linux using PowerShell 7. The workflow ends after package validation. Record revision-specific
-evidence and platform exclusions in the release checklist.
+The shared [CI/CD workflow](../.github/workflows/ci-cd.yml) runs Release solution tests and
+package-content validation on Windows and Linux for version branches and `master`. An authorized
+matching release tag runs the Windows verification and isolated PackageConsumer before GitHub Actions
+publishes the verified artifact. See the [branch and release policy](efcore/version-support-matrix.md#branches-cicd-and-publishing).
 
-The standalone PackageConsumer executable is a manually run, offline NuGet-consumer smoke check;
-it is not included in the solution or executed by CI. CI only invokes its Verify-Package.ps1 archive
-content check. The solution's ConsumerTests project contains ordinary provider configuration tests.
+PackageConsumer is a standalone NuGet-consumer smoke check. The solution's ConsumerTests project
+contains ordinary provider configuration tests.
 PackageConsumer reports managed verification failures on stderr with exit code1, including expected
 negative probes against older packages; it must not use unhandled exceptions as a failure signal.
 Native acceptance lives in the opt-in LiveTests project; the [samples](../samples/README.md) provide
