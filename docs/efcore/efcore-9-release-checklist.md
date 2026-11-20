@@ -10,7 +10,7 @@ EF9 acceptance. [Baseline acceptance scenarios](efcore-10-release-checklist.md#a
 - Record the exact fork revision of `efcore/10.0`, candidate revision, SDK, runtime, operating system and
   dependency resolution. The branch uses C# 13 and the .NET 9 runtime. CI uses the .NET 10 SDK to
   read the solution and build the `net9.0` projects.
-- Target `OceanBase.EntityFrameworkCore` 9.x with a `net9.0` asset and EF runtime dependencies in
+- Target `Sharp.OceanBase.EntityFrameworkCore` 9.x with a `net9.0` asset and EF runtime dependencies in
   `[9.0.0,10.0.0)`. Build against the floor. Use EF 9.0.0 and 9.0.23 to exercise the
   dependency range. Align test, Design, Proxies, specification and `dotnet-ef` versions with each run.
 - Verify the selected `OceanBaseConnector` asset and transitive dependencies. Connector 0.4.0 has a
@@ -38,6 +38,19 @@ Record exact restore, test, package and tooling commands and their candidate ide
 gate. Keep detailed logs and TRX in ignored `artifacts/`. Use EF9-generated artifacts for tooling
 checks and reuse the EF10 scenario list only to select cases. The package-content script and isolated
 consumers must verify the candidate independently of project references.
+
+## Stable release preparation
+
+The Windows package checkpoint `3c10a30` passed the Release solution, package archive and
+source revision checks, and isolated consumers on EF 9.0.0 and 9.0.23. The package-only
+live probes passed MySQL and Oracle direct connections and four MySQL computed-column migration
+cases with TLS disabled. NuGet.org had no package under the selected ID at the time of the check,
+and the resolved package and consumer dependencies had no matches in the live NuGet advisory feed.
+Evidence is under `artifacts/release-prep/ef9/` and `artifacts/release-prep/audit.log`.
+Hosted verification of `ci-cd.yml` and activation of the release repository's NuGet Trusted
+Publishing policy remain pending. See the [release policy](version-support-matrix.md#branches-cicd-and-publishing).
+The EF9 specification project also passed after updating its private MSBuild dependency to
+17.8.43. The repeated advisory check found no matches in that test graph.
 
 ## Local acceptance evidence
 

@@ -10,6 +10,7 @@
     <PackageReference Include="Microsoft.EntityFrameworkCore.Relational.Specification.Tests" />
     <!-- Service the official specification package's Xml/Pkcs test dependencies without changing the provider. -->
     <PackageReference Include="System.Security.Cryptography.Xml" />
+    <PackageReference Include="Microsoft.Build.Tasks.Core" VersionOverride="17.8.43" PrivateAssets="all" />
     <PackageReference Include="xunit" />
     <PackageReference Include="xunit.runner.visualstudio" />
     <ProjectReference Include="../../src/OceanBase.EntityFrameworkCore/OceanBase.EntityFrameworkCore.csproj" />
