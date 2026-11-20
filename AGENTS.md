@@ -4,6 +4,9 @@ Follow the [repository guidelines](docs/repository-guidelines.md). The Provider 
 Connector APIs. Explain proposed driver changes to protocol, authentication, TLS, pooling or wire codecs
 and obtain user authorization before changing the driver.
 
+Before selecting a development branch, starting a port or changing CI/CD or NuGet publishing, follow
+the [branch and release policy](docs/efcore/version-support-matrix.md#branches-cicd-and-publishing).
+
 ## Documentation language and size
 
 - These rules apply throughout this repository to EF Core 8, 9, 10, 11 and all future versions. They do

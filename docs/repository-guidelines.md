@@ -23,9 +23,9 @@ comparison; they do not establish an OceanBase capability or replace its live ac
     src/OceanBase.EntityFrameworkCore/          EF-version provider project
     tests/                        Unit, relational and live integration tests
 
-The active branch is `efcore/10.0`. The [version-support document](efcore/version-support-matrix.md)
-owns branch/porting policy; EF8/EF9 remain planned. Keep shared source small and dependency-free where
-practical. Do not introduce a compatibility wrapper for an API used in only one EF Core version.
+The [version-support document](efcore/version-support-matrix.md) owns branch, porting and release
+policy. Keep shared source small and dependency-free where practical. Do not introduce a compatibility
+wrapper for an API used in only one EF Core version.
 
 ## C# and project style
 
@@ -40,10 +40,10 @@ Existing tracked blobs are already LF-normalized; no bulk renormalization is nee
 Existing working files may retain their prior endings until rewritten or checked out again; Git still
 normalizes text when staging. Use an LF-capable editor. Do not discard local changes to refresh line endings.
 
-The [CI workflow](../.github/workflows/ci.yml) runs Release solution tests and the package-content gate
-on Windows and Linux using PowerShell 7. It does not connect to databases or publish packages. Historical
-runs do not establish acceptance of a later revision; current evidence and platform exclusions belong
-in the release checklist.
+The current [CI workflow](../.github/workflows/ci.yml) triggers automatically on pushes and pull requests
+targeting `efcore/10.0`. It runs offline Release solution tests and the package-content gate on Windows
+and Linux using PowerShell 7. The workflow ends after package validation. Record revision-specific
+evidence and platform exclusions in the release checklist.
 
 The standalone PackageConsumer executable is a manually run, offline NuGet-consumer smoke check;
 it is not included in the solution or executed by CI. CI only invokes its Verify-Package.ps1 archive

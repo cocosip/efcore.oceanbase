@@ -1,15 +1,14 @@
 # EF Core Version Support
 
-This checkout develops EF Core 10. Other major versions below are plans, not implemented or published
-compatibility claims. Package existence and publication status must be checked on the intended feed
-before release; local branches, validation packages and test passes do not establish publication.
+EF Core 10 is the current development baseline. EF Core 8 and 9 are planned ports. Check package
+availability and publication status on the intended feed before release.
 
 | EF major | Branch | Provider line / target asset | Current state |
 | --- | --- | --- | --- |
 | 10 | `efcore/10.0` | `OceanBase.EntityFrameworkCore` 10.x / `net10.0` | Active implementation; accepted profiles and remaining publication steps are in the [release checklist](efcore-10-release-checklist.md) |
-| 8 | `efcore/8.0` (planned) | 8.x / proposed `net8.0` | Port postponed until a stable EF10 baseline is selected; no acceptance claimed here |
-| 9 | `efcore/9.0` (planned) | 9.x / proposed `net8.0` | Independent port from the selected EF10 baseline; no acceptance claimed here |
-| Later majors | To be selected | Matching package major and independently verified target | No implementation or runtime support implied |
+| 9 | `efcore/9.0` (planned) | 9.x / proposed `net8.0` | Port from `efcore/10.0` |
+| 8 | `efcore/8.0` (planned) | 8.x / proposed `net8.0` | Port from `efcore/9.0` after the EF Core 9 port is complete |
+| 11 | `dev` when development begins | 11.x / target to be verified | Development has yet to begin |
 
 The EF10 provider asset requires a .NET 10 application target or a compatible later target that receives
 its own verification. It cannot be consumed by a .NET 8/9 application merely by changing the EF package.
@@ -17,13 +16,22 @@ For proposed EF8/EF9 ports, confirm target framework, SDK/runtime and version-sp
 [official references](official-references.md) before implementation. Do not infer cross-runtime support
 from NuGet asset selection.
 
+## Branches, CI/CD and publishing
+
+- `dev` is the development branch for the latest EF Core major. It follows `efcore/10.0` while EF Core
+  10 is current. Start the EF Core 11 upgrade on `dev` when that work begins.
+- `master` is the integration branch for `dev`. CI/CD for work on `dev` runs on `master` after the merge.
+  The `dev` branch itself is excluded from CI/CD.
+- Each of `efcore/8.0`, `efcore/9.0` and `efcore/10.0` must run its own CI/CD and build the provider package
+  for its matching EF Core major.
+- Publishing a provider package to NuGet requires a release tag on the intended release commit. Runs
+  without a release tag may build validation packages and must skip NuGet publication. Follow the
+  [release authorization rules](../repository-guidelines.md#git-and-releases).
+
 ## Porting and dependency rules
 
-- Develop, test and package EF10 on `efcore/10.0`; `dev` retains an earlier integration checkpoint.
-  Synchronization with other branches is deliberate.
-- Fork EF8 and EF9 independently from a selected stable EF10 release commit. EF9 is not contingent on
-  first completing an EF8 port. Preserve applicable behavior and explicit limitations; adapt version-local
-  APIs, service registration, model/query generation and tooling on each branch.
+- Preserve applicable behavior and explicit limitations. Adapt version-local APIs, service registration,
+  model/query generation and tooling on each branch.
 - Keep the package ID `OceanBase.EntityFrameworkCore`. Match its major to EF Core and bound dependencies
   to that major: 8.x uses `[8.0.0,9.0.0)`, 9.x uses `[9.0.0,10.0.0)`, and 10.x uses `[10.0.0,11.0.0)`.
   The EF10 range is implemented in [Directory.Packages.props](../../Directory.Packages.props); the others

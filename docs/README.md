@@ -22,7 +22,7 @@ Shared topics have one owner:
 | Topic | Document |
 | --- | --- |
 | Provider, Connector and server responsibilities; source layout | [Architecture](provider-architecture.md) |
-| Current EF major, proposed ports and dependency isolation | [Version support](efcore/version-support-matrix.md) |
+| Branch policy, CI/CD, NuGet publishing, ports and dependency isolation | [Version support](efcore/version-support-matrix.md) |
 | Development, testing, credentials and release rules | [Repository guidelines](repository-guidelines.md) |
 | Official EF documentation used when implementing or porting | [References](efcore/official-references.md) |
 
