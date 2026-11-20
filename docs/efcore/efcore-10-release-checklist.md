@@ -35,6 +35,24 @@ to proxy routing/failover, certificate verification or distributed ambient trans
 | R-08 Review / REL-02 | Passed for declared scope | Independent reviews cover the computed-column fix, equivalent EF-patch mappings, connection probes, added native contracts, README and final evidence/scope. Initial findings were corrected and re-reviewed; no unresolved Critical/Important issue remains |
 | R-09 Sensitive information/cleanup | Passed for candidate-owned scope | Tracked text and 488 completed log/TRX/SQL files have no configured connection-detail matches or locked files. Candidate-owned CREATE/cleanup/absence checks passed. The read-only global catalog still retains ten tables and four sequences of historical or unidentified ownership; this is not a zero-object global pass and does not authorize prefix-based deletion |
 | R-10 Release operations | Held by user instruction | No tag, push or publication is authorized. Package major/dependency ranges and README scope are aligned. Local acceptance commits do not authorize release operations; a validation package is not a published release |
+
+## Remaining publication preparation
+
+The acceptance checkpoint is `4fab40c`; the tested implementation remains `e25988a`.
+The user reconfirmed on 2026-11-20 that Linux, TLS and HA acceptance may remain documented exclusions.
+They do not block this declared release scope. No further feature implementation is currently identified
+as a blocker within that scope; the deferred and unaccepted extensions below remain explicit limitations.
+
+- R-01/R-04: Produce the final stable package, currently configured as `10.0.0`, from the selected release
+  commit. The accepted `.1`/`.2`/`.3` artifacts are validation versions. Verify the final archive, dependencies,
+  README, source revision and hashes, then run isolated consumers on EF 10.0.0 and 10.0.14 and focused native
+  connection/CRUD/generated-value/migration smoke checks against that exact package. A documentation-only
+  checkpoint does not require repeating the full native suite; any runtime change requires affected regression.
+- R-04/R-10: Confirm that the selected version is available on the publication feed and complete an online
+  direct/transitive dependency vulnerability audit. The 2026-11-20 NuGet version lookup could not connect;
+  cached restores and prior package checks establish neither version availability nor a current online audit.
+- R-10: Tag, push and publish only after explicit user authorization. No release operation has been performed.
+
 ## Acceptance requirements by feature
 
 The 53 Required acceptance IDs below define contracts and map them to evidence gates; they are not a second status inventory.
