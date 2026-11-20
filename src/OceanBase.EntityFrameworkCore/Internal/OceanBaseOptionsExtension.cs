@@ -10,6 +10,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Query;
 using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.EntityFrameworkCore.Update;
+using Microsoft.EntityFrameworkCore.ValueGeneration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using OceanBase.EntityFrameworkCore.Metadata;
@@ -18,6 +19,7 @@ using OceanBase.EntityFrameworkCore.Migrations;
 using OceanBase.EntityFrameworkCore.Query;
 using OceanBase.EntityFrameworkCore.Storage;
 using OceanBase.EntityFrameworkCore.Update;
+using OceanBase.EntityFrameworkCore.ValueGeneration;
 using OceanBaseConnector;
 
 namespace OceanBase.EntityFrameworkCore.Internal
@@ -148,7 +150,7 @@ namespace OceanBase.EntityFrameworkCore.Internal
 
         public override void ApplyServices(IServiceCollection services)
         {
-            services.TryAddEnumerable(ServiceDescriptor.Singleton<IInterceptor, OceanBaseRetryReaderInterceptor>());
+            services.TryAddEnumerable(ServiceDescriptor.Scoped<IInterceptor, OceanBaseRetryReaderInterceptor>());
             var builder = new EntityFrameworkRelationalServicesBuilder(services)
                 .TryAdd<LoggingDefinitions, OceanBaseLoggingDefinitions>()
                 .TryAdd<IDatabaseProvider, DatabaseProvider<OceanBaseOptionsExtension>>()
@@ -165,10 +167,19 @@ namespace OceanBase.EntityFrameworkCore.Internal
                 .TryAdd<IModelValidator, RelationalModelValidator>()
                 .TryAdd<ICompiledQueryCacheKeyGenerator, OceanBaseCompiledQueryCacheKeyGenerator>()
                 .TryAdd<IQueryCompilationContextFactory, OceanBaseQueryCompilationContextFactory>()
+                .TryAdd<IEvaluatableExpressionFilter, OceanBaseEvaluatableExpressionFilter>()
+                .TryAdd<IShapedQueryCompilingExpressionVisitorFactory>(s =>
+                    new OceanBaseShapedQueryCompilingExpressionVisitorFactory(
+                        s.GetRequiredService<ShapedQueryCompilingExpressionVisitorDependencies>(),
+                        s.GetRequiredService<RelationalShapedQueryCompilingExpressionVisitorDependencies>(),
+                        s.GetRequiredService<QuerySqlGeneratorDependencies>(),
+                        s.GetRequiredService<RelationalCommandBuilderDependencies>(), CompatibilityMode))
                 .TryAdd<IQueryableMethodTranslatingExpressionVisitorFactory, OceanBaseQueryableMethodTranslatingExpressionVisitorFactory>()
+                .TryAdd<IQueryTranslationPreprocessorFactory, OceanBaseQueryTranslationPreprocessorFactory>()
                 .TryAdd<IRelationalSqlTranslatingExpressionVisitorFactory, OceanBaseSqlTranslatingExpressionVisitorFactory>()
                 .TryAdd<IQueryTranslationPostprocessorFactory, OceanBaseQueryTranslationPostprocessorFactory>()
                 .TryAdd<IRelationalConnection, OceanBaseRelationalConnection>()
+                .TryAdd<IValueGeneratorSelector, OceanBaseValueGeneratorSelector>()
                 .TryAdd<IRelationalDatabaseCreator, OceanBaseDatabaseCreator>()
                 .TryAdd<IBatchExecutor, OceanBaseBatchExecutor>()
                 .TryAdd<IModificationCommandBatchFactory, OceanBaseModificationCommandBatchFactory>();

@@ -1,30 +1,32 @@
-# OceanBase Entity Framework Core Provider Documentation
+# OceanBase Entity Framework Core Provider documentation
 
-This directory contains the design, support boundaries, development rules and release process for the
-OceanBase Entity Framework Core provider built on top of OceanBaseConnector.
+Start with the [package guide](../src/OceanBase.EntityFrameworkCore/README.md) for configuration,
+supported behavior and usage examples, or the [samples](../samples/README.md) for runnable scenarios.
 
-Start development and acceptance review with the [EF Core 10 feature checklist](efcore/efcore-10-feature-checklist.md).
-It assigns stable feature IDs, separate MySQL/Oracle statuses, acceptance criteria, evidence gaps and explicit
-deferred features. The implementation plan follows those requirements; it does not replace them.
+## Version inventories
 
-## Documents
+| EF Core | Features and scope by mode | Development gaps and closure conditions | Acceptance and release evidence |
+| --- | --- | --- | --- |
+| 10 | [Feature inventory](efcore/efcore-10-feature-matrix.md) | [Gap inventory](efcore/efcore-10-gap-matrix.md) | [Release checklist](efcore/efcore-10-release-checklist.md) |
+| 9 | [Feature inventory](efcore/efcore-9-feature-matrix.md) | [Gap inventory](efcore/efcore-9-gap-matrix.md) | [Release checklist](efcore/efcore-9-release-checklist.md) |
+| 8 | [Feature inventory](efcore/efcore-8-feature-matrix.md) | [Gap inventory](efcore/efcore-8-gap-matrix.md) | [Release checklist](efcore/efcore-8-release-checklist.md) |
 
-| Document | Purpose |
+Use the gap inventory to select development work, the feature inventory to assess implemented scope,
+and the release checklist to assess release readiness. Implemented code, accepted runtime profiles and
+published packages are different states. The EF10 checklist records its scoped Windows ordinary-direct
+profile. EF8 and EF9 start with porting requirements and pending acceptance.
+
+Shared topics have one owner:
+
+| Topic | Document |
 | --- | --- |
-| [Repository guidelines](repository-guidelines.md) | C# style, project layout, tests, commits and review rules. |
-| [Provider architecture](provider-architecture.md) | Provider boundaries, MySQL/Oracle mode handling, branch and package strategy. |
-| [Version support matrix](efcore/version-support-matrix.md) | Relationship between application TFM, EF Core version, provider branch and package. |
-| [EF Core 8 design](efcore/efcore-8-design.md) | Independent EF Core 8 adaptation boundary and intended feature profile. |
-| [EF Core 9 design](efcore/efcore-9-design.md) | EF Core 9 porting boundary and feature review checklist. |
-| [EF Core 10 design](efcore/efcore-10-design.md) | EF Core 10 porting boundary and feature review checklist. |
-| [EF Core 10 technical baseline](efcore/efcore-10-technical-baseline.md) | Exact provider contracts and first-slice verification gates. |
-| [EF Core 10 feature checklist](efcore/efcore-10-feature-checklist.md) | Release feature boundary, statuses and definition of complete. |
-| [EF Core 10 implementation plan](efcore/efcore-10-implementation-plan.md) | Development tasks mapped to checklist IDs and remaining acceptance work. |
-| [EF Core 10 local development plan](efcore/efcore-10-local-development-plan.md) | Active end-to-end local implementation ledger; live database and EF8/EF9 work postponed. |
-| [EF Core 10 query and update pipeline](efcore/efcore-10-query-update-design.md) | EF10 service contracts, generated-value paths and command-test evidence limits. |
-| [EF Core 10 migrations core](efcore/efcore-10-migrations-design.md) | Operation SQL, scoped execution/history/locking, upgrade/downgrade scripts and unsupported boundaries. |
-| [EF Core 10 migrations execution plan](efcore/efcore-10-migrations-plan.md) | Whole-module development, review and validation evidence. |
-| [EF Core references](efcore/official-references.md) | Official Microsoft documentation to read before implementing each version. |
+| Provider, Connector and server responsibilities; source layout | [Architecture](provider-architecture.md) |
+| Branch policy, CI/CD, NuGet publishing, ports and dependency isolation | [Version support](efcore/version-support-matrix.md) |
+| Development, testing, credentials and release rules | [Repository guidelines](repository-guidelines.md) |
+| Official EF documentation used when implementing or porting | [References](efcore/official-references.md) |
 
-The version documents describe intended support. They are not evidence of implementation or live OceanBase
-compatibility until the corresponding tests and server matrix pass.
+Git retains history and ignored `artifacts/` retains raw local evidence.
+
+Write documentation in English and organize it by lasting topic across all EF Core versions. New
+independent topics are allowed; small features do not get their own documents. See the root
+[AGENTS.md](../AGENTS.md) for these rules.

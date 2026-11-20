@@ -9,18 +9,25 @@ using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Migrations.Operations;
 using Microsoft.EntityFrameworkCore.Storage;
+using OceanBase.EntityFrameworkCore.Internal;
 
 namespace OceanBase.EntityFrameworkCore.Storage;
 
 internal sealed partial class OceanBaseDatabaseCreator
 {
-    private sealed record CreationPlan(IReadOnlyList<string> Schema, IReadOnlyList<string> Data);
+    private sealed record CreationPlan(IReadOnlyList<string> Schema, IReadOnlyList<string> Data,
+        bool ChangesDatabaseCollation, bool CreatesSequences);
 
     private CreationPlan BuildCreationPlan(IModel model)
     {
         var context = currentContext.Context;
-        var schema = new OceanBaseSchemaSqlGenerator(context.GetService<ISqlGenerationHelper>(), _mode).Generate(model);
-        if (!model.GetEntityTypes().Any(entity => entity.GetSeedData().Any())) return new(schema, []);
+        var ownedDatabase = _mode == OceanBaseCompatibilityMode.MySql && DatabaseManagementEnabled
+            ? options.FindExtension<OceanBaseOptionsExtension>()!.SchemaManagementScope : null;
+        var schema = new OceanBaseSchemaSqlGenerator(context.GetService<ISqlGenerationHelper>(), _mode).Generate(model, ownedDatabase);
+        var changesDatabaseCollation = model.GetCollation() is not null;
+        var createsSequences = model.GetSequences().Any();
+        if (!model.GetEntityTypes().Any(entity => entity.GetSeedData().Any()))
+            return new(schema, [], changesDatabaseCollation, createsSequences);
         var includedTables = model.GetRelationalModel().Tables.Where(table => !table.IsExcludedFromMigrations)
             .Select(table => (table.Name, table.Schema)).ToHashSet();
         var operations = context.GetService<IMigrationsModelDiffer>().GetDifferences(null, model.GetRelationalModel())
@@ -33,7 +40,7 @@ internal sealed partial class OceanBaseDatabaseCreator
             }).ToArray();
         var data = context.GetService<IMigrationsSqlGenerator>().Generate(operations, model)
             .Select(command => command.CommandText.TrimEnd().TrimEnd(';')).ToArray();
-        return new(schema, data);
+        return new(schema, data, changesDatabaseCollation, createsSequences);
     }
 
     private void ApplyModelData(IReadOnlyList<string> statements)

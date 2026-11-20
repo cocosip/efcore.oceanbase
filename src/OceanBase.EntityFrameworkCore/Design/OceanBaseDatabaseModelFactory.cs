@@ -12,10 +12,11 @@ using Microsoft.EntityFrameworkCore.Scaffolding.Metadata;
 using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.Logging;
 using OceanBaseConnector;
+using static OceanBase.EntityFrameworkCore.Metadata.OceanBaseRelationalAnnotationProvider;
 
 namespace OceanBase.EntityFrameworkCore.Design
 {
-    internal sealed class OceanBaseDatabaseModelFactory(ILoggerFactory loggerFactory,
+    internal sealed partial class OceanBaseDatabaseModelFactory(ILoggerFactory loggerFactory,
         OceanBaseScaffoldingTypeMappingSource mappings) : DatabaseModelFactory
     {
         private readonly ILogger _logger = loggerFactory.CreateLogger<OceanBaseDatabaseModelFactory>();
@@ -95,14 +96,20 @@ namespace OceanBase.EntityFrameworkCore.Design
             }
             foreach (var table in requested)
                 if (!tables.ContainsKey(table)) throw new InvalidOperationException("Requested table was not found in the visible catalog: " + table.Schema + "." + table.Name);
-            foreach (var schema in schemas)
-                if (!tables.Keys.Any(t => t.Schema == schema)) throw new InvalidOperationException("Requested schema has no visible tables/views: " + schema);
             foreach (var schema in namespaces.OrderBy(s => s, StringComparer.Ordinal))
             {
                 ReadColumns(connection, mode, schema, tables);
                 ReadKeysAndIndexes(connection, mode, schema, tables);
             }
+            foreach (var table in tables.Values)
+                if (table.PrimaryKey?.Columns.Any(column => column[OnUpdateSqlAnnotation] is not null) == true)
+                    throw Unsupported("HAS_ON_UPDATE on a primary key of " + table.Name);
             foreach (var schema in namespaces.OrderBy(s => s, StringComparer.Ordinal)) ReadForeignKeys(connection, mode, schema, tables);
+            if (mode == OceanBaseCompatibilityMode.Oracle && connection is OceanBaseConnection native)
+                foreach (var schema in namespaces.OrderBy(s => s, StringComparer.Ordinal)) ReadSequences(native, schema, database);
+            foreach (var schema in schemas)
+                if (!tables.Keys.Any(t => t.Schema == schema) && !database.Sequences.Any(sequence => sequence.Schema == schema))
+                    throw new InvalidOperationException("Requested schema has no visible supported tables/views or sequences: " + schema);
             return database;
         }
 
@@ -118,26 +125,32 @@ namespace OceanBase.EntityFrameworkCore.Design
             foreach (var group in rows.Rows.Cast<DataRow>().GroupBy(r => Text(r, "TABLE_NAME")!))
             {
                 if (!tables.TryGetValue((schema, group.Key), out var table)) continue;
+                var definitions = mode == OceanBaseCompatibilityMode.Oracle && table is not DatabaseView && connection is OceanBaseConnection native
+                    ? native.GetOracleIdentityColumns(table.Name, schema).ToDictionary(column => column.ColumnName, StringComparer.Ordinal)
+                    : null;
                 foreach (var row in group.OrderBy(r => Number(r, "ORDINAL_POSITION")))
                 {
                     var name = Text(row, "COLUMN_NAME")!;
                     var store = Text(row, "TYPE_DECLARATION");
                     if (string.IsNullOrWhiteSpace(store)) throw Unsupported("missing TYPE_DECLARATION for " + table.Name + "." + name);
-                    var clr = OceanBaseScaffoldingTypes.ClrType(store, mode);
+                    var definition = definitions?.GetValueOrDefault(name);
+                    var clr = OceanBaseScaffoldingTypes.ClrType(store, mode, identity: definition is not null);
                     _ = typeMappings.FindMapping(clr, store) ?? throw Unsupported("column type " + store);
-                    var identity = Flag(row, "IS_IDENTITY", table.Name, name);
+                    var identity = definitions is not null ? definition is not null : Flag(row, "IS_IDENTITY", table.Name, name);
                     var computed = Flag(row, "IS_COMPUTED", table.Name, name);
                     var hasDefault = Flag(row, "HAS_DEFAULT", table.Name, name);
                     var hasUpdate = Flag(row, "HAS_ON_UPDATE", table.Name, name);
                     var expression = BehaviorSql(row, "IS_COMPUTED", "COMPUTED_EXPRESSION", computed, table.Name, name);
                     var defaultSql = BehaviorSql(row, "HAS_DEFAULT", "DEFAULT_VALUE_SQL", hasDefault, table.Name, name);
-                    _ = BehaviorSql(row, "HAS_ON_UPDATE", "ON_UPDATE_SQL", hasUpdate, table.Name, name);
-                    if (hasUpdate == true) throw Unsupported("HAS_ON_UPDATE on " + table.Name + "." + name);
+                    var updateSql = BehaviorSql(row, "HAS_ON_UPDATE", "ON_UPDATE_SQL", hasUpdate, table.Name, name)?.ToUpperInvariant();
+                    if (hasUpdate == true && (mode != OceanBaseCompatibilityMode.MySql || identity != false || computed != false
+                        || !IsSupportedOnUpdate(updateSql, store, defaultSql)))
+                        throw Unsupported("HAS_ON_UPDATE on " + table.Name + "." + name);
                     if (computed == true && (identity == true || hasDefault == true))
                         throw Unsupported("inconsistent IS_IDENTITY/IS_COMPUTED/HAS_DEFAULT for " + table.Name + "." + name);
                     if (identity == true && clr != typeof(int) && clr != typeof(long))
                         throw Unsupported("identity outside the supported int/long range");
-                    if (identity == true && mode == OceanBaseCompatibilityMode.Oracle)
+                    if (identity == true && mode == OceanBaseCompatibilityMode.Oracle && definition is null)
                         WarnIncomplete(table.Name, name, "Oracle identity mode/options");
                     var stored = row.Field<bool?>("IS_STORED");
                     if (computed != true && stored is not null)
@@ -152,11 +165,19 @@ namespace OceanBase.EntityFrameworkCore.Design
                         },
                         ComputedColumnSql = expression, IsStored = stored, DefaultValueSql = defaultSql,
                         DefaultValue = hasDefault == true && defaultSql is null ? DBNull.Value : null,
-                        ValueGenerated = computed == true ? ValueGenerated.OnAddOrUpdate : identity == true ? ValueGenerated.OnAdd : null,
+                        ValueGenerated = updateSql is not null
+                            ? (hasDefault == true ? ValueGenerated.OnAddOrUpdate : ValueGenerated.OnUpdate)
+                            : computed == true ? ValueGenerated.OnAddOrUpdate : identity == true ? ValueGenerated.OnAdd : null,
                         Comment = Text(row, "COLUMN_COMMENT") is { Length: > 0 } comment ? comment : null,
                         Collation = Text(row, "COLLATION_NAME")
                     };
                     column["ClrType"] = clr;
+                    if (definition is not null)
+                    {
+                        column[IdentityGenerationAnnotation] = definition.GenerationType;
+                        if (!string.IsNullOrWhiteSpace(definition.SequenceOptions)) column[IdentityOptionsAnnotation] = definition.SequenceOptions;
+                    }
+                    if (updateSql is not null) column[OnUpdateSqlAnnotation] = updateSql;
                     table.Columns.Add(column);
                 }
             }
@@ -191,6 +212,8 @@ namespace OceanBase.EntityFrameworkCore.Design
         {
             using var keys = Schema(connection, "Constraints", schema, mode);
             using var columns = Schema(connection, "ConstraintColumns", schema, mode);
+            using var indexes = Schema(connection, "Indexes", schema, mode);
+            using var indexColumns = Schema(connection, "IndexColumns", schema, mode);
             foreach (DataRow row in keys.Rows)
             {
                 if (!tables.TryGetValue((schema, Text(row, "TABLE_NAME")!), out var table) || table is DatabaseView) continue;
@@ -198,6 +221,12 @@ namespace OceanBase.EntityFrameworkCore.Design
                 var kind = Text(row, "CONSTRAINT_TYPE");
                 if (kind == "CHECK") { _logger.LogWarning("CHECK constraint {Constraint} on {Table} is not represented by EF reverse engineering.", name, table.Name); continue; }
                 if (kind is not ("PRIMARY KEY" or "UNIQUE")) continue;
+                if (kind == "UNIQUE"
+                    && indexes.Rows.Cast<DataRow>().Any(index => Text(index, "TABLE_NAME") == table.Name
+                        && Text(index, "INDEX_NAME") == name && Text(index, "IS_UNIQUE") == "YES")
+                    && Ordered(indexColumns, "INDEX_NAME", name, table.Name).Any(member =>
+                        !member.IsNull("PREFIX_LENGTH") || indexColumns.Columns.Contains("COLUMN_EXPRESSION") && !member.IsNull("COLUMN_EXPRESSION")))
+                    continue;
                 var keyColumns = Ordered(columns, "CONSTRAINT_NAME", name, table.Name).Select(r => Column(table, Text(r, "COLUMN_NAME")!)).ToArray();
                 if (keyColumns.Length == 0) throw Unsupported("key without visible columns");
                 if (kind == "PRIMARY KEY")
@@ -213,23 +242,58 @@ namespace OceanBase.EntityFrameworkCore.Design
                     table.UniqueConstraints.Add(key);
                 }
             }
-            using var indexes = Schema(connection, "Indexes", schema, mode);
-            using var indexColumns = Schema(connection, "IndexColumns", schema, mode);
             foreach (DataRow row in indexes.Rows)
             {
                 if (!tables.TryGetValue((schema, Text(row, "TABLE_NAME")!), out var table) || table is DatabaseView) continue;
                 var name = Text(row, "INDEX_NAME")!;
                 var kind = Text(row, "INDEX_TYPE");
-                if (kind is not ("BTREE" or "NORMAL")) throw Unsupported("index type " + kind);
+                if (kind is not ("BTREE" or "NORMAL") && !(mode == OceanBaseCompatibilityMode.Oracle && kind == "FUNCTION-BASED NORMAL"))
+                    throw Unsupported("index type " + kind);
                 var members = Ordered(indexColumns, "INDEX_NAME", name, table.Name).ToArray();
-                if (members.Length == 0 || members.Any(r => Text(r, "COLUMN_NAME") is null || Text(r, "PREFIX_LENGTH") is not null))
-                    throw Unsupported("empty, expression or prefix index " + name);
-                var mapped = members.Select(r => Column(table, Text(r, "COLUMN_NAME")!)).ToArray();
+                if (members.Length == 0 || members.Any(r => Text(r, "COLUMN_NAME") is null
+                    && (!indexColumns.Columns.Contains("COLUMN_EXPRESSION") || Text(r, "COLUMN_EXPRESSION") is null)))
+                    throw Unsupported("empty or expression index " + name);
                 var unique = Text(row, "IS_UNIQUE") switch { "YES" => true, "NO" => false, _ => throw Unsupported("unknown index uniqueness") };
+                if (indexColumns.Columns.Contains("COLUMN_EXPRESSION") && members.Any(member => Text(member, "COLUMN_EXPRESSION") is not null))
+                {
+                    if (mode != OceanBaseCompatibilityMode.Oracle) throw Unsupported("MySQL expression index " + name);
+                    var sql = new List<string> { unique ? "UNIQUE" : "NONUNIQUE" };
+                    foreach (var member in members)
+                    {
+                        if (!member.IsNull("PREFIX_LENGTH")) throw Unsupported("prefix length on an Oracle expression index");
+                        var expression = Text(member, "COLUMN_EXPRESSION");
+                        if (expression is not null && string.IsNullOrWhiteSpace(expression)) throw Unsupported("empty index expression");
+                        var column = expression is null ? Column(table, Text(member, "COLUMN_NAME")!) : null;
+                        var direction = Text(member, "SORT_ORDER") switch
+                        {
+                            "ASC" => "", "DESC" => " DESC", _ => throw Unsupported("unknown index direction")
+                        };
+                        sql.Add((expression ?? "\"" + column!.Name.Replace("\"", "\"\"", StringComparison.Ordinal) + "\"") + direction);
+                    }
+                    table[ExpressionIndexPrefix + name] = sql.ToArray();
+                    continue;
+                }
+                if (kind == "FUNCTION-BASED NORMAL") throw Unsupported("missing expression metadata for " + name);
+                var mapped = members.Select(r => Column(table, Text(r, "COLUMN_NAME")!)).ToArray();
+                var lengths = new int[members.Length];
+                for (var position = 0; position < members.Length; position++)
+                {
+                    if (members[position].IsNull("PREFIX_LENGTH")) continue;
+                    if (mode != OceanBaseCompatibilityMode.MySql || members[position]["PREFIX_LENGTH"] is not long length
+                        || length is <= 0 or > int.MaxValue || mapped[position]["ClrType"] is not Type clr
+                        || clr != typeof(string) && clr != typeof(byte[]))
+                        throw Unsupported("invalid index prefix length for " + name + "." + mapped[position].Name);
+                    lengths[position] = (int)length;
+                }
+                var prefixed = lengths.Any(length => length > 0);
+                if (prefixed && table.PrimaryKey is { } primaryKey
+                    && (primaryKey.Name == name || name == "PRIMARY"))
+                    throw Unsupported("prefix lengths on primary key " + name);
                 if (unique && (table.PrimaryKey is { } primary && primary.Columns.SequenceEqual(mapped)
                         && (primary.Name == name || mode == OceanBaseCompatibilityMode.MySql && name == "PRIMARY")
                     || table.UniqueConstraints.Any(k => k.Name == name && k.Columns.SequenceEqual(mapped)))) continue;
                 var index = new DatabaseIndex { Table = table, Name = name, IsUnique = unique };
+                if (prefixed) index[IndexPrefixLengthsAnnotation] = lengths;
                 foreach (var column in mapped) index.Columns.Add(column);
                 foreach (var member in members)
                 {
@@ -271,7 +335,11 @@ namespace OceanBase.EntityFrameworkCore.Design
                         || Text(member, mode == OceanBaseCompatibilityMode.MySql ? "REFERENCED_TABLE_CATALOG" : "REFERENCED_TABLE_SCHEMA") != principalSchema)
                         throw Unsupported("inconsistent foreign-key targets");
                     key.Columns.Add(Column(table, Text(member, "COLUMN_NAME")!));
-                    key.PrincipalColumns.Add(Column(principal, Text(member, "REFERENCED_COLUMN_NAME")!));
+                    var principalColumn = Column(principal, Text(member, "REFERENCED_COLUMN_NAME")!);
+                    if (principalColumn[OnUpdateSqlAnnotation] is not null)
+                        throw Unsupported("HAS_ON_UPDATE on principal column " + principal.Name + "." + principalColumn.Name
+                            + " of foreign key " + name);
+                    key.PrincipalColumns.Add(principalColumn);
                 }
                 if (key.Columns.Count == 0) throw Unsupported("foreign key without visible columns");
                 table.ForeignKeys.Add(key);
@@ -281,7 +349,8 @@ namespace OceanBase.EntityFrameworkCore.Design
         private static DataTable Schema(DbConnection connection, string collection, string schema, OceanBaseCompatibilityMode mode)
         {
             var rows = connection.GetSchema(collection, mode == OceanBaseCompatibilityMode.MySql ? [schema, null] : [null, schema]);
-            if (rows.Rows.Cast<DataRow>().Any(r => Text(r, mode == OceanBaseCompatibilityMode.MySql ? "TABLE_CATALOG" : "TABLE_SCHEMA") != schema))
+            var prefix = collection == "Sequences" ? "SEQUENCE_" : "TABLE_";
+            if (rows.Rows.Cast<DataRow>().Any(r => Text(r, prefix + (mode == OceanBaseCompatibilityMode.MySql ? "CATALOG" : "SCHEMA")) != schema))
             {
                 rows.Dispose();
                 throw Unsupported("catalog rows outside the requested namespace");

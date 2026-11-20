@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Storage;
 using OceanBase.EntityFrameworkCore.Internal;
 using OceanBaseConnector;
@@ -32,7 +33,12 @@ public class OceanBaseRetryingExecutionStrategy : ExecutionStrategy
             || error.ServerErrorCode == 0 || error.Data.Contains(UnsafeCleanup)
             || error.SqlState is "70100" or "57014"
             || (_mode == OceanBaseCompatibilityMode.MySql ? error.ServerErrorCode is 1317 or 3024 : error.ServerErrorCode == 1013)
-            || Dependencies.CurrentContext.Context.Database.CurrentTransaction is not null)
+            || Dependencies.CurrentContext.Context.Database.CurrentTransaction is not null
+            || System.Transactions.Transaction.Current is not null
+            || Dependencies.CurrentContext.Context.GetService<IRelationalConnection>()
+                is OceanBaseRelationalConnection { HasAmbientConnectionLease: true }
+            || Dependencies.CurrentContext.Context.GetService<IDbContextTransactionManager>()
+                is ITransactionEnlistmentManager { EnlistedTransaction: not null })
             return false;
         return error.SqlState == "40001" || _additionalCodes.Contains(error.ServerErrorCode)
             || (_mode == OceanBaseCompatibilityMode.MySql ? error.ServerErrorCode is 1205 or 1213

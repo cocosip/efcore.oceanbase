@@ -174,7 +174,7 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             Assert.Contains("O''Reilly!", literal);
             Assert.Contains(mode == OceanBaseCompatibilityMode.Oracle ? "N'!'" : "'!'", literal);
             Assert.DoesNotContain(mode == OceanBaseCompatibilityMode.MySql ? "@values" : ":values", literal);
-            if (mode == OceanBaseCompatibilityMode.MySql) Assert.Contains("CONVERT(X'", literal);
+            if (mode == OceanBaseCompatibilityMode.MySql) Assert.Contains("_utf8mb4 X'", literal);
             using var constants = CreateContext(mode, relationalNulls, ParameterTranslationMode.Constant);
             Assert.Contains("O''Reilly!", constants.Rows.Where(row => values.Contains(row.Suffix)).ToQueryString());
             using var parameters = CreateContext(mode, relationalNulls, ParameterTranslationMode.Parameter);
@@ -202,14 +202,20 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             if (mode == OceanBaseCompatibilityMode.Oracle)
                 Assert.Contains(relationalNulls ? "IN (NULL, NULL)" : "\"EmptyConverted\" IS NULL", inlineEmpty);
             string[] binary = ["0A", "0B"];
-            var binarySql = context.Rows.Where(row => binary.Contains(row.Binary)).ToQueryString();
-            Assert.Contains(" IN (", binarySql);
-            Assert.DoesNotContain("IS NULL", binarySql);
-            binary = ["", "0A"];
             if (mode == OceanBaseCompatibilityMode.Oracle)
-                Assert.Contains("empty Oracle binary inputs", Assert.Throws<NotSupportedException>(() => context.Rows
-                    .Where(row => binary.Contains(row.Binary)).ToQueryString()).Message);
-            else Assert.Contains(" IN (", context.Rows.Where(row => binary.Contains(row.Binary)).ToQueryString());
+            {
+                Assert.Contains("BLOB", Assert.Throws<NotSupportedException>(() => context.Rows.Where(row => binary.Contains(row.Binary)).ToQueryString()).Message);
+                binary = ["", "0A"];
+                Assert.Contains("BLOB", Assert.Throws<NotSupportedException>(() => context.Rows.Where(row => EF.Constant(binary).Contains(row.Binary)).ToQueryString()).Message);
+            }
+            else
+            {
+                var binarySql = context.Rows.Where(row => binary.Contains(row.Binary)).ToQueryString();
+                Assert.Contains(" IN (", binarySql);
+                Assert.DoesNotContain("IS NULL", binarySql);
+                binary = ["", "0A"];
+                Assert.Contains(" IN (", context.Rows.Where(row => binary.Contains(row.Binary)).ToQueryString());
+            }
             Assert.Contains(" IN (", context.Rows.Where(row => values.Contains(row.Preserved)).ToQueryString());
         }
 

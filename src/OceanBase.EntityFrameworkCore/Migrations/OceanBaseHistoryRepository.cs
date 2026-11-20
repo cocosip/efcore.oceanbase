@@ -22,14 +22,15 @@ namespace OceanBase.EntityFrameworkCore.Migrations
         public override LockReleaseBehavior LockReleaseBehavior => LockReleaseBehavior.Explicit;
         private string Q(string name) => SqlGenerationHelper.DelimitIdentifier(name);
         private string Table => SqlGenerationHelper.DelimitIdentifier(TableName, TableSchema);
-        private string LockTable => SqlGenerationHelper.DelimitIdentifier(TableName + "Lock", TableSchema);
+        private string LockTableName => TableName + "Lock";
+        private string LockTable => SqlGenerationHelper.DelimitIdentifier(LockTableName, TableSchema);
         private string Literal(string value) => Dependencies.TypeMappingSource.GetMapping(typeof(string)).GenerateSqlLiteral(value);
 
         private void ValidateHistoryScope()
         {
             if (Options.SchemaManagementScope is { } scope && TableSchema is not null && TableSchema != scope)
                 throw new NotSupportedException("The migrations history table must be in the selected schema management scope.");
-            if (Encoding.UTF8.GetByteCount(TableName + "Lock") > (Oracle ? 128 : 64))
+            if (Encoding.UTF8.GetByteCount(LockTableName) > (Oracle ? 128 : 64))
                 throw new NotSupportedException("The migrations history table name is too long for its lock table.");
         }
 
@@ -39,8 +40,7 @@ namespace OceanBase.EntityFrameworkCore.Migrations
             {
                 ValidateHistoryScope();
                 return Oracle
-                    ? "SELECT COUNT(*) FROM ALL_TABLES WHERE OWNER = " + (TableSchema is null ? "SYS_CONTEXT('USERENV', 'CURRENT_SCHEMA')" : Literal(TableSchema))
-                        + " AND TABLE_NAME = " + Literal(TableName)
+                    ? "SELECT COUNT(*) " + OracleTableCatalog(TableName)
                     : "SELECT COUNT(*) FROM information_schema.tables WHERE BINARY TABLE_SCHEMA = BINARY "
                         + (TableSchema is null ? "DATABASE()" : Literal(TableSchema))
                         + " AND ((@@lower_case_table_names = 0 AND BINARY TABLE_NAME = BINARY " + Literal(TableName)
@@ -48,6 +48,11 @@ namespace OceanBase.EntityFrameworkCore.Migrations
                         + "))) AND TABLE_TYPE = 'BASE TABLE'";
             }
         }
+
+        private string OracleTableCatalog(string name)
+            => "FROM ALL_TABLES WHERE OWNER = "
+                + (TableSchema is null ? "SYS_CONTEXT('USERENV', 'CURRENT_SCHEMA')" : Literal(TableSchema))
+                + " AND TABLE_NAME = " + Literal(name);
 
         protected override bool InterpretExistsResult(object? value)
             => value is null or DBNull ? throw new InvalidOperationException("The migrations history catalog returned no count.")
@@ -65,14 +70,14 @@ namespace OceanBase.EntityFrameworkCore.Migrations
         public override string GetCreateIfNotExistsScript()
         {
             ValidateHistoryScope();
-            return CreateIfMissing(GetCreateScript());
-        }
-
-        private string CreateIfMissing(string sql)
-            => Oracle
-                ? "BEGIN\n    EXECUTE IMMEDIATE '" + sql.Trim().TrimEnd(';').Replace("'", "''", StringComparison.Ordinal)
-                    + "';\nEXCEPTION WHEN OTHERS THEN\n    IF SQLCODE != -955 THEN RAISE; END IF;\nEND;\n"
+            var sql = GetCreateScript();
+            return Oracle
+                ? "DECLARE ob_count NUMBER;\nBEGIN\n    SELECT COUNT(*) INTO ob_count " + OracleTableCatalog(TableName)
+                    + ";\n    IF ob_count = 0 THEN\n        EXECUTE IMMEDIATE '"
+                    + sql.Trim().TrimEnd(';').Replace("'", "''", StringComparison.Ordinal)
+                    + "';\n    END IF;\nEND;\n"
                 : "CREATE TABLE IF NOT EXISTS " + sql["CREATE TABLE ".Length..];
+        }
 
         public override string GetBeginIfNotExistsScript(string migrationId) => Condition(migrationId, exists: false);
         public override string GetBeginIfExistsScript(string migrationId) => Condition(migrationId, exists: true);
@@ -92,10 +97,18 @@ namespace OceanBase.EntityFrameworkCore.Migrations
         private string LockCreateScript()
         {
             ValidateHistoryScope();
-            return CreateIfMissing("CREATE TABLE " + LockTable + " (" + Q("Id")
+            return (Oracle ? "CREATE TABLE " : "CREATE TABLE IF NOT EXISTS ") + LockTable + " (" + Q("Id")
                 + (Oracle ? " NUMBER(10)" : " INT") + " NOT NULL PRIMARY KEY, " + Q("Owner")
-                + (Oracle ? " VARCHAR2(36)" : " VARCHAR(36)") + " NOT NULL);\n");
+                + (Oracle ? " VARCHAR2(36)" : " VARCHAR(36)") + " NOT NULL)" + (Oracle ? "" : ";\n");
         }
+
+        private bool OracleLockTableExists()
+            => InterpretExistsResult(Dependencies.RawSqlCommandBuilder.Build("SELECT COUNT(*) " + OracleTableCatalog(LockTableName))
+                .ExecuteScalar(Parameters()));
+
+        private async Task<bool> OracleLockTableExistsAsync(CancellationToken cancellationToken)
+            => InterpretExistsResult(await Dependencies.RawSqlCommandBuilder.Build("SELECT COUNT(*) " + OracleTableCatalog(LockTableName))
+                .ExecuteScalarAsync(Parameters(), cancellationToken).ConfigureAwait(false));
         private string ClaimScript(string owner)
             => "INSERT INTO " + LockTable + " (" + Q("Id") + ", " + Q("Owner") + ") SELECT 1, " + Literal(owner)
                 + " FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM " + LockTable + " WHERE " + Q("Id") + " = 1)";
@@ -125,7 +138,15 @@ namespace OceanBase.EntityFrameworkCore.Migrations
         public override IMigrationsDatabaseLock AcquireDatabaseLock()
         {
             if (_migrationOwnsLock && _lock is not null) return _lock;
-            Dependencies.RawSqlCommandBuilder.Build(LockCreateScript()).ExecuteNonQuery(Parameters());
+            var create = LockCreateScript();
+            if (!Oracle || !OracleLockTableExists())
+            {
+                try { Dependencies.RawSqlCommandBuilder.Build(create).ExecuteNonQuery(Parameters()); }
+                catch (OceanBaseException error) when (Oracle && error.ServerErrorCode == 955)
+                {
+                    if (!OracleLockTableExists()) throw;
+                }
+            }
             var owner = Guid.NewGuid().ToString();
             _lock = new DatabaseLock(this, owner);
             try
@@ -140,7 +161,15 @@ namespace OceanBase.EntityFrameworkCore.Migrations
         {
             cancellationToken.ThrowIfCancellationRequested();
             if (_migrationOwnsLock && _lock is not null) return _lock;
-            await Dependencies.RawSqlCommandBuilder.Build(LockCreateScript()).ExecuteNonQueryAsync(Parameters(), cancellationToken).ConfigureAwait(false);
+            var create = LockCreateScript();
+            if (!Oracle || !await OracleLockTableExistsAsync(cancellationToken).ConfigureAwait(false))
+            {
+                try { await Dependencies.RawSqlCommandBuilder.Build(create).ExecuteNonQueryAsync(Parameters(), cancellationToken).ConfigureAwait(false); }
+                catch (OceanBaseException error) when (Oracle && error.ServerErrorCode == 955)
+                {
+                    if (!await OracleLockTableExistsAsync(cancellationToken).ConfigureAwait(false)) throw;
+                }
+            }
             var owner = Guid.NewGuid().ToString();
             _lock = new DatabaseLock(this, owner);
             try

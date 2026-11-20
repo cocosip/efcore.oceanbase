@@ -102,8 +102,8 @@ internal sealed class OceanBaseRoundTranslator(
         if (type != typeof(decimal))
             return TranslateBinary(input, type, digits, rule);
 
-        if (input.TypeMapping is not OceanBaseDecimalTypeMapping mapping || mapping.ClrType != typeof(decimal)
-            || mapping.Converter is { ProviderClrType: var carrier } && carrier != typeof(decimal)
+        if (input.TypeMapping is not OceanBaseDecimalTypeMapping mapping || (Nullable.GetUnderlyingType(mapping.ClrType) ?? mapping.ClrType) != typeof(decimal)
+            || mapping.Converter is { ProviderClrType: var carrier } && (Nullable.GetUnderlyingType(carrier) ?? carrier) != typeof(decimal)
             || !OceanBaseMathTranslator.IsValidNumeric(mapping, mappingSource))
             return null;
 
@@ -152,8 +152,9 @@ internal sealed class OceanBaseRoundTranslator(
         input = factory.ApplyDefaultTypeMapping(input);
         if (type == typeof(decimal))
         {
-            return input.TypeMapping is OceanBaseDecimalTypeMapping decimalMapping && decimalMapping.ClrType == typeof(decimal)
-                && (decimalMapping.Converter?.ProviderClrType ?? typeof(decimal)) == typeof(decimal)
+            return input.TypeMapping is OceanBaseDecimalTypeMapping decimalMapping && (Nullable.GetUnderlyingType(decimalMapping.ClrType) ?? decimalMapping.ClrType) == typeof(decimal)
+                && (Nullable.GetUnderlyingType(decimalMapping.Converter?.ProviderClrType ?? typeof(decimal))
+                    ?? decimalMapping.Converter?.ProviderClrType ?? typeof(decimal)) == typeof(decimal)
                 && OceanBaseMathTranslator.IsValidNumeric(decimalMapping, mappingSource)
                     ? decimalMapping.AsQueryResult()
                     : null;
@@ -163,8 +164,9 @@ internal sealed class OceanBaseRoundTranslator(
         return input.TypeMapping is RelationalTypeMapping floatingMapping
             && (single ? floatingMapping is OceanBaseFloatingPointTypeMapping<float>
                 : floatingMapping is OceanBaseFloatingPointTypeMapping<double>)
-            && floatingMapping.ClrType == type
-            && (floatingMapping.Converter?.ProviderClrType ?? type) == type
+            && (Nullable.GetUnderlyingType(floatingMapping.ClrType) ?? floatingMapping.ClrType) == type
+            && (Nullable.GetUnderlyingType(floatingMapping.Converter?.ProviderClrType ?? type)
+                ?? floatingMapping.Converter?.ProviderClrType ?? type) == type
             && OceanBaseMathTranslator.IsValidNumeric(floatingMapping, mappingSource)
             ? floatingMapping
             : null;
@@ -176,7 +178,9 @@ internal sealed class OceanBaseRoundTranslator(
         var mapping = input.TypeMapping;
         if ((single ? mapping is not OceanBaseFloatingPointTypeMapping<float>
                 : mapping is not OceanBaseFloatingPointTypeMapping<double>)
-            || mapping!.ClrType != type || (mapping.Converter?.ProviderClrType ?? type) != type
+            || (Nullable.GetUnderlyingType(mapping!.ClrType) ?? mapping.ClrType) != type
+            || (Nullable.GetUnderlyingType(mapping.Converter?.ProviderClrType ?? type)
+                ?? mapping.Converter?.ProviderClrType ?? type) != type
             || !OceanBaseMathTranslator.IsValidNumeric(mapping, mappingSource))
             return null;
 

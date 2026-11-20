@@ -12,6 +12,11 @@ namespace OceanBase.EntityFrameworkCore.Storage
                 return timestamp.ToDateTime();
             }
 
+            if (targetType == typeof(DateTime) && value is OceanBaseTimestampLocalTimeZone local)
+            {
+                return local.ToDateTime();
+            }
+
             if (targetType == typeof(DateTimeOffset) && value is OceanBaseTimestampWithTimeZone zoned)
             {
                 return zoned.ToDateTimeOffset();

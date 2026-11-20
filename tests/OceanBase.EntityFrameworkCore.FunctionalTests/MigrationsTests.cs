@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Data;
 using System.Data.Common;
 using System.Linq;
+using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
@@ -38,6 +39,8 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
             var forward = migrator.GenerateScript();
             Assert.Contains("__EFMigrationsHistory", forward);
             Assert.Contains("CREATE TABLE", forward);
+            Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? "table''s comment" : "table''''s comment", forward);
+            Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? "column''s comment" : "column''''s comment", forward);
             Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? "MODIFY COLUMN" : "MODIFY (", forward);
             Assert.Contains(Expand, forward);
             Assert.DoesNotContain("START TRANSACTION", forward);
@@ -46,6 +49,8 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
             Assert.Contains("DELETE FROM", reverse);
             var idempotent = migrator.GenerateScript(options: MigrationsSqlGenerationOptions.Idempotent);
             Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? "PREPARE" : "EXECUTE IMMEDIATE", idempotent);
+            Assert.Contains(mode == OceanBaseCompatibilityMode.MySql
+                ? Convert.ToHexString(Encoding.UTF8.GetBytes("table''s comment")) : "table''''s comment", idempotent);
             Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? "@ob_migration_apply" : "IF ob_count = 0 THEN", idempotent);
             var down = migrator.GenerateScript(Expand, Migration.InitialDatabase, MigrationsSqlGenerationOptions.Idempotent);
             Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? "@ob_migration_apply" : "IF ob_count > 0 THEN", down);
@@ -64,11 +69,15 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
             Assert.Contains(capture.Commands, c => c.Sql.StartsWith("CREATE TABLE", StringComparison.Ordinal) && c.Sql.Contains("Rows", StringComparison.Ordinal));
             Assert.All(capture.Commands, c => Assert.Equal(async, c.Async));
             if (mode == OceanBaseCompatibilityMode.Oracle)
-                Assert.All(capture.Commands.Where(c => !c.Sql.StartsWith("BEGIN", StringComparison.Ordinal)),
+                Assert.All(capture.Commands.Where(c => !c.Sql.StartsWith("BEGIN", StringComparison.Ordinal)
+                    && !c.Sql.StartsWith("DECLARE", StringComparison.Ordinal)),
                     c => Assert.False(c.Sql.TrimEnd().EndsWith(';'), c.Sql));
             var count = capture.Commands.Count;
             if (async) await context.Database.MigrateAsync(); else context.Database.Migrate();
             Assert.DoesNotContain(capture.Commands.Skip(count), c => c.Sql.Contains("ALTER TABLE", StringComparison.Ordinal));
+            if (mode == OceanBaseCompatibilityMode.Oracle)
+                Assert.DoesNotContain(capture.Commands.Skip(count), c => c.Sql.Contains("CREATE TABLE", StringComparison.Ordinal)
+                    && c.Sql.Contains("__EFMigrationsHistoryLock", StringComparison.Ordinal));
             var migrator = context.GetService<IMigrator>();
             if (async) await migrator.MigrateAsync(Migration.InitialDatabase); else migrator.Migrate(Migration.InitialDatabase);
             Assert.Empty(capture.Applied);
@@ -291,10 +300,10 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
         {
             builder.HasAnnotation("ProductVersion", "10.0.0");
             var row = builder.Entity("MigrationRow");
-            row.ToTable("Rows");
+            row.ToTable("Rows", table => table.HasComment("table's comment"));
             row.Property<int>("Id").ValueGeneratedOnAdd();
             row.HasKey("Id");
-            row.Property<string>("Code").HasMaxLength(evolved ? 64 : 32).IsRequired();
+            row.Property<string>("Code").HasMaxLength(evolved ? 64 : 32).IsRequired().HasComment("column's comment");
         }
 
         private sealed record Command(string Sql, bool Async);
@@ -318,6 +327,7 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
             public Exception? ReleaseFailure { get; init; }
             public Exception? ClaimFailure { get; init; }
             private bool _history;
+            private bool _lockTable;
             private string? _owner;
 
             private int Execute(DbCommand command, bool async)
@@ -326,6 +336,7 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
                 Commands.Add(new(sql, async));
                 if (sql.Contains("__EFMigrationsHistoryLock", StringComparison.Ordinal))
                 {
+                    if (sql.Contains("CREATE TABLE", StringComparison.Ordinal)) _lockTable = true;
                     if (sql.StartsWith("INSERT", StringComparison.Ordinal))
                     {
                         if (LockHeld) return 0;
@@ -363,6 +374,8 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
             private object Scalar(DbCommand command, bool async)
             {
                 Commands.Add(new(command.CommandText, async));
+                if (command.CommandText.StartsWith("SELECT COUNT", StringComparison.Ordinal)
+                    && command.CommandText.Contains("__EFMigrationsHistoryLock", StringComparison.Ordinal)) return _lockTable ? 1 : 0;
                 return command.CommandText.StartsWith("SELECT COUNT", StringComparison.Ordinal) ? _history ? 1 : 0 : Scope;
             }
             public override InterceptionResult<object> ScalarExecuting(DbCommand command, CommandEventData data, InterceptionResult<object> result)
@@ -394,8 +407,8 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
             => builder.CreateTable("Rows", columns: table => new
             {
                 Id = table.Column<int>(nullable: false).Annotation("OceanBase:Identity", true),
-                Code = table.Column<string>(maxLength: 32, nullable: false)
-            }, constraints: table => table.PrimaryKey("PK_Rows", row => row.Id));
+                Code = table.Column<string>(maxLength: 32, nullable: false, comment: "column's comment")
+            }, constraints: table => table.PrimaryKey("PK_Rows", row => row.Id), comment: "table's comment");
         protected override void Down(MigrationBuilder builder) => builder.DropTable("Rows");
         protected override void BuildTargetModel(ModelBuilder builder) => MigrationsTests.ConfigureModel(builder, false);
     }
@@ -405,9 +418,11 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
     public sealed class ExpandSchemaMigration : Migration
     {
         protected override void Up(MigrationBuilder builder)
-            => builder.AlterColumn<string>("Code", "Rows", maxLength: 64, nullable: false, oldClrType: typeof(string), oldMaxLength: 32);
+            => builder.AlterColumn<string>("Code", "Rows", maxLength: 64, nullable: false, oldClrType: typeof(string), oldMaxLength: 32,
+                comment: "column's comment", oldComment: "column's comment");
         protected override void Down(MigrationBuilder builder)
-            => builder.AlterColumn<string>("Code", "Rows", maxLength: 32, nullable: false, oldClrType: typeof(string), oldMaxLength: 64);
+            => builder.AlterColumn<string>("Code", "Rows", maxLength: 32, nullable: false, oldClrType: typeof(string), oldMaxLength: 64,
+                comment: "column's comment", oldComment: "column's comment");
         protected override void BuildTargetModel(ModelBuilder builder) => MigrationsTests.ConfigureModel(builder, true);
     }
 

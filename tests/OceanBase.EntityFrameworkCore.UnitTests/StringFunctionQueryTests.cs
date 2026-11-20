@@ -121,10 +121,6 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
                 context.Rows.Where(row => row.Required.ToUpperInvariant() == "x"),
                 context.Rows.Where(row => row.Required.ToLower(CultureInfo.InvariantCulture) == "x"),
                 context.Rows.Where(row => row.Required.ToUpper(CultureInfo.InvariantCulture) == "x"),
-                context.Rows.Where(row => row.Required.Trim(' ') == "x"),
-                context.Rows.Where(row => row.Required.Trim(new[] { ' ' }) == "x"),
-                context.Rows.Where(row => row.Required.TrimStart(' ') == "x"),
-                context.Rows.Where(row => row.Required.TrimEnd(new[] { ' ' }) == "x"),
                 context.Rows.Where(row => ToLower(row.Required) == "x"),
                 context.Rows.Where(row => new Impostor(row.Required).Length > 0)
             ];
@@ -230,6 +226,189 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             Assert.Contains("BinaryConverted", context.Rows.Select(row => row.BinaryConverted.ToLower()).ToQueryString());
         }
 
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle)]
+        public void Pad_translates_all_four_signatures_without_truncation(OceanBaseCompatibilityMode mode)
+        {
+            using var context = CreateContext(mode);
+            var width = 8;
+            var token = '海';
+            var query = context.Rows.Where(row => row.Required.PadLeft(width).PadRight(12, token) == "body"
+                || row.Optional!.PadRight(width).PadLeft(2, row.Character!.Value) == "other");
+            var sql = query.ToQueryString();
+            Assert.Contains("PAD(", sql);
+            Assert.Contains(Length(mode), sql);
+            Assert.Contains("CASE", sql);
+            Assert.Throws<InvalidOperationException>(() => context.Rows.Where(row =>
+                row.Required.PadLeft(width, row.NumericCharacter) == "body").ToQueryString());
+            Assert.Throws<InvalidOperationException>(() => context.Rows.Where(row =>
+                row.BinaryConverted.PadRight(width) == "body").ToQueryString());
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql, "CHAR(8)")]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, "NCHAR(8)")]
+        public void Pad_returns_variable_text_for_fixed_receivers(OceanBaseCompatibilityMode mode, string storeType)
+        {
+            using var context = CreateContext(mode);
+            var mapping = context.GetService<IRelationalTypeMappingSource>().FindMapping(typeof(string), storeTypeName: storeType)!;
+            Assert.True(mapping.IsFixedLength);
+            var factory = context.GetService<ISqlExpressionFactory>();
+            var padded = context.GetService<IMethodCallTranslatorProvider>().Translate(context.Model, factory.Constant("x", mapping),
+                typeof(string).GetMethod(nameof(string.PadRight), [typeof(int)])!, [factory.Constant(1)],
+                context.GetService<IDiagnosticsLogger<DbLoggerCategory.Query>>());
+            var resultMapping = Assert.IsType<CaseExpression>(padded).TypeMapping!;
+            Assert.False(resultMapping.IsFixedLength);
+            Assert.Equal(mapping.IsUnicode, resultMapping.IsUnicode);
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle)]
+        public void Insert_uses_guarded_native_character_offsets(OceanBaseCompatibilityMode mode)
+        {
+            using var context = CreateContext(mode);
+            var start = 1;
+            string? inserted = "海";
+            var query = context.Rows.Where(row => row.Optional!.Insert(start, inserted!) == "body");
+            var sql = query.ToQueryString();
+            Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? "SUBSTRING(" : "SUBSTR(", sql);
+            Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? "CONCAT(" : " || ", sql);
+            Assert.Contains("CASE", sql);
+            Assert.DoesNotContain("__oceanbase_internal", sql);
+            inserted = "";
+            Assert.DoesNotContain("__oceanbase_internal", query.ToQueryString());
+            Assert.Throws<InvalidOperationException>(() => context.Rows.Where(row =>
+                row.BinaryConverted.Insert(start, "x") == "body").ToQueryString());
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle)]
+        public void Replace_translates_ordinary_signatures_and_guards_search_tokens(OceanBaseCompatibilityMode mode)
+        {
+            using var context = CreateContext(mode);
+            var oldCharacter = 'x';
+            var sql = context.Rows.Where(row => row.Required.Replace(oldCharacter, 'y').Replace("yy", null) == "body")
+                .ToQueryString();
+            Assert.Contains("REPLACE(", sql);
+            Assert.Contains(Length(mode), sql);
+            Assert.Contains("CASE", sql);
+            Assert.Throws<InvalidOperationException>(() => context.Rows.Where(row =>
+                row.Required.Replace("x", "y", StringComparison.OrdinalIgnoreCase) == "body").ToQueryString());
+            Assert.Throws<InvalidOperationException>(() => context.Rows.Where(row =>
+                row.BinaryConverted.Replace("x", "y") == "body").ToQueryString());
+            Assert.Throws<InvalidOperationException>(() => context.Rows.Where(row =>
+                row.Required.Replace(row.NumericCharacter, 'x') == "body").ToQueryString());
+            Assert.Throws<InvalidOperationException>(() => context.Rows.Where(row =>
+                row.Required.Replace('x', row.ExpandedCharacter) == "body").ToQueryString());
+        }
+
+        [Theory]
+        [InlineData("TEXT")]
+        [InlineData("MEDIUMTEXT")]
+        [InlineData("LONGTEXT")]
+        public void Replace_keeps_explicit_MySql_lob_mapping_with_size_metadata(string storeType)
+        {
+            using var context = CreateContext(OceanBaseCompatibilityMode.MySql);
+            var mapping = context.GetService<IRelationalTypeMappingSource>().FindMapping(typeof(string), storeTypeName: storeType, size: 64)!;
+            var factory = context.GetService<ISqlExpressionFactory>();
+            var replaced = context.GetService<IMethodCallTranslatorProvider>().Translate(context.Model, factory.Constant("x", mapping),
+                typeof(string).GetMethod(nameof(string.Replace), [typeof(string), typeof(string)])!, [factory.Constant("x"), factory.Constant("expanded")],
+                context.GetService<IDiagnosticsLogger<DbLoggerCategory.Query>>());
+            Assert.Equal(mapping.StoreType, Assert.IsType<CaseExpression>(replaced).TypeMapping!.StoreType);
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle)]
+        public void Explicit_trim_translates_six_signatures_and_keeps_null_results(OceanBaseCompatibilityMode mode)
+        {
+            using var context = CreateContext(mode);
+            char[]? characters = ['x', 'y'];
+            var character = 'x';
+            IQueryable[] queries =
+            [
+                context.Rows.Where(row => row.Required.Trim('x') == "body"),
+                context.Rows.Where(row => row.Required.TrimStart(character) == "body"),
+                context.Rows.Where(row => row.Required.TrimEnd('x') == "body"),
+                context.Rows.Where(row => row.Required.Trim(new[] { 'x', 'y' }) == "body"),
+                context.Rows.Where(row => row.Required.TrimStart(characters) == "body"),
+                context.Rows.Where(row => row.Required.TrimEnd(characters) == "body"),
+                context.Rows.Where(row => row.Required.Trim((char[]?)null) == null),
+                context.Rows.Where(row => row.Required.Trim(Array.Empty<char>()) == null)
+            ];
+            foreach (var query in queries)
+            {
+                var sql = query.ToQueryString();
+                Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? "REGEXP_REPLACE(" : "TRIM(", sql);
+                Assert.DoesNotContain("WHERE 0 = 1", sql);
+            }
+            characters = [];
+            Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? "REGEXP_REPLACE(" : "LTRIM(", queries[4].ToQueryString());
+            Assert.Throws<InvalidOperationException>(() => context.Rows.Where(row => row.BinaryConverted.Trim('x') == "body").ToQueryString());
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle)]
+        public void Explicit_trim_columns_and_constants_preserve_text_mapping_and_reject_invalid_carriers(OceanBaseCompatibilityMode mode)
+        {
+            using var context = CreateContext(mode);
+            var columns = context.Rows.Where(row => row.Required.Trim(row.Character!.Value) == "body"
+                && row.National.TrimStart(new[] { row.Character.Value, ' ' }) == "body").ToQueryString();
+            Assert.Contains("Character", columns);
+            Assert.DoesNotContain(" AS longtext)", columns, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("COALESCE(", columns);
+            Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? "REGEXP_REPLACE(" : "LTRIM(", columns);
+            var source = "xxbodyxx";
+            Assert.Contains("Character", context.Rows.Where(row => "xxbodyxx".Trim(new[] { row.Character!.Value }) == "body").ToQueryString());
+            Assert.Contains("Character", context.Rows.Where(row => source.TrimStart(new[] { row.Character!.Value }) == "bodyxx").ToQueryString());
+            Assert.Throws<InvalidOperationException>(() => context.Rows.Where(row => row.Required.Trim(row.NumericCharacter) == "body").ToQueryString());
+            Assert.Throws<InvalidOperationException>(() => context.Rows.Where(row => row.Required.Trim(row.ExpandedCharacter) == "body").ToQueryString());
+            foreach (var name in new[] { nameof(Row.Fixed), nameof(Row.National), nameof(Row.Converted) })
+            {
+                var mapping = (RelationalTypeMapping)context.Model.FindEntityType(typeof(Row))!.FindProperty(name)!.GetTypeMapping();
+                var factory = context.GetService<ISqlExpressionFactory>();
+                var result = context.GetService<IMethodCallTranslatorProvider>().Translate(context.Model, factory.Constant("xxbody!", mapping),
+                    typeof(string).GetMethod(nameof(string.TrimStart), [typeof(char)])!, [factory.Constant('x')],
+                    context.GetService<IDiagnosticsLogger<DbLoggerCategory.Query>>())!;
+                Assert.False(result.TypeMapping!.IsFixedLength);
+                Assert.Same(mapping.Converter, result.TypeMapping.Converter);
+                Assert.Equal(mapping.IsUnicode, result.TypeMapping.IsUnicode);
+            }
+            char[] characters = ['x'];
+            var query = context.Rows.Where(row => row.Required.Trim(EF.Constant(characters)) == "body");
+            var before = query.ToQueryString();
+            Assert.DoesNotContain("_ob_trim_", before);
+            characters[0] = 'y';
+            var after = query.ToQueryString();
+            Assert.NotEqual(before, after);
+            characters[0] = 'x';
+            Assert.Equal(before, query.ToQueryString());
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle)]
+        public void Explicit_trim_array_keeps_plugin_precedence_for_nontext_receivers(OceanBaseCompatibilityMode mode)
+        {
+            var options = new DbContextOptionsBuilder<TestContext>().UseOceanBase("Server=localhost;Database=test", mode)
+                .ReplaceService<IMethodCallTranslatorProvider, PluginMethodProvider>().Options;
+            using var context = new TestContext(options);
+            char[] characters = ['x'];
+            var sql = context.Rows.Where(row => row.BinaryConverted.Trim(characters) == "plugin").Select(row => row.Id).ToQueryString();
+            Assert.DoesNotContain("BinaryConverted", sql);
+        }
+
+        private sealed class PluginMethodProvider : RelationalMethodCallTranslatorProvider
+        {
+            public PluginMethodProvider(RelationalMethodCallTranslatorProviderDependencies dependencies)
+                : base(new RelationalMethodCallTranslatorProviderDependencies(dependencies.SqlExpressionFactory,
+                    [new OverridePlugin(dependencies.SqlExpressionFactory)], dependencies.RelationalTypeMappingSource)) { }
+        }
+
         private sealed class OverridePlugin(ISqlExpressionFactory factory) : IMethodCallTranslatorPlugin, IMemberTranslatorPlugin,
             IMethodCallTranslator, IMemberTranslator
         {
@@ -261,6 +440,9 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
                 modelBuilder.Entity<Row>().Property(row => row.National).IsUnicode().IsFixedLength().HasMaxLength(8);
                 modelBuilder.Entity<Row>().Property(row => row.Converted).HasConversion(value => value + "!", value => value.Substring(0, value.Length - 1)).HasMaxLength(16);
                 modelBuilder.Entity<Row>().Property(row => row.BinaryConverted).HasConversion(value => Encoding.UTF8.GetBytes(value), value => Encoding.UTF8.GetString(value)).HasMaxLength(16);
+                modelBuilder.Entity<Row>().Property(row => row.Character).HasConversion<string>().HasMaxLength(1);
+                modelBuilder.Entity<Row>().Property(row => row.NumericCharacter).HasConversion<int>();
+                modelBuilder.Entity<Row>().Property(row => row.ExpandedCharacter).HasConversion(value => value + "!", value => value[0]).HasMaxLength(2);
             }
         }
         private sealed class Row
@@ -272,6 +454,9 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             public string National { get; set; } = "";
             public string Converted { get; set; } = "";
             public string BinaryConverted { get; set; } = "";
+            public char? Character { get; set; }
+            public char NumericCharacter { get; set; }
+            public char ExpandedCharacter { get; set; }
         }
     }
 }

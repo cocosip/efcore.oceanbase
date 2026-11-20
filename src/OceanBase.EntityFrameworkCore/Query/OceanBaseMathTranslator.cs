@@ -90,6 +90,7 @@ namespace OceanBase.EntityFrameworkCore.Query
                 Add(owner, "Cosh", type, type, "COSH");
                 Add(owner, "Tanh", type, type, "TANH");
                 Add(owner, "Asinh", type, type, "ASINH");
+                Add(owner, "Acosh", type, type, "ACOSH");
                 Add(owner, "Atanh", type, type, "ATANH");
             }
             return functions;
@@ -128,13 +129,25 @@ namespace OceanBase.EntityFrameworkCore.Query
             var mapping = input.TypeMapping!;
 
             var intMapping = mappingSource.FindMapping(typeof(int))!;
-            if (function != "SIGN" && mapping.ClrType != method.ReturnType)
+            if (function != "SIGN" && (Nullable.GetUnderlyingType(mapping.ClrType) ?? mapping.ClrType) != method.ReturnType)
                 return null;
             if (function is "SQRT" or "EXP" or "LN" or "LOG" or "LOG2" or "LOG10" or "POWER"
                 or "SIN" or "COS" or "TAN" or "ASIN" or "ACOS" or "ATAN" or "ATAN2"
-                or "SINH" or "COSH" or "TANH" or "ASINH" or "ATANH")
+                or "SINH" or "COSH" or "TANH" or "ASINH" or "ACOSH" or "ATANH")
                 return TranslateTranscendental(function, method.ReturnType, inputs, mapping);
             var resultMapping = function == "SIGN" ? intMapping : mapping;
+            var inputCarrier = Nullable.GetUnderlyingType(mapping.Converter?.ProviderClrType ?? mapping.ClrType)
+                ?? mapping.Converter?.ProviderClrType ?? mapping.ClrType;
+            if (mode == OceanBaseCompatibilityMode.Oracle && function == "SIGN"
+                && (inputCarrier == typeof(float) || inputCarrier == typeof(double)))
+            {
+                // Oracle binary-floating SIGN returns +1 for zero; CLR Sign requires zero.
+                var zero = sqlExpressionFactory.Constant(Convert.ChangeType(0, inputCarrier), mappingSource.FindMapping(inputCarrier));
+                return sqlExpressionFactory.Case(
+                    [new CaseWhenClause(sqlExpressionFactory.Equal(input, zero), sqlExpressionFactory.Constant(0, intMapping))],
+                    sqlExpressionFactory.Function("SIGN", [input], nullable: true,
+                        argumentsPropagateNullability: [false], typeof(int), intMapping));
+            }
             if (mode == OceanBaseCompatibilityMode.MySql && function is "FLOOR" or "CEIL")
             {
                 var truncated = sqlExpressionFactory.Function("TRUNCATE", [input, sqlExpressionFactory.Constant(0, intMapping)],
@@ -209,7 +222,7 @@ namespace OceanBase.EntityFrameworkCore.Query
                 return null;
             var value = inputs[0]!;
             var mapping = (RelationalTypeMapping)value.TypeMapping!;
-            if (mapping.ClrType != method.ReturnType
+            if ((Nullable.GetUnderlyingType(mapping.ClrType) ?? mapping.ClrType) != method.ReturnType
                 || !inputs.All(input => IsValidNumeric((RelationalTypeMapping)input!.TypeMapping!, mappingSource)))
                 return null;
 
@@ -240,7 +253,12 @@ namespace OceanBase.EntityFrameworkCore.Query
             var nativeType = single ? typeof(double) : returnType;
             var nativeMapping = single ? mappingSource.FindMapping(typeof(double))! : resultMapping;
             SqlExpression body;
-            if (function == "LOG" && mode == OceanBaseCompatibilityMode.MySql)
+            if (function is "ASINH" or "ACOSH" or "ATANH"
+                || mode == OceanBaseCompatibilityMode.MySql && function is "SINH" or "COSH" or "TANH")
+            {
+                body = TranslateHyperbolic(function, inputs[0], nativeType, nativeMapping);
+            }
+            else if (function == "LOG" && mode == OceanBaseCompatibilityMode.MySql)
             {
                 // Keep both logarithms at native precision until the completed quotient is normalized.
                 var doubleMapping = mappingSource.FindMapping(typeof(double))!;
@@ -264,6 +282,83 @@ namespace OceanBase.EntityFrameworkCore.Query
             SqlExpression Native(string name, SqlExpression[] operands, Type type, RelationalTypeMapping typeMapping)
                 => sqlExpressionFactory.Function(name, operands, nullable: true,
                     argumentsPropagateNullability: operands.Select(_ => false), type, typeMapping);
+        }
+
+        private SqlExpression TranslateHyperbolic(string function, SqlExpression input,
+            Type resultType, RelationalTypeMapping resultMapping)
+        {
+            var mapping = mappingSource.FindMapping(typeof(double))!;
+            // Promote the stored operand before ABS/squaring, including integer converters and narrow declarations.
+            input = sqlExpressionFactory.Multiply(input, sqlExpressionFactory.Constant(1d, mapping), mapping);
+            var zero = Number(0);
+            var one = Number(1);
+            var half = Number(0.5);
+            var absolute = Native("ABS", input);
+            var square = Multiply(input, input);
+            var negative = sqlExpressionFactory.LessThan(input, zero);
+            SqlExpression result;
+            if (function is "SINH" or "COSH")
+            {
+                // Halve before the second product so finite results near log(Double.MaxValue) do not overflow early.
+                var exponentialHalf = Native("EXP", Multiply(absolute, half));
+                var positiveTerm = Multiply(Multiply(exponentialHalf, half), exponentialHalf);
+                var negativeTerm = Multiply(Native("EXP", sqlExpressionFactory.Negate(absolute)), half);
+                if (function == "COSH") return Result(Add(positiveTerm, negativeTerm));
+                result = Small(Taylor(1d / 6, 1d / 120), Signed(Subtract(positiveTerm, negativeTerm)));
+            }
+            else if (function == "TANH")
+            {
+                var quotient = Subtract(one, Divide(Number(2), Add(Native("EXP", Multiply(Number(2), absolute)), one)));
+                result = Signed(Choose(sqlExpressionFactory.GreaterThan(absolute, Number(20)), one, quotient));
+                result = Small(Taylor(-1d / 3, 2d / 15), result);
+            }
+            else if (function == "ASINH")
+            {
+                var ordinary = Native("LN", Add(absolute, Native("SQRT", Add(Multiply(absolute, absolute), one))));
+                // Avoid squaring huge inputs; their correction is below Double precision.
+                var large = Add(Native("LN", absolute), Number(Math.Log(2)));
+                result = Signed(Choose(sqlExpressionFactory.GreaterThan(absolute, Number(1e150)), large, ordinary));
+                result = Small(Taylor(-1d / 6, 3d / 40), result);
+            }
+            else if (function == "ACOSH")
+            {
+                var halfDistance = Multiply(Subtract(input, one), half);
+                var root = Native("SQRT", halfDistance);
+                var ordinary = Native("LN", Add(root, Native("SQRT", Add(one, halfDistance))));
+                var series = Multiply(root, Add(one, Multiply(halfDistance,
+                    Add(Number(-1d / 6), Multiply(halfDistance, Number(3d / 40))))));
+                var magnitude = Choose(sqlExpressionFactory.LessThan(halfDistance, Number(1e-6)), series, ordinary);
+                result = new CaseExpression(
+                    [new CaseWhenClause(sqlExpressionFactory.GreaterThanOrEqual(input, one), Result(Multiply(Number(2), magnitude)))],
+                    elseResult: null);
+            }
+            else
+            {
+                result = Multiply(half, Subtract(Native("LN", Add(one, input)), Native("LN", Subtract(one, input))));
+                result = Small(Taylor(1d / 3, 1d / 5), result);
+            }
+            return result;
+
+            SqlExpression Number(double value) => sqlExpressionFactory.Constant(value, mapping);
+            SqlBinaryExpression Add(SqlExpression left, SqlExpression right)
+                => new(ExpressionType.Add, left, right, typeof(double), mapping);
+            SqlExpression Subtract(SqlExpression left, SqlExpression right) => sqlExpressionFactory.Subtract(left, right, mapping);
+            SqlBinaryExpression Multiply(SqlExpression left, SqlExpression right)
+                => new(ExpressionType.Multiply, left, right, typeof(double), mapping);
+            SqlExpression Divide(SqlExpression left, SqlExpression right) => sqlExpressionFactory.Divide(left, right, mapping);
+            SqlExpression Native(string name, SqlExpression value) => sqlExpressionFactory.Function(name, [value], nullable: true,
+                argumentsPropagateNullability: [false], typeof(double), mapping);
+            SqlExpression Choose(SqlExpression condition, SqlExpression yes, SqlExpression no)
+                => sqlExpressionFactory.Case([new CaseWhenClause(condition, yes)], no);
+            SqlExpression Signed(SqlExpression value) => Choose(negative, sqlExpressionFactory.Negate(value), value);
+            // CASE takes its result mapping from its first branch; syntax constants keep their native mapping.
+            SqlExpression Small(SqlBinaryExpression tiny, SqlExpression ordinary)
+                => new CaseExpression([new CaseWhenClause(sqlExpressionFactory.LessThan(absolute, Number(1e-3)), Result(tiny))], ordinary);
+            SqlBinaryExpression Result(SqlBinaryExpression value)
+                => new(value.OperatorType, value.Left, value.Right, resultType, resultMapping);
+            // The omitted next term is below Double precision in the small-input branch.
+            SqlBinaryExpression Taylor(double first, double second)
+                => Multiply(input, Add(one, Multiply(square, Add(Number(first), Multiply(square, Number(second))))));
         }
 
         internal static bool IsValidNumeric(RelationalTypeMapping? mapping, IRelationalTypeMappingSource mappingSource)

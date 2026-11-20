@@ -16,6 +16,22 @@ namespace OceanBase.EntityFrameworkCore.Storage
     {
         public IRelationalCommandBuilder Create() => new Builder(dependencies, mode);
 
+        internal static void ConfigureStoredProcedure(IRelationalCommandBuilder builder)
+            => builder.AddParameter(StoredProcedureParameter.Instance);
+
+        private sealed class StoredProcedureParameter : IRelationalParameter
+        {
+            internal static readonly StoredProcedureParameter Instance = new();
+
+            public string InvariantName => "__oceanbase_stored_procedure";
+
+            public void AddDbParameter(DbCommand command, object? value)
+                => command.CommandType = CommandType.StoredProcedure;
+
+            public void AddDbParameter(DbCommand command, IReadOnlyDictionary<string, object?>? values)
+                => command.CommandType = CommandType.StoredProcedure;
+        }
+
         private sealed class Builder(RelationalCommandBuilderDependencies dependencies, OceanBaseCompatibilityMode mode)
             : RelationalCommandBuilder(dependencies)
         {
@@ -26,9 +42,13 @@ namespace OceanBase.EntityFrameworkCore.Storage
             }
         }
 
-        private sealed class PositionalCommand(RelationalCommandBuilderDependencies dependencies, IRelationalCommand template)
+        private sealed class PositionalCommand(RelationalCommandBuilderDependencies dependencies, IRelationalCommandTemplate template)
             : RelationalCommand(dependencies, template.CommandText, template.LogCommandText, WithBinding(template.Parameters))
         {
+            public override void PopulateFrom(IRelationalCommandTemplate commandTemplate)
+                => base.PopulateFrom(commandTemplate is PositionalCommand ? commandTemplate
+                    : new PositionalCommand(Dependencies, commandTemplate));
+
             public override DbCommand CreateDbCommand(RelationalCommandParameterObject parameterObject, Guid commandId, DbCommandMethod commandMethod)
             {
                 try { return base.CreateDbCommand(parameterObject, commandId, commandMethod); }
@@ -42,6 +62,7 @@ namespace OceanBase.EntityFrameworkCore.Storage
 
             private static IReadOnlyList<IRelationalParameter> WithBinding(IReadOnlyList<IRelationalParameter> parameters)
             {
+                if (parameters.Count > 0 && parameters[^1] is BindingParameter) return parameters;
                 var result = new List<IRelationalParameter>(parameters) { new BindingParameter(parameters) };
                 return result;
             }
@@ -54,7 +75,7 @@ namespace OceanBase.EntityFrameworkCore.Storage
 
             public void AddDbParameter(DbCommand command, IReadOnlyDictionary<string, object?>? values)
             {
-                if (command.Parameters.Count == 0) return;
+                if (command.Parameters.Count == 0 || command.CommandType == CommandType.StoredProcedure) return;
                 try
                 {
                     var indices = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
@@ -82,12 +103,20 @@ namespace OceanBase.EntityFrameworkCore.Storage
                         {
                             if (original.Value is Stream)
                                 throw new NotSupportedException("A stream cannot be consumed by repeated MySQL parameter positions.");
+                            if (original is OceanBaseConnector.OceanBaseParameter native)
+                            {
+                                ordered.Add(native.Clone());
+                                continue;
+                            }
                             using var scratch = new OceanBaseConnector.OceanBaseCommand();
-                            if (!AddMappedParameter(name, scratch, values))
-                                throw new NotSupportedException("Repeated caller-owned MySQL parameters require a public connector clone contract; use distinct parameter instances.");
-                            var repeated = scratch.Parameters[0];
-                            scratch.Parameters.Clear();
-                            ordered.Add(repeated);
+                            if (AddMappedParameter(name, scratch, values))
+                            {
+                                var repeated = scratch.Parameters[0];
+                                scratch.Parameters.Clear();
+                                ordered.Add(repeated);
+                            }
+                            else
+                                throw new NotSupportedException("Repeated MySQL parameters require OceanBaseParameter or distinct parameter instances.");
                         }
                     }
                     command.Parameters.Clear();

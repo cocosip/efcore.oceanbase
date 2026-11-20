@@ -91,6 +91,37 @@ public sealed class ReverseEngineeringTests
     }
 
     [Theory]
+    [InlineData(OceanBaseCompatibilityMode.MySql)]
+    [InlineData(OceanBaseCompatibilityMode.Oracle)]
+    public void Json_catalog_column_keeps_its_store_type_and_maps_to_string(OceanBaseCompatibilityMode mode)
+    {
+        using var services = Services();
+        using var connection = new CatalogConnection(mode)
+        {
+            Rewrite = (name, rows) =>
+            {
+                if (name == "Columns")
+                {
+                    var document = rows.NewRow();
+                    document.ItemArray = rows.Rows.Cast<DataRow>().Single(row => (string)row["COLUMN_NAME"] == "Note").ItemArray;
+                    document["COLUMN_NAME"] = "Document";
+                    document["ORDINAL_POSITION"] = 5;
+                    document["TYPE_DECLARATION"] = "json";
+                    rows.Rows.Add(document);
+                }
+            }
+        };
+        var database = services.GetRequiredService<IDatabaseModelFactory>()
+            .Create(connection, new DatabaseModelFactoryOptions());
+        var model = services.GetRequiredService<IScaffoldingModelFactory>()
+            .Create(database, new ModelReverseEngineerOptions { UseDatabaseNames = true });
+        var property = model.GetEntityTypes().Single(entity => entity.GetTableName() == "Children").FindProperty("Document")!;
+        Assert.Equal(typeof(string), property.ClrType);
+        Assert.Equal("json", property.GetColumnType());
+        Assert.True(property.IsNullable);
+    }
+
+    [Theory]
     [InlineData(OceanBaseCompatibilityMode.MySql, false)]
     [InlineData(OceanBaseCompatibilityMode.MySql, true)]
     [InlineData(OceanBaseCompatibilityMode.Oracle, false)]
@@ -154,6 +185,8 @@ public sealed class ReverseEngineeringTests
     [InlineData(OceanBaseCompatibilityMode.MySql, "bigint unsigned", typeof(ulong))]
     [InlineData(OceanBaseCompatibilityMode.Oracle, "DATE", typeof(DateTime))]
     [InlineData(OceanBaseCompatibilityMode.Oracle, "TIMESTAMP(9) WITH TIME ZONE", typeof(DateTimeOffset))]
+    [InlineData(OceanBaseCompatibilityMode.Oracle, "TIMESTAMP(9) WITH LOCAL TIME ZONE", typeof(DateTime))]
+    [InlineData(OceanBaseCompatibilityMode.Oracle, "TIMESTAMP(6) WITH LOCAL TIME ZONE", typeof(DateTime))]
     [InlineData(OceanBaseCompatibilityMode.Oracle, "TIMESTAMP(9)", typeof(DateTime))]
     [InlineData(OceanBaseCompatibilityMode.Oracle, "TIMESTAMP(6)", typeof(DateTime))]
     [InlineData(OceanBaseCompatibilityMode.Oracle, "CHAR(10 CHAR)", typeof(string))]
@@ -223,7 +256,7 @@ public sealed class ReverseEngineeringTests
     [InlineData("ForeignKeyColumns", "ORDINAL_POSITION", 7)]
     [InlineData("Indexes", "IS_UNIQUE", "UNKNOWN")]
     [InlineData("IndexColumns", "SORT_ORDER", "UNKNOWN")]
-    [InlineData("IndexColumns", "PREFIX_LENGTH", 4)]
+    [InlineData("IndexColumns", "PREFIX_LENGTH", -1)]
     [InlineData("ForeignKeys", "UPDATE_RULE", "CASCADE")]
     public void Inconsistent_or_unrepresentable_selected_catalog_cannot_silently_generate_a_model(string collection, string field, object value)
     {
@@ -253,6 +286,52 @@ public sealed class ReverseEngineeringTests
         };
         var database = services.GetRequiredService<IDatabaseModelFactory>().Create(connection, new DatabaseModelFactoryOptions());
         Assert.Equal("IX_SeparateName", Assert.Single(database.Tables.Single(t => t.Name == "Parents").Indexes).Name);
+    }
+
+    [Fact]
+    public void MySql_prefix_index_survives_catalog_order_and_CSharp_generation()
+    {
+        using var services = Services();
+        using var connection = new CatalogConnection(OceanBaseCompatibilityMode.MySql)
+        {
+            Rewrite = (name, rows) =>
+            {
+                if (name == "IndexColumns") rows.Rows[^1]["PREFIX_LENGTH"] = 9L;
+            }
+        };
+        var database = services.GetRequiredService<IDatabaseModelFactory>().Create(connection, new DatabaseModelFactoryOptions());
+        var model = services.GetRequiredService<IScaffoldingModelFactory>().Create(database,
+            new ModelReverseEngineerOptions { UseDatabaseNames = true, NoPluralize = true });
+        var index = Assert.Single(model.GetEntityTypes().Single(entity => entity.GetTableName() == "Children").GetIndexes());
+        Assert.Equal(new[] { "Note", "Seq" }, index.Properties.Select(property => property.Name));
+        Assert.Equal(new[] { true, false }, index.IsDescending);
+        Assert.Equal(new[] { 9, 0 }, Assert.IsType<int[]>(index["OceanBase:IndexPrefixLengths"]));
+        var generation = new ModelCodeGenerationOptions { Language = "C#", ContextName = "PrefixContext", ConnectionString = connection.ConnectionString };
+        var code = services.GetRequiredService<IModelCodeGeneratorSelector>().Select(generation).GenerateModel(model, generation);
+        Assert.Contains(".HasAnnotation(\"OceanBase:IndexPrefixLengths\", new[] { 9, 0 })", code.ContextFile.Code);
+    }
+
+    [Fact]
+    public void MySql_unique_prefix_index_uses_public_index_members_instead_of_hidden_constraint_columns()
+    {
+        using var services = Services();
+        using var connection = new CatalogConnection(OceanBaseCompatibilityMode.MySql)
+        {
+            Rewrite = (name, rows) =>
+            {
+                if (name == "ConstraintColumns")
+                    rows.Rows.Cast<DataRow>().Single(row => Equals(row["CONSTRAINT_NAME"], "UQ_Name"))["COLUMN_NAME"] = "__substr_name";
+                if (name == "IndexColumns")
+                    rows.Rows.Cast<DataRow>().Single(row => Equals(row["INDEX_NAME"], "UQ_Name"))["PREFIX_LENGTH"] = 9L;
+            }
+        };
+        var database = services.GetRequiredService<IDatabaseModelFactory>().Create(connection, new DatabaseModelFactoryOptions());
+        var table = database.Tables.Single(table => table.Name == "Parents");
+        Assert.Empty(table.UniqueConstraints);
+        var index = Assert.Single(table.Indexes);
+        Assert.True(index.IsUnique);
+        Assert.Equal("Name", Assert.Single(index.Columns).Name);
+        Assert.Equal(new[] { 9 }, Assert.IsType<int[]>(index["OceanBase:IndexPrefixLengths"]));
     }
 
     [Theory]
@@ -304,6 +383,66 @@ public sealed class ReverseEngineeringTests
         var database = services.GetRequiredService<IDatabaseModelFactory>().Create(connection, new DatabaseModelFactoryOptions());
         Assert.Equal(3, database.Tables.Count);
         Assert.Contains(warnings, w => w.Contains(field, StringComparison.Ordinal) && w.Contains("Note", StringComparison.Ordinal));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void MySql_on_update_timestamp_survives_scaffolding_and_codegen(bool hasDefault)
+    {
+        using var services = Services();
+        using var connection = new CatalogConnection(OceanBaseCompatibilityMode.MySql)
+        {
+            Rewrite = (name, rows) =>
+            {
+                if (name != "Columns") return;
+                var row = rows.Rows.Cast<DataRow>().Single(r => Equals(r["TABLE_NAME"], "Children") && Equals(r["COLUMN_NAME"], "Note"));
+                row["TYPE_DECLARATION"] = "datetime(6)";
+                row["DATA_TYPE"] = "datetime";
+                row["COLLATION_NAME"] = DBNull.Value;
+                row["HAS_DEFAULT"] = hasDefault ? true : DBNull.Value;
+                row["DEFAULT_VALUE_SQL"] = hasDefault ? "CURRENT_TIMESTAMP(6)" : DBNull.Value;
+                row["HAS_ON_UPDATE"] = true;
+                row["ON_UPDATE_SQL"] = "CURRENT_TIMESTAMP(6)";
+            }
+        };
+        var database = services.GetRequiredService<IDatabaseModelFactory>().Create(connection, new DatabaseModelFactoryOptions());
+        var column = database.Tables.Single(t => t.Name == "Children").Columns.Single(c => c.Name == "Note");
+        var generation = hasDefault ? ValueGenerated.OnAddOrUpdate : ValueGenerated.OnUpdate;
+        Assert.Equal(generation, column.ValueGenerated);
+        var model = services.GetRequiredService<IScaffoldingModelFactory>().Create(database, new ModelReverseEngineerOptions());
+        var property = model.GetEntityTypes().Single(e => e.GetTableName() == "Children").FindProperty("Note")!;
+        Assert.Equal(generation, property.ValueGenerated);
+        Assert.Equal("CURRENT_TIMESTAMP(6)", property["OceanBase:OnUpdateSql"]);
+        var code = services.GetRequiredService<IModelCodeGeneratorSelector>().Select(new ModelCodeGenerationOptions { Language = "C#" })
+            .GenerateModel(model, new ModelCodeGenerationOptions { Language = "C#", ContextName = "OnUpdateContext", ConnectionString = connection.ConnectionString });
+        Assert.Contains(hasDefault ? ".ValueGeneratedOnAddOrUpdate()" : ".ValueGeneratedOnUpdate()", code.ContextFile.Code);
+        Assert.Contains(".HasAnnotation(\"OceanBase:OnUpdateSql\", \"CURRENT_TIMESTAMP(6)\")", code.ContextFile.Code);
+    }
+
+    [Fact]
+    public void Rejects_an_on_update_column_that_would_become_a_principal_key()
+    {
+        using var services = Services();
+        using var connection = new CatalogConnection(OceanBaseCompatibilityMode.MySql)
+        {
+            Rewrite = (name, rows) =>
+            {
+                if (name == "ForeignKeyColumns") rows.Rows[0]["REFERENCED_COLUMN_NAME"] = "Name";
+                if (name != "Columns") return;
+                var row = rows.Rows[1];
+                row["TYPE_DECLARATION"] = "datetime(6)";
+                row["DATA_TYPE"] = "datetime";
+                row["COLLATION_NAME"] = DBNull.Value;
+                row["DEFAULT_VALUE_SQL"] = "CURRENT_TIMESTAMP(6)";
+                row["HAS_ON_UPDATE"] = true;
+                row["ON_UPDATE_SQL"] = "CURRENT_TIMESTAMP(6)";
+            }
+        };
+        var error = Assert.Throws<NotSupportedException>(() => services.GetRequiredService<IDatabaseModelFactory>()
+            .Create(connection, new DatabaseModelFactoryOptions()));
+        Assert.Contains("FK_Parent", error.Message);
+        Assert.Contains("Parents.Name", error.Message);
     }
 
     [Theory]

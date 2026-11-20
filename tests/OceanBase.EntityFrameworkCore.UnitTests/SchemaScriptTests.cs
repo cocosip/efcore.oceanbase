@@ -2,12 +2,29 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Xunit;
 
 namespace OceanBase.EntityFrameworkCore.UnitTests
 {
     public sealed class SchemaScriptTests
     {
+        [Fact]
+        public void Owned_MySql_database_collation_is_set_before_table_creation()
+        {
+            var options = new DbContextOptionsBuilder<SchemaContext>()
+                .UseOceanBase("Server=offline;Database=owned", OceanBaseCompatibilityMode.MySql)
+                .EnableOceanBaseDatabaseManagement("owned")
+                .ReplaceService<IModelCacheKeyFactory, ShapeCacheKey>()
+                .AddInterceptors(new RejectConnection());
+            using var context = new SchemaContext(options.Options, "model-collation", OceanBaseCompatibilityMode.MySql);
+            var script = context.Database.GenerateCreateScript();
+
+            Assert.StartsWith("ALTER DATABASE `owned` DEFAULT COLLATE utf8mb4_bin;", script);
+            Assert.Contains("CREATE TABLE", script);
+        }
+
         [Theory]
         [InlineData(OceanBaseCompatibilityMode.MySql)]
         [InlineData(OceanBaseCompatibilityMode.Oracle)]
@@ -63,10 +80,63 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
         }
 
         [Theory]
-        [InlineData("sequence")]
-        [InlineData("trigger")]
+        [InlineData(OceanBaseCompatibilityMode.MySql)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle)]
+        public void Create_script_preserves_table_and_column_comments(OceanBaseCompatibilityMode mode)
+        {
+            using var context = Create(mode, "comment");
+            var script = context.Database.GenerateCreateScript();
+            Assert.Contains("table''s description", script);
+            Assert.Contains("column''s description", script);
+            Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? " COMMENT = " : "COMMENT ON TABLE ", script);
+            Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? " COMMENT 'column" : "COMMENT ON COLUMN ", script);
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle)]
+        public void Trigger_metadata_is_preserved_without_synthesizing_trigger_bodies(OceanBaseCompatibilityMode mode)
+        {
+            using var context = Create(mode, "trigger");
+            using var baseline = Create(mode, "baseline");
+            var model = context.GetService<IDesignTimeModel>().Model;
+            var relational = model.GetRelationalModel();
+            var withoutTrigger = baseline.GetService<IDesignTimeModel>().Model.GetRelationalModel();
+            Assert.Equal("Trigger", Assert.Single(Assert.Single(relational.Tables).Triggers).ModelName);
+            Assert.Empty(Assert.Single(withoutTrigger.Tables).Triggers);
+            Assert.DoesNotContain("CREATE TRIGGER", context.Database.GenerateCreateScript());
+            var differ = context.GetService<IMigrationsModelDiffer>();
+            Assert.Empty(differ.GetDifferences(withoutTrigger, relational));
+            Assert.Empty(differ.GetDifferences(relational, withoutTrigger));
+            var generator = context.GetService<IMigrationsSqlGenerator>();
+            var commands = generator.Generate(differ.GetDifferences(null, relational), model);
+            var createTable = Assert.Single(commands);
+            Assert.StartsWith("CREATE TABLE", createTable.CommandText);
+            Assert.DoesNotContain("CREATE TRIGGER", createTable.CommandText);
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql, "`")]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, "\"")]
+        public void Model_sequences_precede_tables_and_match_migration_sql(OceanBaseCompatibilityMode mode, string quote)
+        {
+            using var context = Create(mode, "sequence");
+            var script = context.Database.GenerateCreateScript();
+            var name = quote + "Extra" + quote;
+            var create = $"CREATE SEQUENCE {name} START WITH 7 INCREMENT BY 3 MINVALUE 1 MAXVALUE 19 NOCYCLE NOCACHE";
+            Assert.StartsWith(create + ";", script);
+            var model = context.GetService<IDesignTimeModel>().Model;
+            var differ = context.GetService<IMigrationsModelDiffer>();
+            var generator = context.GetService<IMigrationsSqlGenerator>();
+            var up = generator.Generate(differ.GetDifferences(null, model.GetRelationalModel()), model);
+            Assert.Equal(mode == OceanBaseCompatibilityMode.MySql ? create + ";" : create, up[0].CommandText.TrimEnd());
+            Assert.True(up[0].TransactionSuppressed);
+            var down = generator.Generate(differ.GetDifferences(model.GetRelationalModel(), null));
+            Assert.Equal("DROP SEQUENCE " + name, down[^1].CommandText.TrimEnd().TrimEnd(';'));
+        }
+
+        [Theory]
         [InlineData("filter")]
-        [InlineData("comment")]
         [InlineData("unknown-default")]
         [InlineData("unknown-computed")]
         [InlineData("multiple-identity")]
@@ -202,11 +272,17 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
                         modelBuilder.Entity<Child>().ToTable("External", t => t.ExcludeFromMigrations());
                         modelBuilder.Entity<Parent>().HasNoKey().ToView("ViewRows");
                         break;
-                    case "sequence": modelBuilder.HasSequence<int>("Extra"); break;
+                    case "sequence":
+                        modelBuilder.HasSequence<long>("Extra").StartsAt(7).IncrementsBy(3).HasMin(1).HasMax(19);
+                        break;
                     case "seed": row.HasData(new Generated { Id = 1, Caption = "seed" }); break;
                     case "trigger": row.ToTable(t => t.HasTrigger("Trigger")); break;
+                    case "baseline": break;
                     case "filter": row.HasIndex(r => r.BaseValue).HasFilter("BaseValue > 0"); break;
-                    case "comment": row.Property(r => r.Caption).HasComment("must not disappear"); break;
+                    case "comment":
+                        row.ToTable(table => table.HasComment("table's description"));
+                        row.Property(r => r.Caption).HasComment("column's description");
+                        break;
                     case "unknown-default": row.Property(r => r.Caption).HasDefaultValue(); break;
                     case "unknown-computed": row.Property(r => r.Twice).HasComputedColumnSql(); break;
                     case "multiple-identity":

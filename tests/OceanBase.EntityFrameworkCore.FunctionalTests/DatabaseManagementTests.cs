@@ -387,6 +387,48 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
         [Theory]
         [InlineData(false)]
         [InlineData(true)]
+        public async Task EnsureCreated_changes_the_database_default_only_when_creating_tables_in_the_owned_database(bool async)
+        {
+            const string collation = "utf8mb4_bin";
+            var capture = new Capture();
+            await using (var context = Create(capture, collation: collation))
+                Assert.True(async ? await context.Database.EnsureCreatedAsync() : context.Database.EnsureCreated());
+            Assert.Collection(capture.Commands,
+                command => Assert.Contains("information_schema.schemata", command.Sql),
+                command => Assert.Equal("CREATE DATABASE `owned`", command.Sql),
+                command => Assert.Equal("SELECT DATABASE()", command.Sql),
+                command => Assert.Contains("information_schema.tables", command.Sql),
+                command => Assert.Equal("ALTER DATABASE `owned` DEFAULT COLLATE utf8mb4_bin", command.Sql),
+                command => Assert.StartsWith("CREATE TABLE", command.Sql));
+            Assert.All(capture.Commands, command => Assert.Equal(async, command.Async));
+
+            var populated = new Capture { NamespaceExists = true, HasTables = true };
+            await using (var context = Create(populated, collation: collation))
+                Assert.False(async ? await context.Database.EnsureCreatedAsync() : context.Database.EnsureCreated());
+            Assert.Equal(3, populated.Commands.Count);
+            Assert.All(populated.Commands, command => Assert.StartsWith("SELECT", command.Sql));
+
+            var existing = new Capture { HasTables = true };
+            await using (var context = Create(existing, collation: collation))
+            {
+                var creator = context.GetService<IRelationalDatabaseCreator>();
+                if (async) await Assert.ThrowsAsync<NotSupportedException>(() => creator.CreateTablesAsync());
+                else Assert.Throws<NotSupportedException>(() => creator.CreateTables());
+            }
+            Assert.Equal(2, existing.Commands.Count);
+            Assert.All(existing.Commands, command => Assert.StartsWith("SELECT", command.Sql));
+
+            var tableOnly = new Capture();
+            await using var scoped = Create(tableOnly, "table-only", collation: collation);
+            if (async) await Assert.ThrowsAsync<NotSupportedException>(() => scoped.Database.EnsureCreatedAsync());
+            else Assert.Throws<NotSupportedException>(() => scoped.Database.EnsureCreated());
+            Assert.Empty(tableOnly.Opens);
+            Assert.Empty(tableOnly.Commands);
+        }
+
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
         public async Task Missing_ownership_Oracle_and_supplied_connections_reject_without_management_open(bool async)
         {
             foreach (var profile in new[] { "table-only", "oracle", "supplied", "mismatch" })
@@ -688,7 +730,7 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
         }
 
         private static TestContext Create(Capture capture, string profile = "ordinary", string scope = "owned", bool empty = false,
-            Action<DbContextOptionsBuilder<TestContext>>? configure = null)
+            Action<DbContextOptionsBuilder<TestContext>>? configure = null, string? collation = null)
         {
             var native = new OceanBaseConnectionStringBuilder { Server = "offline", Database = profile == "mismatch" ? "other" : scope };
             var builder = new DbContextOptionsBuilder<TestContext>().UseOceanBase(native.ConnectionString,
@@ -698,24 +740,27 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
             else builder.EnableOceanBaseDatabaseManagement(scope);
             if (profile == "supplied") builder.UseOceanBase(new OceanBaseConnection(native.ConnectionString), OceanBase.EntityFrameworkCore.OceanBaseCompatibilityMode.MySql);
             configure?.Invoke(builder);
-            return new TestContext(builder.Options, empty, profile == "cross-scope", profile == "sequence");
+            return new TestContext(builder.Options, empty, profile == "cross-scope", profile == "sequence", collation);
         }
 
         public sealed class ShapeKey(ModelCacheKeyFactoryDependencies dependencies) : ModelCacheKeyFactory(dependencies)
         {
             public override object Create(DbContext context, bool designTime)
-                => (base.Create(context, designTime), ((TestContext)context).Empty, ((TestContext)context).CrossScope, ((TestContext)context).Sequence);
+                => (base.Create(context, designTime), ((TestContext)context).Empty, ((TestContext)context).CrossScope,
+                    ((TestContext)context).Sequence, ((TestContext)context).Collation);
         }
 
-        private sealed class TestContext(DbContextOptions<TestContext> options, bool empty, bool crossScope, bool sequence) : DbContext(options)
+        private sealed class TestContext(DbContextOptions<TestContext> options, bool empty, bool crossScope, bool sequence, string? collation) : DbContext(options)
         {
             public bool Empty => empty;
             public bool CrossScope => crossScope;
             public bool Sequence => sequence;
+            public string? Collation => collation;
             protected override void OnModelCreating(ModelBuilder model)
             {
                 if (!Empty) model.Entity<Row>().ToTable("Rows", CrossScope ? "other" : null);
-                if (Sequence) model.HasSequence<long>("UnsupportedSequence");
+                if (Sequence) model.HasSequence<int>("UnsupportedSequence");
+                if (Collation is not null) model.UseCollation(Collation);
             }
         }
         private sealed class Row { public int Id { get; set; } }

@@ -26,6 +26,10 @@ namespace OceanBase.EntityFrameworkCore.Query
             {
                 expression = new OceanBaseCollectionProjectionTypeMappingNormalizer(RelationalDependencies.TypeMappingSource,
                     RelationalQueryCompilationContext.Model).Normalize(expression);
+                var jsonCollections = new JsonCollectionProjectionVisitor();
+                jsonCollections.Visit(expression);
+                if (jsonCollections.RootAliases.Count != 0)
+                    new JsonCollectionConverterGuard(jsonCollections).Visit(expression);
                 var mapped = new NumericCollectionTypeMappingPostprocessor(Dependencies, RelationalDependencies,
                     RelationalQueryCompilationContext).Process(expression);
                 var metadata = new MetadataVisitor();
@@ -66,6 +70,16 @@ namespace OceanBase.EntityFrameworkCore.Query
             RelationalQueryCompilationContext queryCompilationContext)
             : RelationalTypeMappingPostprocessor(dependencies, relationalDependencies, queryCompilationContext)
         {
+            protected override Expression VisitExtension(Expression node)
+            {
+                if (node is TableValuedFunctionExpression function
+                    && function.FindAnnotation(OceanBaseQueryableMethodTranslatingExpressionVisitorFactory.JsonCollectionAnnotation) is not null
+                    && TryGetInferredTypeMapping(function.Alias, "Value", out var element)
+                    && element.Converter is not null)
+                    ThrowContextualConverter();
+                return base.VisitExtension(node);
+            }
+
             protected override ValuesExpression ApplyTypeMappingsOnValuesExpression(ValuesExpression values)
             {
                 if (values.ValuesParameter is not { } parameter) return base.ApplyTypeMappingsOnValuesExpression(values);
@@ -89,6 +103,106 @@ namespace OceanBase.EntityFrameworkCore.Query
                 => node is ShapedQueryExpression shaped
                     ? shaped.UpdateQueryExpression(Visit(shaped.QueryExpression)) : base.VisitExtension(node);
         }
+
+        private sealed class JsonCollectionProjectionVisitor : QueryVisitor
+        {
+            public HashSet<string> RootAliases { get; } = [];
+            public Dictionary<(string Alias, string Name), List<SqlExpression>> Projections { get; } = [];
+
+            protected override Expression VisitExtension(Expression node)
+            {
+                switch (node)
+                {
+                    case TableValuedFunctionExpression function when function.FindAnnotation(
+                        OceanBaseQueryableMethodTranslatingExpressionVisitorFactory.JsonCollectionAnnotation) is not null:
+                        RootAliases.Add(function.Alias);
+                        break;
+                    case SelectExpression { Alias: { } alias } select:
+                        AddProjections(alias, select);
+                        break;
+                    case SetOperationBase operation:
+                        foreach (var (left, right) in operation.Source1.Projection.Zip(operation.Source2.Projection))
+                            Projections[(operation.Alias, left.Alias)] = [left.Expression, right.Expression];
+                        break;
+                }
+                return base.VisitExtension(node);
+            }
+
+            private void AddProjections(string alias, SelectExpression select)
+            {
+                foreach (var projection in select.Projection)
+                    Projections[(alias, projection.Alias)] = [projection.Expression];
+            }
+        }
+
+        private sealed class JsonCollectionConverterGuard(JsonCollectionProjectionVisitor projections) : QueryVisitor
+        {
+            protected override Expression VisitExtension(Expression node)
+            {
+                // EF can infer one mapping from a different use of the same column.
+                switch (node)
+                {
+                    case SqlBinaryExpression { OperatorType: not (ExpressionType.AndAlso or ExpressionType.OrElse) } binary:
+                        Check(binary.Left, binary.Right);
+                        break;
+                    case InExpression { Subquery: { Projection: [var projection] } } membership:
+                        Check(membership.Item, projection.Expression);
+                        break;
+                    case SqlExpression { TypeMapping.Converter: not null } scalar
+                        when scalar.Type == typeof(int) || scalar.Type == typeof(long):
+                        if (Inspect(scalar).HasJsonValue) ThrowContextualConverter();
+                        break;
+                }
+                return base.VisitExtension(node);
+            }
+
+            private void Check(SqlExpression left, SqlExpression right)
+            {
+                var lhs = Inspect(left);
+                var rhs = Inspect(right);
+                if ((lhs.HasConverter && rhs.HasJsonValue) || (rhs.HasConverter && lhs.HasJsonValue))
+                    ThrowContextualConverter();
+            }
+
+            private JsonCollectionOperandVisitor Inspect(SqlExpression expression)
+            {
+                var operand = new JsonCollectionOperandVisitor(projections);
+                operand.Visit(expression);
+                return operand;
+            }
+        }
+
+        private sealed class JsonCollectionOperandVisitor(JsonCollectionProjectionVisitor projections) : ExpressionVisitor
+        {
+            private readonly HashSet<(string Alias, string Name)> _visitedColumns = [];
+            public bool HasJsonValue { get; private set; }
+            public bool HasConverter { get; private set; }
+
+            protected override Expression VisitExtension(Expression node)
+            {
+                if (node is SqlExpression { Type: var type } && type == typeof(bool)) return node;
+                HasConverter |= node is SqlExpression { TypeMapping.Converter: not null };
+                switch (node)
+                {
+                    case ColumnExpression column when _visitedColumns.Add((column.TableAlias, column.Name)):
+                        HasJsonValue |= column.Name == "Value" && projections.RootAliases.Contains(column.TableAlias);
+                        if (projections.Projections.TryGetValue((column.TableAlias, column.Name), out var sources))
+                            foreach (var source in sources) Visit(source);
+                        return node;
+                    case ScalarSubqueryExpression { Subquery.Projection: [var projection] }:
+                        Visit(projection.Expression);
+                        return node;
+                    case CaseExpression conditional:
+                        foreach (var clause in conditional.WhenClauses) Visit(clause.Result);
+                        Visit(conditional.ElseResult);
+                        return node;
+                }
+                return base.VisitExtension(node);
+            }
+        }
+
+        private static void ThrowContextualConverter()
+            => throw new NotSupportedException("Single JSON collection parameters cannot use a contextual value converter.");
 
         private sealed class MetadataVisitor : QueryVisitor
         {

@@ -75,7 +75,8 @@ if (@($toolingAssets.libraries.PSObject.Properties | Where-Object { $_.Value.typ
 if (-not $toolingAssets.libraries."Microsoft.EntityFrameworkCore.Design/$EfCoreVersion") { throw 'Wrong EF Design patch.' }
 if (-not $toolingAssets.libraries."$toolingPackageId/$ProviderVersion" -or
     -not $toolingAssets.libraries."Microsoft.EntityFrameworkCore/$EfCoreVersion" -or
-    -not $toolingAssets.libraries."Microsoft.EntityFrameworkCore.Relational/$EfCoreVersion") {
+    -not $toolingAssets.libraries."Microsoft.EntityFrameworkCore.Relational/$EfCoreVersion" -or
+    -not $toolingAssets.libraries."Microsoft.EntityFrameworkCore.Proxies/$EfCoreVersion") {
     throw 'Wrong provider or EF runtime package version.'
 }
 $toolingCachedDll = Join-Path $toolingRoot "artifacts/tooling-packages/$($toolingPackageId.ToLowerInvariant())/$ProviderVersion/lib/net10.0/OceanBase.EntityFrameworkCore.dll"
@@ -92,6 +93,10 @@ foreach ($toolingMode in @('MySql', 'Oracle')) {
     $null = Invoke-ToolingDotNet "$toolingMode-optimize" @('ef', 'dbcontext', 'optimize', '--project', $toolingProject,
         '--context', "Compiled${toolingMode}Context", '--no-build', '--output-dir', "Compiled/$toolingMode", '--namespace', "ToolingConsumer.Compiled.$toolingMode")
     Build-ToolingProject
+    $null = Invoke-ToolingDotNet "$toolingMode-optimize-proxies" @('ef', 'dbcontext', 'optimize', '--project', $toolingProject,
+        '--context', "Compiled${toolingMode}Context", '--no-build', '--output-dir', "CompiledProxies/$toolingMode",
+        '--namespace', "ToolingConsumer.CompiledProxies.$toolingMode", '--', '--proxies')
+    Build-ToolingProject
 }
 $null = Invoke-ToolingDotNet 'verify-compiled' @('run', '--project', $toolingProject, '--no-build', '--', '--verify-compiled')
 
@@ -102,8 +107,9 @@ foreach ($toolingMode in @('MySql', 'Oracle')) {
     $null = Invoke-ToolingDotNet "$toolingMode-add-initial" (@('ef', 'migrations', 'add', 'Initial', '--output-dir', "Migrations/$toolingMode") + $toolingCommon)
     $toolingInitial = Get-ChildItem $toolingMigrations -Filter '*_Initial.cs' | Select-Object -ExpandProperty FullName
     if ((Get-Content $toolingInitial -Raw) -notmatch 'OceanBase:Identity') { throw 'Scaffold lost identity annotations.' }
-    if ([regex]::Matches((Get-Content $toolingInitial -Raw), 'OceanBase:Identity').Count -ne 4) {
-        throw 'Scaffold must generate one identity per ordinary, TPT root, split primary and shared table.'
+    $toolingIdentityCount = if ($toolingMode -eq 'MySql') { 3 } else { 4 }
+    if ([regex]::Matches((Get-Content $toolingInitial -Raw), 'OceanBase:Identity').Count -ne $toolingIdentityCount) {
+        throw 'Scaffold generated an unexpected number of identity columns.'
     }
     $toolingSnapshot = Get-ChildItem $toolingMigrations -Filter '*ModelSnapshot.cs' | Select-Object -ExpandProperty FullName
     if ((Get-Content $toolingSnapshot -Raw) -notmatch 'UseTptMappingStrategy') { throw 'Snapshot lost the TPT strategy.' }
@@ -145,6 +151,25 @@ foreach ($toolingMode in @('MySql', 'Oracle')) {
         if ($toolingScriptKind -eq 'reverse' -and $toolingSql -notmatch 'DROP TABLE') { throw 'Missing downgrade.' }
         if ($toolingScriptKind -eq 'idempotent' -and $toolingSql -notmatch 'PREPARE|IF ob_count') { throw 'Missing idempotent guard.' }
         if ($toolingMode -eq 'Oracle' -and $toolingSql -notmatch '^SET DEFINE OFF') { throw 'Missing Oracle script client policy.' }
+        if ($toolingMode -eq 'MySql') {
+            $toolingOriginalCollation = 'ALTER DATABASE `tooling` DEFAULT COLLATE utf8mb4_general_ci'
+            $toolingChangedCollation = 'ALTER DATABASE `tooling` DEFAULT COLLATE utf8mb4_bin'
+            $toolingEnableIdentity = 'ALTER TABLE `ToolingRows` MODIFY COLUMN `Id` INT NOT NULL AUTO_INCREMENT'
+            $toolingDisableIdentity = 'ALTER TABLE `ToolingRows` MODIFY COLUMN `Id` INT NOT NULL;'
+            if ($toolingScriptKind -eq 'reverse') {
+                if (!$toolingSql.Contains($toolingOriginalCollation) -or !$toolingSql.Contains($toolingDisableIdentity)) {
+                    throw 'The downgrade did not restore the MySQL database collation and assigned key.'
+                }
+            } elseif (!$toolingInspectedSql.Contains($toolingOriginalCollation) -or
+                !$toolingInspectedSql.Contains($toolingChangedCollation) -or !$toolingInspectedSql.Contains($toolingEnableIdentity)) {
+                throw 'The upgrade did not set both MySQL database collations and enable the identity.'
+            }
+            if ($toolingScriptKind -eq 'forward' -and
+                $toolingSql.IndexOf($toolingOriginalCollation, [StringComparison]::Ordinal) -gt
+                $toolingSql.IndexOf('CREATE TABLE `ToolingRows`', [StringComparison]::Ordinal)) {
+                throw 'The initial MySQL database collation must be set before creating model tables.'
+            }
+        }
     }
     if (-not $SkipBundle) {
         $toolingBundle = Join-Path $toolingWorkspace "$toolingMode-efbundle.exe"

@@ -61,15 +61,17 @@ public sealed class TranscendentalQueryTests
             "Log2" => mode == OceanBaseCompatibilityMode.MySql ? "LOG2(" : "LOG(",
             "Sin" => "SIN(", "Cos" => "COS(", "Tan" => "TAN(",
             "Asin" => "ASIN(", "Acos" => "ACOS(", "Atan" => "ATAN(", "Atan2" => "ATAN2(",
-            "Sinh" => "SINH(", "Cosh" => "COSH(", "Tanh" => "TANH(",
-            "Asinh" => "ASINH(", "Atanh" => "ATANH(",
+            "Sinh" => mode == OceanBaseCompatibilityMode.MySql ? "EXP(" : "SINH(",
+            "Cosh" => mode == OceanBaseCompatibilityMode.MySql ? "EXP(" : "COSH(",
+            "Tanh" => mode == OceanBaseCompatibilityMode.MySql ? "EXP(" : "TANH(",
+            "Asinh" => "LN(", "Atanh" => "LN(",
             "Pow" => "POWER(",
             "Log10" => mode == OceanBaseCompatibilityMode.MySql ? "LOG10(" : "LOG(",
             "LogBase" => mode == OceanBaseCompatibilityMode.Oracle ? "LOG(" : "LN(", _ => "LN(" };
         Assert.Contains(native, sql);
         Assert.Contains("WHERE", sql);
         Assert.Contains("ORDER BY", sql);
-        Assert.Equal(single ? 3 : 0, sql.Split("CAST(", StringSplitOptions.None).Length - 1);
+        Assert.Equal(single ? 3 : 0, sql.Split(mode == OceanBaseCompatibilityMode.MySql ? " AS FLOAT)" : " AS BINARY_FLOAT)", StringSplitOptions.None).Length - 1);
         if (single) Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? " AS FLOAT)" : " AS BINARY_FLOAT)", sql);
         if (name == "LogBase" && mode == OceanBaseCompatibilityMode.MySql)
         {
@@ -132,7 +134,7 @@ public sealed class TranscendentalQueryTests
             else Assert.Same(mapping, result.TypeMapping);
             var functions = Functions(result).ToArray();
             Assert.All(functions, f => { Assert.True(f.IsNullable); Assert.All(f.ArgumentsPropagateNullability!, Assert.False); });
-            Assert.Contains(functions.SelectMany(f => f.Arguments!), a => ReferenceEquals(a, x));
+            Assert.True(ContainsReference(result, x));
             if (name is "LogBase" or "Pow" or "Atan2") Assert.Contains(functions.SelectMany(f => f.Arguments!), a => ReferenceEquals(a, b));
             if (name == "LogBase" && mode == OceanBaseCompatibilityMode.Oracle)
             {
@@ -157,6 +159,50 @@ public sealed class TranscendentalQueryTests
         }
     }
 
+    [Theory]
+    [InlineData(OceanBaseCompatibilityMode.MySql)]
+    [InlineData(OceanBaseCompatibilityMode.Oracle)]
+    public void Emulated_hyperbolic_inputs_promote_before_integer_absolute_and_square(OceanBaseCompatibilityMode mode)
+    {
+        using var context = Context(mode);
+        var source = context.GetService<IRelationalTypeMappingSource>();
+        var factory = context.GetService<ISqlExpressionFactory>();
+        var converter = new ValueConverter<double, long>(value => (long)value, value => value);
+        var mapping = (RelationalTypeMapping)source.FindMapping(typeof(long))!.WithComposedConverter(converter);
+        var input = factory.Constant(5e9d, mapping);
+        var translator = new OceanBaseMathTranslator(factory, source, mode);
+        var result = translator.Translate(null, Method("Asinh", typeof(double)), [input],
+            context.GetService<IDiagnosticsLogger<DbLoggerCategory.Query>>())!;
+        Assert.Same(mapping, result.TypeMapping);
+        foreach (var absolute in Functions(result).Where(function => function.Name == "ABS"))
+        {
+            var promotion = Assert.IsType<SqlBinaryExpression>(absolute.Arguments![0]);
+            Assert.Equal(ExpressionType.Multiply, promotion.OperatorType);
+            Assert.Same(input, promotion.Left);
+            var one = Assert.IsType<SqlConstantExpression>(promotion.Right);
+            Assert.Equal(1d, one.Value);
+            Assert.Null(one.TypeMapping!.Converter);
+            Assert.Equal(typeof(double), one.TypeMapping.ClrType);
+        }
+    }
+
+    private static bool ContainsReference(Expression expression, Expression target)
+    {
+        var probe = new ReferenceProbe(target);
+        probe.Visit(expression);
+        return probe.Found;
+    }
+
+    private sealed class ReferenceProbe(Expression target) : ExpressionVisitor
+    {
+        public bool Found { get; private set; }
+        public override Expression? Visit(Expression? node)
+        {
+            if (ReferenceEquals(node, target)) Found = true;
+            return base.Visit(node);
+        }
+    }
+
     private static IEnumerable<SqlFunctionExpression> Functions(SqlExpression expression)
     {
         if (expression is SqlFunctionExpression function)
@@ -166,6 +212,15 @@ public sealed class TranscendentalQueryTests
         }
         if (expression is SqlBinaryExpression binary)
             foreach (var child in Functions(binary.Left).Concat(Functions(binary.Right))) yield return child;
+        if (expression is SqlUnaryExpression unary)
+            foreach (var child in Functions(unary.Operand)) yield return child;
+        if (expression is CaseExpression conditional)
+        {
+            foreach (var clause in conditional.WhenClauses)
+            foreach (var child in Functions(clause.Test).Concat(Functions(clause.Result))) yield return child;
+            if (conditional.ElseResult is { } otherwise)
+                foreach (var child in Functions(otherwise)) yield return child;
+        }
     }
 
     [Theory]
@@ -213,7 +268,7 @@ public sealed class TranscendentalQueryTests
             .Where(g => g.Count() > 1 && g.Key > 0).Select(g => new { g.Key, Count = g.Count() }).ToQueryString();
         Assert.Contains("GROUP BY", grouped); Assert.Contains("HAVING", grouped); Assert.Contains("CAST(", grouped);
         var nested = context.Rows.Where(r => MathF.Exp(MathF.Log(r.Single, .5f)) > 0).Select(r => r.Id).ToQueryString();
-        Assert.Equal(2, nested.Split("CAST(", StringSplitOptions.None).Length - 1);
+        Assert.Equal(2, nested.Split(mode == OceanBaseCompatibilityMode.MySql ? " AS FLOAT)" : " AS BINARY_FLOAT)", StringSplitOptions.None).Length - 1);
         Assert.Contains("EXP(CAST(", nested);
     }
 
@@ -243,7 +298,7 @@ public sealed class TranscendentalQueryTests
             Assert.Equal(type == typeof(float), sql.Contains("CAST(", StringComparison.Ordinal));
             if (type == typeof(float))
             {
-                Assert.Equal(1, sql.Split("CAST(", StringSplitOptions.None).Length - 1);
+                Assert.Equal(1, sql.Split(mode == OceanBaseCompatibilityMode.MySql ? " AS FLOAT)" : " AS BINARY_FLOAT)", StringSplitOptions.None).Length - 1);
                 Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? " AS FLOAT)" : " AS BINARY_FLOAT)", sql);
             }
             if (name == "LogBase" && mode == OceanBaseCompatibilityMode.MySql)
@@ -275,11 +330,13 @@ public sealed class TranscendentalQueryTests
                 var b = factory.Constant(Convert.ChangeType(baseValue, type), source.FindMapping(type));
                 var result = translator.Translate(null, Method(name, type), name is "LogBase" or "Pow" or "Atan2" ? [x, b] : [x], logger)!;
                 Assert.NotNull(result);
-                Assert.Contains(Functions(result).SelectMany(f => f.Arguments!), a => ReferenceEquals(a, x));
+                Assert.True(ContainsReference(result, x));
                 if (name is "LogBase" or "Pow" or "Atan2")
                     Assert.Contains(Functions(result).SelectMany(f => f.Arguments!), a => ReferenceEquals(a, b));
                 if (name == "Pow") Assert.DoesNotContain(Functions(result), f => f.Name == "LN");
-                Assert.DoesNotContain("CASE", Render(context, mode, result));
+                if (name is "Asinh" or "Atanh" || mode == OceanBaseCompatibilityMode.MySql && name is "Sinh" or "Tanh")
+                    Assert.Contains("CASE", Render(context, mode, result));
+                else Assert.DoesNotContain("CASE", Render(context, mode, result));
             }
         }
     }

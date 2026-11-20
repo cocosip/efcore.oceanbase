@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
@@ -14,6 +15,135 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
 {
     public sealed class StringMappingTests
     {
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle)]
+        public void Scalar_json_uses_native_binding_and_rejects_incompatible_facets(OceanBaseCompatibilityMode mode)
+        {
+            using var context = CreateContext(mode);
+            var source = Source(context);
+            var mapping = source.FindMapping(typeof(string), "JSON");
+            Assert.NotNull(mapping);
+            Assert.Equal(DbType.String, mapping.DbType);
+            using var command = new OceanBaseCommand();
+            var document = "{\"text\":\"海🌊\",\"null\":null}";
+            var parameter = Assert.IsType<OceanBaseParameter>(mapping.CreateParameter(command, "json", document));
+            Assert.Equal(OceanBaseDbType.Json, parameter.OceanBaseDbType);
+            Assert.Equal(document, parameter.Value);
+            Assert.Equal("null", mapping.CreateParameter(command, "jsonNull", "null").Value);
+            Assert.Equal(DBNull.Value, mapping.CreateParameter(command, "sqlNull", null).Value);
+            var clone = mapping.WithStoreTypeAndSize("JSON", null);
+            Assert.Equal(OceanBaseDbType.Json, Assert.IsType<OceanBaseParameter>(clone.CreateParameter(command, "clone", document)).OceanBaseDbType);
+            Assert.Null(source.FindMapping(typeof(List<int>), "JSON"));
+            Assert.Throws<ArgumentException>(() => source.FindMapping(typeof(string), "JSON", precision: 1));
+            Assert.Throws<ArgumentException>(() => source.FindMapping(typeof(string), "JSON", scale: 1));
+            Assert.Throws<ArgumentException>(() => source.FindMapping(typeof(string), "JSON(50)"));
+            Assert.Throws<ArgumentException>(() => source.FindMapping(typeof(string), "JSON", size: 50));
+            Assert.Throws<ArgumentException>(() => source.FindMapping(typeof(string), "JSON", fixedLength: true));
+            Assert.Throws<ArgumentException>(() => source.FindMapping(typeof(string), "JSON", unicode: false));
+            Assert.Throws<ArgumentException>(() => source.FindMapping(typeof(string), "JSON", keyOrIndex: true));
+
+        }
+
+        [Theory]
+        [InlineData("CHAR(32)")]
+        [InlineData("VARCHAR(32)")]
+        [InlineData("TINYTEXT")]
+        [InlineData("TEXT")]
+        [InlineData("MEDIUMTEXT")]
+        [InlineData("LONGTEXT")]
+        public void MySql_control_text_uses_a_character_literal_valid_in_column_defaults(string declaration)
+        {
+            using var context = CreateContext(OceanBaseCompatibilityMode.MySql);
+            var mapping = Source(context).FindMapping(typeof(string), declaration)!;
+            foreach (var text in new[] { "a\\'b", "海🌊\r\n", "\t\0", "' OR 1=1--\n" })
+                Assert.Equal("_utf8mb4 X'" + Convert.ToHexString(System.Text.Encoding.UTF8.GetBytes(text)) + "'",
+                    mapping.GenerateSqlLiteral(text));
+            Assert.Equal("NULL", mapping.GenerateSqlLiteral(null));
+            Assert.Equal("''", mapping.GenerateSqlLiteral(""));
+            Assert.Equal("'Ready''s'", mapping.GenerateSqlLiteral("Ready's"));
+            Assert.Throws<ArgumentException>(() => mapping.GenerateSqlLiteral("\ud800\n"));
+            var converted = (RelationalTypeMapping)mapping.WithComposedConverter(
+                new ValueConverter<Caption, string>(value => value.Value + "\n", value => new Caption(value)));
+            Assert.Equal("_utf8mb4 X'610A'", converted.GenerateSqlLiteral(new Caption("a")));
+        }
+
+        public static IEnumerable<object?[]> NationalLiteralCases()
+        {
+            foreach (var declaration in new[] { "NCHAR(20)", "NVARCHAR2(20)", "NCLOB" })
+            foreach (var (value, sql) in new (string?, string)[]
+            {
+                (null, "NULL"), ("", "N''"), ("Ready's", "N'Ready''s'"),
+                ("海", @"u'\6d77'"), ("海🌊", @"u'\6d77\d83c\df0a'"),
+                (@"\6d77", @"u'\005c\0036\0064\0037\0037'"),
+                ("' OR 1=1--\n\0", @"u'\0027\0020\004f\0052\0020\0031\003d\0031\002d\002d\000a\0000'"),
+                ("\u007f\u0085", @"u'\007f\0085'")
+            }) yield return [declaration, value, sql];
+        }
+
+        [Theory]
+        [MemberData(nameof(NationalLiteralCases))]
+        public void Oracle_national_literals_preserve_text_without_client_encoding(
+            string declaration, string? value, string expected)
+        {
+            using var context = CreateContext(OceanBaseCompatibilityMode.Oracle);
+            var mapping = Source(context).FindMapping(typeof(string), declaration)!;
+            Assert.Equal(expected, mapping.GenerateSqlLiteral(value));
+        }
+
+        [Theory]
+        [InlineData("CHAR(20)")]
+        [InlineData("VARCHAR2(20)")]
+        [InlineData("CLOB")]
+        public void Oracle_ordinary_literals_without_newlines_keep_their_character_set_contract(string declaration)
+        {
+            using var context = CreateContext(OceanBaseCompatibilityMode.Oracle);
+            var mapping = Source(context).FindMapping(typeof(string), declaration)!;
+            Assert.Equal("'海🌊\\'''", mapping.GenerateSqlLiteral("海🌊\\'"));
+        }
+
+        public static IEnumerable<object?[]> OrdinaryNewlineCases()
+        {
+            foreach (var declaration in new[] { "CHAR(20 CHAR)", "VARCHAR2(20 CHAR)", "CLOB" })
+            foreach (var (value, sql) in new (string?, string)[]
+            {
+                (null, "NULL"), ("", "''"), ("a'\\b", "'a''\\b'"),
+                ("\n", "CAST(CHR(10) AS CHAR(1))"),
+                ("a\rb", "(('a' || CAST(CHR(13) AS CHAR(1))) || 'b')"),
+                ("a\r\nb", "(('a' || CAST(CHR(13) AS CHAR(1))) || (CAST(CHR(10) AS CHAR(1)) || 'b'))"),
+                ("a'\\\nb", @"(('a''\' || CAST(CHR(10) AS CHAR(1))) || 'b')"),
+                ("海🌊\n", "('海🌊' || CAST(CHR(10) AS CHAR(1)))"),
+                ("\r\n\t\0", "((CAST(CHR(13) AS CHAR(1)) || CAST(CHR(10) AS CHAR(1))) || '\t\0')"),
+                ("\n\r\n", "((CAST(CHR(10) AS CHAR(1)) || CAST(CHR(13) AS CHAR(1))) || CAST(CHR(10) AS CHAR(1)))"),
+                ("a\nb\nc", "((('a' || CAST(CHR(10) AS CHAR(1))) || ('b' || CAST(CHR(10) AS CHAR(1)))) || 'c')")
+            }) yield return [declaration, value, sql];
+        }
+
+        [Theory]
+        [MemberData(nameof(OrdinaryNewlineCases))]
+        public void Oracle_ordinary_newline_literals_preserve_CHAR_operands(string declaration, string? value, string expected)
+        {
+            using var context = CreateContext(OceanBaseCompatibilityMode.Oracle);
+            var mapping = Source(context).FindMapping(typeof(string), declaration)!;
+            Assert.Equal(expected, mapping.GenerateSqlLiteral(value));
+        }
+
+        [Fact]
+        public void Oracle_ordinary_newline_literals_survive_clones_and_converters_without_changing_parameters()
+        {
+            using var context = CreateContext(OceanBaseCompatibilityMode.Oracle);
+            var mapping = Source(context).FindMapping(typeof(string), "VARCHAR2(2 CHAR)")!;
+            var converted = (RelationalTypeMapping)mapping.WithStoreTypeAndSize("VARCHAR2(4 CHAR)", 4)
+                .WithComposedConverter(new ValueConverter<Caption, string>(value => value.Value + "\n", value => new Caption(value)));
+            Assert.Equal("('海🌊' || CAST(CHR(10) AS CHAR(1)))", converted.GenerateSqlLiteral(new Caption("海🌊")));
+            using var command = new OceanBaseCommand();
+            var parameter = converted.CreateParameter(command, "text", new Caption("海🌊"));
+            Assert.Equal("海🌊\n", parameter.Value);
+            Assert.Equal(DbType.AnsiString, parameter.DbType);
+            Assert.Null(((OceanBaseParameter)parameter).OceanBaseDbType);
+            Assert.Throws<ArgumentException>(() => converted.GenerateSqlLiteral(new Caption("\ud800")));
+        }
+
         [Theory]
         [InlineData(OceanBaseCompatibilityMode.MySql, "CHAR", 1, true, true)]
         [InlineData(OceanBaseCompatibilityMode.MySql, " char ( 4 ) ", 4, true, true)]
@@ -108,7 +238,9 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             var parameter = mapping.CreateParameter(command, "text", "longer🌊query");
             Assert.Equal("longer🌊query", parameter.Value);
             Assert.Equal("longer🌊query".Length, parameter.Size);
-            Assert.Contains("longer🌊query", mapping.GenerateSqlLiteral("longer🌊query"));
+            Assert.Equal(mode == OceanBaseCompatibilityMode.Oracle
+                ? @"u'\006c\006f\006e\0067\0065\0072\d83c\df0a\0071\0075\0065\0072\0079'"
+                : "'longer🌊query'", mapping.GenerateSqlLiteral("longer🌊query"));
             var converted = (RelationalTypeMapping)mapping.WithStoreTypeAndSize(
                 mode == OceanBaseCompatibilityMode.Oracle ? "NVARCHAR2(4)" : "VARCHAR(4)", 4)
                 .WithComposedConverter(new ValueConverter<Caption, string>(value => value.Value + "!", value => new Caption(value)));
@@ -116,6 +248,9 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             convertedValidation.ValidateWriteValue(new Caption("海🌊洋"));
             Assert.Throws<ArgumentException>(() => convertedValidation.ValidateWriteValue(new Caption("海🌊洋河")));
             Assert.Equal("海🌊洋!", converted.CreateParameter(command, "text", new Caption("海🌊洋")).Value);
+            Assert.Equal(mode == OceanBaseCompatibilityMode.Oracle
+                ? @"u'\6d77\d83c\df0a\6d0b\0021'" : "'海🌊洋!'",
+                converted.GenerateSqlLiteral(new Caption("海🌊洋")));
             Assert.ThrowsAny<ArgumentException>(() => mapping.WithPrecisionAndScale(3, null));
             Assert.ThrowsAny<ArgumentException>(() => mapping.WithStoreTypeAndSize("CHAR(2) ignored", 2));
             var lob = Source(context).FindMapping(typeof(string), mode == OceanBaseCompatibilityMode.Oracle ? "NCLOB" : "LONGTEXT", size: 2)!;

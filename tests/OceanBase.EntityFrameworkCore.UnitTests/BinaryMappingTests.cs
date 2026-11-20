@@ -211,21 +211,38 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
         }
 
         [Fact]
-        public void Oracle_rejects_unverified_empty_binary_inputs_and_large_raw_literals()
+        public void Oracle_rejects_empty_RAW_inputs_and_large_raw_literals()
         {
             using var context = CreateContext(OceanBaseCompatibilityMode.Oracle);
             var source = context.GetService<IRelationalTypeMappingSource>();
             using var command = new OceanBaseCommand();
-            foreach (var storeType in new[] { "RAW(8)", "BLOB" })
-            {
-                var mapping = source.FindMapping(typeof(byte[]), storeType)!;
-                Assert.Throws<NotSupportedException>(() => mapping.CreateParameter(command, "data", Array.Empty<byte>()));
-                Assert.Throws<NotSupportedException>(() => mapping.GenerateSqlLiteral(Array.Empty<byte>()));
-            }
+            var mapping = source.FindMapping(typeof(byte[]), "RAW(8)")!;
+            Assert.Throws<NotSupportedException>(() => mapping.CreateParameter(command, "data", Array.Empty<byte>()));
+            Assert.Throws<NotSupportedException>(() => mapping.GenerateSqlLiteral(Array.Empty<byte>()));
 
             var blob = source.FindMapping(typeof(byte[]), "BLOB")!;
             Assert.Throws<NotSupportedException>(() => blob.GenerateSqlLiteral(new byte[2001]));
             Assert.Equal("HEXTORAW('0080FF')", blob.GenerateSqlLiteral(new byte[] { 0, 0x80, 0xff }));
+        }
+
+        [Fact]
+        public void Oracle_empty_BLOB_preserves_empty_parameters_literals_and_converters()
+        {
+            using var context = CreateContext(OceanBaseCompatibilityMode.Oracle);
+            var source = context.GetService<IRelationalTypeMappingSource>();
+            var mapping = source.FindMapping(typeof(byte[]), "BLOB")!;
+            var converted = (RelationalTypeMapping)mapping.WithStoreTypeAndSize("BLOB", 8).WithComposedConverter(
+                new ValueConverter<string, byte[]>(value => Convert.FromHexString(value), value => Convert.ToHexString(value)));
+            using var command = new OceanBaseCommand();
+            foreach (var candidate in new[] { mapping, converted })
+            {
+                object empty = candidate == mapping ? Array.Empty<byte>() : "";
+                ((IOceanBaseWriteValidation)candidate).ValidateWriteValue(empty);
+                Assert.Empty(Assert.IsType<byte[]>(candidate.CreateParameter(command, "data", empty).Value));
+                Assert.Equal("EMPTY_BLOB()", candidate.GenerateSqlLiteral(empty));
+                Assert.Equal(DBNull.Value, candidate.CreateParameter(command, "null", null, nullable: true).Value);
+                Assert.Equal("NULL", candidate.GenerateSqlLiteral(null));
+            }
         }
 
         private static TestContext CreateContext(OceanBaseCompatibilityMode mode)

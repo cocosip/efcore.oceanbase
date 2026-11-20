@@ -18,6 +18,28 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
 {
     public sealed class ConnectionLifecycleTests
     {
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle)]
+        public void Supplied_connection_can_be_set_cleared_and_replaced_without_a_connection_string(OceanBaseCompatibilityMode mode)
+        {
+            var creating = new CountConnectionCreation();
+            using var context = new DbContext(new DbContextOptionsBuilder().UseOceanBase((string?)null, mode)
+                .AddInterceptors(creating).Options);
+            using var first = new OceanBaseConnector.OceanBaseConnection("Server=localhost;Database=test");
+            using var replacement = new OceanBaseConnector.OceanBaseConnection("Server=localhost;Database=test");
+            context.Database.SetDbConnection(null);
+            context.Database.SetDbConnection(first);
+            Assert.Same(first, context.Database.GetDbConnection());
+            context.Database.SetDbConnection(first, contextOwnsConnection: true);
+            context.Database.SetDbConnection(null);
+            context.Database.SetDbConnection(replacement);
+            Assert.Same(replacement, context.Database.GetDbConnection());
+            Assert.Equal(0, creating.Count);
+            Assert.Equal(ConnectionState.Closed, first.State);
+            Assert.Equal(ConnectionState.Closed, replacement.State);
+        }
+
         public static IEnumerable<object[]> PhysicalFailureCases()
         {
             foreach (var mode in Enum.GetValues<OceanBaseCompatibilityMode>())
@@ -39,7 +61,7 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
         [InlineData(OceanBaseCompatibilityMode.MySql, true, true)]
         [InlineData(OceanBaseCompatibilityMode.Oracle, false, true)]
         [InlineData(OceanBaseCompatibilityMode.Oracle, true, true)]
-        public async Task Failed_provider_open_restores_outer_lease_and_can_be_retried(OceanBaseCompatibilityMode mode, bool async, bool outerLease)
+        public async Task Failed_native_enlistment_restores_outer_lease_and_can_be_retried(OceanBaseCompatibilityMode mode, bool async, bool outerLease)
         {
             await using var context = new DbContext(new DbContextOptionsBuilder().UseOceanBase("Server=localhost;Database=test", mode)
                 .AddInterceptors(new SuppressNetwork())
@@ -68,6 +90,28 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
                 if (async) await connection.CloseAsync();
                 else connection.Close();
             }
+            Assert.Equal(0, OpenCount(connection));
+            Assert.False(OpenedInternally(connection));
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true)]
+        public async Task Open_rechecks_mode_after_open_callback_and_restores_accounting(
+            OceanBaseCompatibilityMode mode, bool async)
+        {
+            await using var context = new DbContext(new DbContextOptionsBuilder()
+                .UseOceanBase("Server=localhost;Database=test", mode)
+                .AddInterceptors(new ModeConflictAfterOpen(mode)).Options);
+            var connection = context.GetService<IRelationalConnection>();
+
+            var error = async
+                ? await Assert.ThrowsAsync<InvalidOperationException>(() => connection.OpenAsync(CancellationToken.None))
+                : Assert.Throws<InvalidOperationException>(() => connection.Open());
+
+            Assert.Contains("connection mode does not match", error.Message, StringComparison.OrdinalIgnoreCase);
             Assert.Equal(0, OpenCount(connection));
             Assert.False(OpenedInternally(connection));
         }
@@ -199,6 +243,18 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
                 => ValueTask.FromResult(InterceptionResult.Suppress());
         }
 
+        private sealed class CountConnectionCreation : DbConnectionInterceptor
+        {
+            public int Count { get; private set; }
+
+            public override InterceptionResult<DbConnection> ConnectionCreating(
+                ConnectionCreatingEventData eventData, InterceptionResult<DbConnection> result)
+            {
+                Count++;
+                return result;
+            }
+        }
+
         private sealed class OpenedFailure : DbConnectionInterceptor
         {
             public Exception? Failure { get; set; }
@@ -207,6 +263,30 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             {
                 if (Failure is not null) throw Failure;
             }
+
+            public override Task ConnectionOpenedAsync(DbConnection connection, ConnectionEndEventData eventData,
+                CancellationToken cancellationToken = default)
+            {
+                ConnectionOpened(connection, eventData);
+                return Task.CompletedTask;
+            }
+        }
+
+        private sealed class ModeConflictAfterOpen(OceanBaseCompatibilityMode expected) : DbConnectionInterceptor
+        {
+            private readonly OceanBaseCompatibilityMode _conflict = expected == OceanBaseCompatibilityMode.MySql
+                ? OceanBaseCompatibilityMode.Oracle
+                : OceanBaseCompatibilityMode.MySql;
+
+            public override InterceptionResult ConnectionOpening(DbConnection connection, ConnectionEventData eventData,
+                InterceptionResult result) => InterceptionResult.Suppress();
+
+            public override ValueTask<InterceptionResult> ConnectionOpeningAsync(DbConnection connection,
+                ConnectionEventData eventData, InterceptionResult result, CancellationToken cancellationToken = default)
+                => ValueTask.FromResult(InterceptionResult.Suppress());
+
+            public override void ConnectionOpened(DbConnection connection, ConnectionEndEventData eventData)
+                => connection.ConnectionString = $"Server=localhost;Database=test;ExpectedMode={_conflict}";
 
             public override Task ConnectionOpenedAsync(DbConnection connection, ConnectionEndEventData eventData,
                 CancellationToken cancellationToken = default)

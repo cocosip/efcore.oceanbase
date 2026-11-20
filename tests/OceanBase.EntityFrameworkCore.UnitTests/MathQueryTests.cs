@@ -17,6 +17,75 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
 {
     public sealed class MathQueryTests
     {
+        [Fact]
+        public void MySql_Single_result_normalizes_then_uses_Double_transport()
+        {
+            using var context = CreateContext(OceanBaseCompatibilityMode.MySql);
+            var sql = context.Rows.Where(row => MathF.Sqrt(row.Single) > 0f).Select(row => MathF.Sqrt(row.Single)).ToQueryString();
+            Assert.Contains("CAST(CAST(SQRT(", sql);
+            Assert.Contains(" AS FLOAT) AS DOUBLE)", sql);
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle)]
+        public void Hyperbolic_functions_use_available_native_building_blocks(OceanBaseCompatibilityMode mode)
+        {
+            using var context = CreateContext(mode);
+            foreach (var name in mode == OceanBaseCompatibilityMode.MySql
+                ? new[] { "Sinh", "Cosh", "Tanh", "Asinh", "Atanh" } : new[] { "Asinh", "Atanh" })
+            {
+                var row = Expression.Parameter(typeof(Row), "row");
+                var call = Expression.Call(typeof(Math).GetMethod(name, [typeof(double)])!, Expression.Property(row, nameof(Row.Double)));
+                var predicate = Expression.Lambda<Func<Row, bool>>(Expression.GreaterThan(call, Expression.Constant(0d)), row);
+                var sql = context.Rows.Where(predicate).ToQueryString();
+                Assert.DoesNotContain(name.ToUpperInvariant() + "(", sql);
+                Assert.Contains(name is "Sinh" or "Cosh" or "Tanh" ? "EXP(" : "LN(", sql);
+            }
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle)]
+        public void Acosh_for_double_and_single_translates_in_predicates(OceanBaseCompatibilityMode mode)
+        {
+            using var context = CreateContext(mode);
+            var sql = context.Rows.Where(row => Math.Acosh(row.Double) > 0d && MathF.Acosh(row.Single) > 0f).ToQueryString();
+            Assert.Contains("CASE", sql);
+            Assert.Contains("SQRT(", sql);
+            Assert.Contains("LN(", sql);
+            Assert.DoesNotContain("ACOSH(", sql);
+        }
+
+        [Fact]
+        public void Oracle_binary_floating_sign_handles_zero_before_native_sign()
+        {
+            using var context = CreateContext(OceanBaseCompatibilityMode.Oracle);
+            foreach (var query in new[]
+            {
+                context.Rows.Where(row => Math.Sign(row.Double) == 0).ToQueryString(),
+                context.Rows.Where(row => MathF.Sign(row.Single) == 0).ToQueryString()
+            })
+            {
+                Assert.Contains("CASE", query);
+                Assert.Contains("THEN 0", query);
+                Assert.Contains("SIGN(", query);
+            }
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle)]
+        public void Nullable_decimal_converter_functions_translate_in_predicates(OceanBaseCompatibilityMode mode)
+        {
+            using var context = CreateContext(mode);
+            var sql = context.Rows.Where(row => Math.Abs(row.OptionalTransformed!.Value) > 0m
+                && Math.Round(row.OptionalTransformed.Value, 2) > 0m
+                && Math.Floor(row.OptionalTransformed.Value) > 0m).ToQueryString();
+            Assert.Contains("ABS(", sql);
+            Assert.Contains("CASE", sql);
+        }
+
         private static readonly (Type Owner, string Name, Type Input, string Property)[] Methods =
         [
             (typeof(Math), "Abs", typeof(sbyte), "SByte"),
@@ -94,7 +163,8 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
                 foreach (var value in Values(type))
                 {
                     var input = factory.Constant(value, mapping);
-                    var result = Assert.IsType<SqlFunctionExpression>(translator.Translate(null, method, [input], logger));
+                    var translated = translator.Translate(null, method, [input], logger);
+                    var result = Assert.IsType<SqlFunctionExpression>(translated is CaseExpression conditional ? conditional.ElseResult : translated);
                     Assert.Equal(method.ReturnType, result.Type);
                     Assert.True(result.IsNullable);
                     Assert.All(result.ArgumentsPropagateNullability!, Assert.False);
@@ -186,11 +256,12 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             var column = oracle ? "\"WideSingle\"" : "`WideSingle`";
             Assert.Contains(column + cast, away);
             Assert.Contains((oracle ? " * 100F" : " * 100E0") + cast, away);
-            Assert.Contains(oracle ? "0.49999997F" : "0.4999999701976776E0", away);
+            Assert.Contains(oracle ? "0.4999999701976776F" : "0.4999999701976776E0", away);
             Assert.Contains(oracle ? "8388608F" : "8388608E0", away);
             Assert.Contains(oracle ? "100000000F" : "100000000E0", away);
             Assert.DoesNotContain(" AS BINARY_DOUBLE)", away);
-            Assert.DoesNotContain(" AS DOUBLE)", away);
+            if (oracle) Assert.DoesNotContain(" AS DOUBLE)", away);
+            else Assert.Contains(" AS FLOAT) AS DOUBLE)", away);
 
             var integral = context.Rows.Select(row => new
             {
@@ -557,8 +628,9 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
                 foreach (var name in new[] { "Abs", "Sign", "Truncate" })
                 {
                     var method = (type == typeof(float) ? typeof(MathF) : typeof(Math)).GetMethod(name, [type])!;
-                    var result = Assert.IsType<SqlFunctionExpression>(translator.Translate(null, method,
-                        [factory.Constant(Convert.ChangeType(-1.75m, type), mapping)], logger));
+                    var translated = translator.Translate(null, method,
+                        [factory.Constant(Convert.ChangeType(-1.75m, type), mapping)], logger);
+                    var result = Assert.IsType<SqlFunctionExpression>(translated is CaseExpression conditional ? conditional.ElseResult : translated);
                     Assert.Same(mapping, result.Arguments![0].TypeMapping);
                     if (name != "Sign") Assert.Same(mapping, result.TypeMapping);
                 }
@@ -669,6 +741,26 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
                 context.Rows.OrderBy(row => Math.Truncate(row.Decimal)).ToQueryString());
         }
 
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle)]
+        public void Nullable_floating_converter_round_accepts_constant_and_captured_options(OceanBaseCompatibilityMode mode)
+        {
+            using var context = CreateContext(mode);
+            var digits = 2;
+            var rule = MidpointRounding.ToEven;
+            var captured = context.Rows.Where(row => MathF.Round(row.OptionalSingleTransformed!.Value, digits, rule) > 0
+                && Math.Round(row.OptionalDoubleTransformed!.Value, digits, rule) > 0);
+            var constant = context.Rows.Where(row => MathF.Round(row.OptionalSingleTransformed!.Value, 2) > 0
+                && Math.Round(row.OptionalDoubleTransformed!.Value, 2) > 0);
+            Assert.Contains("CASE", constant.ToQueryString());
+            Assert.Contains("CASE", captured.ToQueryString());
+            digits = -1;
+            Assert.Throws<InvalidOperationException>(() => captured.ToQueryString());
+            digits = 1;
+            Assert.Contains("CASE", captured.ToQueryString());
+        }
+
         private static int Abs(int value) => value;
 
         private sealed class TestMapping(Type type, string storeType) : RelationalTypeMapping(storeType, type)
@@ -700,6 +792,9 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
                 modelBuilder.Entity<Row>().Property(row => row.WideSingle).HasColumnType(wideSingleStoreType);
                 modelBuilder.Entity<Row>().Property(row => row.Converted).HasConversion<long>();
                 modelBuilder.Entity<Row>().Property(row => row.Transformed).HasConversion(value => value * -2m, value => value / -2m).HasPrecision(5, 2);
+                modelBuilder.Entity<Row>().Property(row => row.OptionalTransformed).HasConversion(value => value * -2m, value => value / -2m).HasPrecision(5, 2);
+                modelBuilder.Entity<Row>().Property(row => row.OptionalSingleTransformed).HasConversion(value => value * -2f, value => value / -2f);
+                modelBuilder.Entity<Row>().Property(row => row.OptionalDoubleTransformed).HasConversion(value => value * -2d, value => value / -2d);
                 modelBuilder.Entity<Row>().Property(row => row.Text).HasConversion<string>();
             }
         }
@@ -719,6 +814,9 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             public decimal? OptionalDecimal { get; set; }
             public int Converted { get; set; }
             public decimal Transformed { get; set; }
+            public decimal? OptionalTransformed { get; set; }
+            public float? OptionalSingleTransformed { get; set; }
+            public double? OptionalDoubleTransformed { get; set; }
             public int Text { get; set; }
         }
     }

@@ -9,6 +9,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Storage;
+using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using OceanBaseConnector;
 using Xunit;
 
@@ -16,6 +17,30 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
 {
     public sealed class PositionalCommandTests
     {
+        [Fact]
+        public void Repeated_mapped_positions_clone_the_first_bound_value_without_repeating_conversion()
+        {
+            using var context = CreateContext(OceanBaseCompatibilityMode.MySql);
+            var counter = new ConversionCounter();
+            var converter = new ValueConverter<int, int>(value => counter.Next(value), value => value);
+            var mapping = (RelationalTypeMapping)context.GetService<IRelationalTypeMappingSource>().FindMapping(typeof(int))!
+                .WithComposedConverter(converter);
+            var builder = context.GetService<IRelationalCommandBuilderFactory>().Create();
+            builder.Append("SELECT @value, @value").AddParameter("value", "@value", mapping, false);
+            using var command = builder.Build().CreateDbCommand(new RelationalCommandParameterObject(
+                context.GetService<IRelationalConnection>(), new Dictionary<string, object?> { ["value"] = 7 }, null, context, null),
+                Guid.NewGuid(), DbCommandMethod.ExecuteScalar);
+            Assert.Equal(1, counter.Calls);
+            Assert.Equal(command.Parameters[0].Value, command.Parameters[1].Value);
+            Assert.NotSame(command.Parameters[0], command.Parameters[1]);
+        }
+
+        private sealed class ConversionCounter
+        {
+            public int Calls { get; private set; }
+            public int Next(int value) => value + ++Calls;
+        }
+
         [Theory]
         [InlineData(OceanBaseCompatibilityMode.MySql)]
         [InlineData(OceanBaseCompatibilityMode.Oracle)]
@@ -152,18 +177,77 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             Assert.Equal(0, stream.Position);
         }
 
-        [Fact]
-        public void Repeated_native_parameters_reject_without_copying_ambiguous_facets()
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public void Repeated_native_parameters_copy_declared_and_inferred_facets(bool declared)
         {
             using var context = CreateContext(OceanBaseCompatibilityMode.MySql);
             var builder = context.GetService<IRelationalCommandBuilderFactory>().Create();
             builder.Append("SELECT @a, @a");
-            var original = new OceanBaseParameter { ParameterName = "@a", DbType = DbType.Decimal, Scale = 0, Value = 1m };
+            var original = new OceanBaseParameter { ParameterName = "@a", Value = 1.25m };
+            if (declared) { original.OceanBaseDbType = OceanBaseDbType.Decimal; original.Precision = 18; original.Scale = 2; }
             builder.AddRawParameter("a", original);
-            var error = Assert.Throws<NotSupportedException>(() => builder.Build().CreateDbCommand(new RelationalCommandParameterObject(
-                context.GetService<IRelationalConnection>(), null, null, context, null), Guid.NewGuid(), DbCommandMethod.ExecuteScalar));
-            Assert.Contains("clone", error.Message);
-            Assert.Equal((byte)0, original.Scale);
+            using var command = builder.Build().CreateDbCommand(new RelationalCommandParameterObject(
+                context.GetService<IRelationalConnection>(), null, null, context, null), Guid.NewGuid(), DbCommandMethod.ExecuteScalar);
+            Assert.Equal("SELECT ?, ?", command.CommandText);
+            Assert.Same(original, command.Parameters[0]);
+            var repeated = Assert.IsType<OceanBaseParameter>(command.Parameters[1]);
+            Assert.NotSame(original, repeated);
+            Assert.Equal(original.OceanBaseDbType, repeated.OceanBaseDbType);
+            Assert.Equal(original.Precision, repeated.Precision);
+            Assert.Equal(original.Scale, repeated.Scale);
+            Assert.Equal(1.25m, repeated.Value);
+            command.Parameters.Clear();
+            using var owner = new OceanBaseCommand();
+            owner.Parameters.Add(original);
+            Assert.Same(original, owner.Parameters[0]);
+        }
+
+        [Fact]
+        public void Repeated_native_binary_parameters_copy_the_value_and_preserve_null_binding()
+        {
+            using var context = CreateContext(OceanBaseCompatibilityMode.MySql);
+            foreach (var value in new object[] { new byte[] { 1, 2, 3 }, DBNull.Value })
+            {
+                var builder = context.GetService<IRelationalCommandBuilderFactory>().Create();
+                builder.Append("SELECT @a, @a");
+                var original = new OceanBaseParameter { ParameterName = "@a", OceanBaseDbType = OceanBaseDbType.Binary, Size = 3, Value = value };
+                builder.AddRawParameter("a", original);
+                using var command = builder.Build().CreateDbCommand(new RelationalCommandParameterObject(
+                    context.GetService<IRelationalConnection>(), null, null, context, null), Guid.NewGuid(), DbCommandMethod.ExecuteScalar);
+                var repeated = Assert.IsType<OceanBaseParameter>(command.Parameters[1]);
+                Assert.Equal(value, repeated.Value);
+                Assert.Equal(3, repeated.Size);
+                Assert.Equal(OceanBaseDbType.Binary, repeated.OceanBaseDbType);
+                if (value is byte[]) Assert.NotSame(value, repeated.Value);
+            }
+        }
+
+        [Fact]
+        public void Independent_stream_parameters_bind_but_repeated_stream_rejects_before_consumption()
+        {
+            using var first = new MemoryStream([1, 2, 3]);
+            using var second = new MemoryStream([1, 2, 3]);
+            using var context = CreateContext(OceanBaseCompatibilityMode.MySql);
+            foreach (var repeated in new[] { false, true })
+            {
+                var builder = context.GetService<IRelationalCommandBuilderFactory>().Create();
+                builder.Append(repeated ? "SELECT @a, @a" : "SELECT @a, @b");
+                builder.AddRawParameter("a", new OceanBaseParameter { ParameterName = "@a", Value = first });
+                if (!repeated) builder.AddRawParameter("b", new OceanBaseParameter { ParameterName = "@b", Value = second });
+                DbCommand Build() => builder.Build().CreateDbCommand(new RelationalCommandParameterObject(
+                    context.GetService<IRelationalConnection>(), null, null, context, null), Guid.NewGuid(), DbCommandMethod.ExecuteScalar);
+                if (repeated) Assert.Throws<NotSupportedException>(Build);
+                else
+                {
+                    using var command = Build();
+                    Assert.Same(first, command.Parameters[0].Value);
+                    Assert.Same(second, command.Parameters[1].Value);
+                }
+                Assert.Equal(0, first.Position);
+                Assert.Equal(0, second.Position);
+            }
         }
 
         [Theory]

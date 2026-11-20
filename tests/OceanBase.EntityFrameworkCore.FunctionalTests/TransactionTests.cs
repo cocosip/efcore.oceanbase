@@ -718,6 +718,77 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
             Assert.Equal(ConnectionState.Open, native.State);
         }
 
+        [Theory]
+        [MemberData(nameof(Modes))]
+        public async Task Concurrency_suppression_controls_owned_commit_and_caller_savepoint_recovery(
+            OceanBaseCompatibilityMode mode, bool async)
+        {
+            foreach (var callerOwned in new[] { false, true })
+                foreach (var suppress in new[] { false, true })
+                {
+                    var conflict = new ConflictOnSecondInsert();
+                    var probe = new SaveChangesInterceptionTests.SaveProbe { Suppress = suppress };
+                    await using var context = Create(mode, conflict, probe);
+                    context.Database.AutoTransactionBehavior = AutoTransactionBehavior.Always;
+                    var native = Native(context);
+                    IDbContextTransaction? outer = callerOwned
+                        ? async ? await context.Database.BeginTransactionAsync() : context.Database.BeginTransaction()
+                        : null;
+                    try
+                    {
+                        var first = new Row { Id = 1, Name = "first" };
+                        var second = new Row { Id = 2, Name = "second" };
+                        context.AddRange(first, second);
+                        if (suppress) Assert.Equal(2, async ? await context.SaveChangesAsync() : context.SaveChanges());
+                        else if (async) await Assert.ThrowsAsync<DbUpdateConcurrencyException>(() => context.SaveChangesAsync());
+                        else Assert.Throws<DbUpdateConcurrencyException>(() => context.SaveChanges());
+                        Assert.Same(second, Assert.Single(probe.Conflict!.Entries).Entity);
+                        Assert.Equal(async ? 0 : 1, probe.SyncCalls);
+                        Assert.Equal(async ? 1 : 0, probe.AsyncCalls);
+                        var physical = Assert.Single(native.Transactions);
+                        Assert.Equal(callerOwned ? 0 : suppress ? 1 : 0, physical.Commits);
+                        Assert.Equal(0, physical.Rollbacks);
+                        Assert.Equal(!callerOwned && !suppress, physical.DisposedActive);
+                        Assert.All(context.ChangeTracker.Entries(), entry =>
+                            Assert.Equal(suppress ? EntityState.Unchanged : EntityState.Added, entry.State));
+                        if (callerOwned)
+                        {
+                            Assert.Same(outer, context.Database.CurrentTransaction);
+                            Assert.Equal(ConnectionState.Open, native.State);
+                            Assert.Contains(native.Commands, command => command.Sql.StartsWith("SAVEPOINT", StringComparison.Ordinal));
+                            Assert.Equal(!suppress, native.Commands.Any(command => command.Sql.StartsWith("ROLLBACK TO", StringComparison.Ordinal)));
+                            Assert.Equal(0, physical.Disposals);
+                        }
+                        else
+                        {
+                            Assert.Null(context.Database.CurrentTransaction);
+                            Assert.Equal(ConnectionState.Closed, native.State);
+                            Assert.Equal(1, physical.Disposals);
+                        }
+                    }
+                    finally
+                    {
+                        if (outer is not null)
+                        {
+                            if (async) await outer.DisposeAsync();
+                            else outer.Dispose();
+                        }
+                    }
+                }
+        }
+
+        private sealed class ConflictOnSecondInsert : DbCommandInterceptor
+        {
+            private int _inserts;
+            public override InterceptionResult<int> NonQueryExecuting(DbCommand command, CommandEventData eventData,
+                InterceptionResult<int> result)
+                => command.CommandText.StartsWith("INSERT", StringComparison.Ordinal) && ++_inserts == 2
+                    ? InterceptionResult<int>.SuppressWithResult(0) : result;
+            public override ValueTask<InterceptionResult<int>> NonQueryExecutingAsync(DbCommand command, CommandEventData eventData,
+                InterceptionResult<int> result, CancellationToken cancellationToken = default)
+                => ValueTask.FromResult(NonQueryExecuting(command, eventData, result));
+        }
+
         private static TestContext Create(OceanBaseCompatibilityMode mode, params IInterceptor[] interceptors)
             => new(new DbContextOptionsBuilder<TestContext>()
                 .UseOceanBase("Server=localhost;Database=offline", mode)

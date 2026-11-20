@@ -60,6 +60,18 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
 
         [Theory]
         [MemberData(nameof(Modes))]
+        public async Task EnsureCreated_does_not_recreate_a_sequence_in_a_schema_without_tables(OceanBaseCompatibilityMode mode, bool async)
+        {
+            var capture = new Capture { HasSequences = true };
+            await using var context = Create(mode, capture, "sequence-only");
+            Assert.False(async ? await context.Database.EnsureCreatedAsync() : context.Database.EnsureCreated());
+            Assert.Equal(3, capture.Commands.Count);
+            Assert.Contains(mode == OceanBaseCompatibilityMode.Oracle ? "ALL_SEQUENCES" : "DBA_SEQUENCES", capture.Commands[2].Sql);
+            AssertBalanced(context);
+        }
+
+        [Theory]
+        [MemberData(nameof(Modes))]
         public async Task Explicit_CreateTables_uses_the_same_scope_and_plan_without_the_emptiness_probe(OceanBaseCompatibilityMode mode, bool async)
         {
             var capture = new Capture();
@@ -82,7 +94,7 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
         [MemberData(nameof(Modes))]
         public async Task Missing_opt_in_and_cross_scope_models_reject_before_open(OceanBaseCompatibilityMode mode, bool async)
         {
-            foreach (var shape in new[] { "no-opt-in", "cross-scope", "cross-scope-principal" })
+            foreach (var shape in new[] { "no-opt-in", "cross-scope", "cross-scope-principal", "cross-scope-sequence" })
             {
                 var capture = new Capture();
                 await using var context = Create(mode, capture, shape);
@@ -282,6 +294,11 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
             protected override void OnModelCreating(ModelBuilder modelBuilder)
             {
                 if (shape == "empty") return;
+                if (shape is "sequence-only" or "cross-scope-sequence")
+                {
+                    modelBuilder.HasSequence<long>("Extra", shape == "cross-scope-sequence" ? "other" : null);
+                    return;
+                }
                 modelBuilder.Entity<Row>().ToTable("Rows", shape == "cross-scope" ? "other" : shape == "qualified" ? "owned" : null);
                 modelBuilder.Entity<Row>().Property(r => r.Name).HasMaxLength(40);
                 if (shape is "cleanup" or "cross-scope-principal")
@@ -301,6 +318,7 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
             public List<Command> Commands { get; } = [];
             public string Scope { get; init; } = "owned";
             public bool HasTables { get; init; }
+            public bool HasSequences { get; init; }
             public Exception? Failure { get; init; }
             public int FailOnDdl { get; init; } = 1;
             public Action? BeforeFailure { get; init; }
@@ -319,8 +337,10 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
             private InterceptionResult<object> Scalar(DbCommand command, bool async, CancellationToken token)
             {
                 Record(command, async, token);
-                return InterceptionResult<object>.SuppressWithResult(command.CommandText.StartsWith("SELECT COUNT", StringComparison.Ordinal)
-                    ? HasTables ? 1 : 0 : Scope);
+                if (!command.CommandText.StartsWith("SELECT COUNT", StringComparison.Ordinal))
+                    return InterceptionResult<object>.SuppressWithResult(Scope);
+                var exists = command.CommandText.Contains("_SEQUENCES", StringComparison.Ordinal) ? HasSequences : HasTables;
+                return InterceptionResult<object>.SuppressWithResult(exists ? 1 : 0);
             }
             public InterceptionResult<int> NonQueryExecuting(DbCommand command, CommandEventData eventData, InterceptionResult<int> result)
                 => Execute(command, false, default);

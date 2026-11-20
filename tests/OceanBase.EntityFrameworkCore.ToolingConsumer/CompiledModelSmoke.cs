@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Data;
 using System.Data.Common;
 using System.Linq;
@@ -23,35 +24,50 @@ internal static class CompiledModelSmoke
     internal static void Run()
     {
         foreach (var mode in Enum.GetValues<Mode>())
-        foreach (var async in new[] { false, true }) RunAsync(mode, async).GetAwaiter().GetResult();
+        foreach (var async in new[] { false, true })
+        foreach (var proxies in new[] { false, true }) RunAsync(mode, async, proxies).GetAwaiter().GetResult();
     }
 
-    private static async Task RunAsync(Mode mode, bool async)
+    private static async Task RunAsync(Mode mode, bool async, bool proxies)
     {
-        var modelType = typeof(CompiledModelSmoke).Assembly.GetType($"ToolingConsumer.Compiled.{mode}.Compiled{mode}ContextModel", true)!;
+        var modelNamespace = proxies ? "CompiledProxies" : "Compiled";
+        var modelType = typeof(CompiledModelSmoke).Assembly.GetType($"ToolingConsumer.{modelNamespace}.{mode}.Compiled{mode}ContextModel", true)!;
         var model = (IModel)modelType.GetProperty("Instance")!.GetValue(null)!;
         var capture = new Capture(mode);
         var options = new DbContextOptionsBuilder().UseOceanBase("Server=offline;Database=app", mode).UseModel(model)
-            .ReplaceService<IRelationalConnection, RecoverySmoke.Connection>().AddInterceptors(capture).Options;
+            .ReplaceService<IRelationalConnection, RecoverySmoke.Connection>().AddInterceptors(capture);
+        if (proxies) options.UseLazyLoadingProxies().UseChangeTrackingProxies();
         CompiledGraphContext.ForbidModelBuilding = true;
         try
         {
-            await using CompiledGraphContext context = mode == Mode.MySql ? new CompiledMySqlContext(options) : new CompiledOracleContext(options);
-            var query = context.Set<CompiledRoot>().Include(r => r.Children).AsSplitQuery().OrderBy(r => r.Id);
+            await using CompiledGraphContext context = mode == Mode.MySql ? new CompiledMySqlContext(options.Options) : new CompiledOracleContext(options.Options);
+            context.ChangeTracker.AutoDetectChangesEnabled = !proxies;
+            var roots = context.Set<CompiledRoot>();
+            var query = (proxies ? roots : roots.Include(root => root.Children).AsSplitQuery()).OrderBy(root => root.Id);
             var values = async ? await query.ToArrayAsync() : query.ToArray();
-            if (values.Length != 2 || values[0].Children.Count != 1 || values[1].Children.Count != 0
-                || !ReferenceEquals(values[0], values[0].Children[0].Parent) || context.ChangeTracker.Entries().Count() != 3)
-                throw new Exception("Compiled graph lost shaping/tracking/fixup.");
+            if (values.Length != 2) throw new Exception("Compiled graph lost root shaping.");
             var root = values[0];
+            if (proxies && (root.GetType() == typeof(CompiledRoot) || capture.Readers.Count != 1
+                || context.Entry(root).Collection(entity => entity.Children).IsLoaded))
+                throw new Exception("Compiled lazy proxy did not materialize with an unloaded collection.");
+            var child = root.Children.Single();
+            if ((!proxies && values[1].Children.Count != 0) || !ReferenceEquals(root, child.Parent)
+                || !context.Entry(root).Collection(entity => entity.Children).IsLoaded || context.ChangeTracker.Entries().Count() != 3)
+                throw new Exception("Compiled graph lost shaping/tracking/fixup.");
             if (root.Code != new CompiledCode("code") || root.Day != new DateOnly(2024, 2, 29)
                 || root.Clock != new TimeOnly(12, 34, 56) || root.Duration != TimeSpan.FromHours(-25)
                 || !root.Active || root.Amount != 123.45m || root.Reading != 1.25f || root.Revision is not null
                 || root.Token != Capture.Token || !root.Buffer.SequenceEqual(new byte[] { 1, 2, 3 })
                 || root.Zoned != Capture.Zoned || capture.Readers.Count != 2 || capture.Readers.Any(r => !r.IsClosed))
                 throw new Exception("Compiled scalar conversion or sequential reader cleanup failed.");
+            if (proxies && !Equals(root.Id, capture.CollectionKey))
+                throw new Exception("Compiled lazy proxy lost the collection key binding.");
             root.Name = "changed";
             root.Code = new CompiledCode("new-code");
             root.Clock = new TimeOnly(10, 20, 30);
+            if (proxies && (context.Entry(root).State != EntityState.Modified
+                || !context.Entry(root).Property(entity => entity.Name).IsModified))
+                throw new Exception("Compiled change-tracking proxy lost property notifications.");
             var changed = async ? await context.SaveChangesAsync() : context.SaveChanges();
             if (changed != 1 || capture.Writes.Count != 1 || !capture.Writes[0].Sql.Contains("Revision IS NULL", StringComparison.Ordinal)
                 || !capture.Writes[0].Values.Contains("new-code") || !capture.Writes[0].Values.Contains("changed")
@@ -64,11 +80,12 @@ internal static class CompiledModelSmoke
             catch (DbUpdateException failure) when (failure.InnerException is ArgumentException) { error = failure; }
             if (error is null || capture.Writes.Count != 1) throw new Exception("Compiled mapping lost pre-write length validation.");
             if (context.Database.GetDbConnection().State != ConnectionState.Closed) throw new Exception("Compiled graph leaked its connection.");
-            var opposite = new DbContextOptionsBuilder().UseOceanBase("Server=offline", mode == Mode.MySql ? Mode.Oracle : Mode.MySql).UseModel(model).Options;
-            using var wrong = new DbContext(opposite);
+            var opposite = new DbContextOptionsBuilder().UseOceanBase("Server=offline", mode == Mode.MySql ? Mode.Oracle : Mode.MySql).UseModel(model);
+            if (proxies) opposite.UseLazyLoadingProxies().UseChangeTrackingProxies();
+            using var wrong = new DbContext(opposite.Options);
             try { _ = wrong.Model; throw new Exception("Wrong-mode compiled model was accepted."); }
             catch (InvalidOperationException failure) when (failure.Message.Contains("compatibility mode", StringComparison.OrdinalIgnoreCase)) { }
-            Console.WriteLine($"{mode}/async={async}: packed optimized model graph/conversions/update/guards passed (offline).");
+            Console.WriteLine($"{mode}/async={async}/proxies={proxies}: packed optimized model graph/conversions/update/guards passed (offline).");
         }
         finally { CompiledGraphContext.ForbidModelBuilding = false; }
     }
@@ -79,6 +96,7 @@ internal static class CompiledModelSmoke
         internal static readonly DateTimeOffset Zoned = new(2024, 2, 29, 12, 34, 56, TimeSpan.FromHours(8));
         internal List<DbDataReader> Readers { get; } = [];
         internal List<(string Sql, object?[] Values)> Writes { get; } = [];
+        internal object? CollectionKey { get; private set; }
         public override InterceptionResult<DbDataReader> ReaderExecuting(DbCommand command, CommandEventData eventData, InterceptionResult<DbDataReader> result)
         {
             if (Readers.Any(reader => !reader.IsClosed)) throw new Exception("Compiled split query overlapped native readers.");
@@ -86,6 +104,7 @@ internal static class CompiledModelSmoke
             var table = new DataTable();
             if (sql.Contains("CompiledGraphChildren", StringComparison.Ordinal))
             {
+                if (command.Parameters.Count > 0) CollectionKey = command.Parameters.Cast<DbParameter>().Single().Value;
                 Columns(table, typeof(int), typeof(int), typeof(string), typeof(int));
                 table.Rows.Add(11, 1, "child", 1);
             }
@@ -147,34 +166,34 @@ public sealed class CompiledMySqlContext(DbContextOptions options) : CompiledGra
 public sealed class CompiledOracleContext(DbContextOptions options) : CompiledGraphContext(options);
 public sealed class CompiledMySqlFactory : IDesignTimeDbContextFactory<CompiledMySqlContext>
 {
-    public CompiledMySqlContext CreateDbContext(string[] args) => new(ToolingOptions.Create<CompiledMySqlContext>(Mode.MySql));
+    public CompiledMySqlContext CreateDbContext(string[] args) => new(ToolingOptions.Create<CompiledMySqlContext>(Mode.MySql, args.Contains("--proxies")));
 }
 public sealed class CompiledOracleFactory : IDesignTimeDbContextFactory<CompiledOracleContext>
 {
-    public CompiledOracleContext CreateDbContext(string[] args) => new(ToolingOptions.Create<CompiledOracleContext>(Mode.Oracle));
+    public CompiledOracleContext CreateDbContext(string[] args) => new(ToolingOptions.Create<CompiledOracleContext>(Mode.Oracle, args.Contains("--proxies")));
 }
-public sealed class CompiledRoot
+public class CompiledRoot
 {
-    public int Id { get; set; }
-    public string Name { get; set; } = "";
-    public CompiledCode Code { get; set; } = new("");
-    public DateOnly Day { get; set; }
-    public TimeOnly Clock { get; set; }
-    public TimeSpan Duration { get; set; }
-    public DateTimeOffset Zoned { get; set; }
-    public Guid Token { get; set; }
-    public bool Active { get; set; }
-    public decimal Amount { get; set; }
-    public float Reading { get; set; }
-    public byte[] Buffer { get; set; } = [];
-    public int? Revision { get; set; }
-    public List<CompiledChild> Children { get; set; } = [];
+    public virtual int Id { get; set; }
+    public virtual string Name { get; set; } = "";
+    public virtual CompiledCode Code { get; set; } = new("");
+    public virtual DateOnly Day { get; set; }
+    public virtual TimeOnly Clock { get; set; }
+    public virtual TimeSpan Duration { get; set; }
+    public virtual DateTimeOffset Zoned { get; set; }
+    public virtual Guid Token { get; set; }
+    public virtual bool Active { get; set; }
+    public virtual decimal Amount { get; set; }
+    public virtual float Reading { get; set; }
+    public virtual byte[] Buffer { get; set; } = [];
+    public virtual int? Revision { get; set; }
+    public virtual ICollection<CompiledChild> Children { get; set; } = new ObservableCollection<CompiledChild>();
 }
 public sealed record CompiledCode(string Value);
-public sealed class CompiledChild
+public class CompiledChild
 {
-    public int Id { get; set; }
-    public int ParentId { get; set; }
-    public string Text { get; set; } = "";
-    public CompiledRoot Parent { get; set; } = null!;
+    public virtual int Id { get; set; }
+    public virtual int ParentId { get; set; }
+    public virtual string Text { get; set; } = "";
+    public virtual CompiledRoot Parent { get; set; } = null!;
 }

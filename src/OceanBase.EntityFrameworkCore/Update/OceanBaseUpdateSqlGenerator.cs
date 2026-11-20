@@ -15,6 +15,19 @@ namespace OceanBase.EntityFrameworkCore.Update
             _mode = mode;
         }
 
+        public override void AppendNextSequenceValueOperation(StringBuilder builder, string name, string? schema)
+        {
+            builder.Append("SELECT ");
+            AppendObtainNextSequenceValueOperation(builder, name, schema);
+            builder.Append(" FROM DUAL");
+        }
+
+        public override void AppendObtainNextSequenceValueOperation(StringBuilder builder, string name, string? schema)
+        {
+            SqlGenerationHelper.DelimitIdentifier(builder, name, schema);
+            builder.Append(".NEXTVAL");
+        }
+
         public override ResultSetMapping AppendInsertOperation(
             StringBuilder builder, IReadOnlyModificationCommand command, int commandPosition, out bool requiresTransaction)
         {

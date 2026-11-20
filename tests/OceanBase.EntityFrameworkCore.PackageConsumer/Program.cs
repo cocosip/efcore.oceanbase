@@ -11,6 +11,7 @@ using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
+using Microsoft.EntityFrameworkCore.Update;
 using OceanBase.EntityFrameworkCore;
 using OceanBaseCommand = OceanBaseConnector.OceanBaseCommand;
 using OceanBaseDecimal = OceanBaseConnector.OceanBaseDecimal;
@@ -41,6 +42,14 @@ namespace PackageConsumer
             {
                 VerifyFailedOpen(mode);
                 VerifyNullableConcurrency(mode);
+                ConcurrencyInterceptionSmoke.Run(mode);
+                TphRuntimeSmoke.Run(mode);
+                RelationshipWriteSmoke.Run(mode);
+                SetOperationSmoke.Run(mode);
+                RawQuerySmoke.Run(mode);
+                CorrelatedQuerySmoke.Run(mode);
+                GroupingSmoke.Run(mode);
+                DefaultIfEmptySmoke.Run(mode);
                 TransactionSmoke.Run(mode);
                 RetrySmoke.Run(mode);
                 SplitQuerySmoke.Run(mode);
@@ -58,6 +67,56 @@ namespace PackageConsumer
                     .UseOceanBase("Server=localhost;Database=package_smoke", mode).Options;
                 using var context = new ConsumerContext(options, mode);
                 if (!context.Database.IsOceanBase()) throw new Exception("Provider registration failed.");
+                VerifyJsonAndLocalTimestamp(context, mode);
+                var textMapping = context.GetService<IRelationalTypeMappingSource>().FindMapping(typeof(string))!;
+                var nationalLiteral = textMapping.GenerateSqlLiteral("海🌊\\'\n");
+                var expectedLiteral = mode == OceanBaseCompatibilityMode.Oracle
+                    ? @"u'\6d77\d83c\df0a\005c\0027\000a'"
+                    : "_utf8mb4 X'E6B5B7F09F8C8A5C270A'";
+                if (nationalLiteral != expectedLiteral) throw new Exception("Packed provider lost literal text.");
+                if (mode == OceanBaseCompatibilityMode.MySql)
+                {
+                    var time = context.GetService<IRelationalTypeMappingSource>().FindMapping(typeof(TimeSpan))!;
+                    using var timeCommand = new OceanBaseCommand();
+                    var bound = new TimeSpan(0, 838, 59, 59);
+                    foreach (var sign in new[] { 1, -1 })
+                    {
+                        if (time.CreateParameter(timeCommand, "time", bound * sign).Value is not TimeSpan accepted || accepted != bound * sign)
+                            throw new Exception("Packed provider lost the exact TIME endpoint.");
+                        var invalid = (bound + TimeSpan.FromTicks(10)) * sign;
+                        Action[] operations = [() => time.CreateParameter(timeCommand, "time", invalid), () => time.GenerateSqlLiteral(invalid)];
+                        foreach (var operation in operations)
+                        {
+                            var rejected = false;
+                            try { operation(); }
+                            catch (ArgumentOutOfRangeException) { rejected = true; }
+                            if (!rejected) throw new Exception("Packed provider accepted an out-of-range TIME fraction.");
+                        }
+                    }
+                }
+                if (mode == OceanBaseCompatibilityMode.Oracle)
+                {
+                    var blob = context.GetService<IRelationalTypeMappingSource>().FindMapping(typeof(byte[]), "BLOB")!;
+                    using var emptyBlobCommand = new OceanBaseCommand();
+                    if (blob.GenerateSqlLiteral(Array.Empty<byte>()) != "EMPTY_BLOB()"
+                        || blob.CreateParameter(emptyBlobCommand, "data", Array.Empty<byte>()).Value is not byte[] { Length: 0 })
+                        throw new Exception("Packed provider lost the distinction between empty BLOB and NULL.");
+                    var single = context.GetService<IRelationalTypeMappingSource>().FindMapping(typeof(float))!;
+                    if (single.GenerateSqlLiteral(float.MaxValue) != "3.4028234663852886E+38F"
+                        || single.GenerateSqlLiteral(float.Epsilon) != "1.401298464324817E-45F")
+                        throw new Exception("Packed provider lost Oracle Single literal boundaries.");
+                    var ordinary = context.GetService<IRelationalTypeMappingSource>()
+                        .FindMapping(typeof(string), "VARCHAR2(40 CHAR)")!;
+                    if (ordinary.GenerateSqlLiteral("a'\\\r\nb")
+                        != @"(('a''\' || CAST(CHR(13) AS CHAR(1))) || (CAST(CHR(10) AS CHAR(1)) || 'b'))")
+                        throw new Exception("Packed provider changed ordinary literal newlines or CHAR semantics.");
+                }
+                var updateGenerator = context.GetService<IUpdateSqlGenerator>();
+                var delimiter = mode == OceanBaseCompatibilityMode.MySql ? '`' : '"';
+                var nextValue = $"{delimiter}dbo{delimiter}.{delimiter}sequence{delimiter}.NEXTVAL";
+                if (updateGenerator.GenerateNextSequenceValueOperation("sequence", "dbo") != $"SELECT {nextValue} FROM DUAL"
+                    || updateGenerator.GenerateObtainNextSequenceValueOperation("sequence", "dbo") != nextValue)
+                    throw new Exception("Packed provider generated unexpected sequence SQL.");
                 if (context.Database.GetDbConnection() is not OceanBaseConnector.OceanBaseConnection)
                     throw new Exception("Database facade did not resolve the packed provider connection.");
                 var explicitName = mode == OceanBaseCompatibilityMode.MySql ? "@named" : ":named";
@@ -374,6 +433,218 @@ namespace PackageConsumer
                 if (mode == OceanBaseCompatibilityMode.Oracle && !temporalPartsSql.Contains("AS TIMESTAMP(7)", StringComparison.Ordinal))
                     throw new Exception("Oracle DATE clock extraction lacked a timestamp cast.");
 
+                var dayNumberSql = context.Set<Row>().Where(row => row.Day.DayNumber > 700000)
+                    .Select(row => row.Day.DayNumber).ToQueryString();
+                var dayNumberFunction = mode == OceanBaseCompatibilityMode.MySql
+                    ? "DATEDIFF(`r`.`Day`, '0001-01-01')" : "TRUNC(\"r\".\"Day\") - DATE '0001-01-01'";
+                if (!dayNumberSql.Contains(dayNumberFunction, StringComparison.Ordinal)
+                    || dayNumberSql.Contains("__oceanbase_internal_", StringComparison.Ordinal))
+                    throw new Exception("Packed provider did not translate DateOnly.DayNumber.");
+                var durationSql = context.Set<Row>().Where(row => row.OccurredAt.Add(row.Duration) > new DateTime(2000, 1, 1))
+                    .Select(row => row.LegacyStamp.Subtract(TimeSpan.FromTicks(mode == OceanBaseCompatibilityMode.MySql ? 10 : 1)))
+                    .ToQueryString();
+                if (!durationSql.Contains(mode == OceanBaseCompatibilityMode.MySql ? "TIMESTAMPADD(MICROSECOND" : " AS TIMESTAMP(7)) - (", StringComparison.Ordinal)
+                    || mode == OceanBaseCompatibilityMode.MySql && !durationSql.Contains("-(TIME_TO_SEC(", StringComparison.Ordinal)
+                    || durationSql.Contains("__oceanbase_internal_", StringComparison.Ordinal))
+                    throw new Exception("Packed provider did not translate DateTime duration arithmetic.");
+
+                var ticksSql = context.Set<Row>().Where(row => row.Duration.Ticks != 0)
+                    .Select(row => row.Duration.Ticks).ToQueryString();
+                if (!ticksSql.Contains(mode == OceanBaseCompatibilityMode.MySql ? "TIME_TO_SEC" : "EXTRACT(DAY FROM",
+                        StringComparison.Ordinal)
+                    || !ticksSql.Contains(mode == OceanBaseCompatibilityMode.MySql ? "MICROSECOND" : "EXTRACT(SECOND FROM",
+                        StringComparison.Ordinal)
+                    || ticksSql.Contains("__oceanbase_internal_", StringComparison.Ordinal))
+                    throw new Exception("Packed provider did not translate TimeSpan.Ticks.");
+                var clockTicksSql = context.Set<Row>().Where(row => row.Clock.Ticks > TimeSpan.TicksPerHour)
+                    .Select(row => row.Clock.Ticks).ToQueryString();
+                if (!clockTicksSql.Contains(mode == OceanBaseCompatibilityMode.MySql ? "TIME_TO_SEC" : "EXTRACT(HOUR FROM",
+                        StringComparison.Ordinal)
+                    || !clockTicksSql.Contains(mode == OceanBaseCompatibilityMode.MySql ? "MICROSECOND" : "EXTRACT(SECOND FROM",
+                        StringComparison.Ordinal)
+                    || clockTicksSql.Contains("__oceanbase_internal_", StringComparison.Ordinal))
+                    throw new Exception("Packed provider did not translate TimeOnly.Ticks.");
+                var dateTimeTicksSql = context.Set<Row>().Where(row => row.OccurredAt.Ticks > TimeSpan.TicksPerDay)
+                    .Select(row => row.OccurredAt.Ticks).ToQueryString();
+                if (!dateTimeTicksSql.Contains(mode == OceanBaseCompatibilityMode.MySql
+                        ? "DATEDIFF(`r`.`OccurredAt`, '0001-01-01')" : "TRUNC(\"r\".\"OccurredAt\") - DATE '0001-01-01'",
+                        StringComparison.Ordinal)
+                    || dateTimeTicksSql.Contains("__oceanbase_internal_", StringComparison.Ordinal))
+                    throw new Exception("Packed provider did not translate DateTime.Ticks.");
+                var offsetPartsSql = context.Set<Row>().Where(row => row.OffsetAt.Year == 2026
+                    && row.OffsetAt.DayOfYear > 300 && row.OffsetAt.TimeOfDay > TimeSpan.Zero)
+                    .Select(row => new { row.OffsetAt.Date, row.OffsetAt.TimeOfDay, row.OffsetAt.Year,
+                        row.OffsetAt.Month, row.OffsetAt.Day, row.OffsetAt.Hour, row.OffsetAt.Minute,
+                        row.OffsetAt.Second, row.OffsetAt.Millisecond, row.OffsetAt.Microsecond,
+                        row.OffsetAt.Nanosecond, row.OffsetAt.DayOfYear }).ToQueryString();
+                var offsetParts = mode == OceanBaseCompatibilityMode.MySql
+                    ? new[] { "YEAR(`r`.`OffsetAt`)", "DAYOFYEAR(`r`.`OffsetAt`)", "DATE(`r`.`OffsetAt`)",
+                        "TIME(`r`.`OffsetAt`)", "MICROSECOND(`r`.`OffsetAt`)" }
+                    : new[] { "EXTRACT(YEAR FROM", "'YYYY'", "TRUNC(CAST(\"r\".\"OffsetAt\" AS TIMESTAMP(7)))",
+                        "EXTRACT(SECOND FROM" };
+                if (offsetParts.Any(part => !offsetPartsSql.Contains(part, StringComparison.Ordinal))
+                    || (mode == OceanBaseCompatibilityMode.Oracle
+                        && !offsetPartsSql.Contains("NUMTODSINTERVAL", StringComparison.Ordinal)
+                        && !offsetPartsSql.Contains(" - CAST(TRUNC(", StringComparison.Ordinal))
+                    || offsetPartsSql.Contains("__oceanbase_internal_", StringComparison.Ordinal))
+                    throw new Exception("Packed provider did not translate DateTimeOffset members.");
+                var offsetUtcSql = context.Set<Row>().Where(row => row.OffsetAt.UtcDateTime > new DateTime(2026, 1, 1))
+                    .Select(row => row.OffsetAt.UtcDateTime).ToQueryString();
+                if ((mode == OceanBaseCompatibilityMode.MySql
+                        ? !offsetUtcSql.Contains("`r`.`OffsetAt`", StringComparison.Ordinal)
+                        : !offsetUtcSql.Contains("SYS_EXTRACT_UTC", StringComparison.Ordinal))
+                    || offsetUtcSql.Contains("__oceanbase_internal_", StringComparison.Ordinal))
+                    throw new Exception("Packed provider did not translate DateTimeOffset.UtcDateTime.");
+                var offsetUtcTicksSql = context.Set<Row>().Where(row => row.OffsetAt.UtcTicks > TimeSpan.TicksPerDay)
+                    .Select(row => row.OffsetAt.UtcTicks).ToQueryString();
+                if ((mode == OceanBaseCompatibilityMode.MySql
+                        ? !offsetUtcTicksSql.Contains("DATEDIFF(`r`.`OffsetAt`, '0001-01-01')", StringComparison.Ordinal)
+                        : !offsetUtcTicksSql.Contains("TRUNC(CAST(SYS_EXTRACT_UTC", StringComparison.Ordinal))
+                    || offsetUtcTicksSql.Contains("__oceanbase_internal_", StringComparison.Ordinal))
+                    throw new Exception("Packed provider did not translate DateTimeOffset.UtcTicks.");
+                var offsetClockSql = context.Set<Row>().Where(row => DateTimeOffset.UtcNow > row.OffsetAt)
+                    .Select(_ => DateTimeOffset.UtcNow).ToQueryString();
+                if ((mode == OceanBaseCompatibilityMode.MySql
+                        ? !offsetClockSql.Contains("UTC_TIMESTAMP(6)", StringComparison.Ordinal)
+                        : !offsetClockSql.Contains("CAST(SYS_EXTRACT_UTC(SYSTIMESTAMP) AS TIMESTAMP(7))", StringComparison.Ordinal))
+                    || offsetClockSql.Contains("__oceanbase_internal_", StringComparison.Ordinal))
+                    throw new Exception("Packed provider did not translate DateTimeOffset.UtcNow.");
+                if (mode == OceanBaseCompatibilityMode.MySql)
+                {
+                    try
+                    {
+                        context.Set<Row>().Where(row => row.OffsetAt.TotalOffsetMinutes < 0)
+                            .Select(row => row.Id).ToQueryString();
+                        throw new Exception("Packed MySQL provider translated unsupported DateTimeOffset.TotalOffsetMinutes.");
+                    }
+                    catch (InvalidOperationException)
+                    {
+                    }
+                }
+                else
+                {
+                    var totalOffsetSql = context.Set<Row>().Where(row => row.OffsetAt.TotalOffsetMinutes < 0)
+                        .Select(row => row.OffsetAt.TotalOffsetMinutes).ToQueryString();
+                    if (!totalOffsetSql.Contains("EXTRACT(TIMEZONE_HOUR FROM", StringComparison.Ordinal)
+                        || !totalOffsetSql.Contains("EXTRACT(TIMEZONE_MINUTE FROM", StringComparison.Ordinal)
+                        || totalOffsetSql.Contains("__oceanbase_internal_", StringComparison.Ordinal))
+                        throw new Exception("Packed Oracle provider did not translate DateTimeOffset.TotalOffsetMinutes.");
+                }
+                if (mode == OceanBaseCompatibilityMode.MySql)
+                {
+                    try
+                    {
+                        context.Set<Row>().Where(row => row.OffsetAt.Offset < TimeSpan.Zero)
+                            .Select(row => row.Id).ToQueryString();
+                        throw new Exception("Packed MySQL provider translated unsupported DateTimeOffset.Offset.");
+                    }
+                    catch (InvalidOperationException)
+                    {
+                    }
+                }
+                else
+                {
+                    var offsetSql = context.Set<Row>().Where(row => row.OffsetAt.Offset != TimeSpan.Zero)
+                        .OrderBy(row => row.OffsetAt.Offset).Select(row => row.OffsetAt.Offset).ToQueryString();
+                    if (!offsetSql.Contains("NUMTODSINTERVAL", StringComparison.Ordinal)
+                        || !offsetSql.Contains("EXTRACT(TIMEZONE_HOUR FROM", StringComparison.Ordinal)
+                        || !offsetSql.Contains("EXTRACT(TIMEZONE_MINUTE FROM", StringComparison.Ordinal)
+                        || offsetSql.Contains("__oceanbase_internal_", StringComparison.Ordinal))
+                        throw new Exception("Packed Oracle provider did not translate DateTimeOffset.Offset.");
+                }
+                if (mode == OceanBaseCompatibilityMode.MySql)
+                {
+                    try
+                    {
+                        context.Set<Row>().Where(row => row.OffsetAt.Ticks < 0)
+                            .Select(row => row.Id).ToQueryString();
+                        throw new Exception("Packed MySQL provider translated unsupported DateTimeOffset.Ticks.");
+                    }
+                    catch (InvalidOperationException)
+                    {
+                    }
+                }
+                else
+                {
+                    var offsetTicksSql = context.Set<Row>().Where(row => row.OffsetAt.Ticks > TimeSpan.TicksPerDay)
+                        .OrderBy(row => row.OffsetAt.Ticks).Select(row => row.OffsetAt.Ticks).ToQueryString();
+                    if (!offsetTicksSql.Contains("TRUNC(CAST", StringComparison.Ordinal)
+                        || !offsetTicksSql.Contains("EXTRACT(SECOND FROM", StringComparison.Ordinal)
+                        || offsetTicksSql.Contains("SYS_EXTRACT_UTC", StringComparison.Ordinal)
+                        || offsetTicksSql.Contains("__oceanbase_internal_", StringComparison.Ordinal))
+                        throw new Exception("Packed Oracle provider did not translate DateTimeOffset.Ticks.");
+                }
+                if (mode == OceanBaseCompatibilityMode.MySql)
+                {
+                    try
+                    {
+                        context.Set<Row>().Where(row => row.OffsetAt.DateTime > new DateTime(2024, 1, 1))
+                            .Select(row => row.Id).ToQueryString();
+                        throw new Exception("Packed MySQL provider translated unsupported DateTimeOffset.DateTime.");
+                    }
+                    catch (InvalidOperationException)
+                    {
+                    }
+                }
+                else
+                {
+                    var offsetDateTimeSql = context.Set<Row>().Where(row => row.OffsetAt.DateTime > new DateTime(2024, 1, 1))
+                        .OrderBy(row => row.OffsetAt.DateTime).Select(row => row.OffsetAt.DateTime).ToQueryString();
+                    if (!offsetDateTimeSql.Contains("CAST(", StringComparison.Ordinal)
+                        || !offsetDateTimeSql.Contains("AS TIMESTAMP", StringComparison.Ordinal)
+                        || offsetDateTimeSql.Contains("SYS_EXTRACT_UTC", StringComparison.Ordinal)
+                        || offsetDateTimeSql.Contains("__oceanbase_internal_", StringComparison.Ordinal))
+                        throw new Exception("Packed Oracle provider did not translate DateTimeOffset.DateTime.");
+                }
+                var dateAddSql = context.Set<Row>().Where(row => row.Day.AddDays(3) > new DateOnly(2024, 1, 1))
+                    .Select(row => row.Day.AddDays(3)).ToQueryString();
+                if ((mode == OceanBaseCompatibilityMode.MySql
+                        ? !dateAddSql.Contains("DATE_ADD", StringComparison.Ordinal)
+                        : !dateAddSql.Contains(" + ", StringComparison.Ordinal))
+                    || dateAddSql.Contains("__oceanbase_internal_", StringComparison.Ordinal))
+                    throw new Exception("Packed provider did not translate DateOnly.AddDays.");
+                var dateMonthsSql = context.Set<Row>().Where(row => row.Day.AddMonths(1) > new DateOnly(2024, 1, 1))
+                    .Select(row => row.Day.AddMonths(1)).ToQueryString();
+                if ((mode == OceanBaseCompatibilityMode.MySql
+                        ? !dateMonthsSql.Contains("DATE_ADD", StringComparison.Ordinal)
+                        : !dateMonthsSql.Contains("ADD_MONTHS(TRUNC(", StringComparison.Ordinal)
+                            || !dateMonthsSql.Contains("LEAST(EXTRACT(DAY FROM", StringComparison.Ordinal)
+                            || !dateMonthsSql.Contains("LAST_DAY(ADD_MONTHS(TRUNC(", StringComparison.Ordinal))
+                    || dateMonthsSql.Contains("__oceanbase_internal_", StringComparison.Ordinal))
+                    throw new Exception("Packed provider did not translate DateOnly.AddMonths.");
+                var dateYearsSql = context.Set<Row>().Where(row => row.Day.AddYears(row.Id + 1) > new DateOnly(2024, 1, 1))
+                    .Select(row => row.Day.AddYears(1)).ToQueryString();
+                if ((mode == OceanBaseCompatibilityMode.MySql
+                        ? !dateYearsSql.Contains("DATE_ADD", StringComparison.Ordinal)
+                        : !dateYearsSql.Contains("ADD_MONTHS(TRUNC(", StringComparison.Ordinal)
+                            || !dateYearsSql.Contains("LEAST(EXTRACT(DAY FROM", StringComparison.Ordinal)
+                            || !dateYearsSql.Contains("(\"r\".\"Id\" + 1) * 12", StringComparison.Ordinal))
+                    || dateYearsSql.Contains("__oceanbase_internal_", StringComparison.Ordinal))
+                    throw new Exception("Packed provider did not translate DateOnly.AddYears.");
+                var stampAddSql = context.Set<Row>()
+                    .Where(row => row.OccurredAt.AddMonths(-1) > new DateTime(2000, 1, 1))
+                    .Select(row => row.OccurredAt.AddYears(row.Id + 1)).ToQueryString();
+                var stampAddFragments = mode == OceanBaseCompatibilityMode.MySql
+                    ? new[] { "DATE_ADD", "INTERVAL -1 MONTH", " YEAR)" }
+                    : new[] { "LEAST(EXTRACT(DAY FROM", "LAST_DAY(ADD_MONTHS(TRUNC(",
+                        "(\"r\".\"Id\" + 1) * 12", " AS TIMESTAMP(7)) - CAST(TRUNC(" };
+                if (stampAddFragments.Any(fragment => !stampAddSql.Contains(fragment, StringComparison.Ordinal))
+                    || stampAddSql.Contains("__oceanbase_internal_", StringComparison.Ordinal))
+                    throw new Exception("Packed provider did not translate DateTime calendar addition.");
+                var clockSql = context.Set<Row>().Select(row => new
+                {
+                    Now = DateTime.Now,
+                    UtcNow = DateTime.UtcNow,
+                    Today = DateTime.Today
+                }).ToQueryString();
+                var clockFunctions = mode == OceanBaseCompatibilityMode.MySql
+                    ? new[] { "CURRENT_TIMESTAMP(6)", "UTC_TIMESTAMP(6)", "CURDATE()" }
+                    : new[] { "CAST(CURRENT_TIMESTAMP AS TIMESTAMP(7))",
+                        "CAST(SYS_EXTRACT_UTC(SYSTIMESTAMP) AS TIMESTAMP(7))", "TRUNC(CURRENT_DATE)" };
+                if (clockFunctions.Any(function => !clockSql.Contains(function, StringComparison.Ordinal))
+                    || clockSql.Contains("__oceanbase_internal_", StringComparison.Ordinal))
+                    throw new Exception("Packed provider did not translate DateTime server clock members.");
+
                 var calendarSql = context.Set<Row>().Where(row => row.OccurredAt.DayOfWeek == DayOfWeek.Sunday
                     && row.Day.DayOfYear == 60).ToQueryString();
                 var calendarParts = mode == OceanBaseCompatibilityMode.MySql
@@ -660,6 +931,8 @@ namespace PackageConsumer
                         "LOG_BASE" => mode == OceanBaseCompatibilityMode.MySql ? "LN(" : "LOG(",
                         "LOG2" => mode == OceanBaseCompatibilityMode.MySql ? "LOG2(" : "LOG(2",
                         "LOG10" => mode == OceanBaseCompatibilityMode.MySql ? "LOG10(" : "LOG(",
+                        "SINH" or "COSH" or "TANH" when mode == OceanBaseCompatibilityMode.MySql => "EXP(",
+                        "ASINH" or "ATANH" => "LN(",
                         _ => operation + "("
                     };
                     if (!numericSql.Contains(function, StringComparison.Ordinal)
@@ -693,7 +966,8 @@ namespace PackageConsumer
                     || !aggregateSql.Contains("ORDER BY", StringComparison.Ordinal)
                     || !aggregateSql.Contains("SUM(DISTINCT (CASE", StringComparison.Ordinal)
                     || aggregateSql.Contains("AVG(CAST(", StringComparison.Ordinal)
-                    || aggregateSql.Contains(" AS DOUBLE", StringComparison.Ordinal)
+                    || mode == OceanBaseCompatibilityMode.MySql
+                        && aggregateSql.Split(" AS FLOAT) AS DOUBLE)", StringSplitOptions.None).Length != 8
                     || aggregateSql.Contains(" AS BINARY_DOUBLE)", StringComparison.Ordinal))
                     throw new Exception("Packed aggregates lost native input precision or Single result normalization: " + aggregateSql);
                 var singleAggregateTarget = mode == OceanBaseCompatibilityMode.MySql ? "FLOAT" : "BINARY_FLOAT";
@@ -701,7 +975,8 @@ namespace PackageConsumer
                 var aggregateIdentifiers = context.GetService<ISqlGenerationHelper>();
                 foreach (var projection in new[] { "SumSingle", "AverageSingle", "SumWide", "AverageWide", "MinimumWide", "MaximumWide" })
                 {
-                    var normalizedProjection = " AS " + singleAggregateTarget + ")" + aggregateAliasSeparator
+                    var normalizedProjection = " AS " + singleAggregateTarget + ")"
+                        + (mode == OceanBaseCompatibilityMode.MySql ? " AS DOUBLE)" : "") + aggregateAliasSeparator
                         + aggregateIdentifiers.DelimitIdentifier(projection);
                     if (!aggregateSql.Contains(normalizedProjection, StringComparison.Ordinal))
                         throw new Exception("Packed aggregate projection lost Single normalization: " + projection + ": " + aggregateSql);
@@ -709,6 +984,8 @@ namespace PackageConsumer
 
                 var extrema = context.Set<Row>().Where(row => Math.Min(row.Count, 5L) > 0
                     && Math.Max(row.DoubleValue, 3d) > 1d
+                    && double.MaxNumber(row.DoubleValue, 2d) > 1d
+                    && float.MinNumber(row.Wide, 1f) > 0f
                     && MathF.Max(row.Wide, 2f) > 1f
                     && decimal.Min(row.Amount, 5m) > 0m
                     && EF.Functions.Greatest(row.Id, 2, 3) > 1).ToQueryString();
@@ -716,8 +993,8 @@ namespace PackageConsumer
                 var singleStoreType = mode == OceanBaseCompatibilityMode.MySql ? "FLOAT" : "BINARY_FLOAT";
                 var wideExtremumPattern = System.Text.RegularExpressions.Regex.Escape($"CAST(GREATEST({wideColumn}, ")
                     + @"[^(),]+" + System.Text.RegularExpressions.Regex.Escape($") AS {singleStoreType})");
-                if (extrema.Split("LEAST(", StringSplitOptions.None).Length != 3
-                    || extrema.Split("GREATEST(", StringSplitOptions.None).Length != 4
+                if (extrema.Split("LEAST(", StringSplitOptions.None).Length != 4
+                    || extrema.Split("GREATEST(", StringSplitOptions.None).Length != 5
                     || !System.Text.RegularExpressions.Regex.IsMatch(extrema, wideExtremumPattern))
                     throw new Exception("Packed scalar extrema lost native translation or Single normalization: " + extrema);
 
@@ -986,6 +1263,30 @@ namespace PackageConsumer
             Console.WriteLine($"{mode}: packed text/temporal MIN/MAX and null-converter boundary passed.");
         }
 
+        private static void VerifyJsonAndLocalTimestamp(ConsumerContext context, OceanBaseCompatibilityMode mode)
+        {
+            var path = "$.name";
+            var query = context.Set<Row>().Select(row => EF.Functions.OceanBaseJsonValue(row.Name, path));
+            if (!query.ToQueryString().Contains("JSON_VALUE(", StringComparison.Ordinal))
+                throw new Exception("Packed provider did not translate the public JSON path function.");
+            path = "$.other";
+            if (!query.ToQueryString().Contains("'$.other'", StringComparison.Ordinal))
+                throw new Exception("Packed provider did not refresh the captured JSON path.");
+            if (mode == OceanBaseCompatibilityMode.Oracle)
+            {
+                var mapping = context.GetService<IRelationalTypeMappingSource>()
+                    .FindMapping(typeof(DateTime), "TIMESTAMP(3) WITH LOCAL TIME ZONE")!;
+                if (mapping.WithPrecisionAndScale(7, null).StoreType != "TIMESTAMP(7) WITH LOCAL TIME ZONE")
+                    throw new Exception("Packed provider lost the local timestamp declaration on precision change.");
+                var date = new DateTime(2024, 1, 15, 17, 45, 0).AddTicks(1234567);
+                var native = new OceanBaseConnector.OceanBaseTimestampLocalTimeZone(new OceanBaseConnector.OceanBaseTimestamp(date), "+05:45");
+                var read = OceanBase.EntityFrameworkCore.Storage.OceanBaseCompiledModelTypeMappings.ReadTemporal<DateTime>(native);
+                if (read != date || read.Kind != DateTimeKind.Unspecified)
+                    throw new Exception("Packed provider lost the local timestamp session wall clock.");
+            }
+            Console.WriteLine($"{mode}: packed JSON path and scoped temporal mapping checks passed (offline).");
+        }
+
         private static void VerifyTextRoots(ConsumerContext context, OceanBaseCompatibilityMode mode)
         {
             string?[] values = ["one", null, "two"];
@@ -1005,7 +1306,7 @@ namespace PackageConsumer
 
             var empty = context.Set<Row>().Select(row => new string[] { }.Count(value => row.Id > 0)).ToQueryString();
             if (!empty.Contains("WHERE 1 = 0", StringComparison.Ordinal)
-                || !empty.Contains(mode == OceanBaseCompatibilityMode.MySql ? "CAST(NULL AS CHAR)" : "CAST(NULL AS NVARCHAR2",
+                || !empty.Contains(mode == OceanBaseCompatibilityMode.MySql ? "SELECT NULL AS `Value`" : "TO_NCHAR(NULL)",
                     StringComparison.Ordinal))
                 throw new Exception("Packed text collection root lost its typed empty relation: " + empty);
         }
@@ -1038,7 +1339,7 @@ namespace PackageConsumer
         {
             byte[][] values = [];
             var query = context.Set<Row>().SelectMany(row => values.Where(value => row.Id > 0));
-            var target = mode == OceanBaseCompatibilityMode.MySql ? "BINARY" : "BLOB";
+            var typing = mode == OceanBaseCompatibilityMode.MySql ? " AS BINARY)" : "TO_BLOB(";
             foreach (var input in new[]
             {
                 Array.Empty<byte[]>(),
@@ -1050,14 +1351,14 @@ namespace PackageConsumer
             {
                 values = input;
                 var sql = query.ToQueryString();
-                if (!sql.Contains(" AS " + target + ")", StringComparison.Ordinal))
+                if (!sql.Contains(typing, StringComparison.Ordinal))
                     throw new Exception("Packed binary collection root lost its provider carrier: " + sql);
                 if (sql.Split("UNION ALL SELECT", StringSplitOptions.None).Length - 1 != Math.Max(0, input.Length - 1)
                     || sql.Contains("WHERE 1 = 0", StringComparison.Ordinal) != (input.Length == 0))
                     throw new Exception("Packed binary collection root lost its current values or row shape.");
             }
             var empty = context.Set<Row>().Select(row => new byte[][] { }.Count(value => row.Id > 0)).ToQueryString();
-            if (!empty.Contains("CAST(NULL AS " + target + ")", StringComparison.Ordinal)
+            if (!empty.Contains(mode == OceanBaseCompatibilityMode.MySql ? "CAST(NULL AS BINARY)" : "TO_BLOB(NULL)", StringComparison.Ordinal)
                 || !empty.Contains("WHERE 1 = 0", StringComparison.Ordinal))
                 throw new Exception("Packed binary collection root lost its typed empty relation: " + empty);
         }
@@ -1092,6 +1393,7 @@ namespace PackageConsumer
                 values = input;
                 var sql = query.ToQueryString();
                 if (!sql.Contains(" AS " + target + ")", StringComparison.Ordinal)
+                    || System.Text.RegularExpressions.Regex.Matches(sql, @"CAST\(").Count != (mode == OceanBaseCompatibilityMode.Oracle ? Math.Max(1, input.Length) : 1)
                     || sql.Split("UNION ALL SELECT", StringSplitOptions.None).Length - 1 != Math.Max(0, input.Length - 1)
                     || sql.Contains("WHERE 1 = 0", StringComparison.Ordinal) != (input.Length == 0))
                     throw new Exception("Packed numeric root lost its provider carrier, row count or empty transition.");
@@ -1113,6 +1415,7 @@ namespace PackageConsumer
                 var sql = query.ToQueryString();
                 var target = mode == OceanBaseCompatibilityMode.Oracle ? "NUMBER" : unsigned ? "UNSIGNED" : "SIGNED";
                 if (!sql.Contains(" AS " + target + ")", StringComparison.Ordinal)
+                    || System.Text.RegularExpressions.Regex.Matches(sql, @"CAST\(").Count != (mode == OceanBaseCompatibilityMode.Oracle ? Math.Max(1, input.Length) : 1)
                     || sql.Split("UNION ALL SELECT", StringSplitOptions.None).Length - 1 != Math.Max(0, input.Length - 1)
                     || sql.Contains("WHERE 1 = 0", StringComparison.Ordinal) != (input.Length == 0))
                     throw new Exception("Packed integer root lost its carrier, current values or zero-row SQL.");
@@ -1195,6 +1498,13 @@ namespace PackageConsumer
 
         private static void VerifyFailedOpen(OceanBaseCompatibilityMode mode)
         {
+            using var supplied = new OceanBaseConnector.OceanBaseConnection("Server=localhost");
+            var original = supplied.ConnectionString;
+            using (var suppliedContext = new DbContext(new DbContextOptionsBuilder().UseOceanBase(supplied, mode).Options))
+            {
+                if (!ReferenceEquals(supplied, suppliedContext.Database.GetDbConnection()) || supplied.ConnectionString != original)
+                    throw new Exception("Packed provider rewrote supplied connection configuration.");
+            }
             using var context = new DbContext(new DbContextOptionsBuilder()
                 .UseOceanBase("Server=localhost;Database=package_smoke", mode)
                 .AddInterceptors(new SuppressNetwork())
@@ -1205,12 +1515,13 @@ namespace PackageConsumer
                 try
                 {
                     connection.Open();
-                    throw new Exception("Packed provider did not reject the unsupported ambient transaction.");
+                    throw new Exception("Packed provider enlisted a network-suppressed, closed native connection.");
                 }
-                catch (InvalidOperationException error) when (error.Message.Contains("AmbientTransactionWarning", StringComparison.Ordinal))
+                catch (InvalidOperationException error) when (error.Message.Contains("connection must be open", StringComparison.OrdinalIgnoreCase))
                 {
                 }
             }
+            // Native enlistment fails because SuppressNetwork leaves the Connector closed.
             // Package-only runtime probe: EF has no public open-count API.
             var openedCount = typeof(RelationalConnection).GetField("_openedCount", BindingFlags.Instance | BindingFlags.NonPublic)!;
             if ((int)openedCount.GetValue(connection)! != 0)

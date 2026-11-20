@@ -96,6 +96,80 @@ public sealed class TpcSchemaTests
     }
 
     [Theory]
+    [InlineData(OceanBaseCompatibilityMode.Oracle, "sequence", true)]
+    [InlineData(OceanBaseCompatibilityMode.MySql, "sequence", false)]
+    [InlineData(OceanBaseCompatibilityMode.Oracle, "cycle", false)]
+    [InlineData(OceanBaseCompatibilityMode.Oracle, "wide", false)]
+    [InlineData(OceanBaseCompatibilityMode.Oracle, "undeclared", false)]
+    [InlineData(OceanBaseCompatibilityMode.Oracle, "unqualified", false)]
+    public void Tpc_sequence_defaults_require_a_valid_shared_Oracle_sequence(
+        OceanBaseCompatibilityMode mode, string generation, bool supported)
+    {
+        using var context = Create<int>(mode, generation: generation);
+        var model = context.GetService<IDesignTimeModel>().Model;
+        var operations = context.GetService<IMigrationsModelDiffer>().GetDifferences(null, model.GetRelationalModel());
+        var generator = context.GetService<IMigrationsSqlGenerator>();
+        if (!supported)
+        {
+            Assert.Throws<NotSupportedException>(() => context.Database.GenerateCreateScript());
+            Assert.Throws<NotSupportedException>(() => generator.Generate(operations, model));
+            return;
+        }
+
+        foreach (var sql in new[] { context.Database.GenerateCreateScript(),
+            string.Concat(generator.Generate(operations, model).Select(command => command.CommandText)) })
+        {
+            Assert.Equal(3, Regex.Matches(sql, "DEFAULT \\(\"app\"\\.\"Ids\"\\.NEXTVAL\\)").Count);
+            Assert.True(sql.IndexOf("CREATE SEQUENCE", StringComparison.Ordinal) < sql.IndexOf("CREATE TABLE", StringComparison.Ordinal));
+            Assert.DoesNotContain("AS IDENTITY", sql);
+        }
+    }
+
+    [Theory]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    [InlineData(true, false)]
+    public void Sequence_key_configuration_survives_the_dictionary_based_migration_target_model(bool hiLo, bool tpc)
+    {
+        using var context = Create<int>(OceanBaseCompatibilityMode.Oracle, generation: "sequence");
+        var builder = new ModelBuilder();
+        builder.HasDefaultSchema("app");
+        builder.HasSequence<long>("Ids", "app").HasMax(int.MaxValue);
+        var root = builder.Entity("SnapshotRoot").ToTable("RootRows");
+        var key = root.Property<int>("AssetId").HasColumnType("NUMBER(10)");
+        if (hiLo) key.UseOceanBaseHiLo("Ids", "app");
+        else key.HasDefaultValueSql("\"app\".\"Ids\".NEXTVAL").ValueGeneratedOnAdd();
+        root.HasKey("AssetId");
+        if (tpc)
+        {
+            root.UseTpcMappingStrategy();
+            builder.Entity("SnapshotLeaf").HasBaseType("SnapshotRoot").ToTable("LeafRows");
+        }
+        var target = context.GetService<IModelRuntimeInitializer>().Initialize(builder.FinalizeModel());
+        var operations = context.GetService<IMigrationsModelDiffer>().GetDifferences(null, target.GetRelationalModel());
+        var sql = string.Concat(context.GetService<IMigrationsSqlGenerator>().Generate(operations, target)
+            .Select(command => command.CommandText));
+        Assert.DoesNotContain("AS IDENTITY", sql);
+        if (hiLo) Assert.DoesNotContain(".NEXTVAL", sql);
+        else Assert.Contains("DEFAULT (\"app\".\"Ids\".NEXTVAL)", sql);
+    }
+
+    [Theory]
+    [InlineData("sequence-restart")]
+    [InlineData("sequence-replacement")]
+    public void Tpc_sequence_migration_cannot_reset_allocation_on_populated_tables(string generation)
+    {
+        using var before = Create<int>(OceanBaseCompatibilityMode.Oracle, generation: "sequence");
+        using var after = Create<int>(OceanBaseCompatibilityMode.Oracle, generation: generation);
+        var source = before.GetService<IDesignTimeModel>().Model;
+        var target = after.GetService<IDesignTimeModel>().Model;
+        var changes = after.GetService<IMigrationsModelDiffer>().GetDifferences(source.GetRelationalModel(), target.GetRelationalModel());
+        Assert.NotEmpty(changes);
+        Assert.Contains("data-preserving migration", Assert.Throws<NotSupportedException>(() =>
+            after.GetService<IMigrationsSqlGenerator>().Generate(changes, target)).Message);
+    }
+
+    [Theory]
     [InlineData(OceanBaseCompatibilityMode.MySql, "default")]
     [InlineData(OceanBaseCompatibilityMode.Oracle, "default")]
     [InlineData(OceanBaseCompatibilityMode.MySql, "constant")]
@@ -160,6 +234,21 @@ public sealed class TpcSchemaTests
             if (generation == "constant") root.Property(r => r.Id).HasDefaultValue(default(T)).ValueGeneratedOnAdd();
             if (generation == "computed-never") root.Property(r => r.Id).HasComputedColumnSql("42").ValueGeneratedNever();
             if (generation == "numeric-guid") root.Property(r => r.Id).HasConversion(v => (long)v.GetHashCode(), v => default(T));
+            if (generation is "sequence" or "cycle" or "wide" or "undeclared" or "unqualified"
+                or "sequence-restart" or "sequence-replacement")
+            {
+                var sequence = model.HasSequence<long>(generation == "sequence-replacement" ? "NewIds" : "Ids", "app");
+                if (generation != "wide") sequence.HasMax(int.MaxValue);
+                if (generation == "cycle") sequence.IsCyclic();
+                if (generation == "sequence-restart") sequence.StartsAt(101);
+                var defaultSql = generation switch
+                {
+                    "undeclared" => "\"app\".\"OtherIds\".NEXTVAL",
+                    "unqualified" => "\"Ids\".NEXTVAL",
+                    _ => "\"app\".\"" + sequence.Metadata.Name + "\".NEXTVAL"
+                };
+                root.Property(r => r.Id).HasDefaultValueSql(defaultSql).ValueGeneratedOnAdd();
+            }
             model.Entity<Middle<T>>();
             model.Entity<Leaf<T>>().ToTable("LeafRows");
             model.Entity<Sibling<T>>().ToTable("SiblingRows");

@@ -13,21 +13,24 @@ namespace OceanBase.EntityFrameworkCore.Storage
     {
         private bool Oracle => mode == OceanBaseCompatibilityMode.Oracle;
 
-        public IReadOnlyList<string> Generate(IModel model)
+        public IReadOnlyList<string> Generate(IModel model, string? ownedMySqlDatabase)
         {
-            if (model.GetSequences().Any() || model.GetCollation() is not null)
-            {
-                throw Unsupported("model sequences or database collations");
-            }
-            ValidateTpcKeyGeneration(model.GetEntityTypes());
+            ValidateTpcKeyGeneration(model, Oracle, sql);
             var tables = model.GetRelationalModel().Tables.Where(t => !t.IsExcludedFromMigrations)
                 .OrderBy(t => t.Schema, StringComparer.Ordinal).ThenBy(t => t.Name, StringComparer.Ordinal).ToArray();
             var commands = new List<string>();
+            if (model.GetCollation() is { } collation)
+                commands.Add(DatabaseCollationStatement(sql, ownedMySqlDatabase, collation));
+            foreach (var sequence in model.GetSequences().OrderBy(s => s.Schema, StringComparer.Ordinal).ThenBy(s => s.Name, StringComparer.Ordinal))
+            {
+                commands.Add(OceanBaseSequenceSql.Create(sql.DelimitIdentifier(sequence.Name, sequence.Schema), sequence.Type,
+                    sequence.StartValue, sequence.IncrementBy, sequence.MinValue, sequence.MaxValue, sequence.IsCyclic, noCache: false)
+                    + OceanBaseSequenceSql.AllocationOptions(Oracle, sequence[SequenceCacheAnnotation], sequence[SequenceOrderedAnnotation], creating: true));
+            }
             foreach (var table in tables)
             {
-                if (table.Comment is not null || table.Triggers.Any()) throw Unsupported("table comments or triggers");
                 var identities = table.Columns.Where(IsIdentity).ToArray();
-                if (identities.Length > 1 || identities.Length == 1
+                if (identities.Length > 1 || !Oracle && identities.Length == 1
                     && (table.PrimaryKey is null || !table.PrimaryKey.Columns.Contains(identities[0])
                         || !Oracle && table.PrimaryKey.Columns[0] != identities[0]))
                 {
@@ -47,14 +50,26 @@ namespace OceanBase.EntityFrameworkCore.Storage
                 {
                     definitions.Add("CONSTRAINT " + Q(check.Name!) + " CHECK (" + check.Sql + ")");
                 }
-                commands.Add("CREATE TABLE " + Table(table) + " (\n    " + string.Join(",\n    ", definitions) + "\n)");
+                var tableName = Table(table);
+                var create = "CREATE TABLE " + tableName + " (\n    " + string.Join(",\n    ", definitions) + "\n)";
+                if (!Oracle && table.Comment is not null)
+                    create += " COMMENT = " + OceanBaseCommentSql.Literal(table.Comment, oracle: false);
+                commands.Add(create);
+                if (!Oracle) continue;
+                if (table.Comment is not null)
+                    commands.Add(OceanBaseCommentSql.OracleStatement(tableName, null, table.Comment));
+                foreach (var column in table.Columns.Where(column => column.Comment is not null))
+                    commands.Add(OceanBaseCommentSql.OracleStatement(tableName, Q(column.Name), column.Comment));
             }
             foreach (var table in tables)
             {
+                foreach (var annotation in table.GetAnnotations().Where(annotation => annotation.Name.StartsWith(ExpressionIndexPrefix, StringComparison.Ordinal)))
+                    commands.Add(ExpressionIndexSql(sql, Oracle, table.Name, table.Schema, annotation));
                 foreach (var index in table.Indexes.OrderBy(i => i.Name, StringComparer.Ordinal))
                 {
                     if (index.Filter is not null) throw Unsupported("filtered indexes");
-                    var columns = index.Columns.Select((column, i) => Q(column.Name)
+                    var lengths = IndexPrefixLengths(index[IndexPrefixLengthsAnnotation], index.Columns.Count, Oracle);
+                    var columns = index.Columns.Select((column, i) => Q(column.Name) + IndexPrefixSql(lengths, i)
                         + (index.IsDescending is { } descending && (descending.Count == 0 || descending[i]) ? " DESC" : ""));
                     commands.Add("CREATE " + (index.IsUnique ? "UNIQUE " : "") + "INDEX "
                         + (Oracle ? sql.DelimitIdentifier(index.Name, table.Schema) : Q(index.Name))
@@ -78,13 +93,34 @@ namespace OceanBase.EntityFrameworkCore.Storage
             return commands;
         }
 
+        internal static string DatabaseCollationStatement(ISqlGenerationHelper sql, string? ownedMySqlDatabase, string? collation)
+        {
+            if (ownedMySqlDatabase is null)
+                throw new NotSupportedException("Database collation changes require an explicitly owned MySQL database.");
+            return "ALTER DATABASE " + sql.DelimitIdentifier(ownedMySqlDatabase) + " DEFAULT COLLATE " + ValidateDatabaseCollation(collation);
+        }
+
+        internal static string ValidateDatabaseCollation(string? collation)
+        {
+            if (string.IsNullOrEmpty(collation) || !char.IsAsciiLetter(collation[0])
+                || collation.Any(character => !char.IsAsciiLetterOrDigit(character) && character != '_'))
+                throw new NotSupportedException("Database collation changes require valid names for the target and any previous default.");
+            return collation;
+        }
+
         private string Column(IColumn column)
         {
-            if (column.Comment is not null || column.Collation is not null && Oracle)
+            if (column.Collation is not null && Oracle)
             {
-                throw Unsupported("column comments or Oracle column collations");
+                throw Unsupported("Oracle column collations");
             }
+            var comment = !Oracle && column.Comment is not null
+                ? " COMMENT " + OceanBaseCommentSql.Literal(column.Comment, oracle: false) : "";
             var collationSql = column.Collation is { } collation ? " COLLATE " + Q(collation) : "";
+            var update = column[OnUpdateSqlAnnotation];
+            if (update is not null && (Oracle || column.ComputedColumnSql is not null || IsIdentity(column)
+                || !IsSupportedOnUpdate(update as string, column.StoreType, column.DefaultValueSql)))
+                throw Unsupported("this ON UPDATE clause");
             if (column.ComputedColumnSql is { } computed)
             {
                 if (string.IsNullOrWhiteSpace(computed) || Oracle && column.IsStored == true)
@@ -93,7 +129,7 @@ namespace OceanBase.EntityFrameworkCore.Storage
                 }
                 return Q(column.Name) + (Oracle ? "" : " " + column.StoreType + collationSql)
                     + " GENERATED ALWAYS AS (" + computed + ") " + (column.IsStored == true ? "STORED" : "VIRTUAL")
-                    + (column.IsNullable ? "" : " NOT NULL");
+                    + (column.IsNullable ? "" : " NOT NULL") + comment;
             }
             var identity = IsIdentity(column);
             foreach (var mapping in column.PropertyMappings)
@@ -101,13 +137,15 @@ namespace OceanBase.EntityFrameworkCore.Storage
                 var property = mapping.Property;
                 if (property.ValueGenerated is not (ValueGenerated.Never or ValueGenerated.OnUpdateSometimes)
                     && column.DefaultValue is null && column.DefaultValueSql is null
-                    && !identity && !IsKeyPropagation(mapping) && !(property.IsPrimaryKey() && property.ClrType == typeof(Guid)))
+                    && !(update is not null && property.ValueGenerated == ValueGenerated.OnUpdate)
+                    && !identity && !IsKeyPropagation(mapping) && FindHiLoSequence(property) is null
+                    && !(property.IsPrimaryKey() && property.ClrType == typeof(Guid)))
                 {
                     throw Unsupported("generated columns without an identity, default or computed expression");
                 }
             }
             var definition = Q(column.Name) + " " + column.StoreType + collationSql;
-            if (identity && Oracle) definition += " GENERATED BY DEFAULT AS IDENTITY";
+            definition += IdentityClause(Oracle, identity, column[IdentityGenerationAnnotation], column[IdentityOptionsAnnotation]);
             if (column.DefaultValueSql is { } defaultSql)
             {
                 if (string.IsNullOrWhiteSpace(defaultSql)) throw Unsupported("unspecified SQL defaults");
@@ -121,7 +159,8 @@ namespace OceanBase.EntityFrameworkCore.Storage
             }
             definition += column.IsNullable ? " NULL" : " NOT NULL";
             if (identity && !Oracle) definition += " AUTO_INCREMENT";
-            return definition;
+            if (update is string updateSql) definition += " ON UPDATE " + updateSql;
+            return definition + comment;
         }
 
         private string Q(string name) => sql.DelimitIdentifier(name);

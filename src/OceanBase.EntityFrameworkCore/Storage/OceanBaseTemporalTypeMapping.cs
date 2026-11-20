@@ -13,7 +13,7 @@ namespace OceanBase.EntityFrameworkCore.Storage
 {
     internal sealed class OceanBaseTemporalTypeMapping<T> : RelationalTypeMapping, IOceanBaseWriteValidation where T : struct
     {
-        private const long MaximumMySqlTimeTicks = (838 * 3600L + 59 * 60 + 59) * TimeSpan.TicksPerSecond + 9999990;
+        private const long MaximumMySqlTimeTicks = (838 * 3600L + 59 * 60 + 59) * TimeSpan.TicksPerSecond;
         private readonly OceanBaseCompatibilityMode _mode;
         public OceanBaseCompatibilityMode CompatibilityMode => _mode;
         private readonly byte _leadingPrecision;
@@ -62,6 +62,8 @@ namespace OceanBase.EntityFrameworkCore.Storage
 
             var date = DbType == System.Data.DbType.Date;
             var duration = typeof(T) == typeof(TimeSpan) || typeof(T) == typeof(OceanBaseIntervalDayToSecond);
+            var localTimeZone = OceanBaseTemporalTypeMapping.MatchDeclaration(StoreType, _mode, date, duration,
+                typeof(T) == typeof(DateTimeOffset)).Groups["localTimeZone"].Success;
             var precision = parameters.Precision ?? Precision ?? (date ? 0 : _mode == OceanBaseCompatibilityMode.Oracle ? 7 : 6);
             if (precision < 0 || precision > (date ? 0 : _mode == OceanBaseCompatibilityMode.Oracle ? 9 : 6))
             {
@@ -78,14 +80,18 @@ namespace OceanBase.EntityFrameworkCore.Storage
             {
                 var storeType = date ? "DATE" : typeof(T) == typeof(OceanBaseIntervalDayToSecond)
                     ? $"INTERVAL DAY({_leadingPrecision}) TO SECOND({precision})"
-                    : _mode == OceanBaseCompatibilityMode.Oracle ? $"TIMESTAMP({precision})" + (typeof(T) == typeof(DateTimeOffset) ? " WITH TIME ZONE" : string.Empty)
-                    : typeof(T) == typeof(TimeSpan) ? $"TIME({precision})" : $"DATETIME({precision})";
+                    : _mode == OceanBaseCompatibilityMode.Oracle ? $"TIMESTAMP({precision})" + (typeof(T) == typeof(DateTimeOffset)
+                        ? " WITH TIME ZONE" : localTimeZone ? " WITH LOCAL TIME ZONE" : string.Empty)
+                    : $"{StoreTypeNameBase.Trim().ToUpperInvariant()}({precision})";
                 parameters = parameters.WithStoreTypeAndSize(storeType, parameters.Size);
             }
 
             var match = OceanBaseTemporalTypeMapping.MatchDeclaration(parameters.StoreType, _mode, date, duration,
                 typeof(T) == typeof(DateTimeOffset));
-            if (!match.Success)
+            var mysqlTimestamp = _mode == OceanBaseCompatibilityMode.MySql
+                && StoreTypeNameBase.Trim().Equals("TIMESTAMP", StringComparison.OrdinalIgnoreCase);
+            if (!match.Success || match.Groups["mysqlTimestamp"].Success != mysqlTimestamp
+                || match.Groups["localTimeZone"].Success != localTimeZone)
             {
                 throw new NotSupportedException("The store declaration is incompatible with the current temporal transport.");
             }
@@ -105,10 +111,8 @@ namespace OceanBase.EntityFrameworkCore.Storage
             => typeof(DbDataReader).GetMethod(nameof(DbDataReader.GetValue))!;
 
         public override Expression CustomizeDataReaderExpression(Expression expression)
-            => Expression.Call(typeof(OceanBaseTemporalTypeMapping<T>).GetMethod(nameof(ReadValue))!, expression);
-
-        public static T ReadValue(object value)
-            => (T)OceanBaseTemporalConversions.ConvertValue(value, typeof(T));
+            => Expression.Call(typeof(OceanBaseCompiledModelTypeMappings)
+                .GetMethod(nameof(OceanBaseCompiledModelTypeMappings.ReadTemporal))!.MakeGenericMethod(typeof(T)), expression);
 
         protected override void ConfigureParameter(DbParameter parameter)
         {
@@ -161,7 +165,7 @@ namespace OceanBase.EntityFrameworkCore.Storage
                 case TimeSpan time:
                     if (_mode == OceanBaseCompatibilityMode.MySql && (time.Ticks < -MaximumMySqlTimeTicks || time.Ticks > MaximumMySqlTimeTicks))
                     {
-                        throw new ArgumentOutOfRangeException(nameof(value), "TIME exceeds 838:59:59.999999.");
+                        throw new ArgumentOutOfRangeException(nameof(value), "TIME exceeds 838:59:59.");
                     }
 
                     ticks = time.Ticks;
@@ -231,14 +235,20 @@ namespace OceanBase.EntityFrameworkCore.Storage
 
     internal static class OceanBaseTemporalTypeMapping
     {
+        internal static bool IsLocalTimeZone(RelationalTypeMapping mapping)
+            => MatchDeclaration(mapping.StoreType, OceanBaseCompatibilityMode.Oracle, false, false, false)
+                .Groups["localTimeZone"].Success;
+
         internal static Match MatchDeclaration(string storeType, OceanBaseCompatibilityMode mode, bool date, bool duration, bool zoned)
         {
             var oracle = mode == OceanBaseCompatibilityMode.Oracle;
             var pattern = date ? @"\ADATE\z"
                 : duration && oracle ? @"\AINTERVAL\s+DAY(?:\((?<days>\d+)\))?\s+TO\s+SECOND(?:\((?<precision>\d+)\))?\z"
                 : oracle ? zoned ? @"\ATIMESTAMP(?:\((?<precision>\d+)\))?\s+WITH\s+TIME\s+ZONE\z"
-                    : @"\ATIMESTAMP(?:\((?<precision>\d+)\))?\z"
-                : duration ? @"\ATIME(?:\((?<precision>\d+)\))?\z" : @"\ADATETIME(?:\((?<precision>\d+)\))?\z";
+                    : @"\ATIMESTAMP(?:\((?<precision>\d+)\))?(?<localTimeZone>\s+WITH\s+LOCAL\s+TIME\s+ZONE)?\z"
+                : duration ? @"\ATIME(?:\((?<precision>\d+)\))?\z"
+                : zoned ? @"\ADATETIME(?:\((?<precision>\d+)\))?\z"
+                : @"\A(?:DATETIME|(?<mysqlTimestamp>TIMESTAMP))(?:\((?<precision>\d+)\))?\z";
             return Regex.Match(storeType.Trim(), pattern, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
         }
 

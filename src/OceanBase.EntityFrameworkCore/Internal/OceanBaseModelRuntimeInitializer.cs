@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using OceanBase.EntityFrameworkCore.Metadata;
 
 namespace OceanBase.EntityFrameworkCore.Internal;
 
@@ -17,7 +18,13 @@ internal sealed class OceanBaseModelRuntimeInitializer(ModelRuntimeInitializerDe
     {
         if (model[ModeAnnotation] is int modelMode && modelMode != (int)mode)
             throw new InvalidOperationException("The supplied model uses a different OceanBase compatibility mode. Generate and select a model for the configured mode.");
-        return base.Initialize(model, designTime, validationLogger);
+        var initialized = base.Initialize(model, designTime, validationLogger);
+        foreach (var entityType in initialized.GetEntityTypes())
+        {
+            foreach (var property in entityType.GetDeclaredProperties())
+                OceanBaseRelationalAnnotationProvider.FindHiLoSequence(property);
+        }
+        return initialized;
     }
 }
 

@@ -46,5 +46,6 @@ jobs:
             PackagePath = "artifacts/ci/$packageId.$env:CI_PACKAGE_VERSION.nupkg"
             ExpectedPackageId = $packageId
             ExpectedVersion = $env:CI_PACKAGE_VERSION
+            ExpectedSourceRevision = $env:GITHUB_SHA
           }
           ./tests/OceanBase.EntityFrameworkCore.PackageConsumer/Verify-Package.ps1 @verification

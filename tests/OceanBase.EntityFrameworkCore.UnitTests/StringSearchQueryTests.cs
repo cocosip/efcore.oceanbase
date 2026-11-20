@@ -18,6 +18,28 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
         [Theory]
         [InlineData(OceanBaseCompatibilityMode.MySql)]
         [InlineData(OceanBaseCompatibilityMode.Oracle)]
+        public void Suffix_search_requires_enough_source_characters_before_native_comparison(OceanBaseCompatibilityMode mode)
+        {
+            using var context = CreateContext(mode);
+            var sql = context.Rows.Where(row => row.Optional!.EndsWith(row.Needle!)).ToQueryString();
+            var length = mode == OceanBaseCompatibilityMode.MySql ? "CHAR_LENGTH" : "LENGTH";
+            Assert.Matches(length + @"\([^)]+\) >= " + length + @"\(", sql);
+        }
+
+        [Fact]
+        public void Oracle_lob_suffix_search_uses_last_position_without_lob_equality()
+        {
+            using var context = CreateContext(OceanBaseCompatibilityMode.Oracle);
+            var sql = context.Rows.Where(row => row.Large!.EndsWith(row.Needle!)).ToQueryString();
+            Assert.Contains("INSTR(", sql);
+            Assert.Contains(", -1)", sql);
+            Assert.DoesNotContain("SUBSTR(", sql);
+            Assert.Contains(">=", sql);
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle)]
         public void Search_methods_translate_as_total_native_boolean_expressions(OceanBaseCompatibilityMode mode)
         {
             using var context = CreateContext(mode);
@@ -202,14 +224,15 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             using var context = CreateContext(mode);
             IQueryable[] unsupported =
             [
-                context.Rows.Where(row => row.Required.Contains('x')),
                 context.Rows.Where(row => row.Required.StartsWith("x", StringComparison.Ordinal)),
-                context.Rows.Where(row => row.Required.EndsWith('x')),
+                context.Rows.Where(row => row.Required.Contains('x', StringComparison.Ordinal)),
+                context.Rows.Where(row => row.Required.Contains(row.NumericCharacter)),
+                context.Rows.Where(row => row.BinaryConverted.Contains('x')),
                 context.Rows.Where(row => row.BinaryConverted.Contains("x"))
             ];
             foreach (var query in unsupported)
                 Assert.Contains("could not be translated", Assert.Throws<InvalidOperationException>(() => query.ToQueryString()).Message);
-            Assert.Contains("Required", context.Rows.Select(row => row.Required.Contains('x')).ToQueryString());
+            Assert.Contains("INSTR(", context.Rows.Select(row => row.Required.Contains('x')).ToQueryString());
             Assert.Contains("Required", context.Rows.Select(row => row.Required.EndsWith("x", StringComparison.Ordinal)).ToQueryString());
             var nativeSql = context.Rows.Where(row => NativeInstr(row.Required, row.Optional!) > 0).ToQueryString();
             Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? "`INSTR`(" : "\"INSTR\"(", nativeSql);
@@ -217,6 +240,52 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
         }
 
         private static int NativeInstr(string source, string needle) => throw new NotSupportedException();
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true)]
+        public void Character_search_uses_text_carriers_and_total_native_booleans(OceanBaseCompatibilityMode mode, bool relationalNulls)
+        {
+            using var context = CreateContext(mode, relationalNulls);
+            var needle = '海';
+            var query = context.Rows.Where(row => row.Optional!.Contains(needle)
+                && !row.Required.StartsWith(row.Character!.Value)
+                && row.Converted.EndsWith('x')
+                && row.Large!.EndsWith(row.Character!.Value));
+            foreach (var value in new[] { '海', '%', '_', '\\', '\'', ' ' })
+            {
+                needle = value;
+                var sql = query.ToQueryString();
+                Assert.Contains("INSTR(", sql);
+                Assert.Contains("IS NOT NULL", sql);
+                Assert.Contains("CASE", sql);
+                Assert.Contains("ELSE", sql);
+                Assert.Contains("x!", sql);
+                Assert.DoesNotContain("LIKE", sql);
+                Assert.DoesNotContain("__oceanbase_internal", sql);
+            }
+            var literal = context.Rows.Where(row => row.Required.Contains('海')
+                && row.Required.StartsWith('%') && row.Required.EndsWith('_')).ToQueryString();
+            Assert.Contains(mode == OceanBaseCompatibilityMode.Oracle ? "u'\\6d77'" : "海", literal);
+            Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? "RIGHT(" : "SUBSTR(", literal);
+            var composed = context.Rows.Where(row => (row.Optional ?? row.Required).ToUpper()
+                .Contains(row.Character ?? 'x')).ToQueryString();
+            Assert.Contains("COALESCE(", composed);
+            Assert.Contains("UPPER(", composed);
+            Assert.Contains("INSTR(", composed);
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle)]
+        public void Character_search_rejects_surrogate_literals(OceanBaseCompatibilityMode mode)
+        {
+            using var context = CreateContext(mode);
+            var error = Assert.Throws<ArgumentException>(() => context.Rows.Where(row => row.Required.Contains('\ud800')).ToQueryString());
+            Assert.Contains("well-formed UTF-16", error.Message);
+        }
 
         [Theory]
         [InlineData(false)]
@@ -258,18 +327,22 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             var builder = new DbContextOptionsBuilder<TestContext>().UseOceanBase("Server=localhost;Database=test", mode);
             ((IDbContextOptionsBuilderInfrastructure)builder).AddOrUpdateExtension(
                 builder.Options.Extensions.OfType<RelationalOptionsExtension>().Single().WithUseRelationalNulls(relationalNulls));
-            return new TestContext(builder.Options);
+            return new TestContext(builder.Options, mode);
         }
 
-        private sealed class TestContext(DbContextOptions<TestContext> options) : DbContext(options)
+        private sealed class TestContext(DbContextOptions<TestContext> options, OceanBaseCompatibilityMode mode) : DbContext(options)
         {
             public DbSet<Row> Rows => Set<Row>();
             protected override void OnModelCreating(ModelBuilder modelBuilder)
             {
+                modelBuilder.Entity<Row>().Property(row => row.Large).IsUnicode(false)
+                    .HasColumnType(mode == OceanBaseCompatibilityMode.Oracle ? "CLOB" : "LONGTEXT");
                 modelBuilder.Entity<Row>().Property(row => row.Converted)
                     .HasConversion(value => value + "!", value => value.Substring(0, value.Length - 1));
                 modelBuilder.Entity<Row>().Property(row => row.BinaryConverted)
                     .HasConversion(value => Encoding.UTF8.GetBytes(value), value => Encoding.UTF8.GetString(value));
+                modelBuilder.Entity<Row>().Property(row => row.Character).HasConversion<string>();
+                modelBuilder.Entity<Row>().Property(row => row.NumericCharacter).HasConversion<int>();
                 modelBuilder.HasDbFunction(typeof(StringSearchQueryTests).GetMethod(nameof(NativeInstr),
                     BindingFlags.NonPublic | BindingFlags.Static)!).HasName("INSTR");
             }
@@ -281,8 +354,11 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             public string Required { get; set; } = "";
             public string? Optional { get; set; }
             public string? Needle { get; set; }
+            public string? Large { get; set; }
             public string Converted { get; set; } = "";
             public string BinaryConverted { get; set; } = "";
+            public char? Character { get; set; }
+            public char NumericCharacter { get; set; }
         }
     }
 }

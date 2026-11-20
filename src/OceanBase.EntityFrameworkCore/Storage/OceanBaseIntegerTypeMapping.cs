@@ -16,6 +16,7 @@ namespace OceanBase.EntityFrameworkCore.Storage
         public OceanBaseCompatibilityMode CompatibilityMode => _mode;
         private readonly decimal _minimum;
         private readonly decimal _maximum;
+        internal decimal Maximum => _maximum;
 
         public OceanBaseIntegerTypeMapping(string storeType, DbType dbType, OceanBaseCompatibilityMode mode,
             int? precision = null, int? scale = null, int? size = null, bool fixedLength = false)
@@ -65,10 +66,8 @@ namespace OceanBase.EntityFrameworkCore.Storage
             => typeof(DbDataReader).GetMethod(nameof(DbDataReader.GetValue))!;
 
         public override Expression CustomizeDataReaderExpression(Expression expression)
-            => Expression.Call(typeof(OceanBaseIntegerTypeMapping<T>).GetMethod(nameof(ReadValue))!, expression);
-
-        public static T ReadValue(object value)
-            => (T)OceanBaseNumericConversion.ConvertValue(value, typeof(T));
+            => Expression.Call(typeof(OceanBaseCompiledModelTypeMappings)
+                .GetMethod(nameof(OceanBaseCompiledModelTypeMappings.ReadNumeric))!.MakeGenericMethod(typeof(T)), expression);
 
         protected override void ConfigureParameter(DbParameter parameter)
         {

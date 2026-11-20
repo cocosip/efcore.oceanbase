@@ -4,6 +4,7 @@ using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore.Query;
 using Microsoft.EntityFrameworkCore.Query.SqlExpressions;
 using Microsoft.EntityFrameworkCore.Storage;
+using OceanBaseConnector;
 
 namespace OceanBase.EntityFrameworkCore.Query
 {
@@ -18,6 +19,25 @@ namespace OceanBase.EntityFrameworkCore.Query
         }
 
         protected override string AliasSeparator => _mode == OceanBaseCompatibilityMode.Oracle ? " " : " AS ";
+
+        protected override Expression VisitTableValuedFunction(TableValuedFunctionExpression function)
+        {
+            if (function.FindAnnotation(OceanBaseQueryableMethodTranslatingExpressionVisitorFactory.JsonCollectionAnnotation)
+                ?.Value is not bool isInt32)
+                return base.VisitTableValuedFunction(function);
+
+            var helper = Dependencies.SqlGenerationHelper;
+            var storeType = _mode == OceanBaseCompatibilityMode.Oracle
+                ? (isInt32 ? "NUMBER(10)" : "NUMBER(19)") : (isInt32 ? "INT" : "BIGINT");
+            Sql.Append("JSON_TABLE(");
+            Visit(function.Arguments[0]);
+            Sql.Append(", '$[*]' COLUMNS (").Append(helper.DelimitIdentifier("_ord")).Append(" FOR ORDINALITY, ")
+                .Append(helper.DelimitIdentifier("Value")).Append(" ").Append(storeType)
+                .Append(" PATH '$'");
+            Sql.Append(_mode == OceanBaseCompatibilityMode.Oracle ? " ERROR ON ERROR NULL ON EMPTY))" : " ERROR ON ERROR))")
+                .Append(AliasSeparator).Append(helper.DelimitIdentifier(function.Alias));
+            return function;
+        }
 
         protected override void GenerateValues(ValuesExpression valuesExpression)
         {
@@ -42,6 +62,10 @@ namespace OceanBase.EntityFrameworkCore.Query
                         && conversion.Type == conversion.Operand.Type
                         && ReferenceEquals(conversion.TypeMapping, conversion.Operand.TypeMapping))
                         GenerateCollectionCast(conversion.Operand);
+                    // Oracle UNION branches need common parameter types/charsets (1790/12704).
+                    else if (_mode == OceanBaseCompatibilityMode.Oracle
+                        && expression is SqlParameterExpression or SqlConstantExpression)
+                        GenerateCollectionCast(expression);
                     else Visit(expression);
                     if (row == 0)
                         Sql.Append(AliasSeparator).Append(Dependencies.SqlGenerationHelper.DelimitIdentifier(valuesExpression.ColumnNames[column]));
@@ -56,6 +80,31 @@ namespace OceanBase.EntityFrameworkCore.Query
             if (expression.TypeMapping is not { } mapping
                 || !OceanBaseCollectionParameterExpandingVisitor.IsSupportedCollectionElement(mapping))
                 throw new NotSupportedException("Collection typing casts require supported numeric, Boolean, text, binary or temporal elements with non-null-converting storage carriers.");
+            if (_mode == OceanBaseCompatibilityMode.Oracle && mapping.StoreTypeNameBase.Equals("BLOB", StringComparison.OrdinalIgnoreCase))
+            {
+                Sql.Append("TO_BLOB(");
+                Visit(expression);
+                Sql.Append(")");
+                return;
+            }
+            if (_mode == OceanBaseCompatibilityMode.MySql && OceanBaseCollectionParameterExpandingVisitor.IsSupportedText(mapping))
+            {
+                // CAST AS CHAR gives the session collation the same priority as a contextual column's collation.
+                Visit(expression);
+                return;
+            }
+            if (_mode == OceanBaseCompatibilityMode.Oracle
+                && OceanBaseCollectionParameterExpandingVisitor.IsSupportedText(mapping)
+                && mapping.StoreTypeNameBase.ToUpperInvariant() is "CHAR" or "NCHAR" or "VARCHAR2" or "NVARCHAR2")
+            {
+                if (mapping.IsFixedLength)
+                    throw new NotSupportedException("Oracle collection roots with fixed-length text storage are not supported. Use variable-length text storage for collection comparisons.");
+                // Query values can exceed a contextual column's length; CAST would silently truncate them.
+                Sql.Append(mapping.IsUnicode ? "TO_NCHAR(" : "TO_CHAR(");
+                Visit(expression);
+                Sql.Append(")");
+                return;
+            }
             Sql.Append("CAST(");
             Visit(expression);
             if (OceanBaseCollectionParameterExpandingVisitor.IsSupportedBoolean(mapping))
@@ -99,6 +148,18 @@ namespace OceanBase.EntityFrameworkCore.Query
 
         protected override Expression VisitSqlBinary(SqlBinaryExpression sqlBinaryExpression)
         {
+            if (sqlBinaryExpression.OperatorType is ExpressionType.Equal or ExpressionType.NotEqual
+                or ExpressionType.LessThan or ExpressionType.LessThanOrEqual
+                or ExpressionType.GreaterThan or ExpressionType.GreaterThanOrEqual)
+            {
+                ValidateBlobComparison(sqlBinaryExpression.Left);
+                ValidateBlobComparison(sqlBinaryExpression.Right);
+                // Null processing can rewrite mixed-carrier IN subqueries into EXISTS comparisons.
+                if (sqlBinaryExpression.Left.Type == typeof(TimeSpan) && sqlBinaryExpression.Right.Type == typeof(TimeSpan)
+                    && OceanBaseTemporalMethodTranslator.IsTickDurationMapping(sqlBinaryExpression.Left.TypeMapping)
+                        != OceanBaseTemporalMethodTranslator.IsTickDurationMapping(sqlBinaryExpression.Right.TypeMapping))
+                    throw new NotSupportedException("Comparisons mixing tick-based date differences and stored duration carriers require normalization.");
+            }
             if (sqlBinaryExpression.OperatorType == ExpressionType.ExclusiveOr && sqlBinaryExpression.Type == typeof(bool))
             {
                 Sql.Append("(");
@@ -171,6 +232,43 @@ namespace OceanBase.EntityFrameworkCore.Query
             }
 
             return base.VisitSqlBinary(sqlBinaryExpression);
+        }
+
+        protected override void GenerateIn(InExpression inExpression, bool negated)
+        {
+            ValidateBlobComparison(inExpression.Item);
+            if (inExpression.Subquery is { } subquery)
+            {
+                foreach (var projection in subquery.Projection)
+                {
+                    ValidateBlobComparison(projection.Expression);
+                    ValidateDurationMembership(projection.Expression);
+                }
+            }
+            if (inExpression.Values is { } values)
+            {
+                foreach (var value in values)
+                {
+                    ValidateBlobComparison(value);
+                    ValidateDurationMembership(value);
+                }
+            }
+            base.GenerateIn(inExpression, negated);
+
+            void ValidateDurationMembership(SqlExpression value)
+            {
+                if (inExpression.Item.Type == typeof(TimeSpan) && value.Type == typeof(TimeSpan)
+                    && OceanBaseTemporalMethodTranslator.IsTickDurationMapping(inExpression.Item.TypeMapping)
+                        != OceanBaseTemporalMethodTranslator.IsTickDurationMapping(value.TypeMapping))
+                    throw new NotSupportedException("Membership mixing tick-based date differences and stored duration carriers is not supported.");
+            }
+        }
+
+        private void ValidateBlobComparison(SqlExpression expression)
+        {
+            if (_mode == OceanBaseCompatibilityMode.Oracle
+                && expression.TypeMapping?.StoreTypeNameBase.Equals("BLOB", StringComparison.OrdinalIgnoreCase) == true)
+                throw new NotSupportedException("Oracle BLOB equality and membership are not supported. Use explicitly bounded RAW storage for comparable binary values.");
         }
 
         protected override string GetOperator(SqlBinaryExpression binaryExpression)
@@ -309,6 +407,9 @@ namespace OceanBase.EntityFrameworkCore.Query
 
         protected override Expression VisitSqlFunction(SqlFunctionExpression sqlFunctionExpression)
         {
+            if (sqlFunctionExpression.Name is OceanBaseTemporalMethodTranslator.TimeOnlyFromTicksMarker
+                or OceanBaseTemporalMethodTranslator.TimeOnlyHoursToTicksMarker or OceanBaseTemporalMethodTranslator.TimeOnlyMinutesToTicksMarker)
+                return GenerateTimeOnlyAdd(sqlFunctionExpression);
             if (sqlFunctionExpression.Name == OceanBaseSqlTranslatingExpressionVisitorFactory.BooleanValueMarker)
             {
                 if (sqlFunctionExpression is not { IsBuiltIn: true, Instance: null, Schema: null, Arguments.Count: 1,
@@ -329,34 +430,546 @@ namespace OceanBase.EntityFrameworkCore.Query
             {
                 var mapping = sqlFunctionExpression.TypeMapping;
                 var carrier = mapping?.Converter?.ProviderClrType ?? mapping?.ClrType;
+                var operandType = sqlFunctionExpression.Arguments is { Count: 1 } operands
+                    ? Nullable.GetUnderlyingType(operands[0].Type) ?? operands[0].Type : null;
                 if (sqlFunctionExpression is not { IsBuiltIn: true, Instance: null, Schema: null, Arguments.Count: 1,
                         IsNullable: true, ArgumentsPropagateNullability: [false] }
                     || mapping is null || mapping.Converter?.ConvertsNulls == true
-                    || sqlFunctionExpression.Type != mapping.ClrType
+                    || sqlFunctionExpression.Type != (Nullable.GetUnderlyingType(mapping.ClrType) ?? mapping.ClrType)
                     || !OceanBaseMathTranslator.IsNumeric(sqlFunctionExpression.Type)
                     || (Nullable.GetUnderlyingType(carrier!) ?? carrier) != typeof(float)
-                    || sqlFunctionExpression.Arguments[0].Type != typeof(double)
-                        && sqlFunctionExpression.Arguments[0].Type != sqlFunctionExpression.Type
+                    || operandType != typeof(double)
+                        && operandType != sqlFunctionExpression.Type
                         // EF's SUM compensation derives COALESCE.Type from its Int32 zero constant.
                         && !IsCompensatedSingleSum(sqlFunctionExpression.Arguments[0], sqlFunctionExpression.Type, mapping))
                     throw new InvalidOperationException("Invalid internal Single result expression.");
-                Sql.Append("CAST(");
+                // MySQL text results format FLOAT with fewer digits; widen only after Single normalization.
+                Sql.Append(_mode == OceanBaseCompatibilityMode.MySql ? "CAST(CAST(" : "CAST(");
                 Visit(sqlFunctionExpression.Arguments[0]);
-                Sql.Append(_mode == OceanBaseCompatibilityMode.MySql ? " AS FLOAT)" : " AS BINARY_FLOAT)");
+                Sql.Append(_mode == OceanBaseCompatibilityMode.MySql ? " AS FLOAT) AS DOUBLE)" : " AS BINARY_FLOAT)");
                 return sqlFunctionExpression;
             }
 
-            if (_mode == OceanBaseCompatibilityMode.Oracle
-                && sqlFunctionExpression.Name == OceanBaseTemporalMemberTranslator.ExtractMarker)
+            if (sqlFunctionExpression.Name == OceanBaseTemporalMemberTranslator.ExtractMarker)
             {
-                if (sqlFunctionExpression is not { IsBuiltIn: true, Arguments.Count: 2 }
+                if (sqlFunctionExpression is not { IsBuiltIn: true, IsNullable: true, Arguments.Count: 2,
+                        ArgumentsPropagateNullability: [false, false] }
                     || sqlFunctionExpression.Arguments[0] is not SqlFragmentExpression { Sql: var unit }
-                    || unit is not ("YEAR" or "MONTH" or "DAY" or "HOUR" or "MINUTE" or "SECOND"))
+                    || unit is not ("YEAR" or "MONTH" or "DAY" or "HOUR" or "MINUTE" or "SECOND"
+                        or "MILLISECOND" or "MICROSECOND" or "NANOSECOND"))
                     throw new InvalidOperationException("Invalid internal EXTRACT expression.");
 
-                Sql.Append("EXTRACT(").Append(unit).Append(" FROM ");
-                Visit(sqlFunctionExpression.Arguments[1]);
-                Sql.Append(")");
+                if (_mode == OceanBaseCompatibilityMode.MySql
+                    && sqlFunctionExpression.Arguments[1].Type == typeof(TimeSpan))
+                {
+                    AppendMySqlTimeSpanSign(sqlFunctionExpression.Arguments[1]);
+                    Sql.Append(" * ");
+                    if (unit == "DAY")
+                    {
+                        Sql.Append("(ABS(TIME_TO_SEC(");
+                        Visit(sqlFunctionExpression.Arguments[1]);
+                        Sql.Append(")) DIV 86400)");
+                    }
+                    else if (unit == "HOUR")
+                    {
+                        Sql.Append("(MOD(ABS(TIME_TO_SEC(");
+                        Visit(sqlFunctionExpression.Arguments[1]);
+                        Sql.Append(")), 86400) DIV 3600)");
+                    }
+                    else if (unit == "MINUTE")
+                    {
+                        Sql.Append("(MOD(ABS(TIME_TO_SEC(");
+                        Visit(sqlFunctionExpression.Arguments[1]);
+                        Sql.Append(")), 3600) DIV 60)");
+                    }
+                    else if (unit == "SECOND")
+                    {
+                        Sql.Append("MOD(ABS(TIME_TO_SEC(");
+                        Visit(sqlFunctionExpression.Arguments[1]);
+                        Sql.Append(")), 60)");
+                    }
+                    else if (unit == "MILLISECOND")
+                    {
+                        Sql.Append("(ABS(MICROSECOND(");
+                        Visit(sqlFunctionExpression.Arguments[1]);
+                        Sql.Append(")) DIV 1000)");
+                    }
+                    else if (unit is "MICROSECOND" or "NANOSECOND")
+                    {
+                        Sql.Append("MOD(ABS(MICROSECOND(");
+                        Visit(sqlFunctionExpression.Arguments[1]);
+                        Sql.Append(unit == "NANOSECOND" ? ")) * 1000, 1000)" : ")), 1000)");
+                    }
+                    else
+                        throw new InvalidOperationException("Invalid MySQL duration extraction expression.");
+                }
+                else if (_mode == OceanBaseCompatibilityMode.MySql
+                    && (sqlFunctionExpression.Arguments[1].Type == typeof(DateTime)
+                        || sqlFunctionExpression.Arguments[1].Type == typeof(DateTimeOffset)
+                        || sqlFunctionExpression.Arguments[1].Type == typeof(TimeOnly))
+                    && unit is "MILLISECOND" or "MICROSECOND" or "NANOSECOND")
+                {
+                    if (unit == "MILLISECOND")
+                    {
+                        Sql.Append("(MICROSECOND(");
+                        Visit(sqlFunctionExpression.Arguments[1]);
+                        Sql.Append(") DIV 1000)");
+                    }
+                    else
+                    {
+                        Sql.Append("MOD(MICROSECOND(");
+                        Visit(sqlFunctionExpression.Arguments[1]);
+                        Sql.Append(unit == "NANOSECOND" ? ") * 1000, 1000)" : "), 1000)");
+                    }
+                }
+                else if (_mode == OceanBaseCompatibilityMode.Oracle)
+                {
+                    var truncateSeconds = unit == "SECOND" && sqlFunctionExpression.Arguments[1].Type == typeof(TimeSpan);
+                    if (truncateSeconds) Sql.Append("TRUNC(");
+                    if (unit == "MILLISECOND")
+                    {
+                        Sql.Append("MOD(TRUNC(EXTRACT(SECOND FROM ");
+                        Visit(sqlFunctionExpression.Arguments[1]);
+                        Sql.Append(") * 1000), 1000)");
+                    }
+                    else if (unit is "MICROSECOND" or "NANOSECOND")
+                    {
+                        Sql.Append("MOD(TRUNC(EXTRACT(SECOND FROM ");
+                        Visit(sqlFunctionExpression.Arguments[1]);
+                        Sql.Append(") * ").Append(unit == "MICROSECOND" ? "1000000" : "1000000000")
+                            .Append("), 1000)");
+                    }
+                    else
+                    {
+                        Sql.Append("EXTRACT(").Append(unit).Append(" FROM ");
+                        Visit(sqlFunctionExpression.Arguments[1]);
+                        Sql.Append(")");
+                    }
+                    if (truncateSeconds) Sql.Append(")");
+                }
+                else
+                    throw new InvalidOperationException("Invalid internal temporal extraction mode.");
+                return sqlFunctionExpression;
+            }
+
+            if (sqlFunctionExpression.Name == OceanBaseTemporalMemberTranslator.TimeOfDayMarker)
+            {
+                if (sqlFunctionExpression is not { IsBuiltIn: true, Schema: null, Instance: null, Arguments.Count: 1,
+                        IsNullable: true, ArgumentsPropagateNullability: [false], Type: var timeOfDayType,
+                        TypeMapping: { } resultMapping }
+                    || (timeOfDayType != typeof(TimeSpan) && timeOfDayType != typeof(TimeOnly))
+                    || resultMapping.ClrType != timeOfDayType
+                    || !IsTimeSpanMapping(resultMapping)
+                    || sqlFunctionExpression.Arguments[0] is not { Type: var inputType, TypeMapping: { } inputMapping }
+                    || (inputType != typeof(DateTime) && inputType != typeof(DateTimeOffset))
+                    || !IsDateTimeMapping(inputMapping))
+                    throw new InvalidOperationException("Invalid internal TimeOfDay expression.");
+
+                if (_mode == OceanBaseCompatibilityMode.MySql)
+                {
+                    Sql.Append("TIME(");
+                    Visit(sqlFunctionExpression.Arguments[0]);
+                    Sql.Append(")");
+                }
+                else if (inputMapping.StoreTypeNameBase.Equals("DATE", StringComparison.OrdinalIgnoreCase))
+                {
+                    Sql.Append("NUMTODSINTERVAL((");
+                    Visit(sqlFunctionExpression.Arguments[0]);
+                    Sql.Append(" - TRUNC(");
+                    Visit(sqlFunctionExpression.Arguments[0]);
+                    Sql.Append(")), 'DAY')");
+                }
+                else
+                {
+                    Sql.Append("(");
+                    Visit(sqlFunctionExpression.Arguments[0]);
+                    Sql.Append(" - CAST(TRUNC(");
+                    Visit(sqlFunctionExpression.Arguments[0]);
+                    Sql.Append(") AS TIMESTAMP))");
+                }
+
+                return sqlFunctionExpression;
+            }
+
+            if (sqlFunctionExpression.Name == OceanBaseTemporalMemberTranslator.DateTimeOffsetUtcDateTimeMarker)
+            {
+                if (sqlFunctionExpression is not { IsBuiltIn: true, Schema: null, Instance: null, Arguments.Count: 1,
+                        IsNullable: true, ArgumentsPropagateNullability: [false], Type: var resultType,
+                        TypeMapping: { } resultMapping }
+                    || resultType != typeof(DateTime)
+                    || !IsDateTimeMapping(resultMapping)
+                    || sqlFunctionExpression.Arguments[0] is not { Type: var inputType, TypeMapping: { } inputMapping }
+                    || inputType != typeof(DateTimeOffset)
+                    || !IsDateTimeMapping(inputMapping))
+                    throw new InvalidOperationException("Invalid internal DateTimeOffset.UtcDateTime expression.");
+
+                if (_mode == OceanBaseCompatibilityMode.MySql)
+                {
+                    Visit(sqlFunctionExpression.Arguments[0]);
+                }
+                else
+                {
+                    Sql.Append("CAST(SYS_EXTRACT_UTC(");
+                    Visit(sqlFunctionExpression.Arguments[0]);
+                    Sql.Append(") AS TIMESTAMP(7))");
+                }
+
+                return sqlFunctionExpression;
+            }
+
+            if (sqlFunctionExpression.Name == OceanBaseTemporalMemberTranslator.DateTimeOffsetUtcNowMarker)
+            {
+                if (sqlFunctionExpression is not { IsBuiltIn: true, Schema: null, Instance: null, Arguments.Count: 0,
+                        IsNullable: false, Type: var resultType, TypeMapping: { } resultMapping }
+                    || resultType != typeof(DateTimeOffset)
+                    || !IsDateTimeOffsetMapping(resultMapping))
+                    throw new InvalidOperationException("Invalid internal DateTimeOffset.UtcNow expression.");
+
+                Sql.Append(_mode == OceanBaseCompatibilityMode.MySql
+                    ? "UTC_TIMESTAMP(6)"
+                    : "FROM_TZ(CAST(SYS_EXTRACT_UTC(SYSTIMESTAMP) AS TIMESTAMP(7)), '+00:00')");
+                return sqlFunctionExpression;
+            }
+
+            if (sqlFunctionExpression.Name is OceanBaseTemporalMethodTranslator.DateTimeAddMonthsMarker
+                or OceanBaseTemporalMethodTranslator.DateTimeAddYearsMarker)
+                return GenerateDateTimeCalendarAdd(sqlFunctionExpression);
+
+            if (sqlFunctionExpression.Name == OceanBaseTemporalMethodTranslator.DateTimeAddUnitTicksMarker)
+                return GenerateDateTimeAddUnitTicks(sqlFunctionExpression);
+
+            if (sqlFunctionExpression.Name is OceanBaseTemporalMethodTranslator.DateTimeAddDurationMarker
+                or OceanBaseTemporalMethodTranslator.DateTimeSubtractDurationMarker)
+                return GenerateDateTimeDurationAdd(sqlFunctionExpression);
+
+            if (sqlFunctionExpression.Name is OceanBaseTemporalMethodTranslator.DateTimeAddDaysMarker
+                or OceanBaseTemporalMethodTranslator.DateTimeAddHoursMarker
+                or OceanBaseTemporalMethodTranslator.DateTimeAddMinutesMarker
+                or OceanBaseTemporalMethodTranslator.DateTimeAddSecondsMarker
+                or OceanBaseTemporalMethodTranslator.DateTimeAddMillisecondsMarker
+                or OceanBaseTemporalMethodTranslator.DateTimeAddMicrosecondsMarker
+                or OceanBaseTemporalMethodTranslator.DateTimeAddTicksMarker)
+                return GenerateDateTimeNumericAdd(sqlFunctionExpression);
+
+            if (sqlFunctionExpression.Name == OceanBaseTemporalMethodTranslator.DateOnlyAddDaysMarker)
+            {
+                if (sqlFunctionExpression is not { IsBuiltIn: true, Schema: null, Instance: null, Arguments.Count: 2,
+                        IsNullable: true, ArgumentsPropagateNullability: [false, false], Type: var resultType,
+                        TypeMapping: { } resultMapping }
+                    || resultType != typeof(DateOnly)
+                    || !IsDateOnlyMapping(resultMapping)
+                    || sqlFunctionExpression.Arguments[0] is not { Type: var inputType, TypeMapping: { } inputMapping }
+                    || inputType != typeof(DateOnly)
+                    || !IsDateOnlyMapping(inputMapping)
+                    || sqlFunctionExpression.Arguments[1] is not { Type: var daysType, TypeMapping: { } daysMapping }
+                    || daysType != typeof(int)
+                    || daysMapping.Converter?.ConvertsNulls == true
+                    || (daysMapping.Converter?.ProviderClrType ?? daysMapping.ClrType) != typeof(int))
+                    throw new InvalidOperationException("Invalid internal DateOnly.AddDays expression.");
+
+                if (_mode == OceanBaseCompatibilityMode.MySql)
+                {
+                    Sql.Append("DATE_ADD(");
+                    Visit(sqlFunctionExpression.Arguments[0]);
+                    Sql.Append(", INTERVAL ");
+                    Visit(sqlFunctionExpression.Arguments[1]);
+                    Sql.Append(" DAY)");
+                }
+                else
+                {
+                    // Explicit DATE metadata avoids an unspecified precision on prepared arithmetic results.
+                    Sql.Append("CAST((");
+                    Visit(sqlFunctionExpression.Arguments[0]);
+                    Sql.Append(" + ");
+                    Visit(sqlFunctionExpression.Arguments[1]);
+                    Sql.Append(") AS DATE)");
+                }
+
+                return sqlFunctionExpression;
+            }
+
+            if (sqlFunctionExpression.Name == OceanBaseTemporalMethodTranslator.DateOnlyAddMonthsMarker)
+            {
+                if (sqlFunctionExpression is not { IsBuiltIn: true, Schema: null, Instance: null, Arguments.Count: 2,
+                        IsNullable: true, ArgumentsPropagateNullability: [false, false], Type: var resultType,
+                        TypeMapping: { } resultMapping }
+                    || resultType != typeof(DateOnly)
+                    || !IsDateOnlyMapping(resultMapping)
+                    || sqlFunctionExpression.Arguments[0] is not { Type: var inputType, TypeMapping: { } inputMapping }
+                    || inputType != typeof(DateOnly)
+                    || !IsDateOnlyMapping(inputMapping)
+                    || sqlFunctionExpression.Arguments[1] is not { Type: var monthsType, TypeMapping: { } monthsMapping }
+                    || monthsType != typeof(int)
+                    || monthsMapping.Converter?.ConvertsNulls == true
+                    || (monthsMapping.Converter?.ProviderClrType ?? monthsMapping.ClrType) != typeof(int))
+                    throw new InvalidOperationException("Invalid internal DateOnly.AddMonths expression.");
+
+                if (_mode == OceanBaseCompatibilityMode.MySql)
+                {
+                    Sql.Append("DATE_ADD(");
+                    Visit(sqlFunctionExpression.Arguments[0]);
+                    Sql.Append(", INTERVAL ");
+                    Visit(sqlFunctionExpression.Arguments[1]);
+                    Sql.Append(" MONTH)");
+                }
+                else
+                {
+                    Sql.Append("CAST((");
+                    AppendOracleCalendarDate(sqlFunctionExpression.Arguments[0], sqlFunctionExpression.Arguments[1], years: false);
+                    Sql.Append(") AS DATE)");
+                }
+
+                return sqlFunctionExpression;
+            }
+
+            if (sqlFunctionExpression.Name == OceanBaseTemporalMethodTranslator.DateOnlyAddYearsMarker)
+            {
+                if (sqlFunctionExpression is not { IsBuiltIn: true, Schema: null, Instance: null, Arguments.Count: 2,
+                        IsNullable: true, ArgumentsPropagateNullability: [false, false], Type: var resultType,
+                        TypeMapping: { } resultMapping }
+                    || resultType != typeof(DateOnly)
+                    || !IsDateOnlyMapping(resultMapping)
+                    || sqlFunctionExpression.Arguments[0] is not { Type: var inputType, TypeMapping: { } inputMapping }
+                    || inputType != typeof(DateOnly)
+                    || !IsDateOnlyMapping(inputMapping)
+                    || sqlFunctionExpression.Arguments[1] is not { Type: var yearsType, TypeMapping: { } yearsMapping }
+                    || yearsType != typeof(int)
+                    || yearsMapping.Converter?.ConvertsNulls == true
+                    || (yearsMapping.Converter?.ProviderClrType ?? yearsMapping.ClrType) != typeof(int))
+                    throw new InvalidOperationException("Invalid internal DateOnly.AddYears expression.");
+
+                if (_mode == OceanBaseCompatibilityMode.MySql)
+                {
+                    Sql.Append("DATE_ADD(");
+                    Visit(sqlFunctionExpression.Arguments[0]);
+                    Sql.Append(", INTERVAL ");
+                    Visit(sqlFunctionExpression.Arguments[1]);
+                    Sql.Append(" YEAR)");
+                }
+                else
+                {
+                    Sql.Append("CAST((");
+                    AppendOracleCalendarDate(sqlFunctionExpression.Arguments[0], sqlFunctionExpression.Arguments[1], years: true);
+                    Sql.Append(") AS DATE)");
+                }
+
+                return sqlFunctionExpression;
+            }
+
+            if (sqlFunctionExpression.Name == OceanBaseTemporalMemberTranslator.DayNumberMarker)
+            {
+                if (sqlFunctionExpression is not { IsBuiltIn: true, Schema: null, Instance: null, Arguments.Count: 1,
+                        IsNullable: true, ArgumentsPropagateNullability: [false], Type: var resultType,
+                        TypeMapping: { } resultMapping }
+                    || resultMapping.Converter?.ConvertsNulls == true
+                    || resultType != typeof(int)
+                    || sqlFunctionExpression.Arguments[0] is not { Type: var inputType, TypeMapping: { } inputMapping }
+                    || inputType != typeof(DateOnly)
+                    || !IsDateOnlyMapping(inputMapping))
+                    throw new InvalidOperationException("Invalid internal DateOnly.DayNumber expression.");
+
+                if (_mode == OceanBaseCompatibilityMode.MySql)
+                {
+                    Sql.Append("(DATEDIFF(");
+                    Visit(sqlFunctionExpression.Arguments[0]);
+                    Sql.Append(", '0001-01-01'))");
+                }
+                else
+                {
+                    Sql.Append("(TRUNC(");
+                    Visit(sqlFunctionExpression.Arguments[0]);
+                    Sql.Append(") - DATE '0001-01-01')");
+                }
+
+                return sqlFunctionExpression;
+            }
+
+            if (sqlFunctionExpression.Name == OceanBaseTemporalMemberTranslator.TicksMarker)
+            {
+                if (sqlFunctionExpression is not { IsBuiltIn: true, Schema: null, Instance: null, Arguments.Count: 1,
+                        IsNullable: true, ArgumentsPropagateNullability: [false], Type: var resultType,
+                        TypeMapping: { } resultMapping }
+                    || resultMapping.Converter?.ConvertsNulls == true
+                    || resultType != typeof(long)
+                    || (resultMapping.Converter?.ProviderClrType ?? resultMapping.ClrType) != typeof(long)
+                    || sqlFunctionExpression.Arguments[0] is not { Type: var inputType, TypeMapping: { } inputMapping }
+                    || (inputType != typeof(TimeSpan) && inputType != typeof(TimeOnly))
+                    || !IsTimeSpanMapping(inputMapping))
+                    throw new InvalidOperationException("Invalid internal TimeSpan.Ticks expression.");
+
+                if (_mode == OceanBaseCompatibilityMode.MySql)
+                {
+                    Sql.Append("((TIME_TO_SEC(");
+                    Visit(sqlFunctionExpression.Arguments[0]);
+                    Sql.Append(") * 10000000 + ");
+                    if (inputType == typeof(TimeSpan))
+                        AppendMySqlTimeSpanSign(sqlFunctionExpression.Arguments[0]);
+                    else
+                        Sql.Append("1");
+                    Sql.Append(" * ABS(MICROSECOND(");
+                    Visit(sqlFunctionExpression.Arguments[0]);
+                    Sql.Append(") * 10)))");
+                }
+                else
+                {
+                    Sql.Append("((EXTRACT(DAY FROM ");
+                    Visit(sqlFunctionExpression.Arguments[0]);
+                    Sql.Append(") * 864000000000 + EXTRACT(HOUR FROM ");
+                    Visit(sqlFunctionExpression.Arguments[0]);
+                    Sql.Append(") * 36000000000 + EXTRACT(MINUTE FROM ");
+                    Visit(sqlFunctionExpression.Arguments[0]);
+                    Sql.Append(") * 600000000 + TRUNC(EXTRACT(SECOND FROM ");
+                    Visit(sqlFunctionExpression.Arguments[0]);
+                    Sql.Append(") * 10000000)))");
+                }
+
+                return sqlFunctionExpression;
+            }
+
+            if (sqlFunctionExpression.Name == OceanBaseTemporalMemberTranslator.DateTimeTicksMarker)
+            {
+                if (sqlFunctionExpression is not { IsBuiltIn: true, Schema: null, Instance: null, Arguments.Count: 1,
+                        IsNullable: true, ArgumentsPropagateNullability: [false], Type: var resultType,
+                        TypeMapping: { } resultMapping }
+                    || resultMapping.Converter?.ConvertsNulls == true
+                    || resultType != typeof(long)
+                    || (resultMapping.Converter?.ProviderClrType ?? resultMapping.ClrType) != typeof(long)
+                    || sqlFunctionExpression.Arguments[0] is not { Type: var inputType, TypeMapping: { } inputMapping }
+                    || inputType != typeof(DateTime)
+                    || !IsDateTimeMapping(inputMapping))
+                    throw new InvalidOperationException("Invalid internal DateTime.Ticks expression.");
+
+                if (_mode == OceanBaseCompatibilityMode.MySql)
+                {
+                    Sql.Append("((DATEDIFF(");
+                    Visit(sqlFunctionExpression.Arguments[0]);
+                    Sql.Append(", '0001-01-01') * 864000000000) + (TIME_TO_SEC(TIME(");
+                    Visit(sqlFunctionExpression.Arguments[0]);
+                    Sql.Append(")) * 10000000) + (ABS(MICROSECOND(TIME(");
+                    Visit(sqlFunctionExpression.Arguments[0]);
+                    Sql.Append(")) * 10)))");
+                }
+                else if (inputMapping.StoreTypeNameBase.Equals("DATE", StringComparison.OrdinalIgnoreCase))
+                {
+                    Sql.Append("((TRUNC(");
+                    Visit(sqlFunctionExpression.Arguments[0]);
+                    Sql.Append(") - DATE '0001-01-01') * 864000000000 + TRUNC((");
+                    Visit(sqlFunctionExpression.Arguments[0]);
+                    Sql.Append(" - TRUNC(");
+                    Visit(sqlFunctionExpression.Arguments[0]);
+                    Sql.Append(")) * 864000000000))");
+                }
+                else
+                {
+                    Sql.Append("((TRUNC(");
+                    Visit(sqlFunctionExpression.Arguments[0]);
+                    Sql.Append(") - DATE '0001-01-01') * 864000000000 + EXTRACT(HOUR FROM (");
+                    Visit(sqlFunctionExpression.Arguments[0]);
+                    Sql.Append(" - CAST(TRUNC(");
+                    Visit(sqlFunctionExpression.Arguments[0]);
+                    Sql.Append(") AS TIMESTAMP))) * 36000000000 + EXTRACT(MINUTE FROM (");
+                    Visit(sqlFunctionExpression.Arguments[0]);
+                    Sql.Append(" - CAST(TRUNC(");
+                    Visit(sqlFunctionExpression.Arguments[0]);
+                    Sql.Append(") AS TIMESTAMP))) * 600000000 + TRUNC(EXTRACT(SECOND FROM (");
+                    Visit(sqlFunctionExpression.Arguments[0]);
+                    Sql.Append(" - CAST(TRUNC(");
+                    Visit(sqlFunctionExpression.Arguments[0]);
+                    Sql.Append(") AS TIMESTAMP))) * 10000000))");
+                }
+
+                return sqlFunctionExpression;
+            }
+
+            if (sqlFunctionExpression.Name is OceanBaseTemporalMemberTranslator.DateTimeNowMarker
+                or OceanBaseTemporalMemberTranslator.DateTimeUtcNowMarker
+                or OceanBaseTemporalMemberTranslator.DateTimeTodayMarker)
+            {
+                if (sqlFunctionExpression is not { IsBuiltIn: true, Schema: null, Instance: null, Arguments.Count: 0,
+                        IsNullable: false, Type: var resultType, TypeMapping: { } resultMapping }
+                    || resultType != typeof(DateTime)
+                    || resultMapping.Converter?.ConvertsNulls == true
+                    || !IsDateTimeMapping(resultMapping))
+                    throw new InvalidOperationException("Invalid internal DateTime clock expression.");
+
+                if (_mode == OceanBaseCompatibilityMode.MySql)
+                {
+                    Sql.Append(sqlFunctionExpression.Name switch
+                    {
+                        OceanBaseTemporalMemberTranslator.DateTimeNowMarker => "CURRENT_TIMESTAMP(6)",
+                        OceanBaseTemporalMemberTranslator.DateTimeUtcNowMarker => "UTC_TIMESTAMP(6)",
+                        _ => "CURDATE()"
+                    });
+                }
+                else
+                {
+                    Sql.Append(sqlFunctionExpression.Name switch
+                    {
+                        OceanBaseTemporalMemberTranslator.DateTimeNowMarker => "CAST(CURRENT_TIMESTAMP AS TIMESTAMP(7))",
+                        OceanBaseTemporalMemberTranslator.DateTimeUtcNowMarker => "CAST(SYS_EXTRACT_UTC(SYSTIMESTAMP) AS TIMESTAMP(7))",
+                        _ => "TRUNC(CURRENT_DATE)"
+                    });
+                }
+
+                return sqlFunctionExpression;
+            }
+
+            if (sqlFunctionExpression.Name == OceanBaseTemporalMemberTranslator.TotalMarker)
+            {
+                if (sqlFunctionExpression is not { IsBuiltIn: true, Schema: null, Instance: null, Arguments.Count: 2,
+                        IsNullable: true, ArgumentsPropagateNullability: [false, false], TypeMapping: { } resultMapping }
+                    || sqlFunctionExpression.Arguments[0] is not SqlFragmentExpression { Sql: var unit }
+                    || unit is not ("DAY" or "HOUR" or "MINUTE" or "SECOND" or "MILLISECOND" or "MICROSECOND" or "NANOSECOND")
+                    || sqlFunctionExpression.Type != typeof(double)
+                    || resultMapping.Converter?.ConvertsNulls == true
+                    || (resultMapping.Converter?.ProviderClrType ?? resultMapping.ClrType) != typeof(double)
+                    || sqlFunctionExpression.Arguments[1].Type != typeof(TimeSpan)
+                    || sqlFunctionExpression.Arguments[1].TypeMapping is not { } inputMapping
+                    || !IsTimeSpanMapping(inputMapping))
+                    throw new InvalidOperationException("Invalid internal TimeSpan total expression.");
+
+                if (_mode == OceanBaseCompatibilityMode.MySql)
+                {
+                    Sql.Append("((TIME_TO_SEC(");
+                    Visit(sqlFunctionExpression.Arguments[1]);
+                    Sql.Append(") + ");
+                    AppendMySqlTimeSpanSign(sqlFunctionExpression.Arguments[1]);
+                    Sql.Append(" * (ABS(MICROSECOND(");
+                    Visit(sqlFunctionExpression.Arguments[1]);
+                    Sql.Append(")) / 1e6))");
+                    switch (unit)
+                    {
+                        case "DAY": Sql.Append(" / 86400e0"); break;
+                        case "HOUR": Sql.Append(" / 3600e0"); break;
+                        case "MINUTE": Sql.Append(" / 60e0"); break;
+                        case "MILLISECOND": Sql.Append(" * 1000e0"); break;
+                        case "MICROSECOND": Sql.Append(" * 1000000e0"); break;
+                        case "NANOSECOND": Sql.Append(" * 1000000000e0"); break;
+                    }
+                    Sql.Append(")");
+                }
+                else
+                {
+                    Sql.Append("((EXTRACT(DAY FROM ");
+                    Visit(sqlFunctionExpression.Arguments[1]);
+                    Sql.Append(") * 86400D + EXTRACT(HOUR FROM ");
+                    Visit(sqlFunctionExpression.Arguments[1]);
+                    Sql.Append(") * 3600D + EXTRACT(MINUTE FROM ");
+                    Visit(sqlFunctionExpression.Arguments[1]);
+                    Sql.Append(") * 60D + EXTRACT(SECOND FROM ");
+                    Visit(sqlFunctionExpression.Arguments[1]);
+                    Sql.Append(") * 1D)");
+                    switch (unit)
+                    {
+                        case "DAY": Sql.Append(" / 86400D"); break;
+                        case "HOUR": Sql.Append(" / 3600D"); break;
+                        case "MINUTE": Sql.Append(" / 60D"); break;
+                        case "MILLISECOND": Sql.Append(" * 1000D"); break;
+                        case "MICROSECOND": Sql.Append(" * 1000000D"); break;
+                        case "NANOSECOND": Sql.Append(" * 1000000000D"); break;
+                    }
+                    Sql.Append(")");
+                }
                 return sqlFunctionExpression;
             }
 
@@ -372,6 +985,50 @@ namespace OceanBase.EntityFrameworkCore.Query
                 return sqlFunctionExpression;
             }
 
+            if (sqlFunctionExpression.Name == OceanBaseTemporalMemberTranslator.DateTimeOffsetTotalOffsetMinutesMarker)
+            {
+                if (sqlFunctionExpression is not { IsBuiltIn: true, Schema: null, Instance: null, Arguments.Count: 1,
+                        IsNullable: true, ArgumentsPropagateNullability: [false], TypeMapping: { } resultMapping }
+                    || _mode != OceanBaseCompatibilityMode.Oracle
+                    || sqlFunctionExpression.Type != typeof(int)
+                    || sqlFunctionExpression.Arguments[0].Type != typeof(DateTimeOffset)
+                    || sqlFunctionExpression.Arguments[0].TypeMapping is not { } inputMapping
+                    || inputMapping.Converter?.ConvertsNulls == true
+                    || !IsDateTimeOffsetMapping(inputMapping)
+                    || resultMapping.Converter?.ConvertsNulls == true
+                    || (resultMapping.Converter?.ProviderClrType ?? resultMapping.ClrType) != typeof(int))
+                    throw new InvalidOperationException("Invalid internal DateTimeOffset total-offset-minutes expression.");
+
+                Sql.Append("(EXTRACT(TIMEZONE_HOUR FROM ");
+                Visit(sqlFunctionExpression.Arguments[0]);
+                Sql.Append(") * 60 + EXTRACT(TIMEZONE_MINUTE FROM ");
+                Visit(sqlFunctionExpression.Arguments[0]);
+                Sql.Append("))");
+                return sqlFunctionExpression;
+            }
+
+            if (sqlFunctionExpression.Name == OceanBaseTemporalMemberTranslator.DateTimeOffsetOffsetMarker)
+            {
+                if (sqlFunctionExpression is not { IsBuiltIn: true, Schema: null, Instance: null, Arguments.Count: 1,
+                        IsNullable: true, ArgumentsPropagateNullability: [false], Type: var resultType,
+                        TypeMapping: { } resultMapping }
+                    || _mode != OceanBaseCompatibilityMode.Oracle
+                    || resultType != typeof(TimeSpan)
+                    || !IsTimeSpanMapping(resultMapping)
+                    || sqlFunctionExpression.Arguments[0] is not { Type: var inputType, TypeMapping: { } inputMapping }
+                    || inputType != typeof(DateTimeOffset)
+                    || inputMapping.Converter?.ConvertsNulls == true
+                    || !IsDateTimeOffsetMapping(inputMapping))
+                    throw new InvalidOperationException("Invalid internal DateTimeOffset offset expression.");
+
+                Sql.Append("NUMTODSINTERVAL(EXTRACT(TIMEZONE_HOUR FROM ");
+                Visit(sqlFunctionExpression.Arguments[0]);
+                Sql.Append(") * 60 + EXTRACT(TIMEZONE_MINUTE FROM ");
+                Visit(sqlFunctionExpression.Arguments[0]);
+                Sql.Append("), 'MINUTE')");
+                return sqlFunctionExpression;
+            }
+
             return base.VisitSqlFunction(sqlFunctionExpression);
         }
 
@@ -380,6 +1037,56 @@ namespace OceanBase.EntityFrameworkCore.Query
                     [SqlFunctionExpression { IsBuiltIn: true, Name: "SUM" } sum, SqlConstantExpression { Value: 0 } zero] }
                 && sum.Type == modelType && ReferenceEquals(sum.TypeMapping, mapping)
                 && ReferenceEquals(body.TypeMapping, mapping) && ReferenceEquals(zero.TypeMapping, mapping);
+
+        private bool IsTimeSpanMapping(RelationalTypeMapping mapping)
+        {
+            if (mapping.Converter?.ConvertsNulls == true) return false;
+            var providerType = mapping.Converter?.ProviderClrType ?? mapping.ClrType;
+            providerType = Nullable.GetUnderlyingType(providerType) ?? providerType;
+            var store = mapping.StoreTypeNameBase.Trim().ToUpperInvariant();
+            return _mode == OceanBaseCompatibilityMode.MySql
+                ? providerType == typeof(TimeSpan) && store == "TIME"
+                : providerType == typeof(OceanBaseIntervalDayToSecond) && store.StartsWith("INTERVAL DAY", StringComparison.Ordinal);
+        }
+
+        private bool IsDateTimeMapping(RelationalTypeMapping mapping)
+        {
+            if (mapping.Converter?.ConvertsNulls == true) return false;
+            var providerType = mapping.Converter?.ProviderClrType ?? mapping.ClrType;
+            providerType = Nullable.GetUnderlyingType(providerType) ?? providerType;
+            var store = mapping.StoreTypeNameBase.Trim().ToUpperInvariant();
+            return _mode == OceanBaseCompatibilityMode.MySql
+                ? providerType == typeof(DateTime) && store == "DATETIME"
+                : (providerType == typeof(DateTime) || providerType == typeof(DateTimeOffset))
+                && (store is "DATE" or "TIMESTAMP");
+        }
+
+        private bool IsDateTimeOffsetMapping(RelationalTypeMapping mapping)
+        {
+            if (mapping.Converter?.ConvertsNulls == true || (Nullable.GetUnderlyingType(mapping.ClrType) ?? mapping.ClrType) != typeof(DateTimeOffset)) return false;
+            var providerType = mapping.Converter?.ProviderClrType ?? mapping.ClrType;
+            providerType = Nullable.GetUnderlyingType(providerType) ?? providerType;
+            var store = mapping.StoreTypeNameBase.Trim().ToUpperInvariant();
+            return _mode == OceanBaseCompatibilityMode.MySql
+                ? providerType == typeof(DateTime) && store == "DATETIME"
+                : providerType == typeof(DateTimeOffset) && store == "TIMESTAMP";
+        }
+
+        private bool IsDateOnlyMapping(RelationalTypeMapping mapping)
+        {
+            if (mapping.Converter?.ConvertsNulls == true) return false;
+            var providerType = mapping.Converter?.ProviderClrType ?? mapping.ClrType;
+            providerType = Nullable.GetUnderlyingType(providerType) ?? providerType;
+            var store = mapping.StoreTypeNameBase.Trim().ToUpperInvariant();
+            return (Nullable.GetUnderlyingType(mapping.ClrType) ?? mapping.ClrType) == typeof(DateOnly) && providerType == typeof(DateTime) && store == "DATE";
+        }
+
+        private void AppendMySqlTimeSpanSign(SqlExpression input)
+        {
+            Sql.Append("(CASE WHEN CAST(");
+            Visit(input);
+            Sql.Append(" AS CHAR) LIKE '-%' THEN -1 ELSE 1 END)");
+        }
 
         protected override void GeneratePseudoFromClause()
         {

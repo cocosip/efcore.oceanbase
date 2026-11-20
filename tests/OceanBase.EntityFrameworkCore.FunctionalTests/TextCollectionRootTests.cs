@@ -144,7 +144,9 @@ public sealed class TextCollectionRootTests
         Assert.Equal(new[] { "reader" }, result);
         Assert.Equal(new object?[] { "one!", "two!" }, capture.Inputs.Select(parameter => parameter.Value));
         Assert.All(capture.Inputs, parameter => Assert.Equal(DbType.String, parameter.DbType));
-        Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? "AS CHAR" : "AS NVARCHAR2", Assert.Single(capture.Sql));
+        var sql = Assert.Single(capture.Sql);
+        if (mode == OceanBaseCompatibilityMode.Oracle) Assert.Contains("TO_NCHAR(", sql);
+        else Assert.DoesNotContain("AS CHAR", sql);
 
         values = [];
         capture.Sql.Clear();

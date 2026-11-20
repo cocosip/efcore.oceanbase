@@ -290,6 +290,38 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             Assert.DoesNotContain("CASE", inherited);
         }
 
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle)]
+        public void Convert_to_boolean_normalizes_numeric_operands_in_predicates_and_projections(
+            OceanBaseCompatibilityMode mode)
+        {
+            using var context = CreateContext(mode);
+            var sql = context.Rows.Where(row => Convert.ToBoolean(row.RawNumber) && Convert.ToBoolean(row.Text))
+                .Select(row => new { Value = Convert.ToBoolean(row.RawNumber), Nullable = Convert.ToBoolean(row.OptionalRawNumber), Text = Convert.ToBoolean(row.Text) })
+                .ToQueryString();
+
+            Assert.Contains("<> 0", sql);
+            Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? "`r`.`RawNumber`" : "\"r\".\"RawNumber\"", sql);
+            Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? "`r`.`OptionalRawNumber`" : "\"r\".\"OptionalRawNumber\"", sql);
+            Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? "`r`.`Text`" : "\"r\".\"Text\"", sql);
+            Assert.DoesNotContain("could not be translated", sql, StringComparison.OrdinalIgnoreCase);
+
+            var numeric = new IQueryable[]
+            {
+                context.Rows.Select(row => Convert.ToBoolean(row.RawSByte)),
+                context.Rows.Select(row => Convert.ToBoolean(row.RawUInt)),
+                context.Rows.Select(row => Convert.ToBoolean(row.RawLong)),
+                context.Rows.Select(row => Convert.ToBoolean(row.RawDecimal)),
+                context.Rows.Select(row => Convert.ToBoolean(row.RawDouble))
+            };
+            foreach (var query in numeric)
+                Assert.Contains("<> 0", query.ToQueryString());
+
+            Assert.Throws<InvalidOperationException>(() => context.Rows
+                .Where(row => Convert.ToBoolean(row.RawText)).ToQueryString());
+        }
+
         private static class CustomMethods
         {
             public static bool Equals(bool left, bool right) => left == right;
@@ -463,6 +495,14 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             public bool? OptionalText { get; set; }
             public bool? OptionalNumber { get; set; }
             public bool? OptionalNative { get; set; }
+            public int RawNumber { get; set; }
+            public int? OptionalRawNumber { get; set; }
+            public sbyte RawSByte { get; set; }
+            public uint RawUInt { get; set; }
+            public long RawLong { get; set; }
+            public decimal RawDecimal { get; set; }
+            public double RawDouble { get; set; }
+            public string RawText { get; set; } = "";
             public bool Ambiguous { get; set; }
             public bool NearOne { get; set; }
             public bool CanonicalUnsigned { get; set; }

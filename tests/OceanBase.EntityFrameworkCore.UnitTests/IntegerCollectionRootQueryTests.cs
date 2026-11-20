@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Query;
@@ -14,6 +15,44 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
 {
     public sealed class IntegerCollectionRootQueryTests
     {
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle)]
+        public void Collection_roots_normalize_every_Oracle_UNION_branch_to_the_declared_carrier(OceanBaseCompatibilityMode mode)
+        {
+            Check<sbyte>(sbyte.MinValue, sbyte.MaxValue);
+            Check<byte>(byte.MinValue, byte.MaxValue);
+            Check<SignedState>(SignedState.Minimum, SignedState.Maximum);
+            Check<bool>(false, true);
+            Check<short>(short.MinValue, short.MaxValue);
+
+            void Check<T>(T minimum, T maximum) where T : struct
+            {
+                using var context = Create<T>(mode, false, null);
+                T?[] values = [minimum, maximum, null, minimum];
+                var query = context.Rows.SelectMany(row => values.Where(value => row.Id > 0));
+                var sql = query.ToQueryString();
+                Assert.Equal(mode == OceanBaseCompatibilityMode.Oracle ? 4 : 1, Regex.Matches(sql, @"CAST\(").Count);
+                Assert.Equal(3, Regex.Matches(sql, "UNION ALL SELECT").Count);
+                values = [];
+                sql = query.ToQueryString();
+                Assert.Single(Regex.Matches(sql, @"CAST\("));
+                Assert.Contains("WHERE 1 = 0", sql);
+            }
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle)]
+        public void National_text_roots_use_one_charset_across_every_Oracle_UNION_branch(OceanBaseCompatibilityMode mode)
+        {
+            using var context = Create<int>(mode, false, null);
+            string?[] values = ["alpha", "beta", null];
+            var query = context.Rows.SelectMany(row => values.Where(value => row.Id > 0));
+            Assert.Equal(mode == OceanBaseCompatibilityMode.Oracle ? 3 : 0,
+                Regex.Matches(query.ToQueryString(), mode == OceanBaseCompatibilityMode.Oracle ? @"TO_NCHAR\(" : @"CAST\(").Count);
+        }
+
         public static IEnumerable<object[]> Modes()
         {
             foreach (var mode in new[] { OceanBaseCompatibilityMode.MySql, OceanBaseCompatibilityMode.Oracle })

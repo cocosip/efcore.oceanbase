@@ -54,10 +54,8 @@ namespace OceanBase.EntityFrameworkCore.Storage
             => typeof(DbDataReader).GetMethod(nameof(DbDataReader.GetValue))!;
 
         public override Expression CustomizeDataReaderExpression(Expression expression)
-            => Expression.Call(typeof(OceanBaseFloatingPointTypeMapping<T>).GetMethod(nameof(ReadValue))!, expression);
-
-        public static T ReadValue(object value)
-            => (T)OceanBaseNumericConversion.ConvertValue(value, typeof(T));
+            => Expression.Call(typeof(OceanBaseCompiledModelTypeMappings)
+                .GetMethod(nameof(OceanBaseCompiledModelTypeMappings.ReadNumeric))!.MakeGenericMethod(typeof(T)), expression);
 
         protected override void ConfigureParameter(DbParameter parameter)
         {
@@ -75,7 +73,8 @@ namespace OceanBase.EntityFrameworkCore.Storage
             {
                 if (typeof(T) == typeof(float) && (number > float.MaxValue || number < -float.MaxValue))
                     throw new ArgumentOutOfRangeException(nameof(value), "The floating-point literal exceeds Single range.");
-                return typeof(T) == typeof(float) ? Convert.ToSingle(number).ToString("R", CultureInfo.InvariantCulture) + "F"
+                // Shortest Single text can fall outside Oracle's accepted boundary before binary rounding.
+                return typeof(T) == typeof(float) ? ((double)Convert.ToSingle(number)).ToString("R", CultureInfo.InvariantCulture) + "F"
                     : number.ToString("R", CultureInfo.InvariantCulture) + "D";
             }
 

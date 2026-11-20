@@ -17,7 +17,7 @@ namespace OceanBase.EntityFrameworkCore.Design
                 _ => throw new ArgumentException("Reverse engineering requires ExpectedMode=MySql or ExpectedMode=Oracle in the connection string.")
             };
 
-        internal static Type ClrType(string storeType, OceanBaseCompatibilityMode mode)
+        internal static Type ClrType(string storeType, OceanBaseCompatibilityMode mode, bool identity = false)
         {
             var type = Regex.Replace(storeType.ToUpperInvariant(), @"\s*\([^)]*\)", "").Trim();
             var unsigned = type.EndsWith(" UNSIGNED", StringComparison.Ordinal);
@@ -33,7 +33,7 @@ namespace OceanBase.EntityFrameworkCore.Design
                     case "DECIMAL": case "NUMERIC": return typeof(decimal);
                     case "FLOAT": return typeof(float);
                     case "DOUBLE": case "DOUBLE PRECISION": case "REAL": return typeof(double);
-                    case "CHAR": case "VARCHAR": case "TINYTEXT": case "TEXT": case "MEDIUMTEXT": case "LONGTEXT": return typeof(string);
+                    case "CHAR": case "VARCHAR": case "TINYTEXT": case "TEXT": case "MEDIUMTEXT": case "LONGTEXT": case "JSON": return typeof(string);
                     case "BINARY": case "VARBINARY": case "TINYBLOB": case "BLOB": case "MEDIUMBLOB": case "LONGBLOB": return typeof(byte[]);
                     case "DATE": return typeof(DateOnly);
                     case "DATETIME": case "TIMESTAMP": return typeof(DateTime);
@@ -49,14 +49,14 @@ namespace OceanBase.EntityFrameworkCore.Design
                         if (number.Success && int.Parse(number.Groups[1].Value, CultureInfo.InvariantCulture) is var precision)
                         {
                             if (precision <= 9) return typeof(int);
-                            if (precision <= 18) return typeof(long);
+                            if (precision <= 18 || identity && precision == 19) return typeof(long);
                         }
                         return typeof(decimal);
                     case "BINARY_FLOAT": return typeof(float);
                     case "BINARY_DOUBLE": return typeof(double);
-                    case "CHAR": case "VARCHAR": case "VARCHAR2": case "NCHAR": case "NVARCHAR2": case "CLOB": case "NCLOB": return typeof(string);
+                    case "CHAR": case "VARCHAR": case "VARCHAR2": case "NCHAR": case "NVARCHAR2": case "CLOB": case "NCLOB": case "JSON": return typeof(string);
                     case "RAW": case "BLOB": return typeof(byte[]);
-                    case "DATE": case "TIMESTAMP": return typeof(DateTime);
+                    case "DATE": case "TIMESTAMP": case "TIMESTAMP WITH LOCAL TIME ZONE": return typeof(DateTime);
                     case "TIMESTAMP WITH TIME ZONE": return typeof(DateTimeOffset);
                     case "INTERVAL DAY TO SECOND": return typeof(TimeSpan);
                 }

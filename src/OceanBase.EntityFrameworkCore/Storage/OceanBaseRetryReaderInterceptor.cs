@@ -3,18 +3,21 @@ using System.Collections;
 using System.Data;
 using System.Data.Common;
 using System.IO;
+using System.Runtime.ExceptionServices;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Storage;
+using OceanBaseConnector;
 
 namespace OceanBase.EntityFrameworkCore.Storage;
 
 internal sealed class OceanBaseRetryReaderInterceptor : DbCommandInterceptor
 {
     public override DbDataReader ReaderExecuted(DbCommand command, CommandExecutedEventData eventData, DbDataReader result)
-        => eventData.Context is { } context && (ExecutionStrategy.Current is not null
+        => result is OceanBaseDataReader ? new Reader(result, command.Connection)
+            : eventData.Context is { } context && (ExecutionStrategy.Current is not null
             || context.Database.CreateExecutionStrategy().RetriesOnFailure) ? new Reader(result) : result;
 
     public override ValueTask<DbDataReader> ReaderExecutedAsync(DbCommand command, CommandExecutedEventData eventData,
@@ -22,7 +25,7 @@ internal sealed class OceanBaseRetryReaderInterceptor : DbCommandInterceptor
         => ValueTask.FromResult(ReaderExecuted(command, eventData, result));
 
     // EF buffers in a try/finally: native disposal must not replace an unknown read outcome with a retryable error.
-    private sealed class Reader(DbDataReader inner) : DbDataReader
+    internal sealed class Reader(DbDataReader inner, DbConnection? connection = null) : DbDataReader
     {
         private Exception? _failure;
         private bool _disposed;
@@ -45,23 +48,47 @@ internal sealed class OceanBaseRetryReaderInterceptor : DbCommandInterceptor
             return true;
         }
         public override void Close()
-        {
-            try { inner.Close(); }
-            catch (Exception error) when (PreserveFailure(error)) { }
-        }
+            => Cleanup(async: false, dispose: false).GetAwaiter().GetResult();
+        public override Task CloseAsync() => Cleanup(async: true, dispose: false).AsTask();
         protected override void Dispose(bool disposing)
         {
             if (!disposing || _disposed) return;
             _disposed = true;
-            try { inner.Dispose(); }
-            catch (Exception error) when (PreserveFailure(error)) { }
+            Cleanup(async: false, dispose: true).GetAwaiter().GetResult();
         }
         public override async ValueTask DisposeAsync()
         {
             if (_disposed) return;
             _disposed = true;
-            try { await inner.DisposeAsync().ConfigureAwait(false); }
-            catch (Exception error) when (PreserveFailure(error)) { }
+            await Cleanup(async: true, dispose: true).ConfigureAwait(false);
+        }
+        private async ValueTask Cleanup(bool async, bool dispose)
+        {
+            Exception? failure = null;
+            if (_failure is null && connection?.State == ConnectionState.Open && !inner.IsClosed)
+            {
+                // Native Close discards an unfinished response; consume it to preserve the caller's session.
+                try
+                {
+                    do { while (async ? await inner.ReadAsync(CancellationToken.None).ConfigureAwait(false) : inner.Read()) { } }
+                    while (async ? await inner.NextResultAsync(CancellationToken.None).ConfigureAwait(false) : inner.NextResult());
+                }
+                catch (Exception error) { failure = error; OceanBaseRetryingExecutionStrategy.PreventRetry(error); }
+            }
+            try
+            {
+                if (dispose)
+                {
+                    if (async) await inner.DisposeAsync().ConfigureAwait(false); else inner.Dispose();
+                }
+                else if (async) await inner.CloseAsync().ConfigureAwait(false); else inner.Close();
+            }
+            catch (Exception error)
+            {
+                if (failure is null) failure = error;
+                else failure.Data["OceanBase.ReaderCleanupError"] = error;
+            }
+            if (failure is not null && !PreserveFailure(failure)) ExceptionDispatchInfo.Capture(failure).Throw();
         }
         public override bool Read() => ReadValue(inner.Read);
         public override Task<bool> ReadAsync(CancellationToken cancellationToken) => ReadValueAsync(() => inner.ReadAsync(cancellationToken));
@@ -69,6 +96,9 @@ internal sealed class OceanBaseRetryReaderInterceptor : DbCommandInterceptor
         public override Task<bool> NextResultAsync(CancellationToken cancellationToken) => ReadValueAsync(() => inner.NextResultAsync(cancellationToken));
         public override object GetValue(int ordinal) => ReadValue(() => inner.GetValue(ordinal));
         public override int GetValues(object[] values) => ReadValue(() => inner.GetValues(values));
+        public override Type GetProviderSpecificFieldType(int ordinal) => ReadValue(() => inner.GetProviderSpecificFieldType(ordinal));
+        public override object GetProviderSpecificValue(int ordinal) => ReadValue(() => inner.GetProviderSpecificValue(ordinal));
+        public override int GetProviderSpecificValues(object[] values) => ReadValue(() => inner.GetProviderSpecificValues(values));
         public override bool IsDBNull(int ordinal) => ReadValue(() => inner.IsDBNull(ordinal));
         public override Task<bool> IsDBNullAsync(int ordinal, CancellationToken cancellationToken) => ReadValueAsync(() => inner.IsDBNullAsync(ordinal, cancellationToken));
         public override T GetFieldValue<T>(int ordinal) => ReadValue(() => inner.GetFieldValue<T>(ordinal));

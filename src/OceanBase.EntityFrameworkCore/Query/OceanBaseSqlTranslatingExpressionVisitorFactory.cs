@@ -91,6 +91,8 @@ namespace OceanBase.EntityFrameworkCore.Query
                 Add(typeof(Math), type);
             Add(typeof(MathF), typeof(float));
             Add(typeof(decimal), typeof(decimal));
+            AddNumber(typeof(float), typeof(float));
+            AddNumber(typeof(double), typeof(double));
             return methods;
 
             void Add(Type owner, Type type)
@@ -98,12 +100,24 @@ namespace OceanBase.EntityFrameworkCore.Query
                 methods.Add(owner.GetMethod(nameof(Math.Min), [type, type])!, "LEAST");
                 methods.Add(owner.GetMethod(nameof(Math.Max), [type, type])!, "GREATEST");
             }
+
+            void AddNumber(Type owner, Type type)
+            {
+                // shortcut: finite mapped values only; add dialect-specific NaN handling when native semantics are verified.
+                methods.Add(owner.GetMethod("MinNumber", [type, type])!, "LEAST");
+                methods.Add(owner.GetMethod("MaxNumber", [type, type])!, "GREATEST");
+            }
         }
 
-        private sealed class Visitor(RelationalSqlTranslatingExpressionVisitorDependencies dependencies,
-            QueryCompilationContext queryCompilationContext, QueryableMethodTranslatingExpressionVisitor queryableVisitor)
-            : RelationalSqlTranslatingExpressionVisitor(dependencies, queryCompilationContext, queryableVisitor)
+        private sealed class Visitor : RelationalSqlTranslatingExpressionVisitor
         {
+            private readonly QueryCompilationContext _queryCompilationContext;
+
+            public Visitor(RelationalSqlTranslatingExpressionVisitorDependencies dependencies,
+                QueryCompilationContext queryCompilationContext, QueryableMethodTranslatingExpressionVisitor queryableVisitor)
+                : base(dependencies, queryCompilationContext, queryableVisitor)
+                => _queryCompilationContext = queryCompilationContext;
+
             public override Expression? Visit(Expression? expression)
             {
                 var visited = base.Visit(expression);
@@ -146,6 +160,14 @@ namespace OceanBase.EntityFrameworkCore.Query
 
             protected override Expression VisitMember(MemberExpression expression)
             {
+                if (OceanBaseDefaultIfEmptyProjection.TryDefaultReference(expression.Expression, out var presence))
+                {
+                    var member = ReplacingExpressionVisitor.Replace(expression.Expression!, presence.IfFalse, expression);
+                    var nullableType = expression.Type.IsValueType && Nullable.GetUnderlyingType(expression.Type) is null
+                        ? typeof(Nullable<>).MakeGenericType(expression.Type) : expression.Type;
+                    var lifted = member.Type == nullableType ? member : Expression.Convert(member, nullableType);
+                    return Visit(Expression.Condition(presence.Test, Expression.Constant(null, nullableType), lifted))!;
+                }
                 if (expression.Member == typeof(bool?).GetProperty(nameof(Nullable<bool>.HasValue)))
                 {
                     if (Visit(expression.Expression) is not SqlExpression operand)
@@ -176,12 +198,41 @@ namespace OceanBase.EntityFrameworkCore.Query
                     ifTrue = BooleanOperand(ifTrue);
                     ifFalse = BooleanOperand(ifFalse);
                 }
+                if (Unwrap(expression.Type) == typeof(TimeSpan)) NormalizeDurations(ref ifTrue, ref ifFalse);
                 return Dependencies.SqlExpressionFactory.Case(
                     [new CaseWhenClause(BooleanOperand(test), ifTrue)], ifFalse);
             }
 
             protected override Expression VisitBinary(BinaryExpression expression)
             {
+                if (Unwrap(expression.Left.Type) == typeof(TimeSpan) && Unwrap(expression.Right.Type) == typeof(TimeSpan)
+                    && expression.NodeType is ExpressionType.Add or ExpressionType.Subtract)
+                {
+                    if (Visit(expression.Left) is SqlExpression left && Visit(expression.Right) is SqlExpression right
+                        && (OceanBaseTemporalMethodTranslator.IsTickDurationMapping(left.TypeMapping)
+                            || OceanBaseTemporalMethodTranslator.IsTickDurationMapping(right.TypeMapping)))
+                        throw new NotSupportedException("Binary duration arithmetic on date differences is not supported; use DateTime.Add/Subtract with the duration.");
+                }
+                if (Unwrap(expression.Left.Type) == typeof(TimeSpan) && Unwrap(expression.Right.Type) == typeof(TimeSpan)
+                    && expression.NodeType is ExpressionType.Equal or ExpressionType.NotEqual or ExpressionType.LessThan
+                        or ExpressionType.LessThanOrEqual or ExpressionType.GreaterThan or ExpressionType.GreaterThanOrEqual
+                        or ExpressionType.Coalesce)
+                {
+                    if (Visit(expression.Left) is not SqlExpression left || Visit(expression.Right) is not SqlExpression right)
+                        return QueryCompilationContext.NotTranslatedExpression;
+                    if (NormalizeDurations(ref left, ref right))
+                        return expression.NodeType == ExpressionType.Coalesce
+                            ? Dependencies.SqlExpressionFactory.Coalesce(left, right, left.TypeMapping)
+                            : Dependencies.SqlExpressionFactory.MakeBinary(expression.NodeType, left, right, typeMapping: null)!;
+                }
+                if (expression.NodeType is ExpressionType.Equal or ExpressionType.NotEqual)
+                {
+                    var candidate = expression.Right is ConstantExpression { Value: null } ? expression.Left
+                        : expression.Left is ConstantExpression { Value: null } ? expression.Right : null;
+                    if (OceanBaseDefaultIfEmptyProjection.TryDefaultReference(candidate, out var presence)
+                        && presence.IfFalse is NewExpression or MemberInitExpression)
+                        return Visit(expression.NodeType == ExpressionType.Equal ? presence.Test : Expression.Not(presence.Test))!;
+                }
                 if (expression.Method is null && Unwrap(expression.Left.Type) == typeof(bool)
                     && Unwrap(expression.Right.Type) == typeof(bool)
                     && expression.NodeType is ExpressionType.Equal or ExpressionType.NotEqual or ExpressionType.And
@@ -229,11 +280,74 @@ namespace OceanBase.EntityFrameworkCore.Query
                             ?? QueryCompilationContext.NotTranslatedExpression
                         : QueryCompilationContext.NotTranslatedExpression;
                 }
-                return base.VisitBinary(expression);
+                var translated = base.VisitBinary(expression);
+                return translated is SqlBinaryExpression { OperatorType: ExpressionType.Add or ExpressionType.Subtract } arithmetic
+                    && (arithmetic.Left.TypeMapping is { } leftTemporal && OceanBaseTemporalTypeMapping.IsLocalTimeZone(leftTemporal)
+                        || arithmetic.Right.TypeMapping is { } rightTemporal && OceanBaseTemporalTypeMapping.IsLocalTimeZone(rightTemporal))
+                    ? QueryCompilationContext.NotTranslatedExpression : translated;
             }
 
             protected override Expression VisitMethodCall(MethodCallExpression call)
             {
+                if (OceanBaseExplicitTrimTranslator.IsArrayTrim(call.Method))
+                {
+                    if (Visit(call.Object) is not SqlExpression source)
+                        return QueryCompilationContext.NotTranslatedExpression;
+                    var factory = Dependencies.SqlExpressionFactory;
+                    source = factory.ApplyDefaultTypeMapping(source);
+                    var mapping = source.TypeMapping as OceanBaseStringTypeMapping
+                        ?? (OceanBaseStringTypeMapping)Dependencies.TypeMappingSource.FindMapping(typeof(string))!;
+                    var mode = mapping.CompatibilityMode;
+                    var text = Dependencies.TypeMappingSource.FindMapping(typeof(string), storeTypeName: null, unicode: mapping.IsUnicode)!;
+                    SqlExpression? set;
+                    switch (call.Arguments[0])
+                    {
+                        case ConstantExpression constant:
+                            set = factory.Constant(OceanBaseExplicitTrimTranslator.EncodeSet((char[]?)constant.Value, mode), text);
+                            break;
+                        case QueryParameterExpression parameter:
+                            // A genuine string runtime parameter avoids admitting mapped char[] collections.
+                            var name = "_ob_trim_" + Guid.NewGuid().ToString("N");
+                            var context = QueryCompilationContext.QueryContextParameter;
+                            _queryCompilationContext.RegisterRuntimeParameter(name, Expression.Lambda(
+                                Expression.Call(typeof(OceanBaseExplicitTrimTranslator), nameof(OceanBaseExplicitTrimTranslator.EncodeParameter),
+                                    Type.EmptyTypes, context, Expression.Constant(parameter.Name), Expression.Constant(mode)), context));
+                            set = new SqlParameterExpression(name, name, typeof(string), nullable: false,
+                                parameter.TranslationMode, text);
+                            break;
+                        case NewArrayExpression { NodeType: ExpressionType.NewArrayInit } trimArray:
+                            var elements = new List<SqlExpression>();
+                            foreach (var element in trimArray.Expressions)
+                            {
+                                if (Visit(element) is not SqlExpression value) return QueryCompilationContext.NotTranslatedExpression;
+                                elements.Add(value);
+                            }
+                            set = OceanBaseExplicitTrimTranslator.CharacterSet(factory, text, mode, elements);
+                            break;
+                        default:
+                            return QueryCompilationContext.NotTranslatedExpression;
+                    }
+                    return set is null ? QueryCompilationContext.NotTranslatedExpression
+                        : Dependencies.MethodCallTranslatorProvider.Translate(_queryCompilationContext.Model, source, call.Method, [set], _queryCompilationContext.Logger)
+                            ?? QueryCompilationContext.NotTranslatedExpression;
+                }
+                if (call.Method.DeclaringType == typeof(TimeSpan) && call.Method.Name is nameof(TimeSpan.Compare) or nameof(TimeSpan.CompareTo))
+                {
+                    var first = Unbox(call.Object ?? call.Arguments[0]);
+                    var second = Unbox(call.Arguments[call.Object is null ? 1 : 0]);
+                    if (Unwrap(first.Type) == typeof(TimeSpan) && Unwrap(second.Type) == typeof(TimeSpan)
+                        && Visit(first) is SqlExpression left && Visit(second) is SqlExpression right
+                        && NormalizeDurations(ref left, ref right))
+                    {
+                        var factory = Dependencies.SqlExpressionFactory;
+                        return factory.Case([
+                            new CaseWhenClause(factory.OrElse(factory.IsNull(left), factory.IsNull(right)),
+                                new SqlConstantExpression(null, typeof(int), Dependencies.TypeMappingSource.FindMapping(typeof(int)))),
+                            new CaseWhenClause(factory.Equal(left, right), factory.Constant(0)),
+                            new CaseWhenClause(factory.GreaterThan(left, right), factory.Constant(1)),
+                            new CaseWhenClause(factory.LessThan(left, right), factory.Constant(-1))], elseResult: null);
+                    }
+                }
                 if (call.Method == BooleanCompare || call.Method == BooleanObjectCompare)
                 {
                     if (Visit(call.Object) is not SqlExpression instance)
@@ -314,7 +428,17 @@ namespace OceanBase.EntityFrameworkCore.Query
 
                 function = GetVariadicFunction(call.Method);
                 if (function is null)
-                    return base.VisitMethodCall(call);
+                {
+                    var translated = base.VisitMethodCall(call);
+                    if (translated is SqlBinaryExpression binary && binary.Type == typeof(bool)
+                        && binary.Left.Type == typeof(TimeSpan) && binary.Right.Type == typeof(TimeSpan))
+                    {
+                        var left = binary.Left;
+                        var right = binary.Right;
+                        if (NormalizeDurations(ref left, ref right)) return binary.Update(left, right);
+                    }
+                    return translated;
+                }
                 if (!OceanBaseMathTranslator.IsNumeric(call.Type))
                     return QueryCompilationContext.NotTranslatedExpression;
 
@@ -328,6 +452,34 @@ namespace OceanBase.EntityFrameworkCore.Query
                 for (var i = 0; i < operands.Length; i++)
                     operands[i] = new SqlConstantExpression(values.GetValue(i), type, typeMapping: null);
                 return Build(function, type, operands) ?? QueryCompilationContext.NotTranslatedExpression;
+            }
+
+            private bool NormalizeDurations(ref SqlExpression left, ref SqlExpression right)
+            {
+                var target = OceanBaseTemporalMethodTranslator.IsTickDurationMapping(left.TypeMapping) ? left.TypeMapping
+                    : OceanBaseTemporalMethodTranslator.IsTickDurationMapping(right.TypeMapping) ? right.TypeMapping : null;
+                if (target is null) return false;
+                left = Normalize(left);
+                right = Normalize(right);
+                return true;
+
+                SqlExpression Normalize(SqlExpression value)
+                {
+                    if (OceanBaseTemporalMethodTranslator.IsTickDurationMapping(value.TypeMapping)) return value;
+                    if (value is SqlConstantExpression constant) return constant.ApplyTypeMapping(target);
+                    if (value is SqlParameterExpression parameter) return parameter.ApplyTypeMapping(target);
+                    var mode = ((OceanBaseIntegerTypeMapping<long>)target).CompatibilityMode;
+                    if (value.TypeMapping is not { } mapping || !OceanBaseTemporalMethodTranslator.IsDurationMapping(mapping, mode))
+                        throw new NotSupportedException("Date differences require compatible duration carriers.");
+                    var expected = Dependencies.TypeMappingSource.FindMapping(typeof(TimeSpan), mapping.StoreType)?.Converter;
+                    if (!ExpressionEqualityComparer.Instance.Equals(mapping.Converter?.ConvertToProviderExpression, expected?.ConvertToProviderExpression)
+                        || !ExpressionEqualityComparer.Instance.Equals(mapping.Converter?.ConvertFromProviderExpression, expected?.ConvertFromProviderExpression))
+                        throw new NotSupportedException("Date differences cannot combine with custom converted native duration carriers.");
+                    var factory = Dependencies.SqlExpressionFactory;
+                    var ticks = factory.Function(OceanBaseTemporalMemberTranslator.TicksMarker, [value], nullable: true,
+                        argumentsPropagateNullability: [false], typeof(long), Dependencies.TypeMappingSource.FindMapping(typeof(long)));
+                    return factory.Convert(ticks, typeof(TimeSpan), target);
+                }
             }
 
             private static Expression Unbox(Expression expression)

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
+using System.Linq;
 using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata;
@@ -18,6 +19,7 @@ namespace OceanBase.EntityFrameworkCore.Query
         : IQueryableMethodTranslatingExpressionVisitorFactory
     {
         internal const string EmptyElementTypeAnnotation = "OceanBase:EmptyInlineElementType";
+        internal const string JsonCollectionAnnotation = "OceanBase:JsonCollection";
 
         public QueryableMethodTranslatingExpressionVisitor Create(QueryCompilationContext queryCompilationContext)
             => new Visitor(dependencies, relationalDependencies, (RelationalQueryCompilationContext)queryCompilationContext);
@@ -36,6 +38,80 @@ namespace OceanBase.EntityFrameworkCore.Query
                 => _queryCompilationContext = parent._queryCompilationContext;
 
             protected override QueryableMethodTranslatingExpressionVisitor CreateSubqueryVisitor() => new Visitor(this);
+
+            protected override ShapedQueryExpression? TranslateGroupBy(ShapedQueryExpression source, LambdaExpression keySelector,
+                LambdaExpression? elementSelector, LambdaExpression? resultSelector)
+            {
+                var grouped = base.TranslateGroupBy(source, keySelector, elementSelector, resultSelector: null);
+                if (grouped?.ShaperExpression is not RelationalGroupByShaperExpression group) return grouped;
+                var select = (SelectExpression)group.GroupingEnumerable.QueryExpression;
+                if (select.Predicate is { } predicate)
+                {
+                    var keys = ((SelectExpression)grouped.QueryExpression).GroupBy;
+                    var corrected = new GroupKeyNullMatchingVisitor(keys, RelationalDependencies.SqlExpressionFactory).Visit(predicate);
+                    // GROUP BY has a NULL group even with relational null semantics enabled.
+                    ReplacingExpressionVisitor.Replace(predicate, corrected, select);
+                }
+                if (resultSelector is null) return grouped;
+                var parameter = Expression.Parameter(group.Type, "group");
+                var body = ReplacingExpressionVisitor.Replace(resultSelector.Parameters,
+                    new Expression[] { Expression.Property(parameter, "Key"), parameter }, resultSelector.Body);
+                return TranslateSelect(grouped, Expression.Lambda(body, parameter));
+            }
+
+            private sealed class GroupKeyNullMatchingVisitor(IReadOnlyList<SqlExpression> keys, ISqlExpressionFactory sql) : ExpressionVisitor
+            {
+                protected override Expression VisitExtension(Expression node)
+                {
+                    if (node is SqlBinaryExpression { OperatorType: ExpressionType.Equal,
+                        Left: ColumnExpression { IsNullable: true } left, Right: ColumnExpression { IsNullable: true } right } equality
+                        && keys.Contains(left))
+                        return sql.OrElse(equality, sql.AndAlso(sql.IsNull(left), sql.IsNull(right)));
+                    return base.VisitExtension(node);
+                }
+            }
+
+            protected override ShapedQueryExpression? TranslateDefaultIfEmpty(ShapedQueryExpression source, Expression? defaultValue)
+            {
+                if (defaultValue is not null) return null;
+                var projection = new OceanBaseDefaultIfEmptyProjection(source);
+                projection.Capture();
+                projection.AddPresence(RelationalDependencies.SqlExpressionFactory);
+                if (projection.RequiresPushdown) ((SelectExpression)source.QueryExpression).PushdownIntoSubquery();
+                var translated = base.TranslateDefaultIfEmpty(source, defaultValue);
+                if (translated is null) return null;
+                projection.Restore();
+                return translated.UpdateShaperExpression(projection.Shape(translated.ShaperExpression));
+            }
+
+            protected override ShapedQueryExpression? TranslateSelectMany(ShapedQueryExpression source,
+                LambdaExpression collectionSelector, LambdaExpression resultSelector)
+                => base.TranslateSelectMany(source,
+                    OceanBaseDefaultIfEmptyProjection.PreserveDefaultRows(collectionSelector, RelationalDependencies.Model), resultSelector);
+
+            protected override ShapedQueryExpression TranslateSelect(ShapedQueryExpression source, LambdaExpression selector)
+            {
+                var input = new OceanBaseDefaultIfEmptyProjection(source);
+                input.Capture();
+                var translated = base.TranslateSelect(source, selector);
+                if (input.HasDefaultReference)
+                {
+                    var output = new OceanBaseDefaultIfEmptyProjection(translated);
+                    output.Capture();
+                    output.ResetProjectionMapping();
+                }
+                return translated;
+            }
+
+            protected override ShapedQueryExpression TranslateCast(ShapedQueryExpression source, Type resultType)
+            {
+                if (!resultType.IsValueType && OceanBaseDefaultIfEmptyProjection.TryDefaultReference(source.ShaperExpression, out var conditional)
+                    && conditional.IfFalse is UnaryExpression { NodeType: ExpressionType.Convert, Type: var boxedType } conversion
+                    && boxedType == typeof(object) && conversion.Operand.Type == resultType)
+                    return source.UpdateShaperExpression(Expression.Condition(conditional.Test,
+                        Expression.Constant(null, resultType), conversion.Operand));
+                return base.TranslateCast(source, resultType);
+            }
 
             protected override ShapedQueryExpression TranslateDistinct(ShapedQueryExpression source)
                 // EF10 needs the element mapping's KeyComparer before its final type-mapping pass.
@@ -85,7 +161,10 @@ namespace OceanBase.EntityFrameworkCore.Query
                     .ParameterizedCollectionMode;
                 var collectionModeConfigured = _queryCompilationContext.ContextOptions
                     .FindExtension<OceanBaseOptionsExtension>()?.ParameterizedCollectionModeConfigured == true;
-                if (!collectionModeConfigured || configuredCollectionMode == ParameterTranslationMode.Parameter)
+                var singleParameter = collectionModeConfigured
+                    ? configuredCollectionMode == ParameterTranslationMode.Parameter
+                    : parameter.TranslationMode == ParameterTranslationMode.Parameter;
+                if (!singleParameter && !collectionModeConfigured)
                 {
                     return null;
                 }
@@ -97,14 +176,33 @@ namespace OceanBase.EntityFrameworkCore.Query
                     || (!OceanBaseCollectionParameterExpandingVisitor.IsSupportedNumeric(elementMapping)
                         && !OceanBaseCollectionParameterExpandingVisitor.IsSupportedBoolean(elementMapping)
                         && !OceanBaseCollectionParameterExpandingVisitor.IsSupportedText(elementMapping)
+                        && !OceanBaseCollectionParameterExpandingVisitor.IsSupportedBinary(elementMapping)
                         && !OceanBaseCollectionParameterExpandingVisitor.IsSupportedTemporal(elementMapping)))
                 {
                     return null;
                 }
 
                 var alias = _queryCompilationContext.SqlAliasManager.GenerateTableAlias(tableAlias);
-                var values = new ValuesExpression(alias, parameter, ["_ord", "Value"]);
-                var valueColumn = new ColumnExpression("Value", alias, UnwrapNullable(elementType), elementMapping, parameter.IsNullable);
+                TableExpressionBase values;
+                var scalarType = UnwrapNullable(elementType);
+                var nullable = parameter.IsNullable;
+                if (singleParameter)
+                {
+                    if ((scalarType != typeof(int) && scalarType != typeof(long))
+                        || elementMapping.Converter is not null
+                        || RelationalDependencies.TypeMappingSource.FindMapping(parameter.Type, RelationalDependencies.Model,
+                            elementMapping) is not { Converter.ProviderClrType: var carrier } mapping || carrier != typeof(string))
+                        return null;
+                    var jsonParameter = parameter.ApplyTypeMapping(mapping);
+                    values = new TableValuedFunctionExpression(alias, "JSON_TABLE", [jsonParameter])
+                        .AddAnnotation(JsonCollectionAnnotation, scalarType == typeof(int));
+                    nullable = Nullable.GetUnderlyingType(elementType) is not null;
+                }
+                else
+                {
+                    values = new ValuesExpression(alias, parameter, ["_ord", "Value"]);
+                }
+                var valueColumn = new ColumnExpression("Value", alias, scalarType, singleParameter ? null : elementMapping, nullable);
                 var ordinalMapping = RelationalDependencies.TypeMappingSource.FindMapping(
                     typeof(int), RelationalDependencies.Model, null)
                     ?? throw new InvalidOperationException("An integer mapping is required for collection ordinals.");
@@ -120,12 +218,12 @@ namespace OceanBase.EntityFrameworkCore.Query
                     },
                     _queryCompilationContext.SqlAliasManager);
                 select.AppendOrdering(new OrderingExpression(ordinalColumn, ascending: true));
-                select.AddToProjection(valueColumn);
+                if (!singleParameter) select.AddToProjection(valueColumn);
 
                 Expression projection = new ProjectionBindingExpression(
                     select,
                     new ProjectionMember(),
-                    parameter.IsNullable ? MakeNullable(elementType) : elementType);
+                    nullable ? MakeNullable(elementType) : elementType);
                 if (projection.Type != elementType)
                 {
                     projection = Expression.Convert(projection, elementType);

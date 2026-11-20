@@ -1,7 +1,9 @@
 using System;
 using System.Buffers;
+using System.Collections.Generic;
 using System.Data;
 using System.Data.Common;
+using System.Globalization;
 using System.Text;
 using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore.Storage;
@@ -42,9 +44,49 @@ namespace OceanBase.EntityFrameworkCore.Storage
                 {
                     if (character == '\\' || char.IsControl(character))
                     {
-                        return $"CONVERT(X'{Convert.ToHexString(Encoding.UTF8.GetBytes(text))}' USING utf8mb4)";
+                        // A character literal also works in DEFAULT clauses that reject CONVERT expressions.
+                        return $"_utf8mb4 X'{Convert.ToHexString(Encoding.UTF8.GetBytes(text))}'";
                     }
                 }
+            }
+            else if (IsUnicode)
+            {
+                foreach (var character in text)
+                {
+                    if (character > 127 || character == '\\' || char.IsControl(character))
+                    {
+                        // Match Connector national literals without depending on the ordinary client encoding.
+                        var literal = new StringBuilder("u'");
+                        foreach (var unit in text)
+                            literal.Append('\\').Append(((int)unit).ToString("x4", CultureInfo.InvariantCulture));
+                        return literal.Append('\'').ToString();
+                    }
+                }
+            }
+
+            if (_mode == OceanBaseCompatibilityMode.Oracle && !IsUnicode && (text.Contains('\r') || text.Contains('\n')))
+            {
+                var parts = new List<string>();
+                var start = 0;
+                for (var index = 0; index < text.Length; index++)
+                {
+                    if (text[index] is not ('\r' or '\n')) continue;
+                    if (index > start) parts.Add(base.GenerateNonNullSqlLiteral(text[start..index]));
+                    // Keep CHAR operands so fixed-column comparisons retain blank-padding semantics.
+                    parts.Add(text[index] == '\r' ? "CAST(CHR(13) AS CHAR(1))" : "CAST(CHR(10) AS CHAR(1))");
+                    start = index + 1;
+                }
+                if (start < text.Length) parts.Add(base.GenerateNonNullSqlLiteral(text[start..]));
+
+                // Pair adjacent fragments to avoid server expression-depth failures on newline-heavy text.
+                while (parts.Count > 1)
+                {
+                    var count = 0;
+                    for (var index = 0; index < parts.Count; index += 2)
+                        parts[count++] = index + 1 < parts.Count ? "(" + parts[index] + " || " + parts[index + 1] + ")" : parts[index];
+                    parts.RemoveRange(count, parts.Count - count);
+                }
+                return parts[0];
             }
 
             return (_mode == OceanBaseCompatibilityMode.Oracle && IsUnicode ? "N" : string.Empty)
@@ -53,9 +95,13 @@ namespace OceanBase.EntityFrameworkCore.Storage
 
         protected override void ConfigureParameter(DbParameter parameter)
         {
-            if (_mode == OceanBaseCompatibilityMode.Oracle)
+            var type = StoreTypeNameBase.Trim().ToUpperInvariant();
+            if (type == "JSON")
             {
-                var type = StoreTypeNameBase.Trim().ToUpperInvariant();
+                ((OceanBaseParameter)parameter).OceanBaseDbType = OceanBaseDbType.Json;
+            }
+            else if (_mode == OceanBaseCompatibilityMode.Oracle)
+            {
                 if (type is "NCHAR" or "NVARCHAR2")
                 {
                     ((OceanBaseParameter)parameter).OceanBaseDbType = type == "NCHAR"
@@ -111,7 +157,7 @@ namespace OceanBase.EntityFrameworkCore.Storage
         {
             var storeType = parameters.StoreType.Trim();
             var match = Regex.Match(storeType,
-                @"\A(?<type>CHAR|VARCHAR|VARCHAR2|NCHAR|NVARCHAR2|TINYTEXT|TEXT|MEDIUMTEXT|LONGTEXT|CLOB|NCLOB)(?:\s*\(\s*(?<size>\d+)\s*(?<unit>CHAR|BYTE)?\s*\))?\z",
+                @"\A(?<type>CHAR|VARCHAR|VARCHAR2|NCHAR|NVARCHAR2|TINYTEXT|TEXT|MEDIUMTEXT|LONGTEXT|CLOB|NCLOB|JSON)(?:\s*\(\s*(?<size>\d+)\s*(?<unit>CHAR|BYTE)?\s*\))?\z",
                 RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
             if (!match.Success || parameters.Precision is not null || parameters.Scale is not null)
             {
@@ -120,8 +166,8 @@ namespace OceanBase.EntityFrameworkCore.Storage
 
             var type = match.Groups["type"].Value.ToUpperInvariant();
             var oracle = mode == OceanBaseCompatibilityMode.Oracle;
-            if (oracle ? type is not ("CHAR" or "VARCHAR2" or "NCHAR" or "NVARCHAR2" or "CLOB" or "NCLOB")
-                : type is not ("CHAR" or "VARCHAR" or "TINYTEXT" or "TEXT" or "MEDIUMTEXT" or "LONGTEXT"))
+            if (oracle ? type is not ("CHAR" or "VARCHAR2" or "NCHAR" or "NVARCHAR2" or "CLOB" or "NCLOB" or "JSON")
+                : type is not ("CHAR" or "VARCHAR" or "TINYTEXT" or "TEXT" or "MEDIUMTEXT" or "LONGTEXT" or "JSON"))
             {
                 throw new ArgumentException("The text store type is not supported in this compatibility mode.");
             }
@@ -129,7 +175,8 @@ namespace OceanBase.EntityFrameworkCore.Storage
             var fixedLength = type is "CHAR" or "NCHAR";
             var bounded = fixedLength || type is "VARCHAR" or "VARCHAR2" or "NVARCHAR2";
             if (parameters.FixedLength != fixedLength
-                || oracle && parameters.Unicode != (type is "NCHAR" or "NVARCHAR2" or "NCLOB")
+                || oracle && parameters.Unicode != (type is "NCHAR" or "NVARCHAR2" or "NCLOB" or "JSON")
+                || type == "JSON" && (!parameters.Unicode || parameters.Size is not null)
                 || match.Groups["unit"].Success && (!oracle || type is not ("CHAR" or "VARCHAR2"))
                 || !bounded && match.Groups["size"].Success)
             {

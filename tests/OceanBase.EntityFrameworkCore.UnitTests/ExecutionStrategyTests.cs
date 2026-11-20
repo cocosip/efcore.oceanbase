@@ -9,6 +9,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Query;
 using Microsoft.EntityFrameworkCore.Storage;
+using Microsoft.Extensions.Caching.Memory;
 using OceanBase.EntityFrameworkCore.Storage;
 using OceanBaseConnector;
 using Xunit;
@@ -83,6 +84,34 @@ public sealed class ExecutionStrategyTests
     }
 
     [Theory]
+    [InlineData(OceanBaseCompatibilityMode.MySql)]
+    [InlineData(OceanBaseCompatibilityMode.Oracle)]
+    public void Ambient_transaction_started_during_operation_prevents_partial_replay(OceanBaseCompatibilityMode mode)
+    {
+        using var context = Create(mode);
+        var strategy = context.Database.CreateExecutionStrategy();
+        var failure = ServerError(mode == OceanBaseCompatibilityMode.MySql ? 1213 : 60);
+        System.Transactions.TransactionScope? scope = null;
+        var attempts = 0;
+        void Execute()
+        {
+            scope ??= new System.Transactions.TransactionScope(System.Transactions.TransactionScopeAsyncFlowOption.Enabled);
+            attempts++;
+            throw failure;
+        }
+        try
+        {
+            var actual = Record.Exception(() => strategy.Execute(Execute));
+            Assert.Same(failure, actual);
+            Assert.Equal(1, attempts);
+        }
+        finally
+        {
+            scope?.Dispose();
+        }
+    }
+
+    [Theory]
     [MemberData(nameof(Modes))]
     public async Task Defaults_do_not_retry_and_exhaustion_retains_the_last_error(OceanBaseCompatibilityMode mode, bool async)
     {
@@ -108,14 +137,15 @@ public sealed class ExecutionStrategyTests
     public void Options_snapshot_additional_codes_and_preserve_clones_without_partitioning_singletons(OceanBaseCompatibilityMode mode)
     {
         var codes = new[] { 9999 };
-        var builder = new DbContextOptionsBuilder<StrategyContext>().UseOceanBase("Server=offline;Database=app", mode,
+        using var cache = new MemoryCache(new MemoryCacheOptions());
+        var builder = new DbContextOptionsBuilder<StrategyContext>().UseMemoryCache(cache).UseOceanBase("Server=offline;Database=app", mode,
             options => options.EnableRetryOnFailure(3, TimeSpan.Zero, codes));
         codes[0] = 8888;
         var clone = new DbContextOptionsBuilder<StrategyContext>(builder.Options).UseOceanBase("Server=other;Database=app", mode)
             .EnableOceanBaseSchemaManagement("app");
         using var first = new StrategyContext(builder.Options);
         using var second = new StrategyContext(clone.Options);
-        using var plain = Create(mode, enabled: false);
+        using var plain = Create(mode, enabled: false, cache: cache);
         var strategy = Assert.IsType<OceanBaseRetryingExecutionStrategy>(second.Database.CreateExecutionStrategy());
         Assert.Equal(3, strategy.MaxRetryCount);
         Assert.Equal(TimeSpan.Zero, strategy.MaxRetryDelay);
@@ -186,9 +216,14 @@ public sealed class ExecutionStrategyTests
         }
     }
 
-    private static StrategyContext Create(OceanBaseCompatibilityMode mode, bool enabled = true, IEnumerable<int>? codes = null)
-        => new(new DbContextOptionsBuilder<StrategyContext>().UseOceanBase("Server=offline;Database=app", mode,
+    private static StrategyContext Create(OceanBaseCompatibilityMode mode, bool enabled = true, IEnumerable<int>? codes = null,
+        IMemoryCache? cache = null)
+    {
+        var builder = new DbContextOptionsBuilder<StrategyContext>();
+        if (cache is not null) builder.UseMemoryCache(cache);
+        return new(builder.UseOceanBase("Server=offline;Database=app", mode,
             options => { if (enabled) options.EnableRetryOnFailure(2, TimeSpan.Zero, codes); }).Options);
+    }
 
     private static OceanBaseException ServerError(int code, string? state = null, bool unknown = false, int? xa = null)
         => (OceanBaseException)Activator.CreateInstance(typeof(OceanBaseException), BindingFlags.Instance | BindingFlags.NonPublic,

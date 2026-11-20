@@ -14,8 +14,117 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
 {
     public sealed class MigrationsSqlGeneratorTests
     {
+        [Fact]
+        public void Database_collation_migrations_are_explicit_and_reversible_in_an_owned_MySql_database()
+        {
+            var options = new DbContextOptionsBuilder().UseOceanBase("Server=offline;Database=app", OceanBaseCompatibilityMode.MySql)
+                .EnableOceanBaseDatabaseManagement("app");
+            using var owned = new DbContext(options.Options);
+            using var existing = Create(OceanBaseCompatibilityMode.MySql, scoped: true);
+            using var oracle = Create(OceanBaseCompatibilityMode.Oracle, scoped: true);
+            var upgrade = new AlterDatabaseOperation { Collation = "utf8mb4_bin", OldDatabase = { Collation = "utf8mb4_general_ci" } };
+            var rollback = new AlterDatabaseOperation { Collation = "utf8mb4_general_ci", OldDatabase = { Collation = "utf8mb4_bin" } };
+
+            Assert.Contains("ALTER DATABASE `app` DEFAULT COLLATE utf8mb4_bin;", Sql(owned, [upgrade]));
+            Assert.Contains("ALTER DATABASE `app` DEFAULT COLLATE utf8mb4_general_ci;", Sql(owned, [rollback]));
+            Assert.True(Assert.Single(owned.GetService<IMigrationsSqlGenerator>().Generate([upgrade])).TransactionSuppressed);
+            Assert.Throws<NotSupportedException>(() => Sql(existing, [upgrade]));
+            Assert.Throws<NotSupportedException>(() => Sql(oracle, [upgrade]));
+            Assert.Throws<NotSupportedException>(() => Sql(owned, [new AlterDatabaseOperation { OldDatabase = { Collation = "utf8mb4_bin" } }]));
+            Assert.Throws<NotSupportedException>(() => Sql(owned, [new AlterDatabaseOperation { Collation = "utf8mb4_bin;SELECT" }]));
+            Assert.Throws<NotSupportedException>(() => Sql(owned, [new AlterDatabaseOperation
+                { Collation = "utf8mb4_bin", OldDatabase = { Collation = "bad collation" } }]));
+        }
+
         public static IEnumerable<object[]> Modes()
             => Enum.GetValues<OceanBaseCompatibilityMode>().Select(mode => new object[] { mode });
+
+        [Theory]
+        [MemberData(nameof(Modes))]
+        public void Sequence_range_and_start_changes_use_one_statement(OceanBaseCompatibilityMode mode)
+        {
+            using var context = Create(mode, scoped: true);
+            var generator = context.GetService<IMigrationsSqlGenerator>();
+            var operations = new MigrationOperation[]
+            {
+                new AlterSequenceOperation { Name = "Numbering", Schema = "app", MinValue = 20, MaxValue = 40, IncrementBy = 5 },
+                new AlterSequenceOperation { Name = "OtherNumbers", MinValue = 50, MaxValue = 80, IncrementBy = 2 },
+                new RestartSequenceOperation { Name = "Numbering", Schema = "app", StartValue = 25 },
+                new RestartSequenceOperation { Name = "OtherNumbers", StartValue = 52 }
+            };
+            var commands = generator.Generate(operations);
+            Assert.Equal(2, commands.Count);
+            var name = mode == OceanBaseCompatibilityMode.Oracle ? "\"app\".\"Numbering\"" : "`app`.`Numbering`";
+            Assert.Equal($"ALTER SEQUENCE {name} INCREMENT BY 5 MINVALUE 20 MAXVALUE 40 NOCYCLE START WITH 25 RESTART",
+                commands[0].CommandText.TrimEnd().TrimEnd(';'));
+            Assert.EndsWith("INCREMENT BY 2 MINVALUE 50 MAXVALUE 80 NOCYCLE START WITH 52 RESTART",
+                commands[1].CommandText.TrimEnd().TrimEnd(';'));
+            Assert.All(commands, command => Assert.True(command.TransactionSuppressed));
+        }
+
+        [Theory]
+        [MemberData(nameof(Modes))]
+        public void Identity_toggle_requires_an_unchanged_single_integer_primary_key_in_MySql(OceanBaseCompatibilityMode mode)
+        {
+            using var context = Create(mode, scoped: true);
+            var assigned = Model(context, evolved: false, assignedKey: true);
+            var generated = Model(context, evolved: false);
+            var differ = context.GetService<IMigrationsModelDiffer>();
+            var generator = context.GetService<IMigrationsSqlGenerator>();
+            var up = Assert.IsType<AlterColumnOperation>(Assert.Single(differ.GetDifferences(assigned.GetRelationalModel(), generated.GetRelationalModel())));
+            var down = Assert.IsType<AlterColumnOperation>(Assert.Single(differ.GetDifferences(generated.GetRelationalModel(), assigned.GetRelationalModel())));
+            if (mode == OceanBaseCompatibilityMode.Oracle)
+            {
+                Assert.Throws<NotSupportedException>(() => generator.Generate([up], generated));
+                Assert.Throws<NotSupportedException>(() => generator.Generate([down], assigned));
+                return;
+            }
+
+            Assert.Contains("MODIFY COLUMN `Id` INT NOT NULL AUTO_INCREMENT", Assert.Single(generator.Generate([up], generated)).CommandText);
+            Assert.Contains("MODIFY COLUMN `Id` INT NOT NULL;", Assert.Single(generator.Generate([down], assigned)).CommandText);
+            Assert.Throws<NotSupportedException>(() => generator.Generate([up]));
+            Assert.Throws<NotSupportedException>(() => generator.Generate([up], Model(context, evolved: false, compositeKey: true)));
+            Assert.Throws<NotSupportedException>(() => generator.Generate(
+                [new DropPrimaryKeyOperation { Table = "Rows", Schema = "app", Name = "PK_Rows" }, up], generated));
+            Assert.Throws<NotSupportedException>(() => generator.Generate(
+                [new RenameTableOperation { Name = "PreviousRows", NewName = "Rows" }, up], generated));
+            Assert.Throws<NotSupportedException>(() => generator.Generate([up], assigned));
+            using var unscoped = Create(mode);
+            Assert.Throws<NotSupportedException>(() => unscoped.GetService<IMigrationsSqlGenerator>().Generate(
+                [new DropPrimaryKeyOperation { Table = "Rows", Schema = "app", Name = "PK_Rows" }, up], generated));
+            up.OldColumn.ColumnType = "BIGINT";
+            Assert.Throws<NotSupportedException>(() => generator.Generate([up], generated));
+        }
+
+        [Fact]
+        public void Database_collation_model_differences_generate_initial_upgrade_and_explicit_rollback_sql()
+        {
+            var options = new DbContextOptionsBuilder().UseOceanBase("Server=offline;Database=app", OceanBaseCompatibilityMode.MySql)
+                .EnableOceanBaseDatabaseManagement("app");
+            using var context = new DbContext(options.Options);
+            var implicitDefault = Model(context, evolved: false);
+            var original = Model(context, evolved: false, collation: "utf8mb4_general_ci");
+            var changed = Model(context, evolved: false, collation: "utf8mb4_bin");
+            var differ = context.GetService<IMigrationsModelDiffer>();
+            var generator = context.GetService<IMigrationsSqlGenerator>();
+
+            var initial = generator.Generate(differ.GetDifferences(null, changed.GetRelationalModel()), changed, MigrationsSqlGenerationOptions.Script);
+            Assert.StartsWith("ALTER DATABASE `app` DEFAULT COLLATE utf8mb4_bin;", initial[0].CommandText);
+            Assert.Contains(initial, command => command.CommandText.StartsWith("CREATE TABLE", StringComparison.Ordinal));
+            var initialDown = generator.Generate(differ.GetDifferences(changed.GetRelationalModel(), null), options: MigrationsSqlGenerationOptions.Script);
+            Assert.StartsWith("DROP TABLE", Assert.Single(initialDown).CommandText);
+
+            var up = generator.Generate(differ.GetDifferences(original.GetRelationalModel(), changed.GetRelationalModel()), changed, MigrationsSqlGenerationOptions.Script);
+            Assert.StartsWith("ALTER DATABASE `app` DEFAULT COLLATE utf8mb4_bin;", Assert.Single(up).CommandText);
+            var down = generator.Generate(differ.GetDifferences(changed.GetRelationalModel(), original.GetRelationalModel()), original, MigrationsSqlGenerationOptions.Script);
+            Assert.StartsWith("ALTER DATABASE `app` DEFAULT COLLATE utf8mb4_general_ci;", Assert.Single(down).CommandText);
+            Assert.Throws<NotSupportedException>(() => generator.Generate(
+                differ.GetDifferences(implicitDefault.GetRelationalModel(), changed.GetRelationalModel()), changed,
+                MigrationsSqlGenerationOptions.Script));
+            Assert.Throws<NotSupportedException>(() => generator.Generate(
+                differ.GetDifferences(changed.GetRelationalModel(), implicitDefault.GetRelationalModel()), implicitDefault,
+                MigrationsSqlGenerationOptions.Script));
+        }
 
         [Theory]
         [MemberData(nameof(Modes))]
@@ -119,6 +228,95 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
         }
 
         [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql, "CURRENT_TIMESTAMP(6)", null, true)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, "CURRENT_TIMESTAMP(3)", null, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, "CURRENT_TIMESTAMP(6)", "current_timestamp(3)", false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, "CURRENT_TIMESTAMP(6); SELECT 1", null, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, "CURRENT_TIMESTAMP(6)", null, false)]
+        public void Alter_column_preserves_only_supported_on_update_clauses(OceanBaseCompatibilityMode mode, string expression,
+            string? defaultSql, bool supported)
+        {
+            using var context = Create(mode);
+            var operation = new AlterColumnOperation
+            {
+                Name = "Updated", Table = "Rows", ClrType = typeof(DateTime), ColumnType = "DATETIME(6)", IsNullable = true, DefaultValueSql = defaultSql,
+                OldColumn = new AddColumnOperation { ClrType = typeof(DateTime), ColumnType = "DATETIME(6)", IsNullable = true }
+            };
+            operation["OceanBase:OnUpdateSql"] = expression;
+            if (!supported)
+            {
+                Assert.Throws<NotSupportedException>(() => Sql(context, new[] { operation }));
+                return;
+            }
+            Assert.Contains("MODIFY COLUMN `Updated` DATETIME(6) NULL ON UPDATE CURRENT_TIMESTAMP(6)", Sql(context, new[] { operation }));
+            operation.OldColumn["OceanBase:OnUpdateSql"] = expression;
+            operation.RemoveAnnotation("OceanBase:OnUpdateSql");
+            Assert.DoesNotContain("ON UPDATE", Sql(context, new[] { operation }));
+        }
+
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public void Requiring_an_update_only_column_does_not_invent_an_insert_default(bool alter)
+        {
+            using var context = Create(OceanBaseCompatibilityMode.MySql);
+            IModel Build(bool includeColumn, bool required)
+            {
+                var builder = new ModelBuilder(context.GetService<IConventionSetBuilder>().CreateConventionSet());
+                var row = builder.Entity("Rows");
+                row.Property<int>("Id");
+                row.HasKey("Id");
+                if (includeColumn)
+                    row.Property<DateTime?>("Updated").IsRequired(required).HasColumnType("DATETIME(6)").ValueGeneratedOnUpdate()
+                        .HasAnnotation("OceanBase:OnUpdateSql", "CURRENT_TIMESTAMP(6)");
+                return context.GetService<IModelRuntimeInitializer>().Initialize(builder.FinalizeModel(), designTime: true);
+            }
+            var from = Build(alter, required: false);
+            var to = Build(true, required: true);
+            var operations = context.GetService<IMigrationsModelDiffer>().GetDifferences(from.GetRelationalModel(), to.GetRelationalModel());
+            var operation = Assert.IsAssignableFrom<ColumnOperation>(Assert.Single(operations));
+            Assert.Equal(alter ? typeof(AlterColumnOperation) : typeof(AddColumnOperation), operation.GetType());
+            Assert.Equal(DateTime.MinValue, operation.DefaultValue);
+            var error = Assert.Throws<NotSupportedException>(() => context.GetService<IMigrationsSqlGenerator>().Generate(operations, to));
+            Assert.Contains("backfill", error.Message);
+        }
+
+        [Theory]
+        [InlineData(false, false)]
+        [InlineData(true, false)]
+        [InlineData(true, true)]
+        public void Model_diff_detects_prefix_length_changes_and_rejects_unsafe_unique_replacement(bool unique, bool rename)
+        {
+            using var context = Create(OceanBaseCompatibilityMode.MySql);
+            IModel Build(int length, string name = "IX_Code")
+            {
+                var builder = new ModelBuilder(context.GetService<IConventionSetBuilder>().CreateConventionSet());
+                var row = builder.Entity("Rows");
+                row.Property<int>("Id");
+                row.HasKey("Id");
+                row.Property<string>("Code").HasMaxLength(64);
+                row.HasIndex("Code", "Id").HasDatabaseName(name).IsUnique(unique).IsDescending(true, false)
+                    .HasAnnotation("OceanBase:IndexPrefixLengths", new[] { length, 0 });
+                return context.GetService<IModelRuntimeInitializer>().Initialize(builder.FinalizeModel(), designTime: true);
+            }
+            var from = Build(12);
+            var to = Build(9, rename ? "IX_NewCode" : "IX_Code");
+            var differ = context.GetService<IMigrationsModelDiffer>();
+            Assert.Empty(differ.GetDifferences(from.GetRelationalModel(), Build(12).GetRelationalModel()));
+            var operations = differ.GetDifferences(from.GetRelationalModel(), to.GetRelationalModel());
+            Assert.Collection(operations, operation => Assert.IsType<DropIndexOperation>(operation), operation => Assert.IsType<CreateIndexOperation>(operation));
+            if (unique)
+                Assert.Contains("unique prefix indexes", Assert.Throws<NotSupportedException>(() => Sql(context, operations)).Message);
+            else
+                Assert.Contains("(`Code`(9) DESC, `Id`)", Sql(context, operations));
+            if (rename)
+                Assert.Contains("CREATE UNIQUE INDEX `IX_NewCode`", Sql(context, operations.Reverse().ToArray()));
+            using var script = new DbContext(new DbContextOptionsBuilder().UseOceanBase("Server=offline;Database=app", OceanBaseCompatibilityMode.MySql)
+                .UseModel(to).Options);
+            Assert.Contains("(`Code`(9) DESC, `Id`)", script.Database.GenerateCreateScript());
+        }
+
+        [Theory]
         [MemberData(nameof(Modes))]
         public void Computed_columns_and_hostile_identifiers_are_quoted(OceanBaseCompatibilityMode mode)
         {
@@ -139,7 +337,7 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             using var context = Create(mode, scoped: true);
             foreach (var operation in new MigrationOperation[]
             {
-                new CreateSequenceOperation { Name = "Sequence" },
+                new CreateSequenceOperation { Name = "Sequence", Schema = "other" },
                 new DropSchemaOperation { Name = "app" },
                 new EnsureSchemaOperation { Name = "other" },
                 new DropTableOperation { Name = "Rows", Schema = "other" },
@@ -228,6 +426,11 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
                 Assert.Contains(quoted, sql);
                 Assert.Contains(quoted, history.GetInsertScript(new HistoryRow("id'\\", "10.0.0")));
                 if (mode == OceanBaseCompatibilityMode.MySql) Assert.Contains("CREATE TABLE IF NOT EXISTS", sql);
+                else
+                {
+                    Assert.Contains("SELECT COUNT(*) INTO ob_count FROM ALL_TABLES WHERE OWNER = N'app'", sql);
+                    Assert.Contains("IF ob_count = 0 THEN", sql);
+                }
             }
             ((IDbContextOptionsBuilderInfrastructure)options).AddOrUpdateExtension(extension.WithMigrationsHistoryTableSchema("other"));
             using var other = new DbContext(options.Options);
@@ -284,12 +487,77 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
         private static string Sql(DbContext context, IReadOnlyList<MigrationOperation> operations)
             => string.Concat(context.GetService<IMigrationsSqlGenerator>().Generate(operations).Select(c => c.CommandText));
 
-        private static IModel Model(DbContext context, bool evolved)
+        [Theory]
+        [MemberData(nameof(Modes))]
+        public void Model_diffs_create_change_and_clear_table_and_column_comments(OceanBaseCompatibilityMode mode)
+        {
+            using var context = Create(mode);
+            var initial = Model(context, evolved: false, comment: "title's text");
+            var updated = Model(context, evolved: false, comment: "new comment");
+            var bare = Model(context, evolved: false);
+            var differ = context.GetService<IMigrationsModelDiffer>();
+            var generator = context.GetService<IMigrationsSqlGenerator>();
+            var create = generator.Generate(differ.GetDifferences(null, initial.GetRelationalModel()), initial);
+            var sql = string.Join("\n", create.Select(command => command.CommandText));
+            Assert.Contains("title''s text", sql);
+            Assert.Contains("base title''s text", sql);
+            Assert.All(create, command => Assert.True(command.TransactionSuppressed));
+            if (mode == OceanBaseCompatibilityMode.Oracle)
+            {
+                Assert.Contains("COMMENT ON TABLE \"Rows\" IS 'title''s text'", sql);
+                Assert.Contains("COMMENT ON COLUMN \"Rows\".\"Code\" IS 'base title''s text'", sql);
+            }
+            else
+            {
+                Assert.Contains(" COMMENT = 'title''s text'", sql);
+                Assert.Contains(" COMMENT 'base title''s text'", sql);
+            }
+
+            var changeOps = differ.GetDifferences(initial.GetRelationalModel(), updated.GetRelationalModel());
+            var change = string.Join("\n", generator.Generate(changeOps, updated, MigrationsSqlGenerationOptions.Script)
+                .Select(command => command.CommandText));
+            Assert.Contains("new comment", change);
+            Assert.Contains("base new comment", change);
+            if (mode == OceanBaseCompatibilityMode.Oracle) Assert.DoesNotContain("MODIFY", change);
+
+            var clear = string.Join("\n", generator.Generate(differ.GetDifferences(updated.GetRelationalModel(), bare.GetRelationalModel()), bare)
+                .Select(command => command.CommandText));
+            Assert.Contains("''", clear);
+            Assert.DoesNotContain("new comment", clear);
+            var rollback = string.Join("\n", generator.Generate(differ.GetDifferences(bare.GetRelationalModel(), initial.GetRelationalModel()), initial)
+                .Select(command => command.CommandText));
+            Assert.Contains("base title''s text", rollback);
+        }
+
+        [Theory]
+        [MemberData(nameof(Modes))]
+        public void Schema_comment_literals_reject_unrepresentable_inputs(OceanBaseCompatibilityMode mode)
+        {
+            using var context = Create(mode);
+            var operation = new AlterTableOperation { Name = "Rows", Comment = "invalid\0comment" };
+            Assert.Throws<NotSupportedException>(() => Sql(context, [operation]));
+            operation.Comment = "one\\two";
+            if (mode == OceanBaseCompatibilityMode.MySql)
+                Assert.Throws<NotSupportedException>(() => Sql(context, [operation]));
+            else
+                Assert.Contains("'one\\two'", Sql(context, [operation]));
+        }
+
+        private static IModel Model(DbContext context, bool evolved, string? comment = null, string? collation = null,
+            bool assignedKey = false, bool compositeKey = false)
         {
             var builder = new ModelBuilder(context.GetService<IConventionSetBuilder>().CreateConventionSet());
+            if (collation is not null) builder.UseCollation(collation);
             var row = builder.Entity<Row>();
             row.ToTable("Rows");
+            if (assignedKey) row.Property(entity => entity.Id).ValueGeneratedNever();
+            if (compositeKey) row.HasKey(entity => new { entity.Id, entity.Code });
             row.Property(r => r.Code).HasMaxLength(evolved ? 64 : 32).HasDefaultValue("can't");
+            if (comment is not null)
+            {
+                row.ToTable(table => table.HasComment(comment));
+                row.Property(r => r.Code).HasComment("base " + comment);
+            }
             if (evolved) row.Property<int?>("Revision");
             return context.GetService<IModelRuntimeInitializer>().Initialize(builder.FinalizeModel(), designTime: true);
         }

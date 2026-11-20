@@ -337,7 +337,26 @@ public sealed class NumericAggregateQueryTests
         }).ToQueryString();
         Assert.Equal(4, single.Split(mode == OceanBaseCompatibilityMode.MySql ? " AS FLOAT)" : " AS BINARY_FLOAT)").Length - 1);
         Assert.Contains("CAST(COALESCE(SUM(", single);
-        Assert.DoesNotContain(" AS " + (mode == OceanBaseCompatibilityMode.MySql ? "DOUBLE" : "BINARY_DOUBLE") + ")", single);
+        if (mode == OceanBaseCompatibilityMode.MySql)
+            Assert.Equal(4, single.Split(" AS FLOAT) AS DOUBLE)").Length - 1);
+        else Assert.DoesNotContain(" AS BINARY_DOUBLE)", single);
+    }
+
+    [Theory]
+    [InlineData(OceanBaseCompatibilityMode.MySql)]
+    [InlineData(OceanBaseCompatibilityMode.Oracle)]
+    public void Nullable_single_converter_keeps_sum_compensation_and_normalizes_all_aggregate_results(OceanBaseCompatibilityMode mode)
+    {
+        using var context = Context(mode);
+        Assert.Equal(typeof(float?), context.Model.FindEntityType(typeof(Row))!.FindProperty(nameof(Row.ConvertedSingle))!.GetRelationalTypeMapping().ClrType);
+        var sql = context.Set<Row>().GroupBy(row => row.Id).Select(group => new
+        {
+            Sum = group.Sum(row => row.ConvertedSingle), Average = group.Average(row => row.ConvertedSingle),
+            Min = group.Min(row => row.ConvertedSingle), Max = group.Max(row => row.ConvertedSingle)
+        }).ToQueryString();
+        Assert.Equal(4, sql.Split(mode == OceanBaseCompatibilityMode.MySql ? " AS FLOAT)" : " AS BINARY_FLOAT)").Length - 1);
+        Assert.Contains("CAST(COALESCE(SUM(", sql);
+        Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? "10E0" : "10F", sql);
     }
 
     private static TestContext Context(OceanBaseCompatibilityMode mode, bool nulls = false)
@@ -353,6 +372,7 @@ public sealed class NumericAggregateQueryTests
         protected override void OnModelCreating(ModelBuilder builder)
         {
             builder.Entity<Row>().Property(r => r.Single).HasColumnType(mode == OceanBaseCompatibilityMode.MySql ? "DOUBLE" : "BINARY_DOUBLE");
+            builder.Entity<Row>().Property(r => r.ConvertedSingle).HasConversion(value => value + 10f, value => value - 10f);
             foreach (var type in NumericTypes)
             {
                 builder.Entity<Row>().Property(type, type.Name + "Value");
@@ -366,6 +386,7 @@ public sealed class NumericAggregateQueryTests
         public int Id { get; set; }
         public int Int { get; set; }
         public float Single { get; set; }
+        public float? ConvertedSingle { get; set; }
         public int? Optional { get; set; }
     }
 }

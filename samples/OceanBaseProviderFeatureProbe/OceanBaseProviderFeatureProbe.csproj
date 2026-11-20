@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <UserSecretsId>OceanBase.EntityFrameworkCore.LiveTests</UserSecretsId>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/OceanBase.EntityFrameworkCore/OceanBase.EntityFrameworkCore.csproj" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.UserSecrets" />
+    <Compile Include="../Shared/SampleDatabase.cs" Link="SampleDatabase.cs" />
+  </ItemGroup>
+</Project>
