@@ -1,7 +1,7 @@
 # EF Core 9 Feature Matrix
 
 This inventory covers the same 55 feature groups as EF Core 10, using stable IDs.
-The planned port starts from `efcore/10.0`. The rows describe the branch's target scope before implementation.
+The port starts from `efcore/10.0` and targets `net9.0`. The rows describe the branch's target scope before implementation.
 Use the [gap matrix](efcore-9-gap-matrix.md) for closure conditions and the
 [release checklist](efcore-9-release-checklist.md) for acceptance evidence.
 
