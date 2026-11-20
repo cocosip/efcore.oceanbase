@@ -28,7 +28,7 @@ For gaps and development status, see the [Gap Matrix](efcore-10-gap-matrix.md). 
 | CON-04 | Sync/async connections, early reader disposal, failure cleanup and connection reuse | Implemented | Implemented | [Reader][reader] | — |
 | CON-05 | Timeout/cancellation propagation and resource recovery; no driver cancellation protocol implementation | Implemented | Implemented | [Connection][connection] | — |
 | DIA-01 | EF command/failure logging, standard interceptors and parameter redaction by default | Implemented | Implemented | [Logging][logging] | — |
-| DIA-02 | DbUpdateException inner errors/entries, concurrency events and unwrapped cancellation | Implemented | Implemented | [Writes][writes] | — |
+| DIA-02 | DbUpdateException inner errors/entries, concurrency events and preserved cancellation causes | Implemented | Implemented | [Writes][writes] | Direct/pre-send cancellation stays unwrapped. A native in-flight unknown-outcome error can be wrapped by DbUpdateException while retaining the Connector flag and cancellation cause |
 | MOD-01 | Tables, primary/composite/alternate keys, foreign keys, indexes and relationship conventions | Implemented | Implemented | [Model][conventions] | G-44; SET DEFAULT delete actions are rejected |
 | MOD-02 | Required/optional relationships, owned references/collections, shadow FKs and relationship fixup | Implemented | Implemented | [Model][conventions] | — |
 | MOD-03 | Identity/default/computed metadata, model triggers, names and namespaces | Partial | Partial | [DDL][schema] | `HasTrigger` is metadata only. See G-26..35/G-43/45 |
@@ -70,7 +70,7 @@ For gaps and development status, see the [Gap Matrix](efcore-10-gap-matrix.md). 
 | DEF-05 | Provider integration for Spatial/XML/native enums/OBJECT, LOB locators and REF CURSOR | Deferred | Deferred | [Mappings][mappings] | D-05; ordinary enum converters/scalar LOBs are implemented |
 | DEF-06 | Standalone Int64 model sequence DDL, sequence-backed value allocation and stored-procedure INSERT/UPDATE/DELETE mappings | Partial | Partial | [Sequence DDL][sequence], [HiLo][hilo], [Update SQL generator][update-sql], [Modification batches][modification-batch] | Both modes create, alter, restart and drop sequences, generate standalone NEXTVAL commands and allocate Int32/Int64 primary keys through HiLo. Oracle also scaffolds bounded Int64 sequences with declared starts, cache/order and supports unqualified rename. D-06 tracks the MySQL declaration-start metadata integration for reverse engineering and the remaining procedure/key-allocation shapes; ordinary Connector commands can already query the server catalog |
 | DEF-07 | TPH/TPT/TPC, entity/table splitting and many-to-many skip navigations | Partial | Partial | [Inherited generated values][annotations], [HiLo][hilo] | Ordinary models/CRUD and opt-in TPC HiLo on the hierarchy root are implemented in both modes. Oracle also supports shared sequence defaults and generated-key readback for ordinary TPC inserts (G-28) |
-| DEF-08 | Split-query buffering, compiled models, lazy proxies/ILazyLoader, experimental query precompilation, bounded Windows NativeAOT and compiled models with both proxy options | Implemented | Implemented | [Compiled model][compiled], [Query precompilation][precompile] | Enable the proxy options during model generation and at runtime. Streaming nested lazy loading is unsupported. C-01/C-04 define the implemented scope; Windows x64 NativeAOT has a scoped EF 10.0.14 smoke test, with broader platform/query coverage pending |
+| DEF-08 | Split-query buffering, compiled models, lazy proxies/ILazyLoader, experimental query precompilation, bounded Windows NativeAOT and compiled models with both proxy options | Implemented | Implemented | [Compiled model][compiled], [Query precompilation][precompile] | Enable the proxy options during model generation and at runtime. Streaming nested lazy loading is unsupported. C-01/C-04 define code scope; the release checklist records platform/query acceptance and publish warnings |
 | DEF-09 | HasData, sync/async seeding callbacks and retry/recovery orchestration for known outcomes | Partial | Partial | [Retry][retry] | G-40; unknown outcomes, commits and cleanup are not replayed |
 | DEF-10 | Full-text/vector/search functions and advanced batching optimizations | Deferred | Deferred | [SQL][sqlgenerator] | D-10 |
 
@@ -135,7 +135,7 @@ Do not duplicate acceptance pass counts, individual fix histories or the full co
 
 [options]: ../../src/OceanBase.EntityFrameworkCore/OceanBaseDbContextOptionsBuilderExtensions.cs
 [cache]: ../../src/OceanBase.EntityFrameworkCore/Internal/OceanBaseModelCacheKeyFactory.cs
-[services]: ../../src/OceanBase.EntityFrameworkCore/OceanBaseDbContextOptionsBuilderExtensions.cs
+[services]: ../../src/OceanBase.EntityFrameworkCore/Internal/OceanBaseOptionsExtension.cs
 [connection]: ../../src/OceanBase.EntityFrameworkCore/Storage/OceanBaseRelationalConnection.cs
 [reader]: ../../src/OceanBase.EntityFrameworkCore/Storage/OceanBaseRetryReaderInterceptor.cs
 [logging]: ../../src/OceanBase.EntityFrameworkCore/Internal/OceanBaseLoggingDefinitions.cs

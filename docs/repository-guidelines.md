@@ -6,13 +6,10 @@ This repository contains the Entity Framework Core provider for the managed Ocea
 driver. Provider code must consume the ADO.NET driver through its public APIs. Protocol, pooling, TLS,
 authentication and wire-format work belongs in the connector repository.
 
-Each module must identify the owning layer and the existing Connector public APIs it consumes. EF owns
-LINQ translation, model/mapping metadata, shaping/tracking, migration SQL and operation orchestration;
-the driver owns transport, authentication/TLS, pooling, parameter/reader transport and native transaction
-operations. OceanBase owns SQL/type/constraint semantics. Testing a lower-layer boundary does not mean
-implementing that lower-layer feature in this provider. A public driver API gap is a separately recorded
-dependency/proposal, not permission to add a driver implementation or bypass its API inside EF. Do not
-claim provider retry orchestration implements driver routing or failover.
+Each module must identify its owning layer and public Connector APIs. Follow the
+[architecture boundaries](provider-architecture.md): a driver API gap is a recorded dependency/proposal,
+not permission to add a driver implementation or bypass its API inside EF. Explain proposed driver
+changes to protocol, authentication, TLS, pooling or wire codecs and obtain user authorization first.
 
 Both compatibility modes are OceanBase Database modes, not Oracle Database or MySQL Server. Base
 feature support, SQL syntax and restrictions on the targeted OceanBase version's own documentation
@@ -26,11 +23,9 @@ comparison; they do not establish an OceanBase capability or replace its live ac
     src/OceanBase.EntityFrameworkCore/          EF-version provider project
     tests/                        Unit, relational and live integration tests
 
-The efcore/10.0 branch is the active EF10 development, packaging and release branch as requested on resumption.
-dev retains the preceding checkpoint; synchronize other branches only deliberately. The efcore/8.0 and efcore/9.0 branches fork from an
-efcore/10.0 release baseline and then adapt independently to their EF Core major. Shared source is kept small
-and dependency-free where practical. Do not introduce a compatibility wrapper for an API that is used in only one
-EF Core version.
+The active branch is `efcore/10.0`. The [version-support document](efcore/version-support-matrix.md)
+owns branch/porting policy; EF8/EF9 remain planned. Keep shared source small and dependency-free where
+practical. Do not introduce a compatibility wrapper for an API used in only one EF Core version.
 
 ## C# and project style
 
@@ -45,18 +40,18 @@ Existing tracked blobs are already LF-normalized; no bulk renormalization is nee
 Existing working files may retain their prior endings until rewritten or checked out again; Git still
 normalizes text when staging. Use an LF-capable editor. Do not discard local changes to refresh line endings.
 
-The GitHub Actions CI workflow runs the Release solution tests and package-content gate on both Windows and
-Linux using PowerShell 7. It does not connect to databases or publish packages. Both jobs and all four gates
-passed for e41981e in [run 42865290840](https://github.com/cocosip/efcore.oceanbase/actions/runs/42865290840).
-That evidence applies to that commit; subsequent changes need their own run. Local Windows checks alone do
-not establish Linux or hosted-runner compatibility.
+The [CI workflow](../.github/workflows/ci.yml) runs Release solution tests and the package-content gate
+on Windows and Linux using PowerShell 7. It does not connect to databases or publish packages. Historical
+runs do not establish acceptance of a later revision; current evidence and platform exclusions belong
+in the release checklist.
 
 The standalone PackageConsumer executable is a manually run, offline NuGet-consumer smoke check;
 it is not included in the solution or executed by CI. CI only invokes its Verify-Package.ps1 archive
 content check. The solution's ConsumerTests project contains ordinary provider configuration tests.
 PackageConsumer reports managed verification failures on stderr with exit code1, including expected
 negative probes against older packages; it must not use unhandled exceptions as a failure signal.
-This executable is separate from the postponed comprehensive real-database test application.
+Native acceptance lives in the opt-in LiveTests project; the [samples](../samples/README.md) provide
+separate interactive database and migration probes. None are executed by the default solution CI run.
 
 ### C# conventions
 
@@ -99,25 +94,20 @@ Required test layers are:
 The solution's SpecificationTests project currently runs six complete inherited official relational
 model-building families (one-to-many, many-to-one, one-to-one, many-to-many, inheritance and owned types)
 against the real provider in both modes. It blocks EF connection opening and is safe for ordinary offline
-CI execution. Other official runtime/query/write fixtures remain separate work; passing metadata tests
-does not advertise their corresponding DDL or database execution support.
+CI execution. Selected store-backed official runtime fixtures are tested separately, as recorded in the
+release checklist; offline metadata tests do not establish runtime query or write support.
 
 An unavailable database, proxy, TLS or authentication environment is recorded as an unverified boundary; it is
 not converted into a client pass or a client defect.
 
 ### Live-test credentials and ownership
 
-The user confirms database addresses were already supplied (2026-11-11). Reuse that access when wiring
-live tests; the missing provider fixture is implementation work, not evidence that access was not supplied.
-Store local live-test connection strings with .NET User Secrets,
-outside the repository, using `ConnectionStrings:OceanBaseMySql` and `ConnectionStrings:OceanBaseOracle`.
-The current local environment stores these keys plus `ConnectionStrings:OceanBaseOracleManagement`
-under User Secrets ID `OceanBase.EntityFrameworkCore.LiveTests`; the values are never repository content.
-When adding the live-test fixture, use that stable `UserSecretsId` and explicitly load User Secrets
-in test configuration; a test project does not load them automatically. The ID is public metadata, not a secret.
+The live fixture explicitly loads .NET User Secrets ID `OceanBase.EntityFrameworkCore.LiveTests` with
+`ConnectionStrings:OceanBaseMySql` and `ConnectionStrings:OceanBaseOracle`. Administration access uses
+separate keys when needed. Keep values outside the repository; the ID and key names are public metadata.
 The opt-in fixture lives in `tests/OceanBase.EntityFrameworkCore.LiveTests` and is intentionally excluded from
 the default solution run; set `OCEANBASE_RUN_LIVE_TESTS=1` only for an explicit live acceptance command.
-This is the agreed fixture contract; the current intercepted tests do not load secrets or connect to a server.
+Intercepted tests remain separate: they do not load secrets or connect to a server.
 
 Live tests preserve the configured TLS policy by default. For a server without TLS, the explicitly authorized
 ordinary-direct profile can set `OCEANBASE_LIVE_DISABLE_TLS=1` in the test process. This only overrides test
@@ -138,41 +128,30 @@ disabled for live acceptance runs and redact connector errors before recording e
 local input path that avoids echoing them into tool output or shell history.
 
 Before tests create or delete objects, record the user-authorized database/schema and cleanup scope for each mode.
-Use only test-owned objects within that scope. Until the live fixture and authorized scope are configured, live gates remain unverified;
-continue local implementation and tests without treating unavailable infrastructure as a successful acceptance run.
+Use only test-owned objects within that scope. Existing ordinary-direct acceptance creates owned objects
+in pre-provisioned namespaces; it does not authorize namespace creation/deletion or prefix-based cleanup.
+Record unavailable infrastructure as unverified, never as a successful acceptance run.
 
 ## Documentation and review
 
 Public behavior, unsupported features and server prerequisites are documented before implementation. A change
-that affects more than one EF Core branch must update the shared design document and each affected branch's
+that affects more than one EF Core branch must update the owning shared contract and each affected branch's
 compatibility notes.
 
-Write all repository documentation in English. Follow the root AGENTS.md documentation-size rules
-for every EF Core version, including 8, 9, 10, 11 and future versions. Reuse each version's existing topics
-and keep shared contracts in one place; do not
-automatically create a new set of development documents for a version or a small feature. Separate feature
-scope, development gaps and release acceptance. The three existing EF10 primary inventories are:
-docs/efcore/efcore-10-feature-matrix.md for feature scope and code status,
-docs/efcore/efcore-10-gap-matrix.md for stable gap IDs, development states and closure conditions,
-and docs/efcore/efcore-10-release-checklist.md for test/live/package/release evidence.
-Update existing entries instead of creating a document for each small feature, test run or commit. Add a new
-document only for a distinct long-lived topic or an explicitly requested standalone record; do not recreate
-module plans, progress copies or session logs. Name affected feature/gap IDs before implementation and update
-code status separately from acceptance. Inherited EF behavior, generated SQL and intercepted commands are not
-live server proof; missing live evidence does not make an implemented feature undeveloped.
+Follow [AGENTS.md](../AGENTS.md) for English-only documentation, stable IDs and the three-inventory
+ownership rule across all EF versions. The [documentation index](README.md) identifies each topic's owner.
+Name affected feature/gap IDs before implementation; record implementation separately from acceptance.
+Inherited EF behavior, generated SQL and intercepted commands are not live server proof; missing evidence
+does not make implemented code undeveloped. Do not create per-feature plans, reports or duplicate inventories.
 
 Before merging a feature, review the generated SQL, parameter names, identifier quoting, null semantics,
 identity/key retrieval, transaction behavior and cancellation behavior for both compatibility modes.
 
 ## Git and releases
 
-- efcore/10.0 is the active development and release branch used to pack and publish the 10.x package.
-- dev retains the preceding integration checkpoint; synchronization is not implicit.
-- efcore/8.0 and efcore/9.0 fork from an efcore/10.0 release commit and are adapted independently.
-- A version branch is compiled against exactly one EF Core major version.
-- All branches publish the package ID OceanBase.EntityFrameworkCore; the package major version identifies
-  the EF Core major (8.x, 9.x, 10.x, 11.x).
+- Use the branch and dependency rules in [version support](efcore/version-support-matrix.md).
 - Use Gitmoji Conventional Commits, for example: ✨ feat(efcore8): add relational options registration.
-- Review and test changes on efcore/10.0 before committing; pack and publish from that branch after release gates pass.
+- Preserve unrelated changes, review and test the affected scope before committing, and do not push,
+  tag or publish without explicit authorization.
 - A release requires passing unit tests, package-consumer tests and the documented compatibility checks for the
   target branch. Live evidence is reported separately from local validation.

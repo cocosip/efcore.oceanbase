@@ -2,6 +2,21 @@
 
 Entity Framework Core 10 provider for OceanBase MySQL and Oracle compatibility modes, using the public
 OceanBaseConnector 0.4.0 API. The package targets .NET 10 and accepts EF Core 10 patch versions in `[10.0.0,11.0.0)`.
+
+- [Configuration](#configuration)
+- [Scalar mappings](#scalar-mappings)
+- [Query translations](#query-translations)
+- [Retries and transactions](#retries-and-transactions)
+- [Graph loading and compiled models](#graph-loading-and-compiled-models)
+- [Reverse engineering](#reverse-engineering)
+- [Collection and scalar query details](#collection-and-scalar-query-details)
+- [Schema creation and migrations](#schema-creation-and-migrations)
+- [Inheritance and split entities](#inheritance-and-split-entities)
+- [Seeding and namespace ownership](#seeding-and-namespace-ownership)
+- [Bulk updates and deletes](#bulk-updates-and-deletes)
+
+## Configuration
+
 Select the tenant's compatibility mode explicitly when configuring a context:
 
 ```csharp
@@ -38,6 +53,8 @@ Local and bounded OceanBase 4.4.2.2 native profiles cover queries, mappings, wri
 schema tooling and package consumption in both modes. The release target is Windows x64 with ordinary
 direct connections and TLS Disabled. Consult the release checklist for revision-specific evidence and
 remaining gates. Linux, TLS and HA deployments require separate acceptance.
+
+## Scalar mappings
 
 Numeric acceptance includes all eight integer widths, nullable Boolean logic, exact decimal
 storage/facets/converters and native Single boundaries in both modes. Connector 0.4.0 enables
@@ -118,6 +135,10 @@ allowed those extra fractions; the narrower validation prevents that loss. Raw S
 caller-owned parameters bypasses mapping validation. Numeric-offset session tests do not
 establish named timezone/DST or other deployments.
 
+## Query translations
+
+### Temporal methods
+
 The temporal query profile additionally covers implemented calendar/fractional members,
 Date/TimeOfDay/Ticks/DayNumber, signed TimeSpan components and Double totals, DateOnly
 AddDays/AddMonths/AddYears and DateTime AddMonths/AddYears. DateTime.Add(TimeSpan) and
@@ -188,6 +209,8 @@ same guarded whole- and fractional-tick truncation as DateTime. AddMonths and Ad
 the day and preserve fractional seconds on the stored calendar. That calendar is the numeric
 offset's wall clock in Oracle mode and UTC in MySQL mode.
 
+### Numeric functions and ordering
+
 `Math.Acosh(double)` and `MathF.Acosh(float)` translate in both modes. They calculate in Double
 precision before applying the existing result mapping, including Single normalization. Finite input
 at or above 1 returns a numeric result. SQL NULL and finite input below 1 return SQL NULL. Use a
@@ -200,6 +223,8 @@ when paging duplicate sort values. Native NULL ordering follows the dialect: the
 tested MySQL mode sorts NULL first ascending and Oracle sorts NULL last ascending;
 descending reverses those positions. Use explicit null-rank/coalesce expressions
 when portable placement is required; this does not configure string collation.
+
+### Strings
 
 String translations support ordinary equality, two/three/four-string concat,
 single-string and char Contains/StartsWith/EndsWith/IndexOf, Length, both integer Substring/Remove overloads,
@@ -283,6 +308,8 @@ independently of display width. Results use variable national or LOB mappings
 and apply the receiver inverse once. Large SQL results follow the server's
 text capacity for the source family.
 
+### Cardinality, joins and defaults
+
 First/FirstOrDefault/Single/SingleOrDefault and ordinary predicate overloads have
 sync/async native coverage for empty, one and multiple rows with entity, scalar,
 nullable, converter and reference projections. Comparer overloads are excluded.
@@ -312,6 +339,8 @@ Captured defaults in composed queries are evaluated for the current execution. A
 `FirstOrDefault` applies ordering before taking the first row. Explicit `SingleOrDefault` defaults
 are supported only at the query root, where EF checks for multiple rows. Explicit defaults for
 entities and structured projections are unsupported.
+
+## Retries and transactions
 
 Enable EF operation retries explicitly for replayable queries and writes:
 
@@ -343,6 +372,8 @@ rejection contract and preserves the existing enlistment. Distributed/multiple-r
 An active ambient or explicitly enlisted transaction prevents partial operation retries. Directly closing
 or disposing the native connection still follows the Connector's transaction ownership contract.
 
+## Graph loading and compiled models
+
 Split queries support ordinary collection Includes, sibling/nested collections, filtering and paging:
 
 ```csharp
@@ -356,7 +387,7 @@ retry buffering is independent of splitting. Splitting adds memory use and datab
 unique order with paging; separate commands can observe concurrent changes unless the application selects
 an appropriate transaction/isolation level. Cancellation or unknown outcomes are not automatically replayed;
 after failed graph materialization, discard or clear partially tracked entities before reusing a context.
-On OceanBase4.4.2.2 ordinary direct connections, both modes have native sync/async
+On OceanBase 4.4.2.2 ordinary direct connections, both modes have native sync/async
 coverage for single/split Include/ThenInclude, composite and alternate keys, optional
 references, owned references/collections and shadow owner keys, filtered Include and
 root paging, many-to-many shared identities, and all three tracking modes. Tracked
@@ -366,8 +397,8 @@ disable and current-context parameter refresh in the tested parent/child/tag gra
 Captured query values have native row checks and observed parameter binding. These checks
 do not prove identical SQL text or binding in every later split command; optional-reference
 tenant-component sensitivity with the Tenant filter disabled remains untested.
-Concurrent-change isolation, arbitrary model/converter combinations, graph failure recovery,
-lazy loading and ordinary compiled models retain their separate acceptance requirements.
+Concurrent-change isolation, arbitrary model/converter combinations and graph failure recovery remain
+outside that graph profile. The following sections describe lazy-loading and compiled-model profiles.
 
 Lazy loading can use EF's injected `ILazyLoader`, or the optional official
 `Microsoft.EntityFrameworkCore.Proxies` package at the application's EF10 patch version:
@@ -410,6 +441,8 @@ queries, and checks built-in converted mappings with dynamic code disabled. Publ
 trim/AOT warnings; arbitrary converters, additional query shapes, other platforms and performance remain
 unverified. See C-01 in the gap matrix for the bounded scope.
 
+## Reverse engineering
+
 Database reverse engineering uses the driver's public `GetSchema` collections, including its typed column
 declarations and tri-state generation/default/update metadata. Scaffolding connections must specify
 `ExpectedMode=MySql` or `ExpectedMode=Oracle`; generated `UseOceanBase` code selects that mode explicitly.
@@ -448,6 +481,8 @@ explicit insert assignments. With no known default, the generated model writes t
 Create scripts and migrations preserve the clause through the `OceanBase:OnUpdateSql` annotation.
 Schema recreation requires the SQL or value of any known default. Adding or making an update-only column
 required in an existing table requires an explicit backfill migration. Oracle's catalog does not expose this behavior.
+
+## Collection and scalar query details
 
 General query collection roots support all eight CLR integer types, decimal, Single, Double, nullable
 forms and integer-backed enums through scalar parameters or constants and SELECT/UNION ALL. Empty
@@ -547,6 +582,8 @@ remain distinct. Results use the native Boolean mapping even when operands have 
 Null-converting, ambiguous and Oracle empty-string encodings are rejected. Valid stored encodings,
 native collation/coercion and repeated volatile operand evaluation remain acceptance boundaries.
 
+## Schema creation and migrations
+
 `Database.GenerateCreateScript()` generates supported relational DDL and `HasData` INSERTs offline. To create tables in an already
 provisioned MySQL database or Oracle schema, explicitly name the target:
 
@@ -564,8 +601,8 @@ rolls back that data transaction; DDL has already committed and requires inspect
 Use explicit stable seed keys. Explicit identity values do not reserve a generated-key range or promise
 to advance Oracle's identity generator. `UseSeeding`/`UseAsyncSeeding` callbacks still run once after
 `EnsureCreated` schema/model-data work, in their separate existing transaction; callback failure does not
-undo previously committed model data. `CreateTables` does not invoke those callbacks. Native DDL/data
-transaction behavior remains unverified.
+undo previously committed model data. `CreateTables` does not invoke those callbacks. Existing-namespace
+callback commit/rollback has native coverage; broader DDL/model-data failure recovery needs separate acceptance.
 
 The current database/schema must match the declared name exactly, including case. `EnsureCreated` returns false
 if any ordinary table exists; it does not reconcile or upgrade existing schemas. DDL is not atomic and a failure
@@ -590,8 +627,8 @@ already include this command.
 
 `HasTrigger` describes a table trigger in the EF model. Create scripts and migrations accept the
 metadata without generating trigger bodies, and metadata-only changes emit no SQL. Provision triggers
-externally or author their creation and removal with `migrationBuilder.Sql`. For Oracle direct migration
-execution with Connector 0.3.0, wrap row-trigger DDL in `BEGIN EXECUTE IMMEDIATE '…'; END;` and
+externally or author their creation and removal with `migrationBuilder.Sql`. The tested Oracle direct migration
+profile wraps row-trigger DDL in `BEGIN EXECUTE IMMEDIATE '…'; END;`; use this form and
 escape any single quotes within the DDL. Quoting the statement keeps `:NEW` and `:OLD` out of Connector
 bind-parameter discovery.
 
@@ -649,9 +686,10 @@ as existing schema. MySQL requires read access to `oceanbase.DBA_SEQUENCES` for 
 `CreateTables` creates the declared objects in the selected namespace. Oracle reverse engineering
 uses the public Connector sequence-start API and preserves the start after values have been consumed,
 increment, bounds, cycle, cache and ordering. Sequences outside the supported Int64 bounds or EF
-increment range are omitted with a warning. MySQL sequence reverse engineering remains deferred
-until a reliable declaration-start metadata contract is available.
-Sequence discovery covers each selected namespace, including when tables are explicitly selected.
+increment range are omitted with a warning. MySQL sequence reverse engineering remains deferred pending
+reliable schema-qualified metadata integration in EF. The existing Connector can query the server's
+declared start through ordinary commands; its `GetSchema("Sequences")` result omits that field.
+Oracle sequence discovery covers each selected namespace, including when tables are explicitly selected.
 EF10 scaffolding preserves allocation annotations through provider design-time services. The
 private EF.Design build reference is excluded from the runtime package dependencies.
 
@@ -670,6 +708,8 @@ the account needs read access to the sequence metadata. Rollbacks and disposed c
 Drain active contexts before restarting or changing a sequence used by HiLo. Reserve separate ranges
 for explicitly assigned or seeded keys. Keep the selected database or schema fixed for the lifetime of
 the context, including when using Oracle session commands to switch schemas.
+
+## Inheritance and split entities
 
 TPT (`UseTptMappingStrategy`, with a table for each mapped type) has a locally tested schema/query/write
 workflow in both modes. The root table generates an int/long identity once; intermediate and leaf tables store
@@ -747,6 +787,8 @@ connection opens and tests local file removal only. Offline bundle verification 
 in both modes, with upgrade/data-preservation/downgrade/rollback and cleanup checks. SQL*Plus remains a
 separate client acceptance boundary. See the release checklist for exact package/EF identities.
 
+## Seeding and namespace ownership
+
 `UseSeeding` and `UseAsyncSeeding` run after successful `EnsureCreated` schema processing, including when it
 returns false. Configure the callback matching the sync/async operation; configuring only the opposite callback
 fails before schema work. The callback runs in a new owned transaction after a fresh target-scope check. Failure
@@ -814,6 +856,8 @@ An explicitly infinite command timeout also leaves this cleanup without a timeou
 In-flight native cancellation/timeout can retain an `OceanBaseException` with an unknown execution outcome
 and its cancellation/timeout cause; this state is never converted into a safe-to-retry result. Close/reopen
 the connection before further work and resolve any uncertain transaction outcome separately.
+
+## Bulk updates and deletes
 
 `ExecuteUpdate` and `ExecuteDelete` have local coverage and a bounded native sync/async profile in both modes:
 filtered updates/deletes, affected rows, joined-source updates and cyclic two-column assignments are checked

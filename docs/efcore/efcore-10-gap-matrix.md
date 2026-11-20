@@ -16,42 +16,17 @@ explicitly unsupported features, dependencies, and capabilities to confirm. Pre-
 
 Current counts: 50 G records (0 Not started, 0 In development, 30 Implemented, 1 Blocked, 19 Unsupported, 0 Deferred). The inventory also retains 2 Implemented F records, 11 dependency records (B-01 through B-10 and C-03, with 7 Implemented, 3 Blocked and 1 Unsupported), 2 Implemented and 1 Unsupported capability investigations, and 4 Deferred D groups.
 
-## Development checkpoint and order
+## Current integration boundary
 
 Connector 0.4.0 integration implements B-10 scalar Oracle JSON, B-01..04 numeric/parameter
 contracts and the supported G-36/C-03/Oracle D-06 reverse-engineering profiles. Expression index SQL,
 identity generation/options and standalone sequence cache/order survive generated C#, relational
 models and DDL through the annotations documented in the package README. The Provider consumes
 public Connector APIs from the published package. MySQL declaration-start catalog integration, other index
-kinds and the existing server limitations retain their explicit boundaries. Final-package, live,
-specification and platform acceptance remains in the release checklist.
-
-1. G-01..11 complete the selected P0/P1 temporal additions and differences. Preserve DateTime's
-   separate whole/fraction tick truncation, exact Int64 duration results and TimeOnly's whole-product
-   truncation/saturation, 24-hour wrapping, NULL/precision and contextual converter contracts.
-2. G-13 conversions and IsBetween are implemented for the exact signatures in the feature inventory;
-   preserve stored-calendar, NULL/precision, invalid-duration and DateTimeKind boundaries.
-3. G-14 char search overloads are implemented using existing search SQL and contextual text mappings;
-   preserve char-to-text conversion, valid Unicode, total Boolean NULL semantics and native collation.
-   Repeated mapping-specific parameters keep their canonical names in both modes.
-4. G-16 Remove(int)/Remove(int,int) are implemented using guarded native substring/concat, native
-   character counts and variable result mappings. Preserve NULL/range/overflow and converter ownership.
-5. G-15 explicit trim char/char[] signatures are implemented as repeated character-set removal.
-   Preserve null/empty array whitespace, valid Unicode, refreshed arrays/inline nullable char columns,
-   EF.Constant inlining, stored-text converter ownership, case sensitivity and strict regex anchors
-   without NULL compensation.
-6. G-18 implements the six IndexOf signatures with native character positions and guarded ranges.
-   G-47 implements ordinary string and char Replace. G-48 implements guarded Insert. G-49 implements
-   non-truncating character padding. G-30 implements table and column comment DDL, and G-29
-   accepts model trigger metadata. G-37 preserves the MySQL DATETIME update clause in scaffolded
-   models and DDL. G-36 preserves MySQL BTREE prefix indexes and supported Oracle expression indexes.
-   Other non-ordinary index kinds require a complete catalog and EF representation contract.
-   Select remaining Provider features by application value and Provider feasibility.
-   Investigate C items before classifying them as missing code;
-   retain Unsupported/Deferred contracts and resolve B dependencies at their owning layer.
-
-Each implementation needs focused SQL, mapping and behavior regression tests and relevant inventory
-updates. See the [release checklist](efcore-10-release-checklist.md) for acceptance progress and pending gates.
+kinds and the existing server limitations retain their explicit boundaries. Select further work by the
+individual rows below; implemented rows are not an outstanding task queue. Preserve precision, NULL,
+converter, ownership and intentional rejection contracts when expanding scope. Final-package, live,
+specification and platform acceptance belongs only in the release checklist.
 
 ## Provider gaps and current limitations
 
@@ -142,7 +117,7 @@ After investigation, record the result under Provider gaps, Connector/server dep
 
 | ID | Related feature | Status | Capability to confirm and next step |
 | --- | --- | --- | --- |
-| C-01 | DEF-08 | Implemented | EF10 experimental managed query precompilation uses public numeric/temporal reader helpers and serializable MySQL parameters, restoring positional binding when renting a command. Generated C# compiles and executes sync/async queries in both modes with nullable, repeated and refreshed parameters while runtime query compilation is blocked. Actual Windows x64 NativeAOT publication/execution passes the scoped EF 10.0.14 numeric/temporal queries and built-in converted mapping checks. Explicit converted JSON readers avoid dynamic construction for built-in mappings. Arbitrary converters, broader query shapes, other platforms and performance remain outside this profile |
+| C-01 | DEF-08 | Implemented | EF10 experimental query precompilation uses numeric/temporal reader helpers and serializable MySQL parameters, restoring positional binding when renting a command. The generated pipeline supports sync/async, nullable, repeated and refreshed parameters without runtime query compilation. Explicit converted JSON readers avoid dynamic construction for built-in mappings. NativeAOT is limited to the declared generated-query/built-in mapping profile; arbitrary converters and broader query shapes are not implied. Platform execution evidence and publish warnings belong in the release checklist |
 | C-02 | MAP-05/QRY-07 | Unsupported | Numeric-offset temporal mappings and explicit Oracle TIMESTAMP WITH LOCAL TIME ZONE DateTime storage are implemented. LTZ reads session-local Kind.Unspecified values, preserves declared precision in DDL/scaffolding and rejects lossy native fractions; it does not retain zone identity. LTZ temporal member/arithmetic translation remains outside this storage profile. Named-zone/DST and non-Gregorian CLR semantics are unsupported: define explicit per-API/type contracts before expanding scope. The tested MySQL named-zone conversions return NULL and Oracle named-zone/Persian controls return 1882/12702; configured zone-data/DST acceptance belongs to the release checklist |
 | C-04 | DEF-08/QRY-08 | Implemented | Generated models support the scoped combination of lazy-loading and change-tracking proxies when options match at generation and runtime. Both modes execute generated models, graph/split loading, lazy key binding/fixup, scalar conversions, change notifications and persisted updates. Broader inheritance/proxy combinations remain acceptance extensions. Nested lazy loading within streaming roots remains outside the single-active-reader contract |
 
@@ -152,20 +127,18 @@ After investigation, record the result under Provider gaps, Connector/server dep
 | --- | --- | --- | --- | --- |
 | D-04 | DEF-04 | Deferred | Remaining JSON partial-document updates, mapped primitive collections/arrays, complex/JSON-owned types and additional element types for single JSON parameter roots | The remaining work is EF translation, shaping/change tracking and update orchestration, with no demonstrated missing scalar transport API in Connector 0.4.0. Constant-path JSON_VALUE queries are implemented by EF.Functions.OceanBaseJsonValue; native mode-specific size, NULL/error and nonscalar semantics apply. Define SQL/shape contracts for the remaining cases. DEF-04 supports scalar documents and reverse engineering in both modes with Connector 0.4.0. G-21 covers standalone signed-integer JSON parameters |
 | D-05 | DEF-05 | Deferred | Provider integration for Spatial, XML, native enum, OBJECT, LOB locators and general REF CURSOR mapping | Connector 0.4.0 already exposes string XMLTYPE binding, binary geometry transport, complex OBJECT/collection values, LOB operations and REF CURSOR readers. These are deferred EF mapping, shaping and lifetime integrations, not demonstrated missing driver APIs. Define bounded OceanBase type contracts before implementation. See DEF-06 for the Oracle stored-procedure result cursor |
-| D-06 | DEF-06 | Deferred | Multi-row and multiple routine results, functions beyond input-only UPDATE/DELETE with an integer row count, MySQL TPC sequence defaults and MySQL sequence reverse engineering. Both modes support the single-result procedure profile in DEF-06. Oracle TPC sequence defaults are tracked by G-28 | Define an EF write mapping for other routine shapes. MySQL 4.4.2.2 rejects the tested column sequence defaults; require supported syntax and reliable key readback. OceanBase supports reading declared starts: the documented DBA_OB_SEQUENCE_OBJECTS.START_WITH view is readable through ordinary Connector commands in the tested MySQL tenant. Existing GetSchema("Sequences") omits this field. This is a missing metadata convenience contract for the current EF scaffolding integration, not missing server sequence or Connector SQL-execution support. Extend the public catalog or add a schema-qualified declaration-start method; never substitute advancing LAST_NUMBER. Oracle bounded Int64 sequence discovery now uses the public start API and preserves bounds, increment, cycle, cache and order; out-of-range sequences are omitted with a warning |
+| D-06 | DEF-06 | Deferred | Multi-row and multiple routine results, functions beyond input-only UPDATE/DELETE with an integer row count, MySQL TPC sequence defaults and MySQL sequence reverse engineering. Both modes support the single-result procedure profile in DEF-06. Oracle TPC sequence defaults are tracked by G-28 | Define an EF write mapping for other routine shapes. MySQL 4.4.2.2 rejects the tested column sequence defaults; require supported syntax and reliable key readback. MySQL reverse engineering requires reliable schema-qualified sequence identity and declaration-start integration, detailed below. Oracle bounded Int64 discovery already uses GetOracleSequenceStartValue and preserves bounds, increment, cycle, cache and order; out-of-range sequences are omitted with a warning |
 | D-10 | DEF-10 | Deferred | Full-text/vector/search functions and advanced batching optimizations | Target server versions, separate feature implementations, and performance goals |
 
-For D-06, the existing Connector can query OceanBase's declared sequence start through public commands;
-creating and consuming sequences does not need a new interface. The proposed convenience contract is
-`GetMySqlSequenceStartValue(sequenceName, schemaName)` with a matching async form, or a declared-start
-field on `GetSchema("Sequences")`. The [OceanBase sequence-object view][ob-sequence-objects] documents
-`START_WITH`; do not substitute advancing `LAST_NUMBER`. Resolve schema/sequence identity before
-implementation: the currently observed `DBA_OB_DATABASES` projection lacks `DATABASE_ID`, so a
-name-only join is insufficient. Closure requires same-name sequences in different databases, exact
-numeric bounds, sync/async and cancellation, absence/permission errors, cache/restart behavior and
-proof that discovery does not consume values. This deferred EF scaffolding integration does not block
-the current release scope. Probe results and Connector/J comparison belong in the release checklist.
-Do not remove data precision/NULL/ownership validation or intentional rejections while completing features. Update feature group, gap, and acceptance statuses separately.
+For D-06, OceanBase exposes declared starts in [DBA_OB_SEQUENCE_OBJECTS.START_WITH][ob-sequence-objects],
+and Connector 0.4.0 can query them through ordinary public commands. `GetSchema("Sequences")` omits
+that field; it is not evidence of missing sequence or SQL-execution support. Complete the EF integration
+with reliable schema/sequence identity. An additional catalog field or schema-qualified helper would be
+optional convenience, not a prerequisite or an existing API. Never substitute advancing `LAST_NUMBER`.
+The observed `DBA_OB_DATABASES` projection lacks `DATABASE_ID`, so a name-only join is insufficient.
+Closure requires same-name sequences in different databases, exact numeric bounds, sync/async and
+cancellation, absence/permission errors, cache/restart behavior and discovery that consumes no values.
+Probe results, static Connector/J comparison and release exclusions belong in the release checklist.
 
 [writes]: ../../src/OceanBase.EntityFrameworkCore/Update/OceanBaseModificationCommandBatch.cs
 [schema]: ../../src/OceanBase.EntityFrameworkCore/Storage/OceanBaseSchemaSqlGenerator.cs
