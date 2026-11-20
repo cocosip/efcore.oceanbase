@@ -39,8 +39,13 @@ jobs:
           -c Release --no-restore "-p:PackageVersion=$env:CI_PACKAGE_VERSION"
           -o artifacts/ci -m:1 -nr:false
       - name: Verify package contents
-        run: >-
-          ./tests/OceanBase.EntityFrameworkCore.PackageConsumer/Verify-Package.ps1
-          -PackagePath "artifacts/ci/OceanBase.EntityFrameworkCore.$env:CI_PACKAGE_VERSION.nupkg"
-          -ExpectedVersion $env:CI_PACKAGE_VERSION
-          -ExpectedSourceRevision $env:GITHUB_SHA
+        run: |
+          $packageId = dotnet msbuild src/OceanBase.EntityFrameworkCore/OceanBase.EntityFrameworkCore.csproj -nologo -getProperty:PackageId
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $verification = @{
+            PackagePath = "artifacts/ci/$packageId.$env:CI_PACKAGE_VERSION.nupkg"
+            ExpectedPackageId = $packageId
+            ExpectedVersion = $env:CI_PACKAGE_VERSION
+            ExpectedSourceRevision = $env:GITHUB_SHA
+          }
+          ./tests/OceanBase.EntityFrameworkCore.PackageConsumer/Verify-Package.ps1 @verification

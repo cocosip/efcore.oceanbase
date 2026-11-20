@@ -5,7 +5,7 @@ availability and publication status on the intended feed before release.
 
 | EF major | Branch | Provider line / target asset | Current state |
 | --- | --- | --- | --- |
-| 10 | `efcore/10.0` | `OceanBase.EntityFrameworkCore` 10.x / `net10.0` | Active implementation; accepted profiles and remaining publication steps are in the [release checklist](efcore-10-release-checklist.md) |
+| 10 | `efcore/10.0` | 10.x / `net10.0` | Active implementation; accepted profiles and remaining publication steps are in the [release checklist](efcore-10-release-checklist.md) |
 | 9 | `efcore/9.0` | 9.x / `net9.0` | Port from `efcore/10.0` under the [EF Core 9 inventories](../README.md#version-inventories) |
 | 8 | `efcore/8.0` (planned) | 8.x / `net8.0` | Port from `efcore/9.0` after the EF Core 9 port is complete, under the [EF Core 8 inventories](../README.md#version-inventories) |
 | 11 | `dev` when development begins | 11.x / target to be verified | Development has yet to begin |
@@ -31,7 +31,9 @@ Verify any claimed later runtime through its own consumer checks.
 
 - Preserve applicable behavior and explicit limitations. Adapt version-local APIs, service registration,
   model/query generation and tooling on each branch.
-- Keep the package ID `OceanBase.EntityFrameworkCore`. Match its major to EF Core and bound dependencies
+- Use `Sharp.OceanBase.EntityFrameworkCore` as the default NuGet package ID across EF Core majors.
+  Override `OceanBasePackagePrefix` with `-p:OceanBasePackagePrefix=<prefix>` to pack as
+  `<prefix>.OceanBase.EntityFrameworkCore`. Match the package major to EF Core and bound dependencies
   to that major: 8.x uses `[8.0.0,9.0.0)`, 9.x uses `[9.0.0,10.0.0)`, and 10.x uses `[10.0.0,11.0.0)`.
   The EF10 range is implemented in [Directory.Packages.props](../../Directory.Packages.props); the others
   are requirements for future ports.
