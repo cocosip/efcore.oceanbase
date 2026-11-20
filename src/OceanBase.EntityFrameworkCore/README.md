@@ -34,10 +34,10 @@ facets. A repeated or shared stream is rejected before execution; use an indepen
 parameter instance per position. Text-command parameters are Input-only. Stored procedures use
 their separate IN/OUT/INOUT binding path.
 
-This is a development provider. Local tests cover model/type mappings, SQL generation, intercepted query/write
-pipelines and package consumption. OceanBase 4.4.2.2 direct connections have narrow live query and bounded
-text/default/HasData/tracked-write coverage in both modes. Wider mapping, transaction and schema acceptance
-remains open. Passing these profiles does not establish release readiness or other deployments.
+Local and bounded OceanBase 4.4.2.2 native profiles cover queries, mappings, writes, transactions,
+schema tooling and package consumption in both modes. The release target is Windows x64 with ordinary
+direct connections and TLS Disabled. Consult the release checklist for revision-specific evidence and
+remaining gates. Linux, TLS and HA deployments require separate acceptance.
 
 Numeric acceptance includes all eight integer widths, nullable Boolean logic, exact decimal
 storage/facets/converters and native Single boundaries in both modes. Connector 0.4.0 enables
@@ -73,7 +73,8 @@ inverse once to results; they need not be equivalent to arithmetic in model spac
 Connector 0.4.0 supports the wide MySQL result metadata produced by scalar LEAST/GREATEST
 over default `DECIMAL(65,28)` operands. EF reads representable results through its existing
 CLR decimal mapping. Values outside CLR decimal's exact range raise a conversion error.
-Temporal query acceptance, wider converter/declaration combinations and other deployments remain open.
+Additional temporal signatures, wider converter/declaration combinations and other deployments remain
+outside the tested profiles.
 
 Guid defaults use canonical 36-character text in MySQL and RAW(16) in Oracle. Binary Guid mappings
 use EF's `GuidToBytesConverter` / .NET `Guid.ToByteArray()` mixed-endian layout: the UUID
@@ -507,7 +508,7 @@ are covered by the bounded composition profile; wider converter combinations and
 
 Text collection roots support captured arrays/lists and empty inline arrays when the provider-owned mapping
 uses a string carrier and does not convert nulls. Model-to-string converters retain parameter and reader
-hooks; MySQL empty roots use `CAST(NULL AS CHAR)` and Oracle non-LOB text uses
+hooks; MySQL empty roots project an untyped SQL NULL and Oracle non-LOB text uses
 `TO_CHAR(NULL)`/`TO_NCHAR(NULL)` with the owning charset. Explicit
 `EF.Parameter(string[])`/`List<string?>` roots are also supported when the context explicitly selects
 `Constant` or `MultipleParameters`; the provider expands scalar values rather than sending a JSON array.
@@ -515,8 +516,6 @@ Unconfigured contexts, EF's single JSON-style collection parameter, null-convert
 non-text carriers remain unsupported by this path. Oracle empty-string normalization occurs after raw
 collection expansion. Bounded ASCII root UNION/membership results have native coverage;
 wider text facets, collation and LOB behavior remain unverified.
-MySQL text roots contextually tied to bounded/fixed properties can return collation
-error 1267 on the tested server; this composition remains unaccepted.
 
 Text and temporal `Min/Max` support scalar/selector and nullable forms using native aggregates and
 the original mappings/readers. Supported temporal families are DateTime, DateTimeOffset, DateOnly,
@@ -622,8 +621,10 @@ behavior and script execution await acceptance on the target server.
 MySQL migration model diffs can toggle `AUTO_INCREMENT` on an unchanged, non-null signed `INT` or
 `BIGINT` sole primary key. The target model must match the column definition. Table renames and
 primary-key replacements need separate migrations. Other identity transitions and changes to computed
-expressions or storage require an explicit data-preserving migration. Native execution, generated-key
-allocation and rollback of the toggle await acceptance on the target server.
+expressions or storage require an explicit data-preserving migration. The bounded identity-toggle native
+profile is recorded in the release checklist; other transitions require separate contracts.
+MySQL also supports nullability/comment changes to an unchanged virtual computed column. EF synthetic
+backfill defaults do not cause computed-value updates; resolve existing NULLs before requiring the column.
 
 Runtime migrations serialize through an owner row in `__EFMigrationsHistoryLock`. Cleanup never removes another
 owner's row. A process crash or failed cleanup can leave a stale row: verify that no migrator is active before
@@ -677,8 +678,9 @@ existing generation rules. Initial/evolved migrations and snapshots, hierarchy/O
 and tracked multi-table inserts/updates/deletes have local coverage. Keep automatic transactions enabled for
 multi-table saves. As with EF's relational executor, SaveChanges counts physical modification commands in this
 profile; one leaf spanning three tables can return 3. Existing generated-key/default limitations still apply,
-including MySQL's rejection of server-default key readback. Native joins, key generation, foreign-key enforcement
-and rollback remain unverified.
+including MySQL's rejection of server-default key readback. The bounded native profile covers three-level
+Int32 identity insert/reload, root/leaf updates, multi-table rollback and reverse-dependency deletion in both
+modes with sync/async execution. Wider key types, hierarchy queries and schema evolution need separate acceptance.
 
 TPC (`UseTpcMappingStrategy`) has a locally tested schema/migrations/query/CRUD profile in both modes.
 Concrete tables repeat inherited columns; abstract types have no table. Use application-assigned keys
@@ -714,10 +716,14 @@ locally tested schema/migrations/query/CRUD profile in both modes. Only an entit
 its identity; required fragment tables receive the same key. EF requires every entity-split fragment row to
 exist. A shared row produces one physical insert/update/delete, and an optional dependent whose non-shared
 nullable values are all NULL materializes as absent. Map shared concurrency tokens consistently on both
-entities; application-managed changes must set both mapped values, while database-generated tokens are read
-once and propagated to both. Removing an optional shared dependent clears its columns without deleting the
-principal row. Keep automatic transactions enabled for multi-table saves. Native execution/rollback remains
-unverified; this profile does not add split queries.
+entities; application-managed changes must set both mapped values, including when removing an optional
+dependent. Otherwise EF can propagate NULL from the deleted dependent into an unchanged non-nullable
+principal token during command preparation. Database-generated tokens are read once and propagated to both.
+Removing an optional shared dependent clears its columns without deleting the
+principal row. Keep automatic transactions enabled for multi-table saves. Both modes have native sync/async
+coverage for two-table entity CRUD, optional shared-row absence/presence/removal and application-managed
+shared-token conflicts. Wider rollback, schema-evolution and generated-token combinations require separate
+acceptance; this profile does not add split queries.
 
 The provider exposes EF design services for migrations authoring. Reference `Microsoft.EntityFrameworkCore.Design`
 as a private development dependency in the startup project, and configure the same explicit mode in its host or
@@ -736,14 +742,18 @@ match the opted-in namespace. Initial/evolved migrations, model snapshots, pendi
 idempotent scripts, migration listing/removal and framework-dependent Windows bundles have a package-only
 verification fixture under `tests/OceanBase.EntityFrameworkCore.ToolingConsumer`.
 `dotnet ef migrations remove --force` may inspect or change a live database; the fixture blocks all
-connection opens and tests local file removal only. Bundle verification builds the executable and runs `--help`;
-applying a bundle remains a separate native acceptance step.
+connection opens and tests local file removal only. Offline bundle verification builds the executable and runs
+`--help`. The bounded native profile also applies bundles, Connector-executed scripts and MySQL CLI scripts
+in both modes, with upgrade/data-preservation/downgrade/rollback and cleanup checks. SQL*Plus remains a
+separate client acceptance boundary. See the release checklist for exact package/EF identities.
 
 `UseSeeding` and `UseAsyncSeeding` run after successful `EnsureCreated` schema processing, including when it
 returns false. Configure the callback matching the sync/async operation; configuring only the opposite callback
 fails before schema work. The callback runs in a new owned transaction after a fresh target-scope check. Failure
 disposes that transaction but does not undo preceding DDL. No migration lock or automatic retry is supplied;
-callbacks must handle concurrent calls and be idempotent. Physical rollback and commit behavior need live tests.
+callbacks must handle concurrent calls and be idempotent. Both modes have native sync/async acceptance for
+callbacks in an existing namespace: successful writes commit and a callback that writes then throws rolls back.
+Namespace creation and earlier DDL/model-data transactions retain their separate acceptance boundaries.
 
 For an application-owned MySQL database, `EnableOceanBaseDatabaseManagement("application_database")`
 also enables namespace creation and `EnsureDeleted`. It declares ownership of the **entire database**,
@@ -805,19 +815,21 @@ In-flight native cancellation/timeout can retain an `OceanBaseException` with an
 and its cancellation/timeout cause; this state is never converted into a safe-to-retry result. Close/reopen
 the connection before further work and resolve any uncertain transaction outcome separately.
 
-`ExecuteUpdate` and `ExecuteDelete` have local sync/async coverage for ordinary relational operations.
+`ExecuteUpdate` and `ExecuteDelete` have local coverage and a bounded native sync/async profile in both modes:
+filtered updates/deletes, affected rows, joined-source updates and cyclic two-column assignments are checked
+against freshly read persisted values.
 They execute immediately, return affected rows and bypass the change tracker; applications supply concurrency
 predicates and a transaction when several calls must share one. MySQL joined updates use native table-reference
 syntax. Single-table acyclic assignments preserve old values through ordering. Cyclic assignments, dependent
 joined assignments and derived joined sources use projected original values under SELECT /*+ NO_MERGE */,
-joined to the physical target by every primary-key column. This requires a keyed target; native optimizer and
-read-consistency behavior still need server validation. Oracle joined/paged updates use correlated
+joined to the physical target by every primary-key column. This requires a keyed target; broader optimizer and
+read-consistency combinations require separate acceptance. Oracle joined/paged updates use correlated
 scalar source queries and EXISTS over every physical primary-key column. Filters, nested paging and left joins
 are preserved; joined keyless targets reject. Multiple source matches retain the scalar-subquery cardinality
 error rather than selecting an arbitrary value. Each setter repeats the source query, which can be expensive.
-Direct literal/captured setters use column write bounds; server-computed expression bounds and physical bulk SQL
-execution remain unverified. These limits are provider implementation gaps, not demonstrated server defects.
+Direct literal/captured setters use column write bounds; broader server-computed expression bounds require
+separate acceptance. These are coverage boundaries, not demonstrated server defects.
 
-Migrations, reverse engineering and the wider EF feature inventory remain under development.
-EF Core 8/9 adaptation is postponed until the EF10 provider stabilizes. Review the repository's EF10
-feature checklist and progress documents before choosing a development checkpoint for an application.
+Review the feature inventory, gap inventory and release checklist under `docs/efcore` for implemented
+scope, deferred integrations and revision-specific acceptance. EF Core 8/9 adaptation is postponed until
+the EF10 provider stabilizes.

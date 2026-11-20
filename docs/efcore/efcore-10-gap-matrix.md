@@ -22,7 +22,7 @@ Connector 0.4.0 integration implements B-10 scalar Oracle JSON, B-01..04 numeric
 contracts and the supported G-36/C-03/Oracle D-06 reverse-engineering profiles. Expression index SQL,
 identity generation/options and standalone sequence cache/order survive generated C#, relational
 models and DDL through the annotations documented in the package README. The Provider consumes
-public Connector APIs from the published package. MySQL sequence declaration starts, other index
+public Connector APIs from the published package. MySQL declaration-start catalog integration, other index
 kinds and the existing server limitations retain their explicit boundaries. Final-package, live,
 specification and platform acceptance remains in the release checklist.
 
@@ -152,9 +152,19 @@ After investigation, record the result under Provider gaps, Connector/server dep
 | --- | --- | --- | --- | --- |
 | D-04 | DEF-04 | Deferred | Remaining JSON partial-document updates, mapped primitive collections/arrays, complex/JSON-owned types and additional element types for single JSON parameter roots | The remaining work is EF translation, shaping/change tracking and update orchestration, with no demonstrated missing scalar transport API in Connector 0.4.0. Constant-path JSON_VALUE queries are implemented by EF.Functions.OceanBaseJsonValue; native mode-specific size, NULL/error and nonscalar semantics apply. Define SQL/shape contracts for the remaining cases. DEF-04 supports scalar documents and reverse engineering in both modes with Connector 0.4.0. G-21 covers standalone signed-integer JSON parameters |
 | D-05 | DEF-05 | Deferred | Provider integration for Spatial, XML, native enum, OBJECT, LOB locators and general REF CURSOR mapping | Connector 0.4.0 already exposes string XMLTYPE binding, binary geometry transport, complex OBJECT/collection values, LOB operations and REF CURSOR readers. These are deferred EF mapping, shaping and lifetime integrations, not demonstrated missing driver APIs. Define bounded OceanBase type contracts before implementation. See DEF-06 for the Oracle stored-procedure result cursor |
-| D-06 | DEF-06 | Deferred | Multi-row and multiple routine results, functions beyond input-only UPDATE/DELETE with an integer row count, MySQL TPC sequence defaults and MySQL sequence reverse engineering. Both modes support the single-result procedure profile in DEF-06. Oracle TPC sequence defaults are tracked by G-28 | Define an EF write mapping for other routine shapes. MySQL 4.4.2.2 rejects the tested column sequence defaults; require supported syntax and reliable key readback. The documented DBA_OB_SEQUENCE_OBJECTS.START_WITH view is readable in the tested MySQL tenant; the Connector public sequence catalog still omits this declaration value. Add a public, schema-qualified declaration-start contract before EF reverse engineering; never substitute advancing LAST_NUMBER. Oracle bounded Int64 sequence discovery now uses the public start API and preserves bounds, increment, cycle, cache and order; out-of-range sequences are omitted with a warning |
+| D-06 | DEF-06 | Deferred | Multi-row and multiple routine results, functions beyond input-only UPDATE/DELETE with an integer row count, MySQL TPC sequence defaults and MySQL sequence reverse engineering. Both modes support the single-result procedure profile in DEF-06. Oracle TPC sequence defaults are tracked by G-28 | Define an EF write mapping for other routine shapes. MySQL 4.4.2.2 rejects the tested column sequence defaults; require supported syntax and reliable key readback. OceanBase supports reading declared starts: the documented DBA_OB_SEQUENCE_OBJECTS.START_WITH view is readable through ordinary Connector commands in the tested MySQL tenant. Existing GetSchema("Sequences") omits this field. This is a missing metadata convenience contract for the current EF scaffolding integration, not missing server sequence or Connector SQL-execution support. Extend the public catalog or add a schema-qualified declaration-start method; never substitute advancing LAST_NUMBER. Oracle bounded Int64 sequence discovery now uses the public start API and preserves bounds, increment, cycle, cache and order; out-of-range sequences are omitted with a warning |
 | D-10 | DEF-10 | Deferred | Full-text/vector/search functions and advanced batching optimizations | Target server versions, separate feature implementations, and performance goals |
 
+For D-06, the existing Connector can query OceanBase's declared sequence start through public commands;
+creating and consuming sequences does not need a new interface. The proposed convenience contract is
+`GetMySqlSequenceStartValue(sequenceName, schemaName)` with a matching async form, or a declared-start
+field on `GetSchema("Sequences")`. The [OceanBase sequence-object view][ob-sequence-objects] documents
+`START_WITH`; do not substitute advancing `LAST_NUMBER`. Resolve schema/sequence identity before
+implementation: the currently observed `DBA_OB_DATABASES` projection lacks `DATABASE_ID`, so a
+name-only join is insufficient. Closure requires same-name sequences in different databases, exact
+numeric bounds, sync/async and cancellation, absence/permission errors, cache/restart behavior and
+proof that discovery does not consume values. This deferred EF scaffolding integration does not block
+the current release scope. Probe results and Connector/J comparison belong in the release checklist.
 Do not remove data precision/NULL/ownership validation or intentional rejections while completing features. Update feature group, gap, and acceptance statuses separately.
 
 [writes]: ../../src/OceanBase.EntityFrameworkCore/Update/OceanBaseModificationCommandBatch.cs
@@ -176,3 +186,5 @@ Do not remove data precision/NULL/ownership validation or intentional rejections
 [aggregates]: ../../src/OceanBase.EntityFrameworkCore/Query/OceanBaseAggregateMethodTranslator.cs
 [ob-identity-resolver]: https://github.com/oceanbase/oceanbase/blob/v4.4.2_CE/src/sql/resolver/ddl/ob_alter_table_resolver.cpp#L6900
 [ob-generated-column-checks]: https://github.com/oceanbase/oceanbase/blob/v4.4.2_CE/src/rootserver/ob_ddl_service.cpp#L9144
+
+[ob-sequence-objects]: https://docs.oceanbase.com/oceanbase-database/V4.2.1-oceanbase-dba_ob_sequence_objects-sys-tenant
