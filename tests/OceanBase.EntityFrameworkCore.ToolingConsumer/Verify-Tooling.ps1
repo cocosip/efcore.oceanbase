@@ -62,6 +62,9 @@ function Build-ToolingProject {
     $null = Invoke-ToolingDotNet 'build' (@('build', $toolingProject, '--no-restore', '--nologo', '-m:1', '-nr:false') + $toolingProperties)
 }
 
+$toolingPackageId = (Invoke-ToolingDotNet 'package-id' @('msbuild', $toolingProject,
+    '-nologo', '-getProperty:OceanBaseProviderPackageId')).Trim()
+
 $null = Invoke-ToolingDotNet 'restore' (@('restore', $toolingProject, '--source', (Resolve-Path $PackageFeed).Path,
     '--source', (Join-Path $env:USERPROFILE '.nuget/packages'), '--disable-parallel') + $toolingProperties)
 Build-ToolingProject
@@ -70,12 +73,12 @@ if (@($toolingAssets.libraries.PSObject.Properties | Where-Object { $_.Value.typ
     throw 'Tooling consumer must have package dependencies only.'
 }
 if (-not $toolingAssets.libraries."Microsoft.EntityFrameworkCore.Design/$EfCoreVersion") { throw 'Wrong EF Design patch.' }
-if (-not $toolingAssets.libraries."OceanBase.EntityFrameworkCore/$ProviderVersion" -or
+if (-not $toolingAssets.libraries."$toolingPackageId/$ProviderVersion" -or
     -not $toolingAssets.libraries."Microsoft.EntityFrameworkCore/$EfCoreVersion" -or
     -not $toolingAssets.libraries."Microsoft.EntityFrameworkCore.Relational/$EfCoreVersion") {
     throw 'Wrong provider or EF runtime package version.'
 }
-$toolingCachedDll = Join-Path $toolingRoot "artifacts/tooling-packages/oceanbase.entityframeworkcore/$ProviderVersion/lib/net10.0/OceanBase.EntityFrameworkCore.dll"
+$toolingCachedDll = Join-Path $toolingRoot "artifacts/tooling-packages/$($toolingPackageId.ToLowerInvariant())/$ProviderVersion/lib/net10.0/OceanBase.EntityFrameworkCore.dll"
 $toolingConsumerDll = Join-Path $toolingWorkspace 'bin/Debug/net10.0/OceanBase.EntityFrameworkCore.dll'
 if ((Get-FileHash $toolingCachedDll).Hash -ne (Get-FileHash $toolingConsumerDll).Hash) {
     throw 'Tooling output does not contain the selected packaged provider assembly.'

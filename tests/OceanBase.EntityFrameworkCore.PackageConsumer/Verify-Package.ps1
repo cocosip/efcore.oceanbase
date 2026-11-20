@@ -2,7 +2,8 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory)][ValidateNotNullOrEmpty()][string]$PackagePath,
-    [Parameter(Mandatory)][ValidateNotNullOrEmpty()][string]$ExpectedVersion
+    [Parameter(Mandatory)][ValidateNotNullOrEmpty()][string]$ExpectedVersion,
+    [ValidateNotNullOrEmpty()][string]$ExpectedPackageId = 'Sharp.OceanBase.EntityFrameworkCore'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -14,7 +15,7 @@ try {
     $reader = [System.IO.StreamReader]::new($nuspecEntries[0].Open())
     try { [xml]$nuspec = $reader.ReadToEnd() } finally { $reader.Dispose() }
     $metadata = $nuspec.package.metadata
-    if ($metadata.id -cne 'OceanBase.EntityFrameworkCore' -or $metadata.version -cne $ExpectedVersion) {
+    if ($metadata.id -cne $ExpectedPackageId -or $metadata.version -cne $ExpectedVersion) {
         throw 'Package ID or version does not match the requested provider build.'
     }
 
@@ -45,7 +46,7 @@ try {
     try { $readme = $reader.ReadToEnd() } finally { $reader.Dispose() }
     if ([string]::IsNullOrWhiteSpace($readme)) { throw 'Package README is empty.' }
 
-    Write-Output "OceanBase.EntityFrameworkCore ${ExpectedVersion}: package content checks passed."
+    Write-Output "${ExpectedPackageId} ${ExpectedVersion}: package content checks passed."
 } finally {
     $archive.Dispose()
 }

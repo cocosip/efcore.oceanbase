@@ -134,8 +134,7 @@ identity/key retrieval, transaction behavior and cancellation behavior for both 
 - dev retains the preceding integration checkpoint; synchronization is not implicit.
 - efcore/8.0 and efcore/9.0 fork from an efcore/10.0 release commit and are adapted independently.
 - A version branch is compiled against exactly one EF Core major version.
-- All branches publish the package ID OceanBase.EntityFrameworkCore; the package major version identifies
-  the EF Core major (8.x, 9.x, 10.x, 11.x).
+- Follow the package naming and version rules in the [version support matrix](efcore/version-support-matrix.md).
 - Use Gitmoji Conventional Commits, for example: ✨ feat(efcore8): add relational options registration.
 - Review and test changes on efcore/10.0 before committing; pack and publish from that branch after release gates pass.
 - A release requires passing unit tests, package-consumer tests and the documented compatibility checks for the

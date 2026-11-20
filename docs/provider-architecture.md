@@ -54,8 +54,7 @@ The normal release flow is:
 4. Fork efcore/8.0 and efcore/9.0 from a stable efcore/10.0 release commit when compatibility work is needed.
 5. Adapt each compatibility branch independently and publish only its matching package line.
 
-The package ID stays OceanBase.EntityFrameworkCore. The package major version and dependency range identify the
-EF Core major. Application TFM and EF Core major are intentionally independent.
+See the [version support matrix](efcore/version-support-matrix.md) for package identity and target frameworks.
 
 Shared code is kept in a small project or shared source directory. Fixes are backported deliberately with
 cherry-picks or focused merges; a compatibility branch must remain buildable and testable without compiling

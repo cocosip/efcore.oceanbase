@@ -12,7 +12,7 @@
              Condition="Exists('../OceanBase.EntityFrameworkCore.PackageConsumer/RecoverySmoke.cs')" />
     <Compile Include="../TestUtilities/ScaffoldingCatalogConnection.cs" Link="ScaffoldingCatalogConnection.cs"
              Condition="Exists('../TestUtilities/ScaffoldingCatalogConnection.cs')" />
-    <PackageReference Include="OceanBase.EntityFrameworkCore" Version="$(OceanBaseProviderVersion)" />
+    <PackageReference Include="$(OceanBaseProviderPackageId)" Version="$(OceanBaseProviderVersion)" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="$(OceanBaseConsumerEfCoreVersion)"
                       PrivateAssets="all" IncludeAssets="all" />
     <PackageReference Include="Microsoft.EntityFrameworkCore" Version="$(OceanBaseConsumerEfCoreVersion)" />

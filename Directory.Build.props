@@ -1,5 +1,7 @@
 <Project>
   <PropertyGroup>
+    <OceanBasePackagePrefix Condition="'$(OceanBasePackagePrefix)' == ''">Sharp</OceanBasePackagePrefix>
+    <OceanBaseProviderPackageId>$(OceanBasePackagePrefix).OceanBase.EntityFrameworkCore</OceanBaseProviderPackageId>
     <TargetFramework>net10.0</TargetFramework>
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
