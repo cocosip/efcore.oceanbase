@@ -2,7 +2,7 @@
   <PropertyGroup>
     <AssemblyName>OceanBase.EntityFrameworkCore</AssemblyName>
     <RootNamespace>OceanBase.EntityFrameworkCore</RootNamespace>
-    <PackageId>OceanBase.EntityFrameworkCore</PackageId>
+    <PackageId>$(OceanBaseProviderPackageId)</PackageId>
     <Description>Entity Framework Core provider for OceanBase MySQL and Oracle compatibility modes.</Description>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <PackageReadmeFile>README.md</PackageReadmeFile>

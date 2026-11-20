@@ -1,4 +1,4 @@
-# OceanBase.EntityFrameworkCore
+# Sharp.OceanBase.EntityFrameworkCore
 
 Entity Framework Core 9 provider for OceanBase MySQL and Oracle compatibility modes, using the public
 OceanBaseConnector 0.4.0 API. The package targets `net9.0` and accepts EF Core 9 patch versions in `[9.0.0,10.0.0)`.
