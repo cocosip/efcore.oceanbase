@@ -1,13 +1,13 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFramework>net9.0</TargetFramework>
+    <TargetFramework>net8.0</TargetFramework>
     <ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally>
     <NuGetAudit>false</NuGetAudit>
     <IsPackable>false</IsPackable>
-    <OceanBaseProviderVersion Condition="'$(OceanBaseProviderVersion)' == ''">9.0.0</OceanBaseProviderVersion>
+    <OceanBaseProviderVersion Condition="'$(OceanBaseProviderVersion)' == ''">8.0.0</OceanBaseProviderVersion>
     <OceanBaseConsumerProxiesVersion Condition="'$(OceanBaseConsumerEfCoreVersion)' != ''">$(OceanBaseConsumerEfCoreVersion)</OceanBaseConsumerProxiesVersion>
-    <OceanBaseConsumerProxiesVersion Condition="'$(OceanBaseConsumerProxiesVersion)' == ''">9.0.0</OceanBaseConsumerProxiesVersion>
+    <OceanBaseConsumerProxiesVersion Condition="'$(OceanBaseConsumerProxiesVersion)' == ''">8.0.0</OceanBaseConsumerProxiesVersion>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="OceanBase.EntityFrameworkCore" Version="$(OceanBaseProviderVersion)" />

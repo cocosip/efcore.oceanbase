@@ -7,6 +7,8 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.EntityFrameworkCore.Query;
+using OceanBase.EntityFrameworkCore.TestUtilities;
 using OceanBaseConnector;
 using Xunit;
 
@@ -319,7 +321,7 @@ public sealed class DateTimeCalendarAddFunctionalTests
         using var table = new DataTable();
         table.Columns.Add("Value", typeof(object));
         var capture = new Capture(table);
-        await using var context = Create(mode, capture);
+        await using var context = Create(mode, capture, keepTemporalConversions: true);
         var day = new DateOnly(2024, 2, 29);
         var clock = new TimeOnly(12, 34, 56).Add(TimeSpan.FromTicks(mode == OceanBaseCompatibilityMode.MySql ? 1234560 : 1234567));
         var stamp = day.ToDateTime(clock);
@@ -334,7 +336,7 @@ public sealed class DateTimeCalendarAddFunctionalTests
         var start = new TimeOnly(22, 0);
         var end = new TimeOnly(2, 0);
         var query = context.Rows.Where(row => row.Clock.IsBetween(start, end))
-            .Select(row => (TimeOnly?)TimeOnly.FromTimeSpan(EF.Parameter(amount)));
+            .Select(row => (TimeOnly?)TimeOnly.FromTimeSpan(amount));
         var index = capture.Parameters.Count;
         Assert.Equal([clock, null], await Read(query));
         Assert.Contains((object)long.MaxValue, capture.Parameters[index]);
@@ -410,11 +412,15 @@ public sealed class DateTimeCalendarAddFunctionalTests
         else Assert.Contains(years ? " YEAR)" : " MONTH)", sql);
     }
 
-    private static TestContext Create(OceanBaseCompatibilityMode mode, Capture capture)
-        => new(new DbContextOptionsBuilder<TestContext>()
+    private static TestContext Create(OceanBaseCompatibilityMode mode, Capture capture, bool keepTemporalConversions = false)
+    {
+        var builder = new DbContextOptionsBuilder<TestContext>()
             .UseOceanBase("Server=offline;Database=datetime_calendar_add", mode)
             .EnableServiceProviderCaching(false)
-            .AddInterceptors(new NoNetwork(), capture).Options);
+            .AddInterceptors(new NoNetwork(), capture);
+        if (keepTemporalConversions) builder.ReplaceService<IEvaluatableExpressionFilter, TemporalConversionFilter>();
+        return new TestContext(builder.Options);
+    }
 
     private sealed class TestContext(DbContextOptions<TestContext> options) : DbContext(options)
     {

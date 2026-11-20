@@ -319,12 +319,12 @@ namespace OceanBase.EntityFrameworkCore.LiveTests
                             property, [Convert.ChangeType(-1, type)], true);
                     }
                 }
-                stage("EF Least/Greatest scalar result and NULL propagation");
+                stage("Math Min/Max scalar result and NULL propagation");
                 var extrema = context.Set<Row>().OrderBy(row => row.Id).Select(row => new
                 {
-                    I = EF.Functions.Least(row.Int32, 1), L = EF.Functions.Greatest(row.Int64, 1L),
-                    F = EF.Functions.Least(row.Single, 1f), B = EF.Functions.Greatest(row.Double, 1d),
-                    D = EF.Functions.Least(row.Decimal, 1m), DMax = EF.Functions.Greatest(row.Decimal, 1m)
+                    I = (int?)Math.Min(row.Int32!.Value, 1), L = (long?)Math.Max(row.Int64!.Value, 1L),
+                    F = (float?)Math.Min(row.Single!.Value, 1f), B = (double?)Math.Max(row.Double!.Value, 1d),
+                    D = (decimal?)Math.Min(row.Decimal!.Value, 1m), DMax = (decimal?)Math.Max(row.Decimal!.Value, 1m)
                 });
                 Assert.Contains("LEAST(", extrema.ToQueryString());
                 Assert.Contains("GREATEST(", extrema.ToQueryString());
@@ -371,8 +371,8 @@ namespace OceanBase.EntityFrameworkCore.LiveTests
                 }
                 var query = context.Set<Row>().OrderBy(row => row.Id).Select(row => new
                 {
-                    Low = EF.Functions.Least(row.Int32, (int?)1, (int?)-1),
-                    High = EF.Functions.Greatest(row.Int32, (int?)1, (int?)-1)
+                    Low = (int?)Math.Min(row.Int32!.Value, -1),
+                    High = (int?)Math.Max(row.Int32!.Value, 1)
                 });
                 Assert.Equal(Seed().Select(row => new
                 {

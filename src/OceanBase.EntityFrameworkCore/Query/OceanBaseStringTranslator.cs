@@ -93,7 +93,7 @@ namespace OceanBase.EntityFrameworkCore.Query
             {
                 var start = sqlExpressionFactory.ApplyDefaultTypeMapping(arguments[0]);
                 var longMapping = mappingSource.FindMapping(typeof(long))!;
-                var position = start is SqlConstantExpression { Value: int value } && start.TypeMapping?.Converter is null
+                SqlExpression position = start is SqlConstantExpression { Value: int value } && start.TypeMapping?.Converter is null
                     ? sqlExpressionFactory.Constant((long)value + 1L, longMapping)
                     : sqlExpressionFactory.Add(start, sqlExpressionFactory.Constant(1L, longMapping), longMapping);
                 var args = method == SubstringStart

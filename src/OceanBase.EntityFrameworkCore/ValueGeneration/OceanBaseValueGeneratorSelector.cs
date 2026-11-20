@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Data;
 using System.Data.Common;
-using System.Diagnostics.CodeAnalysis;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
@@ -24,11 +23,11 @@ namespace OceanBase.EntityFrameworkCore.ValueGeneration
     {
         private readonly Dictionary<IProperty, ValueGenerator> _generators = new();
 
-        public override bool TrySelect(IProperty property, ITypeBase typeBase, [NotNullWhen(true)] out ValueGenerator? valueGenerator)
+        public override ValueGenerator Select(IProperty property, ITypeBase typeBase)
         {
-            if (_generators.TryGetValue(property, out valueGenerator)) return true;
+            if (_generators.TryGetValue(property, out var valueGenerator)) return valueGenerator;
             if (OceanBaseRelationalAnnotationProvider.FindHiLoSequence(property) is not { } sequence)
-                return base.TrySelect(property, typeBase, out valueGenerator);
+                return base.Select(property, typeBase);
 
             var mysql = options.FindExtension<OceanBaseOptionsExtension>()!.CompatibilityMode == OceanBaseCompatibilityMode.MySql;
             var scope = commands.Build(mysql ? "SELECT DATABASE()" : "SELECT SYS_CONTEXT('USERENV', 'CURRENT_SCHEMA') FROM DUAL");
@@ -42,7 +41,7 @@ namespace OceanBase.EntityFrameworkCore.ValueGeneration
             var maximumKey = (long)Math.Min(sequence.MaxValue ?? long.MaxValue, storeMaximum);
             valueGenerator = new SequenceKeyGenerator(connection, commands, updateSql, logger, sequence, scope, mysql, int32, maximumKey);
             _generators.Add(property, valueGenerator);
-            return true;
+            return valueGenerator;
         }
 
         private sealed class SequenceKeyGenerator(IRelationalConnection connection, IRawSqlCommandBuilder commands,

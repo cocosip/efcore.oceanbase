@@ -3,7 +3,6 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Internal;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Query;
 using Microsoft.EntityFrameworkCore.Query.SqlExpressions;
@@ -13,8 +12,6 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using OceanBase.EntityFrameworkCore.Query;
 using OceanBaseConnector;
 using Xunit;
-
-#pragma warning disable EF1001 // EF9-only collection options infrastructure.
 
 namespace OceanBase.EntityFrameworkCore.UnitTests
 {
@@ -53,7 +50,8 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             var visitor = new OceanBaseCollectionParameterExpandingVisitor(factory,
                 dictionary, () => { }, source, mode);
             var error = Assert.Throws<NotSupportedException>(() => visitor.Visit(
-                new ValuesExpression("v", parameter, new[] { "Value" })));
+                new TableValuedFunctionExpression("v", "OceanBaseCollection", [parameter])
+                    .AddAnnotation(OceanBaseQueryableMethodTranslatingExpressionVisitorFactory.ParameterCollectionAnnotation, new[] { "Value" })));
             Assert.Contains("numeric, Boolean, text, binary or temporal", error.Message);
         }
 
@@ -72,14 +70,12 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
         }
 
         [Theory]
-        [InlineData(OceanBaseCompatibilityMode.MySql, ParameterizedCollectionTranslationMode.Constantize)]
-        [InlineData(OceanBaseCompatibilityMode.MySql, ParameterizedCollectionTranslationMode.Parameterize)]
-        [InlineData(OceanBaseCompatibilityMode.Oracle, ParameterizedCollectionTranslationMode.Constantize)]
-        [InlineData(OceanBaseCompatibilityMode.Oracle, ParameterizedCollectionTranslationMode.Parameterize)]
+        [InlineData(OceanBaseCompatibilityMode.MySql)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle)]
         public void Captured_text_roots_translate_and_rebind(
-            OceanBaseCompatibilityMode mode, ParameterizedCollectionTranslationMode translation)
+            OceanBaseCompatibilityMode mode)
         {
-            using var context = CreateContext(mode, collectionMode: translation);
+            using var context = CreateContext(mode);
             string?[] values = ["one", null, "two"];
             var query = context.Rows.Where(row => values.Contains(row.Text));
 
@@ -98,12 +94,6 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             string?[] converted = ["one", null];
             Assert.DoesNotContain("IN ()", context.Rows
                 .Where(row => converted.Contains(row.Suffix)).ToQueryString());
-            using var unconfigured = CreateContext(mode);
-            Assert.Throws<InvalidOperationException>(() => unconfigured.Rows
-                .Where(row => EF.Parameter(converted).Contains(row.Text)).ToQueryString());
-            using var singleParameter = CreateContext(mode, collectionMode: ParameterizedCollectionTranslationMode.Parameterize);
-            Assert.Throws<InvalidOperationException>(() => singleParameter.Rows
-                .Where(row => EF.Parameter(converted).Contains(row.Text)).ToQueryString());
         }
 
         [Theory]
@@ -167,27 +157,22 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
         [InlineData(OceanBaseCompatibilityMode.MySql, true)]
         [InlineData(OceanBaseCompatibilityMode.Oracle, false)]
         [InlineData(OceanBaseCompatibilityMode.Oracle, true)]
-        public void Mapping_owned_literals_modes_and_converted_carriers_keep_their_boundaries(
+        public void Mapping_owned_literals_and_converted_carriers_keep_their_boundaries(
             OceanBaseCompatibilityMode mode, bool relationalNulls)
         {
             using var context = CreateContext(mode, relationalNulls);
             string?[] values = ["", "O'Reilly", "海\\\n'_%--"];
-            var literal = context.Rows.Where(row => EF.Constant(values).Contains(row.Suffix)).ToQueryString();
+            var literal = context.Rows.Where(row => new[] { "", "O'Reilly", "海\\\n'_%--" }.Contains(row.Suffix)).ToQueryString();
             Assert.Contains("O''Reilly!", literal);
             Assert.Contains(mode == OceanBaseCompatibilityMode.Oracle ? "N'!'" : "'!'", literal);
             Assert.DoesNotContain(mode == OceanBaseCompatibilityMode.MySql ? "@values" : ":values", literal);
             if (mode == OceanBaseCompatibilityMode.MySql) Assert.Contains("_utf8mb4 X'", literal);
-            using var constants = CreateContext(mode, relationalNulls, ParameterizedCollectionTranslationMode.Constantize);
-            Assert.Contains("O''Reilly!", constants.Rows.Where(row => values.Contains(row.Suffix)).ToQueryString());
-            using var parameters = CreateContext(mode, relationalNulls, ParameterizedCollectionTranslationMode.Parameterize);
-            Assert.Contains(" IN (", parameters.Rows.Where(row => values.Contains(row.Suffix)).ToQueryString());
-            Assert.Throws<InvalidOperationException>(() => parameters.Rows.Where(row => EF.Parameter(values).Contains(row.Text)).ToQueryString());
             Assert.Throws<InvalidOperationException>(() => context.Rows.Where(row => values.Contains(row.Text, StringComparer.Ordinal)).ToQueryString());
-            Assert.Throws<InvalidOperationException>(() => context.Rows.Where(row => EF.Parameter(values).AsQueryable()
-                .Where(value => value != null).Contains(row.Text)).ToQueryString());
             int[] numbers = [0, 17, 23];
             State[] states = [State.Empty, State.Present];
-            Assert.Contains(" IN (", context.Rows.Where(row => numbers.Contains(row.Number)).ToQueryString());
+            var numberSql = context.Rows.Where(row => numbers.Contains(row.Number)).ToQueryString();
+            Assert.Contains(" IN (", numberSql);
+            Assert.DoesNotContain("JSON_TABLE(", numberSql);
             Assert.Contains(" IN (", context.Rows.Where(row => states.Contains(row.State)).ToQueryString());
             State?[] optionalStates = [State.Empty, State.Present];
             var enumEmpty = context.Rows.Where(row => optionalStates.Contains(row.EmptyState)).ToQueryString();
@@ -204,8 +189,8 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             if (mode == OceanBaseCompatibilityMode.Oracle)
             {
                 Assert.Contains("BLOB", Assert.Throws<NotSupportedException>(() => context.Rows.Where(row => binary.Contains(row.Binary)).ToQueryString()).Message);
-                binary = ["", "0A"];
-                Assert.Contains("BLOB", Assert.Throws<NotSupportedException>(() => context.Rows.Where(row => EF.Constant(binary).Contains(row.Binary)).ToQueryString()).Message);
+                Assert.Contains("BLOB", Assert.Throws<NotSupportedException>(() => context.Rows
+                    .Where(row => new[] { "", "0A" }.Contains(row.Binary)).ToQueryString()).Message);
             }
             else
             {
@@ -297,7 +282,7 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
                 var mapping = (RelationalTypeMapping)context.Model.FindEntityType(typeof(Row))!.FindProperty(property)!.GetTypeMapping();
                 var parameter = new SqlParameterExpression("values", typeof(IEnumerable<string?>),
                     source.FindMapping(typeof(IEnumerable<string?>), context.Model, mapping));
-                var membership = factory.In(new ColumnExpression(property, "r", typeof(string), mapping, true), parameter);
+                var membership = factory.In(new TestColumnExpression(property, "r", typeof(string), mapping, true), parameter);
                 var result = Assert.IsType<InExpression>(visitor.Visit(membership));
                 Assert.All(result.Values!, scalar => Assert.Same(mapping, scalar.TypeMapping));
                 Assert.Equal(values.Cast<object?>(), result.Values!.Select(value => Assert.IsType<SqlConstantExpression>(value).Value));
@@ -318,13 +303,12 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             var source = context.GetService<IRelationalTypeMappingSource>();
             var mapping = (RelationalTypeMapping)context.Model.FindEntityType(typeof(Row))!.FindProperty(nameof(Row.EmptyState))!.GetTypeMapping();
             var collectionMapping = source.FindMapping(typeof(State?[]), context.Model, mapping);
-            var item = new ColumnExpression("EmptyState", "r", typeof(State), mapping, true);
+            var item = new TestColumnExpression("EmptyState", "r", typeof(State), mapping, true);
             var parameter = new SqlParameterExpression("values", typeof(State?[]), collectionMapping);
             State?[] values = [State.Empty, State.Present, null];
             var dictionary = new Dictionary<string, object?> { ["values"] = values };
-            var processor = context.GetService<IRelationalParameterBasedSqlProcessorFactory>()
-                .Create(new RelationalParameterBasedSqlProcessorParameters(relationalNulls, new HashSet<string>()));
-            var select = new SelectExpression(factory.In(item, parameter), new SqlAliasManager());
+            var processor = context.GetService<IRelationalParameterBasedSqlProcessorFactory>().Create(relationalNulls);
+            var select = factory.Select(factory.In(item, parameter));
             select.ApplyProjection();
             _ = processor.Optimize(select, dictionary, out var canCache);
             Assert.False(canCache);
@@ -343,13 +327,11 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
         }
 
-        private static TestContext CreateContext(OceanBaseCompatibilityMode mode, bool relationalNulls = false,
-            ParameterizedCollectionTranslationMode? collectionMode = null)
+        private static TestContext CreateContext(OceanBaseCompatibilityMode mode, bool relationalNulls = false)
         {
             var builder = new DbContextOptionsBuilder<TestContext>().UseOceanBase("Server=localhost;Database=test", mode);
             var extension = builder.Options.Extensions.OfType<RelationalOptionsExtension>().Single()
                 .WithUseRelationalNulls(relationalNulls);
-            if (collectionMode.HasValue) extension = extension.WithParameterizedCollectionTranslationMode(collectionMode.Value);
             ((IDbContextOptionsBuilderInfrastructure)builder).AddOrUpdateExtension(extension);
             return new TestContext(builder.Options);
         }

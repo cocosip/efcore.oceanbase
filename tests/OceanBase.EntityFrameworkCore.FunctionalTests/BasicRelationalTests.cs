@@ -5,6 +5,7 @@ using System.Data.Common;
 using System.Linq;
 using System.Globalization;
 using System.Numerics;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
@@ -47,13 +48,16 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
                 }
                 else
                 {
-                    var minimumParameter = ":" + Assert.Single(commands.Inputs, parameter => Equals(parameter.Value, value))
-                        .ParameterName.TrimStart(':');
+                    var minimumParameters = commands.Inputs.Where(parameter => Equals(parameter.Value, value))
+                        .Select(parameter => ":" + parameter.ParameterName.TrimStart(':')).ToArray();
+                    Assert.InRange(minimumParameters.Length, 1, 2);
+                    var projectionMinimum = minimumParameters[0];
+                    var predicateMinimum = minimumParameters[^1];
                     var nameParameter = ":" + Assert.Single(commands.StringInputs).ParameterName.TrimStart(':');
-                    Assert.Contains($"SELECT \"c\".\"Id\" + {minimumParameter}", commands.Sql[^1]);
-                    Assert.Contains($"\"c\".\"Id\" > {minimumParameter}", commands.Sql[^1]);
+                    Assert.Contains($"SELECT \"c\".\"Id\" + {projectionMinimum}", commands.Sql[^1]);
+                    Assert.Contains($"\"c\".\"Id\" > {predicateMinimum}", commands.Sql[^1]);
                     Assert.Contains($"\"c\".\"Name\" = {nameParameter}", commands.Sql[^1]);
-                    Assert.Equal(new object?[] { value, name }, commands.Values);
+                    Assert.Equal(minimumParameters.Length == 1 ? new object?[] { value, name } : [value, name, value], commands.Values);
                 }
                 commands.Inputs.Clear();
                 commands.StringInputs.Clear();
@@ -364,32 +368,6 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
         }
 
         [Theory]
-        [InlineData(OceanBaseCompatibilityMode.MySql, false)]
-        [InlineData(OceanBaseCompatibilityMode.Oracle, true)]
-        public async Task ScalarExtrema_captured_arrays_refresh_colliding_keys_and_revert(
-            OceanBaseCompatibilityMode mode, bool async)
-        {
-            using var table = new DataTable();
-            table.Columns.Add("Id", typeof(int));
-            table.Rows.Add(1);
-            var commands = new CommandCapture { Results = table };
-            await using var context = CreateContext(mode, commands);
-            int?[] captured = [101, 2, 3, 4, 5, 6, 7, 8, 9];
-            var query = context.Set<NumericAggregateRow>().Where(r => EF.Functions.Least(captured) < r.Id).Select(r => r.Id);
-            foreach (var value in new int?[] { 101, 202, null, 101 })
-            {
-                captured[0] = value; // EF's structural hash uses only the last eight elements.
-                Assert.Equal(1, Assert.Single(async ? await query.ToListAsync() : query.ToList()));
-                var literal = value?.ToString(CultureInfo.InvariantCulture) ?? "NULL";
-                Assert.Contains($"LEAST({literal}, 2, 3, 4, 5, 6, 7, 8, 9)", commands.Sql[^1]);
-            }
-            captured = [17, 22];
-            Assert.Equal(1, Assert.Single(async ? await query.ToListAsync() : query.ToList()));
-            Assert.Contains("LEAST(17, 22)", commands.Sql[^1]);
-            Assert.Empty(commands.Values);
-        }
-
-        [Theory]
         [InlineData(OceanBaseCompatibilityMode.MySql, false, false)]
         [InlineData(OceanBaseCompatibilityMode.MySql, true, true)]
         [InlineData(OceanBaseCompatibilityMode.Oracle, false, true)]
@@ -409,8 +387,8 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
             {
                 Decimal = Math.Min(r.Decimal, r.Cross),
                 Single = Math.Max(r.Cross, r.Decimal),
-                Integral = EF.Functions.Greatest(r.Offset, r.Id),
-                Nullable = EF.Functions.Least(r.Optional, r.Id),
+                Integral = Math.Max(r.Offset, r.Id),
+                Nullable = (int?)Math.Min(r.Optional!.Value, r.Id),
                 Reversed = Math.Min(r.Reversed, r.Decimal)
             });
             foreach (var threshold in new[] { 2m, 7m })
@@ -629,9 +607,9 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
                 .Select(value => row.Id + 1).ElementAt(row.Id));
             Assert.Empty(async ? await ordinal.ToListAsync() : ordinal.ToList());
             sql = Assert.Single(commands.Sql);
-            Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? " AS `_ord` WHERE 1 = 0" : " \"_ord\"" + Environment.NewLine, sql);
+            Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? " AS `_ord`" : " \"_ord\"", sql);
+            Assert.Contains("WHERE 1 = 0", sql);
             Assert.Contains("ORDER BY", sql);
-            Assert.DoesNotContain(mode == OceanBaseCompatibilityMode.MySql ? " AS `Value`" : " \"Value\"", sql);
             Assert.Empty(commands.Inputs);
 
             counts.Rows.Add(new OceanBaseDecimal(42m), false);
@@ -658,7 +636,7 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
         [InlineData(OceanBaseCompatibilityMode.Oracle, true, false)]
         [InlineData(OceanBaseCompatibilityMode.Oracle, false, true)]
         [InlineData(OceanBaseCompatibilityMode.Oracle, true, true)]
-        public async Task Integral_root_commands_rebind_current_values_without_padding_or_mutating_sources(
+        public async Task Integral_root_commands_rebind_one_json_parameter_without_mutating_sources(
             OceanBaseCompatibilityMode mode, bool async, bool relationalNulls)
         {
             using var table = new DataTable();
@@ -681,25 +659,26 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
                 Assert.Equal(snapshot, capture);
                 var sql = Assert.Single(commands.Sql);
                 Assert.DoesNotContain("UNION ALL VALUES", sql);
-                if (capture is null || capture.Length == 0)
+                Assert.Contains("JSON_TABLE(", sql);
+                if (capture is null)
                 {
-                    Assert.Contains("WHERE 1 = 0", sql);
+                    Assert.Contains("JSON_TABLE(NULL,", sql);
                     Assert.Empty(commands.Inputs);
                 }
                 else
                 {
-                    Assert.Equal(capture.Length - 1, sql.Split("UNION ALL SELECT").Length - 1);
-                    Assert.Equal(capture.Where(value => value.HasValue).Select(value => (object)value!.Value),
-                        commands.Values.Where(value => value is not DBNull));
-                    Assert.All(commands.Inputs, parameter => Assert.Equal(DbType.Int32, parameter.DbType));
+                    Assert.Single(commands.Inputs);
+                    Assert.Equal(capture, JsonSerializer.Deserialize<int?[]>(Assert.IsType<string>(Assert.Single(commands.Values))));
                 }
             }
 
             List<int?> list = [17, null, 17, 3, 5, 7];
             var listQuery = context.Set<ArithmeticRow>().SelectMany(row => list.Where(value => value > row.Id));
             commands.Sql.Clear();
+            commands.Values.Clear();
             _ = async ? await listQuery.ToListAsync() : listQuery.ToList();
-            Assert.Equal(5, Assert.Single(commands.Sql).Split("UNION ALL SELECT").Length - 1);
+            Assert.Contains("JSON_TABLE(", Assert.Single(commands.Sql));
+            Assert.Equal(list, JsonSerializer.Deserialize<int?[]>(Assert.IsType<string>(Assert.Single(commands.Values))));
             Assert.Equal(new int?[] { 17, null, 17, 3, 5, 7 }, list);
         }
 
@@ -754,8 +733,7 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
             table.Rows.Add(new OceanBaseDecimal(17m));
             var commands = new CommandCapture { Results = table };
             await using var context = CreateContext(mode, commands);
-            int?[] values = [null, 17, 17];
-            var query = context.Set<ArithmeticRow>().SelectMany(row => EF.Constant(values).Where(value => value > row.Id));
+            var query = context.Set<ArithmeticRow>().SelectMany(row => new int?[] { null, 17, 17 }.Where(value => value > row.Id));
             var rows = async ? await query.ToListAsync() : query.ToList();
             Assert.Equal(new int?[] { null, 17 }, rows);
             Assert.Empty(commands.Inputs);
@@ -931,7 +909,7 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
         [InlineData(OceanBaseCompatibilityMode.Oracle, true, false)]
         [InlineData(OceanBaseCompatibilityMode.Oracle, false, true)]
         [InlineData(OceanBaseCompatibilityMode.Oracle, true, true)]
-        public async Task Membership_commands_rebind_current_scalar_values_without_mutating_captured_arrays(
+        public async Task Membership_commands_rebind_current_values_without_mutating_captured_arrays(
             OceanBaseCompatibilityMode mode, bool async, bool relationalNulls)
         {
             using var table = new DataTable();
@@ -956,12 +934,18 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
                 Assert.Equal(snapshot, current);
                 var sql = Assert.Single(commands.Sql);
                 Assert.DoesNotContain("IN ()", sql);
-                Assert.All(commands.Values, value => Assert.True(value is int or DBNull, $"Unexpected collection parameter: {value?.GetType()}"));
-                foreach (var value in (current ?? []).Where(value => value.HasValue).Select(value => value!.Value).Distinct())
-                    Assert.Contains(value, commands.Values);
-                Assert.All(commands.Values.Where(value => value is int), value => Assert.Contains((int)value!, current!));
-                if (current is null || current.Length == 0) Assert.DoesNotContain(" IN (", sql);
-                if (current is not null && current.Any(value => value.HasValue)) Assert.NotEmpty(commands.Inputs);
+                Assert.Contains("JSON_TABLE(", sql);
+                // EF may reuse the same JSON parameter in its membership and null-compensation subqueries.
+                if (current is null)
+                {
+                    Assert.Contains("JSON_TABLE(NULL,", sql);
+                    Assert.Empty(commands.Inputs);
+                }
+                else
+                {
+                    var parameter = Assert.Single(commands.Values.Distinct());
+                    Assert.Equal(current, JsonSerializer.Deserialize<int?[]>(Assert.IsType<string>(parameter)));
+                }
             }
             int[] converted = [int.MinValue, int.MaxValue];
             commands.Values.Clear();
@@ -972,15 +956,13 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
             Assert.All(commands.Values, value => Assert.IsType<long>(value));
             List<int> list = [17, 19];
             List<int?> optionalList = [17, null, 19];
-            foreach (var listQuery in new[]
-                { context.Set<ArithmeticRow>().Where(row => list.Contains(row.Value)).Select(row => row.Id),
-                    context.Set<ArithmeticRow>().Where(row => optionalList.Contains(row.Optional)).Select(row => row.Id) })
+            foreach (var (listQuery, expected) in new (IQueryable<int>, IEnumerable<int?>)[]
+                { (context.Set<ArithmeticRow>().Where(row => list.Contains(row.Value)).Select(row => row.Id), [17, 19]),
+                    (context.Set<ArithmeticRow>().Where(row => optionalList.Contains(row.Optional)).Select(row => row.Id), [17, null, 19]) })
             {
                 commands.Values.Clear();
                 _ = async ? await listQuery.ToListAsync() : listQuery.ToList();
-                Assert.Contains(17, commands.Values);
-                Assert.Contains(19, commands.Values);
-                Assert.All(commands.Values.Where(value => value is not DBNull), value => Assert.IsType<int>(value));
+                Assert.Equal(expected, JsonSerializer.Deserialize<int?[]>(Assert.IsType<string>(Assert.Single(commands.Values.Distinct()))));
             }
         }
 
@@ -2113,7 +2095,7 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
                 .Select(row => new { Plain = row.Caption!.TrimStart(characters), Converted = row.Converted.TrimEnd(characters) });
             var forced = context.Set<ShortTextRow>().Select(row => new
             {
-                Plain = row.Caption!.Trim(EF.Constant(characters)), Converted = row.Converted.TrimStart(EF.Constant(characters))
+                Plain = row.Caption!.Trim(new[] { 'x' }), Converted = row.Converted.TrimStart(new[] { 'x' })
             });
             foreach (var value in new char[]?[] { characters, ['y', 'x'], [], null, ['海', '\\', '[', ']', '^', '-', '&', '\0'], ['x'] })
             {
@@ -2425,7 +2407,7 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
                 if (value is null)
                 {
                     Assert.Empty(commands.Values);
-                    Assert.Contains("(NULL) = 1 THEN 1", sql);
+                    Assert.Contains("<> NULL", sql);
                 }
                 else
                 {

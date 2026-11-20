@@ -1,8 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq.Expressions;
-using Microsoft.EntityFrameworkCore.Infrastructure;
-using Microsoft.EntityFrameworkCore.Internal;
 using Microsoft.EntityFrameworkCore.Query;
 using Microsoft.EntityFrameworkCore.Query.SqlExpressions;
 
@@ -10,21 +8,16 @@ namespace OceanBase.EntityFrameworkCore.Query
 {
     internal sealed class OceanBaseParameterBasedSqlProcessorFactory(
         RelationalParameterBasedSqlProcessorDependencies dependencies,
-        IDbContextOptions options,
         OceanBaseCompatibilityMode mode) : IRelationalParameterBasedSqlProcessorFactory
     {
-        public RelationalParameterBasedSqlProcessor Create(RelationalParameterBasedSqlProcessorParameters parameters)
-            => new Processor(dependencies, parameters, mode,
-#pragma warning disable EF1001 // EF9 stores collection policy on the relational options extension.
-                RelationalOptionsExtension.Extract(options).ParameterizedCollectionTranslationMode
-                    == ParameterizedCollectionTranslationMode.Constantize);
-#pragma warning restore EF1001
+        public RelationalParameterBasedSqlProcessor Create(bool useRelationalNulls)
+            => new Processor(dependencies, useRelationalNulls, mode);
 
         private sealed class Processor(
             RelationalParameterBasedSqlProcessorDependencies dependencies,
-            RelationalParameterBasedSqlProcessorParameters processorParameters,
-            OceanBaseCompatibilityMode mode, bool constantizeCollections)
-            : RelationalParameterBasedSqlProcessor(dependencies, processorParameters)
+            bool useRelationalNulls,
+            OceanBaseCompatibilityMode mode)
+            : RelationalParameterBasedSqlProcessor(dependencies, useRelationalNulls)
         {
             public override Expression Optimize(Expression queryExpression,
                 IReadOnlyDictionary<string, object?> parameters, out bool canCache)
@@ -36,7 +29,7 @@ namespace OceanBase.EntityFrameworkCore.Query
                 queryExpression = new OceanBaseBulkDmlVisitor(mode, parameters, DisableCaching, Dependencies.SqlExpressionFactory).Visit(queryExpression);
                 var collections = new OceanBaseCollectionParameterExpandingVisitor(
                     Dependencies.SqlExpressionFactory, parameters, DisableCaching,
-                    Dependencies.TypeMappingSource, mode, Parameters.ParametersToConstantize, constantizeCollections);
+                    Dependencies.TypeMappingSource, mode, constantizeByDefault: false);
                 queryExpression = collections.Visit(queryExpression);
                 parameters = collections.ParameterValues;
                 queryExpression = new OceanBaseRoundParameterVisitor(

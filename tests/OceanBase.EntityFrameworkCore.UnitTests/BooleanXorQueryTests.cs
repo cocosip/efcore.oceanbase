@@ -111,7 +111,7 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
                 if (value is null)
                 {
                     Assert.Empty(command.Parameters);
-                    Assert.Contains("(NULL) = 1 THEN 1", command.CommandText);
+                    Assert.Contains("<> NULL", command.CommandText);
                 }
                 else
                 {
@@ -150,9 +150,10 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             var converter = new ValueConverter<bool, bool>(value => value, value => value, convertsNulls: true);
 #pragma warning restore EF1001
             var mapped = (RelationalTypeMapping)new BoolTypeMapping("BOOLEAN").WithComposedConverter(converter);
-            var left = new ColumnExpression("Flag", "r", typeof(bool), mapped, true);
-            var right = new SqlConstantExpression(true, typeof(bool), native);
-            var expression = new SqlBinaryExpression(ExpressionType.ExclusiveOr, left, right, typeof(bool), native);
+            var left = new TestColumnExpression("Flag", "r", typeof(bool), mapped, true);
+            var right = new SqlConstantExpression(System.Linq.Expressions.Expression.Constant(true), native);
+            var expression = context.GetService<ISqlExpressionFactory>().Function(OceanBaseSqlTranslatingExpressionVisitorFactory.ExclusiveOrMarker,
+                [left, right], nullable: true, argumentsPropagateNullability: [true, true], typeof(bool), native);
             var generator = new OceanBaseQuerySqlGenerator(context.GetService<QuerySqlGeneratorDependencies>(), mode);
             Assert.Throws<NotSupportedException>(() => generator.GetCommand(expression));
         }

@@ -37,9 +37,9 @@ public sealed class NonnumericAggregateQueryTests
         var mappings = context.GetService<IRelationalTypeMappingSource>();
         var factory = context.GetService<ISqlExpressionFactory>();
         var mapping = mappings.FindMapping(type)!;
-        var operand = new ColumnExpression("Value", "r", Nullable.GetUnderlyingType(type) ?? type, mapping, true);
+        var operand = new TestColumnExpression("Value", "r", Nullable.GetUnderlyingType(type) ?? type, mapping, true);
         var integer = mappings.FindMapping(typeof(int));
-        var predicate = factory.GreaterThan(new ColumnExpression("Id", "r", typeof(int), integer, false), factory.Constant(2, integer));
+        var predicate = factory.GreaterThan(new TestColumnExpression("Id", "r", typeof(int), integer, false), factory.Constant(2, integer));
         var definition = minimum ? selector ? QueryableMethods.MinWithSelector : QueryableMethods.MinWithoutSelector
             : selector ? QueryableMethods.MaxWithSelector : QueryableMethods.MaxWithoutSelector;
         var method = definition.MakeGenericMethod(selector ? [typeof(Row), type] : [type]);
@@ -103,7 +103,7 @@ public sealed class NonnumericAggregateQueryTests
         foreach (var item in invalid)
         foreach (var method in new[] { QueryableMethods.MinWithoutSelector, QueryableMethods.MaxWithoutSelector })
             Assert.Contains("OceanBase", Assert.Throws<InvalidOperationException>(() => service.Translate(context.Model,
-                method.MakeGenericMethod(item.Type), new EnumerableExpression(new ColumnExpression("Value", "r", item.Type, item.Mapping, true)),
+                method.MakeGenericMethod(item.Type), new EnumerableExpression(new TestColumnExpression("Value", "r", item.Type, item.Mapping, true)),
                 [], context.GetService<IDiagnosticsLogger<DbLoggerCategory.Query>>())).Message);
     }
 

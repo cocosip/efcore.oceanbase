@@ -386,18 +386,16 @@ public sealed class ExecutionStrategyRuntimeTests
 
     [Theory]
     [MemberData(nameof(Modes))]
-    public async Task Ddl_rejects_configured_and_outer_retries_before_network_factories_or_seeders(OceanBaseCompatibilityMode mode, bool async)
+    public async Task Ddl_rejects_configured_and_outer_retries_before_network_or_factories(OceanBaseCompatibilityMode mode, bool async)
     {
         foreach (var inside in new[] { false, true })
             foreach (var operation in new[] { "tables", "ensure", "migrate", "create", "delete", "ensure-delete" })
             {
                 var network = new NoNetwork();
                 var factories = 0;
-                var seeders = 0;
                 var builder = new DbContextOptionsBuilder<RetryContext>().UseOceanBase("Server=offline.invalid;Database=app;User ID=app", mode,
                     options => options.EnableRetryOnFailure(2, TimeSpan.Zero, [9999]))
                     .EnableOceanBaseSchemaManagement("app").EnableServiceProviderCaching(false)
-                    .UseSeeding((_, _) => seeders++).UseAsyncSeeding((_, _, _) => { seeders++; return Task.CompletedTask; })
                     .AddInterceptors(network);
                 if (operation is "create" or "delete" or "ensure-delete")
                 {
@@ -436,7 +434,6 @@ public sealed class ExecutionStrategyRuntimeTests
                 else Assert.Throws<NotSupportedException>(() => { if (inside) strategy.Execute(Execute); else Execute(); });
                 Assert.Equal(0, network.Attempts);
                 Assert.Equal(0, factories);
-                Assert.Equal(0, seeders);
                 Assert.Contains("CREATE TABLE", context.Database.GenerateCreateScript());
             }
     }

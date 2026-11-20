@@ -1,32 +1,17 @@
 using System;
 using System.Linq;
 using Microsoft.EntityFrameworkCore.Design.Internal;
-using Microsoft.EntityFrameworkCore.Metadata;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 using OceanBase.EntityFrameworkCore.Storage;
 using OceanBaseConnector;
 
 namespace OceanBase.EntityFrameworkCore.Design;
 
-#pragma warning disable EF1001 // EF10's provider extension seam for compiled mapping construction.
+#pragma warning disable EF1001 // EF8's provider extension seam for compiled mapping construction.
 internal sealed class OceanBaseRuntimeAnnotationCodeGenerator(CSharpRuntimeAnnotationCodeGeneratorDependencies dependencies,
     RelationalCSharpRuntimeAnnotationCodeGeneratorDependencies relationalDependencies)
     : RelationalCSharpRuntimeAnnotationCodeGenerator(dependencies, relationalDependencies)
 {
-    public override void Generate(IProperty property, CSharpRuntimeAnnotationCodeGeneratorParameters parameters)
-    {
-        base.Generate(property, parameters);
-        // EF otherwise emits a composed converter and re-infers storage from its provider CLR type.
-        if (!parameters.IsRuntime && !parameters.ForNativeAot && property.GetValueConverter() is not null
-            && property.GetTypeMapping() is IOceanBaseWriteValidation && property.GetTypeMapping().Converter?.MappingHints is null)
-        {
-            parameters.MainBuilder.Append(parameters.TargetName).Append(".TypeMapping = ");
-            ((ICSharpRuntimeAnnotationCodeGenerator)this).Create(property.GetTypeMapping(), property, parameters);
-            parameters.MainBuilder.AppendLine(";");
-        }
-    }
-
     protected override CoreTypeMapping? CreateDefaultTypeMapping(CoreTypeMapping mapping,
         CSharpRuntimeAnnotationCodeGeneratorParameters parameters)
     {

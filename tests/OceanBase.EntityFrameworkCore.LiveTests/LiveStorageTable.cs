@@ -2,11 +2,13 @@ using System;
 using System.Collections.Generic;
 using System.Data.Common;
 using System.Linq;
+using System.Linq.Expressions;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Query;
 using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.Configuration;
 using OceanBaseConnector;
@@ -16,6 +18,12 @@ namespace OceanBase.EntityFrameworkCore.LiveTests;
 
 internal static class LiveStorageTable
 {
+    internal static IQueryable<T> WhereLiteral<T, TValue>(this IQueryable<T> query, TValue value, Expression<Func<T, TValue, bool>> predicate)
+    {
+        var body = ReplacingExpressionVisitor.Replace(predicate.Parameters[1], Expression.Constant(value, typeof(TValue)), predicate.Body);
+        return query.Where(Expression.Lambda<Func<T, bool>>(body, predicate.Parameters[0]));
+    }
+
     internal static async Task WithTable<TContext>(OceanBaseCompatibilityMode mode, bool async, bool noBackslashEscapes,
         Func<DbContextOptions<TContext>, string, TContext> createContext,
         Func<TContext, Commands, Action<string>, Task> run, string[]? tableSuffixes = null,

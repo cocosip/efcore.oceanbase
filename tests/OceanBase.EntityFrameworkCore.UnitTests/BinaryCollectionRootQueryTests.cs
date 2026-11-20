@@ -72,14 +72,12 @@ public sealed class BinaryCollectionRootQueryTests
     }
 
     [Theory]
-    [InlineData(OceanBaseCompatibilityMode.MySql, ParameterizedCollectionTranslationMode.Constantize)]
-    [InlineData(OceanBaseCompatibilityMode.MySql, ParameterizedCollectionTranslationMode.Parameterize)]
-    [InlineData(OceanBaseCompatibilityMode.Oracle, ParameterizedCollectionTranslationMode.Constantize)]
-    [InlineData(OceanBaseCompatibilityMode.Oracle, ParameterizedCollectionTranslationMode.Parameterize)]
+    [InlineData(OceanBaseCompatibilityMode.MySql)]
+    [InlineData(OceanBaseCompatibilityMode.Oracle)]
     public void Captured_binary_roots_translate_and_rebind(
-        OceanBaseCompatibilityMode mode, ParameterizedCollectionTranslationMode translation)
+        OceanBaseCompatibilityMode mode)
     {
-        using var context = CreateContext(mode, translation);
+        using var context = CreateContext(mode);
         byte[]?[] values = [new byte[] { 1, 2 }, null, new byte[] { 3, 4 }];
         var query = context.Rows.Where(row => values.Contains(row.Payload));
 
@@ -117,17 +115,15 @@ public sealed class BinaryCollectionRootQueryTests
             relational.Rows.Select(other => other.Payload).Contains(row.Bounded)).ToQueryString()).Message);
     }
 
-    private static TestContext CreateContext(OceanBaseCompatibilityMode mode,
-        ParameterizedCollectionTranslationMode? translation = null, bool relationalNulls = false)
+    private static TestContext CreateContext(OceanBaseCompatibilityMode mode, bool relationalNulls = false)
     {
         var builder = new DbContextOptionsBuilder<TestContext>()
             .UseOceanBase("Server=localhost;Database=binary_roots", mode)
             .EnableServiceProviderCaching(false);
-        if (translation.HasValue || relationalNulls)
+        if (relationalNulls)
         {
             var extension = builder.Options.Extensions.OfType<RelationalOptionsExtension>().Single()
                 .WithUseRelationalNulls(relationalNulls);
-            if (translation.HasValue) extension = extension.WithParameterizedCollectionTranslationMode(translation.Value);
             ((IDbContextOptionsBuilderInfrastructure)builder).AddOrUpdateExtension(extension);
         }
 

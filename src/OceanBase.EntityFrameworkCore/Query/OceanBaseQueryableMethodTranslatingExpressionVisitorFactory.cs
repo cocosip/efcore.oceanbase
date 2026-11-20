@@ -1,14 +1,14 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
 using System.Linq;
 using System.Linq.Expressions;
+using System.Runtime.CompilerServices;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.EntityFrameworkCore.Query;
 using Microsoft.EntityFrameworkCore.Query.SqlExpressions;
-using Microsoft.EntityFrameworkCore.Infrastructure;
-using Microsoft.EntityFrameworkCore.Internal;
 using Microsoft.EntityFrameworkCore.Storage;
 using OceanBase.EntityFrameworkCore.Internal;
 
@@ -20,6 +20,7 @@ namespace OceanBase.EntityFrameworkCore.Query
         : IQueryableMethodTranslatingExpressionVisitorFactory
     {
         internal const string EmptyElementTypeAnnotation = "OceanBase:EmptyInlineElementType";
+        internal const string ParameterCollectionAnnotation = "OceanBase:CollectionColumns";
         internal const string JsonCollectionAnnotation = "OceanBase:JsonCollection";
 
         public QueryableMethodTranslatingExpressionVisitor Create(QueryCompilationContext queryCompilationContext)
@@ -27,16 +28,23 @@ namespace OceanBase.EntityFrameworkCore.Query
 
         private sealed class Visitor : RelationalQueryableMethodTranslatingExpressionVisitor
         {
-            private readonly RelationalQueryCompilationContext _queryCompilationContext;
+            private readonly RelationalQueryCompilationContext _compilation;
+            private readonly StrongBox<int> _emptyCollectionAliasCount;
 
             public Visitor(QueryableMethodTranslatingExpressionVisitorDependencies dependencies,
                 RelationalQueryableMethodTranslatingExpressionVisitorDependencies relationalDependencies,
                 RelationalQueryCompilationContext queryCompilationContext)
                 : base(dependencies, relationalDependencies, queryCompilationContext)
-                => _queryCompilationContext = queryCompilationContext;
+            {
+                _compilation = queryCompilationContext;
+                _emptyCollectionAliasCount = new();
+            }
 
             private Visitor(Visitor parent) : base(parent)
-                => _queryCompilationContext = parent._queryCompilationContext;
+            {
+                _compilation = parent._compilation;
+                _emptyCollectionAliasCount = parent._emptyCollectionAliasCount;
+            }
 
             protected override QueryableMethodTranslatingExpressionVisitor CreateSubqueryVisitor() => new Visitor(this);
 
@@ -66,8 +74,9 @@ namespace OceanBase.EntityFrameworkCore.Query
                 }
                 if (resultSelector is null) return grouped;
                 var parameter = Expression.Parameter(group.Type, "group");
-                var body = ReplacingExpressionVisitor.Replace(resultSelector.Parameters,
-                    new Expression[] { Expression.Property(parameter, "Key"), parameter }, resultSelector.Body);
+                var body = ReplacingExpressionVisitor.Replace(resultSelector.Parameters[0],
+                    Expression.Property(parameter, "Key"), resultSelector.Body);
+                body = ReplacingExpressionVisitor.Replace(resultSelector.Parameters[1], parameter, body);
                 return TranslateSelect(grouped, Expression.Lambda(body, parameter));
             }
 
@@ -122,10 +131,26 @@ namespace OceanBase.EntityFrameworkCore.Query
             }
 
             protected override ShapedQueryExpression TranslateDistinct(ShapedQueryExpression source)
-                // EF10 needs the element mapping's KeyComparer before its final type-mapping pass.
+                // EF needs the element mapping's KeyComparer before its final type-mapping pass.
                 => base.TranslateDistinct((ShapedQueryExpression)new OceanBaseCollectionProjectionTypeMappingNormalizer(
                     RelationalDependencies.TypeMappingSource, RelationalDependencies.Model)
                     .Normalize(source, applyProjectionMappings: true));
+
+            protected override NonQueryExpression? TranslateExecuteUpdate(ShapedQueryExpression source, LambdaExpression setPropertyCalls)
+            {
+                if (_compilation is not OceanBaseQueryCompilationContextFactory.Context context)
+                    return base.TranslateExecuteUpdate(source, setPropertyCalls);
+                var previous = context.TranslatingUpdate;
+                context.TranslatingUpdate = true;
+                try
+                {
+                    return base.TranslateExecuteUpdate(source, setPropertyCalls);
+                }
+                finally
+                {
+                    context.TranslatingUpdate = previous;
+                }
+            }
 
             protected override bool IsValidSelectExpressionForExecuteUpdate(SelectExpression select, TableExpressionBase targetTable,
                 [NotNullWhen(true)] out TableExpression? tableExpression)
@@ -141,14 +166,15 @@ namespace OceanBase.EntityFrameworkCore.Query
                 return base.IsValidSelectExpressionForExecuteUpdate(select, targetTable, out tableExpression);
             }
 
-            protected override ShapedQueryExpression? TranslateInlineQueryRoot(InlineQueryRootExpression inlineQueryRootExpression)
+            protected override ShapedQueryExpression? VisitInlineQueryRoot(InlineQueryRootExpression inlineQueryRootExpression)
             {
                 if (inlineQueryRootExpression.Values.Count != 0)
-                    return base.TranslateInlineQueryRoot(inlineQueryRootExpression);
+                    return base.VisitInlineQueryRoot(inlineQueryRootExpression);
 
                 var elementType = inlineQueryRootExpression.ElementType;
-                var alias = _queryCompilationContext.SqlAliasManager.GenerateTableAlias("values");
-                var values = new ValuesExpression(alias, Array.Empty<RowValueExpression>(), ["_ord", "Value"])
+                // EF8 scans structurally equal table expressions as a single mapping target.
+                var alias = "v" + (_emptyCollectionAliasCount.Value++).ToString(CultureInfo.InvariantCulture);
+                var values = new TableValuedFunctionExpression(alias, "OceanBaseEmptyCollection", [])
                     .AddAnnotation(EmptyElementTypeAnnotation, elementType);
                 return ShapeCollection(values, elementType, nullable: false);
             }
@@ -176,47 +202,125 @@ namespace OceanBase.EntityFrameworkCore.Query
                     return null;
                 }
 
-                var scalarType = UnwrapNullable(elementType);
-#pragma warning disable EF1001 // EF9 stores collection policy on the relational options extension.
-                var collectionMode = RelationalOptionsExtension.Extract(_queryCompilationContext.ContextOptions)
-                    .ParameterizedCollectionTranslationMode;
-                var explicitParameter = _queryCompilationContext.ParametersToNotConstantize.Contains(parameter.Name);
-                var jsonRequested = explicitParameter || collectionMode == ParameterizedCollectionTranslationMode.Parameterize;
-#pragma warning restore EF1001
-                if (jsonRequested && (scalarType == typeof(int) || scalarType == typeof(long))
-                    && elementMapping.Converter is null
-                    && RelationalDependencies.TypeMappingSource.FindMapping(parameter.Type, RelationalDependencies.Model,
-                        elementMapping) is { Converter.ProviderClrType: var carrier } mapping && carrier == typeof(string))
+                var values = new TableValuedFunctionExpression(tableAlias, "OceanBaseCollection", [parameter])
+                    .AddAnnotation(ParameterCollectionAnnotation, new[] { "_ord", "Value" });
+                return ShapeCollection(values, elementType, !elementType.IsValueType || Nullable.GetUnderlyingType(elementType) is not null);
+            }
+
+            protected override Expression ApplyInferredTypeMappings(Expression expression,
+                IReadOnlyDictionary<(TableExpressionBase, string), RelationalTypeMapping?> inferredTypeMappings)
+            {
+                var mappings = new OceanBaseCollectionProjectionTypeMappingNormalizer(RelationalDependencies.TypeMappingSource,
+                    RelationalDependencies.Model);
+                expression = mappings.Normalize(expression);
+                var applier = new CollectionTypeMappingApplier(RelationalDependencies, inferredTypeMappings, mappings);
+                var mapped = applier.Visit(expression);
+                if (applier.HasJsonCollection) new OceanBaseJsonCollectionConverterGuard().Visit(mapped);
+                return mapped;
+            }
+
+            private sealed class CollectionTypeMappingApplier(RelationalQueryableMethodTranslatingExpressionVisitorDependencies dependencies,
+                IReadOnlyDictionary<(TableExpressionBase, string), RelationalTypeMapping?> inferredTypeMappings,
+                OceanBaseCollectionProjectionTypeMappingNormalizer mappings)
+                : RelationalInferredTypeMappingApplier(dependencies.Model, dependencies.SqlExpressionFactory, inferredTypeMappings)
+            {
+                public bool HasJsonCollection { get; private set; }
+
+                protected override Expression VisitExtension(Expression node)
                 {
-                    var jsonParameter = parameter.ApplyTypeMapping(mapping);
-                    var jsonRows = new TableValuedFunctionExpression(tableAlias, "JSON_TABLE", [jsonParameter])
-                        .AddAnnotation(JsonCollectionAnnotation, scalarType == typeof(int));
-                    return ShapeCollection(jsonRows, elementType, Nullable.GetUnderlyingType(elementType) is not null);
+                    if (node is ColumnExpression { TypeMapping: null } column)
+                    {
+                        var table = column.Table is JoinExpressionBase join ? join.Table : column.Table;
+                        if (mappings.GetContextualMapping(table, column.Name) is { } contextual)
+                            return column.ApplyTypeMapping(contextual);
+                        if (TryGetInferredTypeMapping(table, column.Name, out var inferred))
+                            return column.ApplyTypeMapping(inferred);
+                        if (dependencies.TypeMappingSource.FindMapping(column.Type, Model) is { } fallback)
+                            return column.ApplyTypeMapping(fallback);
+                    }
+
+                    if (node is TableValuedFunctionExpression collection)
+                    {
+                        if (collection.FindAnnotation(EmptyElementTypeAnnotation)?.Value is Type emptyType)
+                        {
+                            var element = FindElementMapping(collection, emptyType);
+                            var ordinal = dependencies.TypeMappingSource.FindMapping(typeof(int))!;
+                            return collection.Update([
+                                dependencies.SqlExpressionFactory.Constant(null, typeof(int?), ordinal),
+                                dependencies.SqlExpressionFactory.Constant(null, MakeNullable(emptyType), element)]);
+                        }
+
+                        if (collection.FindAnnotation(ParameterCollectionAnnotation) is not null
+                            && collection.Arguments is [SqlParameterExpression parameter])
+                        {
+                            var elementType = UnwrapNullable(OceanBaseCollectionParameterExpandingVisitor.ElementType(parameter.Type)!);
+                            var element = FindElementMapping(collection, elementType);
+                            var mapping = dependencies.TypeMappingSource.FindMapping(parameter.Type, Model, element)
+                                ?? throw new InvalidOperationException("A supported collection mapping is required for the query root.");
+                            var mappedParameter = parameter.ApplyTypeMapping(mapping);
+                            if ((elementType == typeof(int) || elementType == typeof(long)) && element.Converter is null
+                                && mapping.Converter?.ProviderClrType == typeof(string))
+                            {
+                                HasJsonCollection = true;
+                                return new TableValuedFunctionExpression(collection.Alias, "JSON_TABLE", [mappedParameter])
+                                    .AddAnnotation(JsonCollectionAnnotation, elementType == typeof(int));
+                            }
+
+                            return collection.Update([mappedParameter]);
+                        }
+                    }
+
+                    return base.VisitExtension(node);
                 }
 
-                if (explicitParameter) return null;
-                var values = new ValuesExpression(tableAlias, parameter, ["_ord", "Value"]);
-                return ShapeCollection(values, elementType, !elementType.IsValueType || Nullable.GetUnderlyingType(elementType) is not null);
+                protected override ValuesExpression ApplyTypeMappingsOnValuesExpression(ValuesExpression values, bool stripOrdering)
+                {
+                    // EF8 can still reference _ord from an ordering after its mapping pass.
+                    if (mappings.GetContextualMapping(values, "Value") is not { } contextual)
+                        return base.ApplyTypeMappingsOnValuesExpression(values, stripOrdering: false);
+
+                    var rows = new RowValueExpression[values.RowValues.Count];
+                    for (var index = 0; index < rows.Length; index++)
+                    {
+                        var row = values.RowValues[index];
+                        rows[index] = new RowValueExpression([row.Values[0],
+                            dependencies.SqlExpressionFactory.ApplyTypeMapping(row.Values[1], contextual)]);
+                    }
+                    return values.Update(rows);
+                }
+
+                private RelationalTypeMapping FindElementMapping(TableExpressionBase table, Type elementType)
+                {
+                    elementType = UnwrapNullable(elementType);
+                    var mapping = mappings.GetContextualMapping(table, "Value")
+                        ?? (TryGetInferredTypeMapping(table, "Value", out var inferred)
+                            ? inferred : dependencies.TypeMappingSource.FindMapping(elementType, Model));
+                    if (mapping is { Converter.ConvertsNulls: true }
+                        && (mapping.Converter.ProviderClrType == typeof(string)))
+                    {
+                        throw new InvalidOperationException("Oracle queries with null-converting string value converters are not supported.");
+                    }
+                    if (mapping is null || UnwrapNullable(mapping.ClrType) != elementType
+                        || !OceanBaseCollectionParameterExpandingVisitor.IsSupportedCollectionElement(mapping))
+                    {
+                        throw new NotSupportedException("Collection roots require supported numeric, Boolean, text, binary or temporal elements with non-null-converting storage carriers.");
+                    }
+
+                    return mapping;
+                }
             }
 
             private ShapedQueryExpression ShapeCollection(TableExpressionBase values, Type elementType, bool nullable)
             {
-                var alias = values.Alias!;
-                var valueColumn = new ColumnExpression("Value", alias, UnwrapNullable(elementType), null, nullable);
                 var ordinalMapping = RelationalDependencies.TypeMappingSource.FindMapping(
                     typeof(int), RelationalDependencies.Model, null)
                     ?? throw new InvalidOperationException("An integer mapping is required for collection ordinals.");
-                var ordinalColumn = new ColumnExpression("_ord", alias, typeof(int), ordinalMapping, nullable: false);
 
-#pragma warning disable EF1001 // EF9's parameter-root shape is an internal provider contract.
-                var select = new SelectExpression(
-                    new List<TableExpressionBase> { values },
-                    valueColumn,
-                    new List<(ColumnExpression, Microsoft.EntityFrameworkCore.ChangeTracking.ValueComparer)>
-                    {
-                        (ordinalColumn, ordinalMapping.Comparer)
-                    },
-                    _queryCompilationContext.SqlAliasManager);
+#pragma warning disable EF1001 // EF8's scalar-table constructor is required to attach the ordinal identifier.
+                var select = new SelectExpression(values, "Value", elementType, columnTypeMapping: null, isColumnNullable: nullable,
+                    identifierColumnName: "_ord", identifierColumnType: typeof(int), identifierColumnTypeMapping: ordinalMapping);
+#pragma warning restore EF1001
+                var ordinalColumn = select.CreateColumnExpression(values, "_ord", typeof(int), ordinalMapping, columnNullable: false);
                 select.AppendOrdering(new OrderingExpression(ordinalColumn, ascending: true));
 
                 Expression projection = new ProjectionBindingExpression(
@@ -227,7 +331,6 @@ namespace OceanBase.EntityFrameworkCore.Query
                 {
                     projection = Expression.Convert(projection, elementType);
                 }
-#pragma warning restore EF1001
 
                 return new ShapedQueryExpression(select, projection);
             }

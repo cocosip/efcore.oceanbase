@@ -56,7 +56,7 @@ public sealed class TpcRuntimeTests(ITestOutputHelper output)
         Assert.All(context.ChangeTracker.Entries(), e => Assert.Equal(EntityState.Unchanged, e.State));
         var command = Assert.Single(capture.Items);
         Assert.Equal(2, Regex.Matches(command.Sql, "UNION ALL").Count);
-        Assert.Contains("u.AssetId, u.Name, u.TenantId, u.Version, u.Pages, u.Serial, u.Reading, u.Discriminator", Unquote(command.Sql));
+        Assert.Contains("t.AssetId, t.Name, t.TenantId, t.Version, t.Pages, t.Serial, t.Reading, t.Discriminator", Unquote(command.Sql));
         Assert.Equal(new object?[] { 1 }, command.Inputs);
         capture.Results = Table([typeof(int), typeof(string), typeof(int), typeof(int), typeof(int), typeof(int), typeof(int), typeof(string)]);
         Assert.Empty(async ? await query.ToListAsync() : query.ToList());

@@ -26,22 +26,6 @@ namespace OceanBase.EntityFrameworkCore.Infrastructure
             return this;
         }
 
-#pragma warning disable EF1001 // EF9 exposes collection translation configuration through its version-local options extension.
-        /// <summary>Translates captured query collections to SQL constants by default.</summary>
-        public OceanBaseDbContextOptionsBuilder TranslateParameterizedCollectionsToConstants()
-        {
-            Update(Options.WithParameterizedCollectionTranslationMode(ParameterizedCollectionTranslationMode.Constantize));
-            return this;
-        }
-
-        /// <summary>Translates supported captured query collections to a SQL parameter by default.</summary>
-        public OceanBaseDbContextOptionsBuilder TranslateParameterizedCollectionsToParameters()
-        {
-            Update(Options.WithParameterizedCollectionTranslationMode(ParameterizedCollectionTranslationMode.Parameterize));
-            return this;
-        }
-#pragma warning restore EF1001
-
         /// <summary>Enables operation-level retries for confirmed transient server errors.</summary>
         /// <remarks>Unknown outcomes, cancellation and XA never retry. Schema/migration execution rejects retries.</remarks>
         public OceanBaseDbContextOptionsBuilder EnableRetryOnFailure(int maxRetryCount = 6,

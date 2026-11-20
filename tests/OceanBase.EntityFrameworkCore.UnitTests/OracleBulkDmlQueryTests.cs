@@ -1,5 +1,7 @@
 using System;
+using System.Linq;
 using System.Linq.Expressions;
+using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
@@ -18,14 +20,14 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             using var context = Create();
             var table = context.Model.GetRelationalModel().FindTable("Rows", null)!;
             var integer = table.FindColumn("Id")!.StoreTypeMapping;
-            var target = new TableExpression("__ob_bulk_target", table);
-            var nestedSource = SelectExpression.CreateImmutable("joined", [new TableExpression("__ob_bulk_target1", table)],
-                [new ProjectionExpression(new ColumnExpression("Id", "__ob_bulk_target1", typeof(int), integer, false), "Id")]);
-            var setter = new SelectExpression(null, [new TableExpression("__ob_bulk_target2", table)], null, [], null,
-                [new ProjectionExpression(new ColumnExpression("Count", "__ob_bulk_target2", typeof(int), integer, false), "")], false, [], null, null);
-            var select = new SelectExpression(null, [target, new CrossJoinExpression(nestedSource)], null, [], null, [], false, [], null, null);
+            var target = Table(context, "__ob_bulk_target");
+            var nestedSource = Select(context, [Table(context, "__ob_bulk_target1")], "joined",
+                new TestColumnExpression("Id", "__ob_bulk_target1", typeof(int), integer, false));
+            var setter = Select(context, [Table(context, "__ob_bulk_target2")], projection:
+                new TestColumnExpression("Count", "__ob_bulk_target2", typeof(int), integer, false));
+            var select = Select(context, [target, new CrossJoinExpression(nestedSource)]);
             var update = new UpdateExpression(target, select,
-                [new ColumnValueSetter(new ColumnExpression("Count", target.Alias, typeof(int), integer, false), new ScalarSubqueryExpression(setter))]);
+                [new ColumnValueSetter(new TestColumnExpression("Count", target.Alias, typeof(int), integer, false), new ScalarSubqueryExpression(setter))]);
             var sql = Generator(context).GetCommand(update).CommandText;
             Assert.StartsWith("UPDATE \"Rows\" \"__ob_bulk_target3\"", sql);
             Assert.Contains("\"__ob_bulk_target\".\"Id\" = \"__ob_bulk_target3\".\"Id\"", sql);
@@ -47,14 +49,15 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             using var context = Create();
             var table = context.Model.GetRelationalModel().FindTable("Rows", null)!;
             var integer = table.FindColumn("Id")!.StoreTypeMapping;
-            var target = new TableExpression("target", table);
-            var column = new ColumnExpression("Count", "target", typeof(int), integer, false);
-            var value = new SqlConstantExpression(1, typeof(int), integer);
-            var select = new SelectExpression(null, [target, new CrossJoinExpression(new TableExpression("other", table))], null,
+            var target = Table(context, "target");
+            var column = new TestColumnExpression("Count", "target", typeof(int), integer, false);
+            var value = new SqlConstantExpression(Expression.Constant(1), integer);
+            var select = Select(context, [target, new CrossJoinExpression(Table(context, "other"))],
+                projection: shape == "projection" ? column : null, distinct: shape == "distinct");
+            select = select.Update(select.Projection, select.Tables, null,
                 shape == "group" ? [column] : [], shape == "having" ? value : null,
-                shape == "projection" ? [new ProjectionExpression(column, "Count")] : [], shape == "distinct",
                 shape == "order" ? [new OrderingExpression(column, true)] : [],
-                shape == "offset" ? value : null, shape == "limit" ? value : null);
+                shape == "limit" ? value : null, shape == "offset" ? value : null);
             var update = new UpdateExpression(target, select, [new ColumnValueSetter(column, value)]);
             Assert.Contains("query shape", Assert.Throws<NotSupportedException>(() => Generator(context).GetCommand(update)).Message);
         }
@@ -65,12 +68,12 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             using var context = Create(OceanBaseCompatibilityMode.MySql);
             var table = context.Model.GetRelationalModel().FindTable("Rows", null)!;
             var integer = table.FindColumn("Id")!.StoreTypeMapping;
-            var target = new TableExpression("__ob_bulk_target", table);
-            var nested = SelectExpression.CreateImmutable("__ob_bulk_snapshot", [new TableExpression("__ob_bulk_target1", table)],
-                [new ProjectionExpression(new ColumnExpression("Id", "__ob_bulk_target1", typeof(int), integer, false), "Id")]);
-            var select = new SelectExpression(null, [target, new CrossJoinExpression(nested)], null, [], null, [], false, [], null, null);
-            var id = new ColumnExpression("Id", target.Alias, typeof(int), integer, false);
-            var count = new ColumnExpression("Count", target.Alias, typeof(int), integer, false);
+            var target = Table(context, "__ob_bulk_target");
+            var nested = Select(context, [Table(context, "__ob_bulk_target1")], "__ob_bulk_snapshot",
+                new TestColumnExpression("Id", "__ob_bulk_target1", typeof(int), integer, false));
+            var select = Select(context, [target, new CrossJoinExpression(nested)]);
+            var id = new TestColumnExpression("Id", target.Alias, typeof(int), integer, false);
+            var count = new TestColumnExpression("Count", target.Alias, typeof(int), integer, false);
             var update = new UpdateExpression(target, select, [new ColumnValueSetter(id, count), new ColumnValueSetter(count, id)]);
             var sql = new OceanBaseQuerySqlGenerator(context.GetService<QuerySqlGeneratorDependencies>(), OceanBaseCompatibilityMode.MySql)
                 .GetCommand(update).CommandText;
@@ -79,6 +82,28 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             Assert.Contains("FROM `Rows` AS `__ob_bulk_target1`", sql);
             Assert.Contains("SET `__ob_bulk_target2`.`Id` = `__ob_bulk_snapshot1`.`__ob_value_0`", sql);
         }
+
+        private static TableExpression Table(DbContext context, string alias)
+        {
+            var entity = context.Model.FindEntityType(typeof(Row))!;
+            var select = context.GetService<ISqlExpressionFactory>().Select(entity);
+            var table = Assert.IsType<TableExpression>(Assert.Single(select.Tables));
+            SetAlias(table, alias);
+            return table;
+        }
+
+        private static SelectExpression Select(DbContext context, TableExpressionBase[] tables,
+            string? alias = null, SqlExpression? projection = null, bool distinct = false)
+        {
+            var select = context.GetService<ISqlExpressionFactory>().Select(projection);
+            if (distinct) select.ApplyDistinct();
+            select.ApplyProjection();
+            if (alias is not null) SetAlias(select, alias);
+            return select.Update(select.Projection, tables, null, [], null, [], null, null);
+        }
+
+        private static void SetAlias(TableExpressionBase table, string alias)
+            => typeof(TableExpressionBase).GetProperty(nameof(TableExpressionBase.Alias))!.SetValue(table, alias);
 
         private static OceanBaseQuerySqlGenerator Generator(DbContext context)
             => new(context.GetService<QuerySqlGeneratorDependencies>(), OceanBaseCompatibilityMode.Oracle);

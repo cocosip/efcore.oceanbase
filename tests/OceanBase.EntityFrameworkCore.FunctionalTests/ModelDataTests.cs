@@ -50,26 +50,16 @@ public sealed class ModelDataTests
 
     [Theory]
     [MemberData(nameof(Cases))]
-    public async Task EnsureCreated_inserts_model_data_before_one_callback_in_separate_transactions(OceanBaseCompatibilityMode mode, bool async)
+    public async Task EnsureCreated_inserts_model_data_once_after_schema_creation(OceanBaseCompatibilityMode mode, bool async)
     {
         foreach (var existing in new[] { false, true })
         {
             var capture = new Commands { ExistingTables = existing };
-            var callbacks = 0;
-            void Callback(DbContext db, bool created)
-            {
-                callbacks++;
-                Assert.Equal(!existing, created);
-                Assert.Equal(existing ? 0 : 1, capture.Transactions.Count(t => t.Committed));
-                Assert.NotNull(db.Database.CurrentTransaction);
-                capture.Events.Add("callback");
-            }
-            await using var context = Create(mode, capture, Callback);
+            await using var context = Create(mode, capture);
             context.Database.SetCommandTimeout(24);
             using var source = new CancellationTokenSource();
             Assert.Equal(!existing, async ? await context.Database.EnsureCreatedAsync(source.Token) : context.Database.EnsureCreated());
-            Assert.Equal(1, callbacks);
-            Assert.Equal(existing ? 1 : 2, capture.Transactions.Count);
+            Assert.Equal(existing ? 0 : 1, capture.Transactions.Count);
             Assert.All(capture.Transactions, tx => { Assert.True(tx.Committed); Assert.True(tx.Disposed); });
             var inserts = capture.Items.Where(item => item.Sql.StartsWith("INSERT", StringComparison.Ordinal)).ToArray();
             Assert.Equal(existing ? 0 : 2, inserts.Length);
@@ -78,7 +68,8 @@ public sealed class ModelDataTests
                 Assert.StartsWith("INSERT INTO ZParents", Unquote(inserts[0].Sql));
                 Assert.StartsWith("INSERT INTO AChildren", Unquote(inserts[1].Sql));
                 Assert.All(inserts, item => Assert.Same(capture.Transactions[0], item.Transaction));
-                Assert.True(capture.Events.IndexOf("commit") < capture.Events.IndexOf("callback"));
+                Assert.True(Array.IndexOf(capture.Items.ToArray(), inserts[0]) > capture.Items.FindLastIndex(item =>
+                    item.Sql.StartsWith("CREATE", StringComparison.Ordinal) || item.Sql.StartsWith("ALTER", StringComparison.Ordinal)));
             }
             Assert.All(capture.Items.Where(item => item.Sql.StartsWith("CREATE", StringComparison.Ordinal)
                 || item.Sql.StartsWith("ALTER", StringComparison.Ordinal)), item => Assert.Null(item.Transaction));
@@ -89,10 +80,10 @@ public sealed class ModelDataTests
 
     [Theory]
     [MemberData(nameof(Cases))]
-    public async Task Explicit_CreateTables_applies_model_data_without_EnsureCreated_callbacks(OceanBaseCompatibilityMode mode, bool async)
+    public async Task Explicit_CreateTables_applies_model_data_and_preserves_the_caller_connection(OceanBaseCompatibilityMode mode, bool async)
     {
         var capture = new Commands();
-        await using var context = Create(mode, capture, (_, _) => throw new Exception("CreateTables must not invoke callback."));
+        await using var context = Create(mode, capture);
         context.Database.OpenConnection();
         try
         {
@@ -108,7 +99,7 @@ public sealed class ModelDataTests
 
     [Theory]
     [MemberData(nameof(Cases))]
-    public async Task Failed_model_data_rolls_back_without_replaying_or_invoking_callbacks(OceanBaseCompatibilityMode mode, bool async)
+    public async Task Failed_model_data_rolls_back_without_replaying(OceanBaseCompatibilityMode mode, bool async)
     {
         foreach (var scenario in new[] { "insert", "cancel", "scope", "rollback", "dispose", "commit" })
         {
@@ -124,7 +115,7 @@ public sealed class ModelDataTests
                 DisposeFailure = scenario == "dispose" ? new InvalidOperationException("Dispose failure.") : null,
                 CommitFailure = scenario == "commit" ? failure : null
             };
-            await using var context = Create(mode, capture, (_, _) => throw new Exception("Callback must not run after failed model data."));
+            await using var context = Create(mode, capture);
             var error = await Assert.ThrowsAnyAsync<Exception>(async () =>
             {
                 if (async) await context.Database.EnsureCreatedAsync(source.Token); else context.Database.EnsureCreated();
@@ -141,6 +132,22 @@ public sealed class ModelDataTests
             if (scenario == "dispose") Assert.Same(capture.DisposeFailure, error.Data["OceanBase.ModelDataCleanupError"]);
             AssertReleased(context);
         }
+    }
+
+    [Theory]
+    [MemberData(nameof(Cases))]
+    public async Task Schema_failure_prevents_model_data_and_leaves_partial_schema_for_inspection(OceanBaseCompatibilityMode mode, bool async)
+    {
+        var failure = new InvalidOperationException("Synthetic table creation failure.");
+        var capture = new Commands { DdlFailure = failure };
+        await using var context = Create(mode, capture);
+        var error = async ? await Assert.ThrowsAsync<InvalidOperationException>(() => context.Database.EnsureCreatedAsync())
+            : Assert.Throws<InvalidOperationException>(() => context.Database.EnsureCreated());
+        Assert.Same(failure, error);
+        Assert.Empty(capture.Transactions);
+        Assert.DoesNotContain(capture.Items, item => item.Sql.StartsWith("INSERT", StringComparison.Ordinal)
+            || item.Sql.StartsWith("DROP", StringComparison.Ordinal));
+        AssertReleased(context);
     }
 
     [Theory]
@@ -187,12 +194,11 @@ public sealed class ModelDataTests
         AssertReleased(context);
     }
 
-    private static Context Create(OceanBaseCompatibilityMode mode, Commands capture, Action<DbContext, bool>? callback = null, bool crossScope = false)
+    private static Context Create(OceanBaseCompatibilityMode mode, Commands capture, bool crossScope = false)
     {
         var builder = new DbContextOptionsBuilder<Context>().UseOceanBase("Server=offline;Database=owned", mode)
             .EnableOceanBaseSchemaManagement("owned").EnableServiceProviderCaching(false)
             .ReplaceService<IRelationalConnection, TransactionTests.TestConnection>().AddInterceptors(capture);
-        if (callback is not null) builder.UseSeeding(callback).UseAsyncSeeding((db, created, _) => { callback(db, created); return Task.CompletedTask; });
         return new Context(builder.Options, crossScope);
     }
 
@@ -238,6 +244,7 @@ public sealed class ModelDataTests
         public bool ExistingTables { get; init; }
         public string SeedScope { get; init; } = "owned";
         public int Inserts { get; private set; }
+        public Exception? DdlFailure { get; init; }
         public Exception? InsertFailure { get; init; }
         public Action? BeforeInsertFailure { get; init; }
         public Exception? RollbackFailure { get; init; }
@@ -245,7 +252,6 @@ public sealed class ModelDataTests
         public Exception? CommitFailure { get; init; }
         public List<Command> Items { get; } = [];
         public List<SeedTransaction> Transactions { get; } = [];
-        public List<string> Events { get; } = [];
         public override InterceptionResult<object> ScalarExecuting(DbCommand command, CommandEventData data, InterceptionResult<object> result)
             => Scalar(command, false, default);
         public override ValueTask<InterceptionResult<object>> ScalarExecutingAsync(DbCommand command, CommandEventData data,
@@ -263,6 +269,7 @@ public sealed class ModelDataTests
         private InterceptionResult<int> Write(DbCommand command, bool async, CancellationToken token)
         {
             Record(command, async, token);
+            if (DdlFailure is { } ddl && command.CommandText.StartsWith("CREATE", StringComparison.Ordinal)) throw ddl;
             if (command.CommandText.StartsWith("INSERT", StringComparison.Ordinal) && ++Inserts == 2 && InsertFailure is { } failure)
             { BeforeInsertFailure?.Invoke(); throw failure; }
             return InterceptionResult<int>.SuppressWithResult(1);
@@ -270,7 +277,6 @@ public sealed class ModelDataTests
         private void Record(DbCommand command, bool async, CancellationToken token)
         {
             Items.Add(new(command.CommandText, async, token, command.Transaction, command.CommandTimeout));
-            Events.Add(command.CommandText.StartsWith("INSERT", StringComparison.Ordinal) ? "insert" : "command");
         }
         public InterceptionResult<DbTransaction> TransactionStarting(DbConnection connection, TransactionStartingEventData data, InterceptionResult<DbTransaction> result)
         {
@@ -294,12 +300,10 @@ public sealed class ModelDataTests
         {
             if (capture.CommitFailure is { } failure) throw failure;
             Committed = true;
-            capture.Events.Add("commit");
         }
         public override void Rollback()
         {
             Rollbacks++;
-            capture.Events.Add("rollback");
             if (capture.RollbackFailure is { } failure) throw failure;
         }
         public override Task RollbackAsync(CancellationToken token = default)

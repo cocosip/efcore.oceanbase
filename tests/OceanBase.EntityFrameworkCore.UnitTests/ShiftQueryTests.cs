@@ -200,7 +200,7 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             var mappings = context.GetService<IRelationalTypeMappingSource>();
             var integer = mappings.FindMapping(typeof(int))!;
             var wide = mappings.FindMapping(typeof(long))!;
-            var value = new ColumnExpression("Signed", "r", typeof(int), integer, false);
+            var value = new TestColumnExpression("Signed", "r", typeof(int), integer, false);
             var count = factory.Constant(1, integer);
             foreach (var marker in new[] { OceanBaseSqlTranslatingExpressionVisitorFactory.LeftShiftMarker,
                 OceanBaseSqlTranslatingExpressionVisitorFactory.RightShiftMarker })

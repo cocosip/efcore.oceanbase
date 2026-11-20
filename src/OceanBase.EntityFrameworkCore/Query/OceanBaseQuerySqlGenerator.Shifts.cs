@@ -11,7 +11,8 @@ namespace OceanBase.EntityFrameworkCore.Query
             if (expression is not { IsBuiltIn: true, Instance: null, Schema: null, Arguments.Count: 2,
                     IsNullable: true, ArgumentsPropagateNullability: [true, true] }
                 || IntegerCode(expression.Type) is not (TypeCode.Int32 or TypeCode.UInt32 or TypeCode.Int64 or TypeCode.UInt64)
-                || expression.Type != expression.Arguments[0].Type || expression.Arguments[1].Type != typeof(int)
+                || expression.Type != expression.Arguments[0].Type || (Nullable.GetUnderlyingType(expression.Arguments[1].Type) ?? expression.Arguments[1].Type) != typeof(int)
+                    && expression.Arguments[1] is not SqlConstantExpression { Value: null }
                 || !ReferenceEquals(expression.TypeMapping, expression.Arguments[0].TypeMapping))
                 throw new InvalidOperationException("Invalid internal integer shift expression.");
             var value = expression.Arguments[0];

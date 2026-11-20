@@ -125,16 +125,20 @@ namespace OceanBase.EntityFrameworkCore.Internal
         }
 
         public override OceanBaseOptionsExtension WithConnectionString(string? connectionString)
-            => new OceanBaseOptionsExtension((OceanBaseOptionsExtension)base.WithConnectionString(connectionString))
-            {
-                CompatibilityMode = CompatibilityMode
-            };
+        {
+            var clone = (OceanBaseOptionsExtension)base.WithConnectionString(connectionString);
+            return connectionString is null ? clone : clone.WithConnection(null, owned: false);
+        }
 
         public override OceanBaseOptionsExtension WithConnection(DbConnection? connection)
-            => new OceanBaseOptionsExtension((OceanBaseOptionsExtension)base.WithConnection(connection))
-            {
-                CompatibilityMode = CompatibilityMode
-            };
+            => WithConnection(connection, owned: false);
+
+        public override OceanBaseOptionsExtension WithConnection(DbConnection? connection, bool owned)
+        {
+            var clone = (OceanBaseOptionsExtension)base.WithConnection(connection, owned);
+            // EF Core 8 otherwise applies the inherited string to the supplied connection.
+            return connection is null ? clone : clone.WithConnectionString(null);
+        }
 
         protected override RelationalOptionsExtension Clone()
             => new OceanBaseOptionsExtension(this);
@@ -158,17 +162,11 @@ namespace OceanBase.EntityFrameworkCore.Internal
                 .TryAdd<IModelValidator, RelationalModelValidator>()
                 .TryAdd<ICompiledQueryCacheKeyGenerator, OceanBaseCompiledQueryCacheKeyGenerator>()
                 .TryAdd<IQueryCompilationContextFactory, OceanBaseQueryCompilationContextFactory>()
+                .TryAdd<IShapedQueryCompilingExpressionVisitorFactory, OceanBaseShapedQueryCompilingExpressionVisitorFactory>()
                 .TryAdd<IEvaluatableExpressionFilter, OceanBaseEvaluatableExpressionFilter>()
-                .TryAdd<IShapedQueryCompilingExpressionVisitorFactory>(s =>
-                    new OceanBaseShapedQueryCompilingExpressionVisitorFactory(
-                        s.GetRequiredService<ShapedQueryCompilingExpressionVisitorDependencies>(),
-                        s.GetRequiredService<RelationalShapedQueryCompilingExpressionVisitorDependencies>(),
-                        s.GetRequiredService<QuerySqlGeneratorDependencies>(),
-                        s.GetRequiredService<RelationalCommandBuilderDependencies>(), CompatibilityMode))
                 .TryAdd<IQueryableMethodTranslatingExpressionVisitorFactory, OceanBaseQueryableMethodTranslatingExpressionVisitorFactory>()
                 .TryAdd<IQueryTranslationPreprocessorFactory, OceanBaseQueryTranslationPreprocessorFactory>()
                 .TryAdd<IRelationalSqlTranslatingExpressionVisitorFactory, OceanBaseSqlTranslatingExpressionVisitorFactory>()
-                .TryAdd<IQueryTranslationPostprocessorFactory, OceanBaseQueryTranslationPostprocessorFactory>()
                 .TryAdd<IRelationalConnection, OceanBaseRelationalConnection>()
                 .TryAdd<IValueGeneratorSelector, OceanBaseValueGeneratorSelector>()
                 .TryAdd<IRelationalDatabaseCreator, OceanBaseDatabaseCreator>()
@@ -205,7 +203,7 @@ namespace OceanBase.EntityFrameworkCore.Internal
             builder.TryAdd<IRelationalParameterBasedSqlProcessorFactory>(serviceProvider =>
                 new OceanBaseParameterBasedSqlProcessorFactory(
                     serviceProvider.GetRequiredService<RelationalParameterBasedSqlProcessorDependencies>(),
-                    serviceProvider.GetRequiredService<IDbContextOptions>(), CompatibilityMode));
+                    CompatibilityMode));
             builder.TryAdd<IRelationalTypeMappingSource>(serviceProvider =>
                 new OceanBaseTypeMappingSource(
                     serviceProvider.GetRequiredService<TypeMappingSourceDependencies>(),

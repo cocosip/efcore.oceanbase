@@ -130,7 +130,7 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             var factory = context.GetService<ISqlExpressionFactory>();
             var narrow = source.FindMapping(typeof(DateTime), mode == OceanBaseCompatibilityMode.MySql ? "DATETIME(0)" : "DATE")!;
             var result = Assert.IsType<SqlBinaryExpression>(methods.Translate(context.Model,
-                new ColumnExpression("DateStamp", "r", typeof(DateTime), narrow, true),
+                new TestColumnExpression("DateStamp", "r", typeof(DateTime), narrow, true),
                 typeof(DateTime).GetMethod(nameof(DateTime.Subtract), [typeof(DateTime)])!,
                 [factory.Constant(anchor, source.FindMapping(typeof(DateTime)))],
                 context.GetService<IDiagnosticsLogger<DbLoggerCategory.Query>>()));
@@ -225,7 +225,7 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             {
                 var ticks = name == nameof(DateTime.AddTicks);
                 var result = Assert.IsType<SqlFunctionExpression>(methods.Translate(context.Model,
-                    new ColumnExpression("Stamp", "r", typeof(DateTime), mapping, true),
+                    new TestColumnExpression("Stamp", "r", typeof(DateTime), mapping, true),
                     typeof(DateTime).GetMethod(name, [ticks ? typeof(long) : typeof(double)])!,
                     [ticks ? factory.Constant(10L, source.FindMapping(typeof(long)))
                         : factory.Constant(0.5, source.FindMapping(typeof(double)))], logger));
@@ -256,15 +256,15 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
                 nameof(DateTime.AddSeconds), nameof(DateTime.AddMilliseconds), nameof(DateTime.AddMicroseconds) })
             {
                 var method = typeof(DateTime).GetMethod(name, [typeof(double)])!;
-                var input = new ColumnExpression("Stamp", "r", typeof(DateTime), date, true);
+                var input = new TestColumnExpression("Stamp", "r", typeof(DateTime), date, true);
                 Assert.NotNull(methods.Translate(context.Model, input, method, [factory.Constant(0.5, number)], logger));
                 foreach (var invalid in new[] { textNumber, nullNumber })
                     Assert.Null(methods.Translate(context.Model, input, method, [factory.Constant(0.5, invalid)], logger));
-                Assert.Null(methods.Translate(context.Model, new ColumnExpression("Stamp", "r", typeof(DateTime), textDate, true),
+                Assert.Null(methods.Translate(context.Model, new TestColumnExpression("Stamp", "r", typeof(DateTime), textDate, true),
                     method, [factory.Constant(0.5, number)], logger));
             }
             var tickMethod = typeof(DateTime).GetMethod(nameof(DateTime.AddTicks), [typeof(long)])!;
-            var tickInput = new ColumnExpression("Stamp", "r", typeof(DateTime), date, true);
+            var tickInput = new TestColumnExpression("Stamp", "r", typeof(DateTime), date, true);
             var tickMapping = source.FindMapping(typeof(long))!;
             var nullTicks = (RelationalTypeMapping)tickMapping.WithComposedConverter(
                 new ValueConverter<long, long>(value => value, value => value, convertsNulls: true));
@@ -273,7 +273,7 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             foreach (var invalid in new[] { nullTicks, textTicks })
                 Assert.Null(methods.Translate(context.Model, tickInput, tickMethod, [factory.Constant(10L, invalid)], logger));
             Assert.Null(methods.Translate(context.Model, tickInput, tickMethod, [factory.Constant(10.0, number)], logger));
-            Assert.Null(methods.Translate(context.Model, new ColumnExpression("Stamp", "r", typeof(DateTime), textDate, true),
+            Assert.Null(methods.Translate(context.Model, new TestColumnExpression("Stamp", "r", typeof(DateTime), textDate, true),
                 tickMethod, [factory.Constant(10L, tickMapping)], logger));
         }
 
@@ -286,7 +286,7 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             var factory = context.GetService<ISqlExpressionFactory>();
             var source = context.GetService<IRelationalTypeMappingSource>();
             var date = source.FindMapping(typeof(DateTime))!;
-            var stamp = new ColumnExpression("Stamp", "r", typeof(DateTime), date, true);
+            var stamp = new TestColumnExpression("Stamp", "r", typeof(DateTime), date, true);
             var amount = factory.Constant(0.5, source.FindMapping(typeof(double)));
             foreach (var marker in new[] { OceanBaseTemporalMethodTranslator.DateTimeAddDaysMarker,
                 OceanBaseTemporalMethodTranslator.DateTimeAddHoursMarker, OceanBaseTemporalMethodTranslator.DateTimeAddMinutesMarker,
@@ -325,14 +325,13 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             var repeatedInput = reverse ? digit : ordinary;
             var repeatedMapping = cloneMapping ? mapping.WithStoreTypeAndSize(mapping.StoreType, null) : mapping;
             if (cloneMapping) Assert.NotSame(mapping, repeatedMapping);
-            var secondOccurrence = new SqlParameterExpression(repeatedInput.Name, repeatedInput.Type,
-                cloneMapping ? !repeatedInput.IsNullable : repeatedInput.IsNullable, repeatedMapping);
+            var secondOccurrence = new SqlParameterExpression(repeatedInput.Name, cloneMapping ? typeof(int?) : typeof(int), repeatedMapping);
             var values = new Dictionary<string, object?> { ["8_anchor"] = 11, ["_ob_8_anchor"] = 22 };
             var processor = context.GetService<IRelationalParameterBasedSqlProcessorFactory>()
-                .Create(new RelationalParameterBasedSqlProcessorParameters(false, new HashSet<string>()));
+                .Create(useRelationalNulls: false);
             var expression = reverse ? factory.Add(ordinary, factory.Add(digit, secondOccurrence))
                 : factory.Add(digit, factory.Add(ordinary, secondOccurrence));
-            var processed = processor.Optimize(ProjectScalar(expression), values, out _);
+            var processed = processor.Optimize(ProjectScalar(factory, expression), values, out _);
             var addition = Assert.IsType<SqlBinaryExpression>(
                 Assert.Single(Assert.IsType<SelectExpression>(processed).Projection).Expression);
             var repeated = Assert.IsType<SqlBinaryExpression>(addition.Right);
@@ -375,9 +374,9 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             var shifted = new SqlParameterExpression("8_amount", typeof(int), shiftedMapping);
             var values = new Dictionary<string, object?> { ["8_amount"] = 11 };
             var processor = context.GetService<IRelationalParameterBasedSqlProcessorFactory>()
-                .Create(new RelationalParameterBasedSqlProcessorParameters(false, new HashSet<string>()));
+                .Create(useRelationalNulls: false);
             var expression = factory.Add(ordinary, factory.Add(shifted, factory.Add(ordinary, shifted)));
-            var processed = processor.Optimize(ProjectScalar(expression), values, out _);
+            var processed = processor.Optimize(ProjectScalar(factory, expression), values, out _);
             var generator = new OceanBaseQuerySqlGenerator(context.GetService<QuerySqlGeneratorDependencies>(), OceanBaseCompatibilityMode.Oracle);
             using var command = new OceanBaseCommand();
             foreach (var parameter in generator.GetCommand(processed).Parameters) parameter.AddDbParameter(command, values);
@@ -386,8 +385,12 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             Assert.Equal(111, command.Parameters[1].Value);
         }
 
-        private static SelectExpression ProjectScalar(SqlExpression expression)
-            => new(null, [], null, [], null, [new ProjectionExpression(expression, "Value")], false, [], null, null);
+        private static SelectExpression ProjectScalar(ISqlExpressionFactory factory, SqlExpression expression)
+        {
+            var select = factory.Select(expression);
+            select.ApplyProjection();
+            return select;
+        }
 
         private static Context Create(OceanBaseCompatibilityMode mode)
             => new(new DbContextOptionsBuilder<Context>().UseOceanBase("Server=offline;Database=numeric_date_add", mode).Options);

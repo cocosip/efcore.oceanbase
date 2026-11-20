@@ -277,8 +277,8 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
                     .SetProperty(row => row.OptionalSourceFlag, row => row.OptionalFlag));
             Assert.Equal(1, count);
             var command = Assert.Single(capture.Commands);
-            Assert.Contains("CASE WHEN b.OptionalSourceFlag = 'T' THEN 'Y' WHEN b.OptionalSourceFlag = 'F' THEN 'N' END AS __ob_value_0", command.Sql);
-            Assert.Contains("CASE WHEN b.OptionalFlag = 'Y' THEN 'T' WHEN b.OptionalFlag = 'N' THEN 'F' END AS __ob_value_1", command.Sql);
+            Assert.Contains("CASE WHEN b.OptionalSourceFlag = 'T' THEN 'Y' WHEN b.OptionalSourceFlag = 'F' THEN 'N' ELSE NULL END AS __ob_value_0", command.Sql);
+            Assert.Contains("CASE WHEN b.OptionalFlag = 'Y' THEN 'T' WHEN b.OptionalFlag = 'N' THEN 'F' ELSE NULL END AS __ob_value_1", command.Sql);
             Assert.Contains("SET __ob_bulk_target.OptionalFlag = __ob_bulk_snapshot.__ob_value_0, __ob_bulk_target.OptionalSourceFlag = __ob_bulk_snapshot.__ob_value_1", command.Sql);
             Assert.Equal(leftJoin, command.Sql.Contains("LEFT JOIN BulkGroups", StringComparison.Ordinal));
             Assert.DoesNotContain("ELSE 'N'", command.Sql);

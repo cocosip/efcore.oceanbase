@@ -1,14 +1,12 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Runtime.ExceptionServices;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Infrastructure;
-using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Migrations.Internal;
 using Microsoft.EntityFrameworkCore.Storage;
@@ -16,7 +14,7 @@ using OceanBase.EntityFrameworkCore.Internal;
 
 namespace OceanBase.EntityFrameworkCore.Migrations
 {
-#pragma warning disable EF1001 // EF10's Migrator exposes the script-command seam; review on patch upgrades.
+#pragma warning disable EF1001 // EF8's Migrator exposes the script-command seam; review on patch upgrades.
     internal sealed class OceanBaseMigrator(
         IMigrationsAssembly migrationsAssembly, IHistoryRepository historyRepository, IDatabaseCreator databaseCreator,
         IMigrationsSqlGenerator migrationsSqlGenerator, IRawSqlCommandBuilder rawSqlCommandBuilder,
@@ -24,17 +22,15 @@ namespace OceanBase.EntityFrameworkCore.Migrations
         ISqlGenerationHelper sqlGenerationHelper, ICurrentDbContext currentContext,
         IModelRuntimeInitializer modelRuntimeInitializer, IDiagnosticsLogger<DbLoggerCategory.Migrations> logger,
         IRelationalCommandDiagnosticsLogger commandLogger, IDatabaseProvider databaseProvider,
-        IMigrationsModelDiffer migrationsModelDiffer, IDesignTimeModel designTimeModel,
         IDbContextOptions contextOptions, IExecutionStrategy executionStrategy, IRelationalTypeMappingSource mappingSource)
         : Migrator(migrationsAssembly, historyRepository, databaseCreator, migrationsSqlGenerator, rawSqlCommandBuilder,
             migrationCommandExecutor, connection, sqlGenerationHelper, currentContext, modelRuntimeInitializer,
-            logger, commandLogger, databaseProvider, migrationsModelDiffer, designTimeModel, contextOptions, executionStrategy)
+            logger, commandLogger, databaseProvider)
     {
         private readonly IHistoryRepository _historyRepository = historyRepository;
         private readonly IRawSqlCommandBuilder _rawSqlCommandBuilder = rawSqlCommandBuilder;
         private readonly IRelationalConnection _connection = connection;
         private readonly ICurrentDbContext _currentContext = currentContext;
-        private readonly IDbContextOptions _contextOptions = contextOptions;
         private readonly IExecutionStrategy _executionStrategy = executionStrategy;
         private readonly IRelationalCommandDiagnosticsLogger _commandLogger = commandLogger;
         private readonly OceanBaseOptionsExtension _options = contextOptions.FindExtension<OceanBaseOptionsExtension>()!;
@@ -43,7 +39,7 @@ namespace OceanBase.EntityFrameworkCore.Migrations
         private RelationalCommandParameterObject Parameters()
             => new(_connection, null, null, _currentContext.Context, _commandLogger, CommandSource.Migrations);
 
-        private void Validate(bool async)
+        private void Validate()
         {
             if (_options.SchemaManagementScope is null)
                 throw new NotSupportedException("Migrate requires EnableOceanBaseSchemaManagement for an already provisioned target.");
@@ -52,10 +48,6 @@ namespace OceanBase.EntityFrameworkCore.Migrations
                 throw new NotSupportedException("OceanBase migrations cannot run inside a caller, ambient or enlisted transaction.");
             if (_executionStrategy.RetriesOnFailure || ExecutionStrategy.Current is not null)
                 throw new NotSupportedException("Automatic migration retries are unsupported because OceanBase DDL commits implicitly. Inspect the applied schema before retrying.");
-            var core = _contextOptions.FindExtension<CoreOptionsExtension>();
-            if (async ? core?.AsyncSeeder is null && core?.Seeder is not null
-                : core?.Seeder is null && core?.AsyncSeeder is not null)
-                throw new InvalidOperationException(CoreStrings.MissingSeeder);
         }
         private void ValidateScope(object? scope)
         {
@@ -65,9 +57,7 @@ namespace OceanBase.EntityFrameworkCore.Migrations
 
         public override void Migrate(string? targetMigration = null)
         {
-            Validate(async: false);
-            var history = _historyRepository as OceanBaseHistoryRepository;
-            history?.BeginMigration();
+            Validate();
             var opened = false;
             Exception? failure = null;
             try
@@ -79,21 +69,15 @@ namespace OceanBase.EntityFrameworkCore.Migrations
             catch (Exception error) { failure = error; throw; }
             finally
             {
-                Exception? cleanupError = null;
-                try { history?.EndMigration(); }
-                catch (Exception cleanup) { cleanupError = cleanup; }
                 try { if (opened) _connection.Close(); }
-                catch (Exception cleanup) { cleanupError ??= cleanup; }
-                HandleCleanup(failure, cleanupError);
+                catch (Exception cleanup) when (failure is not null) { failure.Data["OceanBase.MigrationCleanupError"] = cleanup; }
             }
         }
 
         public override async Task MigrateAsync(string? targetMigration = null, CancellationToken cancellationToken = default)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            Validate(async: true);
-            var history = _historyRepository as OceanBaseHistoryRepository;
-            history?.BeginMigration();
+            Validate();
             var opened = false;
             Exception? failure = null;
             try
@@ -105,20 +89,9 @@ namespace OceanBase.EntityFrameworkCore.Migrations
             catch (Exception error) { failure = error; throw; }
             finally
             {
-                Exception? cleanupError = null;
-                try { if (history is not null) await history.EndMigrationAsync().ConfigureAwait(false); }
-                catch (Exception cleanup) { cleanupError = cleanup; }
                 try { if (opened) await _connection.CloseAsync().ConfigureAwait(false); }
-                catch (Exception cleanup) { cleanupError ??= cleanup; }
-                HandleCleanup(failure, cleanupError);
+                catch (Exception cleanup) when (failure is not null) { failure.Data["OceanBase.MigrationCleanupError"] = cleanup; }
             }
-        }
-
-        private static void HandleCleanup(Exception? failure, Exception? cleanup)
-        {
-            if (cleanup is null) return;
-            if (failure is not null) failure.Data["OceanBase.MigrationCleanupError"] = cleanup;
-            else ExceptionDispatchInfo.Capture(cleanup).Throw();
         }
 
         public override string GenerateScript(string? fromMigration = null, string? toMigration = null,
@@ -136,14 +109,27 @@ namespace OceanBase.EntityFrameworkCore.Migrations
 
         protected override IReadOnlyList<MigrationCommand> GenerateUpSql(Migration migration,
             MigrationsSqlGenerationOptions options = MigrationsSqlGenerationOptions.Default)
-            => ScriptCommands(base.GenerateUpSql(migration, options), options);
+            => PrepareCommands(base.GenerateUpSql(migration, options), options);
         protected override IReadOnlyList<MigrationCommand> GenerateDownSql(Migration migration, Migration? previousMigration,
             MigrationsSqlGenerationOptions options = MigrationsSqlGenerationOptions.Default)
-            => ScriptCommands(base.GenerateDownSql(migration, previousMigration, options), options);
+            => PrepareCommands(base.GenerateDownSql(migration, previousMigration, options), options);
 
-        private IReadOnlyList<MigrationCommand> ScriptCommands(IReadOnlyList<MigrationCommand> commands, MigrationsSqlGenerationOptions options)
+        private IReadOnlyList<MigrationCommand> PrepareCommands(IReadOnlyList<MigrationCommand> commands, MigrationsSqlGenerationOptions options)
         {
-            if (!options.HasFlag(MigrationsSqlGenerationOptions.Script) || !Oracle && !options.HasFlag(MigrationsSqlGenerationOptions.Idempotent))
+            if (!options.HasFlag(MigrationsSqlGenerationOptions.Script))
+            {
+                // EF8 always appends a transactional history command, even after transaction-suppressed DDL.
+                if (commands.Any(command => command.TransactionSuppressed))
+                {
+                    var migrationCommands = commands.ToArray();
+                    migrationCommands[^1] = new MigrationCommand(_rawSqlCommandBuilder.Build(migrationCommands[^1].CommandText),
+                        _currentContext.Context, _commandLogger, transactionSuppressed: true);
+                    return migrationCommands;
+                }
+                return commands;
+            }
+
+            if (!Oracle && !options.HasFlag(MigrationsSqlGenerationOptions.Idempotent))
                 return commands;
             return commands.Select(command =>
             {

@@ -42,14 +42,12 @@ public sealed class GuidCollectionRootQueryTests
     }
 
     [Theory]
-    [InlineData(OceanBaseCompatibilityMode.MySql, ParameterizedCollectionTranslationMode.Constantize)]
-    [InlineData(OceanBaseCompatibilityMode.MySql, ParameterizedCollectionTranslationMode.Parameterize)]
-    [InlineData(OceanBaseCompatibilityMode.Oracle, ParameterizedCollectionTranslationMode.Constantize)]
-    [InlineData(OceanBaseCompatibilityMode.Oracle, ParameterizedCollectionTranslationMode.Parameterize)]
+    [InlineData(OceanBaseCompatibilityMode.MySql)]
+    [InlineData(OceanBaseCompatibilityMode.Oracle)]
     public void Captured_guid_roots_translate_and_rebind(
-        OceanBaseCompatibilityMode mode, ParameterizedCollectionTranslationMode translation)
+        OceanBaseCompatibilityMode mode)
     {
-        using var context = CreateContext(mode, translation);
+        using var context = CreateContext(mode);
         Guid?[] values = [Token, null, Guid.Empty];
         var query = context.Rows.Where(row => values.Contains(row.Token));
 
@@ -64,19 +62,11 @@ public sealed class GuidCollectionRootQueryTests
         }
     }
 
-    private static TestContext CreateContext(OceanBaseCompatibilityMode mode,
-        ParameterizedCollectionTranslationMode? translation = null)
+    private static TestContext CreateContext(OceanBaseCompatibilityMode mode)
     {
         var builder = new DbContextOptionsBuilder<TestContext>()
             .UseOceanBase("Server=offline;Database=guid_roots", mode)
             .EnableServiceProviderCaching(false);
-        if (translation.HasValue)
-        {
-            var extension = builder.Options.Extensions.OfType<RelationalOptionsExtension>().Single()
-                .WithParameterizedCollectionTranslationMode(translation.Value);
-            ((IDbContextOptionsBuilderInfrastructure)builder).AddOrUpdateExtension(extension);
-        }
-
         return new TestContext(builder.Options);
     }
 

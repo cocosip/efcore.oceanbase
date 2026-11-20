@@ -14,7 +14,7 @@ supported behavior and usage examples, or the [samples](../samples/README.md) fo
 Use the gap inventory to select development work, the feature inventory to assess implemented scope,
 and the release checklist to assess release readiness. Implemented code, accepted runtime profiles and
 published packages are different states. The EF10 checklist records its scoped Windows ordinary-direct
-profile. EF8 and EF9 start with porting requirements and pending acceptance.
+profile. The EF9 checklist records the local port results. The EF8 checklist tracks acceptance on its branch.
 
 Shared topics have one owner:
 

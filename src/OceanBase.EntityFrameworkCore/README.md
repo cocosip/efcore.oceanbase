@@ -1,9 +1,10 @@
 # OceanBase.EntityFrameworkCore
 
-Entity Framework Core 9 provider for OceanBase MySQL and Oracle compatibility modes, using the public
-OceanBaseConnector 0.4.0 API. The package targets `net9.0` and accepts EF Core 9 patch versions in `[9.0.0,10.0.0)`.
+Entity Framework Core 8 provider for OceanBase MySQL and Oracle compatibility modes, using the public
+OceanBaseConnector 0.4.0 API. The package targets `net8.0` and accepts EF Core 8 patch versions in
+`[8.0.0,9.0.0)`. It requires `Microsoft.Extensions.Caching.Memory` 8.0.1 or later.
 
-See the EF Core 9 feature matrix and release checklist in the repository for implementation status,
+See the EF Core 8 feature matrix and release checklist in the repository for implementation status,
 known boundaries and tested profiles.
 
 - [Configuration](#configuration)
@@ -182,9 +183,7 @@ DateOnly.FromDateTime and TimeOnly.FromDateTime extract the stored date/clock; T
 the clock as a native nonnegative duration. DateOnly.ToDateTime(TimeOnly) combines date and clock
 with promoted timestamp precision and Kind.Unspecified; the explicit constant Unspecified overload
 is also supported, while UTC/Local/dynamic Kind reject. TimeOnly.FromTimeSpan accepts only [0,24h),
-returning NULL for invalid SQL values or MySQL sub-microsecond ticks, without wrapping. EF.Parameter
-can keep a scalar duration in SQL as exact ticks, avoiding native TIME storage limits and EF's ordinary
-client evaluation of a pure scalar call. These type-changing methods use stored calendar space and
+returning NULL for invalid SQL values or MySQL sub-microsecond ticks, without wrapping. Keep one argument dependent on the row when a call must execute in SQL. These type-changing methods use stored calendar space and
 the result's own built-in mapping, without applying an inverse converter for the input type.
 TimeOnly.IsBetween uses inclusive start/exclusive end, supports midnight wrapping, and treats equal
 endpoints as empty. NULL clocks/bounds return NULL; scalar bounds adopt the receiver's clock converter
@@ -270,7 +269,7 @@ ends, using stored text and case-sensitive character matching. Null/empty char[]
 arguments select CLR whitespace, including tabs, newlines and Unicode spaces;
 parameterless trim keeps its ordinary-space contract. Captured arrays refresh at
 each execution, including in-place mutations; constant and inline char arrays and
-ordinary text-backed char columns are supported, and EF.Constant retains inlining.
+ordinary text-backed char columns are supported, and inline arguments retain literal translation.
 A NULL char column propagates
 NULL, including within an inline array. Surrogate code units and custom/multichar
 or non-text char converters reject. Trim characters have plain text mappings,
@@ -395,7 +394,7 @@ coverage for single/split Include/ThenInclude, composite and alternate keys, opt
 references, owned references/collections and shadow owner keys, filtered Include and
 root paging, many-to-many shared identities, and all three tracking modes. Tracked
 filtered Includes retain pretracked entities through EF fixup; no-tracking queries
-return fresh filtered graphs. On EF Core 9, combine tenant and active predicates in one
+return fresh filtered graphs. On EF Core 8, combine tenant and active predicates in one
 `HasQueryFilter` expression per entity and use `IgnoreQueryFilters()` to disable all filters.
 Captured query values have native row checks and observed parameter binding. These checks
 do not prove identical SQL text or binding in every later split command; optional-reference
@@ -404,7 +403,7 @@ Concurrent-change isolation, arbitrary model/converter combinations and graph fa
 outside that graph profile. The following sections describe lazy-loading and compiled-model profiles.
 
 Lazy loading can use EF's injected `ILazyLoader`, or the optional official
-`Microsoft.EntityFrameworkCore.Proxies` package at the application's EF Core 9 patch version:
+`Microsoft.EntityFrameworkCore.Proxies` package at the application's EF Core 8 patch version:
 
 ```csharp
 optionsBuilder.UseOceanBase(connectionString, OceanBaseCompatibilityMode.MySql)
@@ -436,9 +435,8 @@ Select the generated model with `UseModel(App.CompiledModels.AppDbContextModel.I
 `UseOceanBase`. Generate and select separate models for MySQL and Oracle; an incompatible mode fails during
 model initialization. Regenerate after model/provider changes. EF's compiled-model restrictions still apply,
 including unsupported query filters. The public compiled-model mapping helpers and interval JSON reader are
-infrastructure used by generated code. Structured JSON property mappings are deferred. EF Core 9
-query precompilation and NativeAOT release profiles remain unverified. See C-01 in the EF Core 9
-gap matrix.
+infrastructure used by generated code. Structured JSON property mappings, query precompilation
+and NativeAOT profiles are outside the EF8 Provider scope. See C-01 in the EF Core 8 gap matrix.
 
 ## Reverse engineering
 
@@ -491,13 +489,9 @@ MySQL SIGNED/UNSIGNED, DECIMAL(65,30), FLOAT or DOUBLE; Oracle NUMBER, BINARY_FL
 Non-finite floating inputs reject before execution. Boolean roots use the provider Boolean carrier
 in MySQL and the decimal Boolean carrier in Oracle.
 
-EF Core 9 uses scalar parameters for supported captured collections by default.
-`TranslateParameterizedCollectionsToConstants()` and `EF.Constant` select constant SQL.
-`TranslateParameterizedCollectionsToParameters()` uses one JSON-text parameter with `JSON_TABLE`
-for signed Int32/Int64 elements, including nullable elements. This path rejects contextual
-converters. Other supported carriers retain scalar bindings. Explicit `EF.Parameter` on a
-collection requires the signed integer JSON path. See the EF Core 9 gap matrix for collection
-scope and boundaries.
+A captured signed Int32/Int64 collection with a standard mapping uses one JSON-text parameter and
+`JSON_TABLE`. Other supported carriers use scalar bindings. Inline arrays can express constant
+SQL on the EF Core 8.0.0 floor. See the EF Core 8 gap matrix for contextual converter boundaries.
 
 Both modes support an explicit `string` property configured with `.HasColumnType("json")` for schema
 creation, projection, reverse engineering and whole-document writes through `SaveChanges`.
@@ -586,10 +580,8 @@ create the schema, skipping excluded tables; an existing populated schema is not
 After DDL, initial data runs in one owned transaction with a fresh target-scope check. Failure/cancellation
 rolls back that data transaction; DDL has already committed and requires inspection before recovery.
 Use explicit stable seed keys. Explicit identity values do not reserve a generated-key range or promise
-to advance Oracle's identity generator. `UseSeeding`/`UseAsyncSeeding` callbacks still run once after
-`EnsureCreated` schema/model-data work, in their separate existing transaction; callback failure does not
-undo previously committed model data. `CreateTables` does not invoke those callbacks. Existing-namespace
-callback commit/rollback has native coverage; broader DDL/model-data failure recovery needs separate acceptance.
+to advance Oracle's identity generator. Use an application-owned initialization step for data
+outside the model after schema creation.
 
 The current database/schema must match the declared name exactly, including case. `EnsureCreated` returns false
 if any ordinary table exists; it does not reconcile or upgrade existing schemas. DDL is not atomic and a failure
@@ -650,13 +642,11 @@ profile is recorded in the release checklist; other transitions require separate
 MySQL also supports nullability/comment changes to an unchanged virtual computed column. EF synthetic
 backfill defaults do not cause computed-value updates; resolve existing NULLs before requiring the column.
 
-Runtime migrations serialize through an owner row in `__EFMigrationsHistoryLock`. Cleanup never removes another
-owner's row. A process crash or failed cleanup can leave a stale row: verify that no migrator is active before
-administrative removal. Generated scripts require external serialization and stop-on-error execution. Oracle
+Serialize runtime and scripted migrations externally and stop on the first SQL error. Oracle
 scripts target SQL*Plus-style clients, disable variable substitution, exit on SQL errors and commit the final
 history changes; rollback cannot undo DDL. MySQL scripts require autocommit. Raw migration SQL is trusted,
 single-statement server input; client directives and multi-statement raw batches are outside this contract.
-Native DDL/locking beyond the documented checks, script-client execution and trigger reverse engineering
+Native DDL beyond the documented checks, script-client execution and trigger reverse engineering
 remain outside the verified scope.
 
 `HasSequence<long>` declares a standalone model sequence. Both compatibility modes support create-script
@@ -770,19 +760,13 @@ idempotent scripts, migration listing/removal and framework-dependent Windows bu
 verification fixture under `tests/OceanBase.EntityFrameworkCore.ToolingConsumer`.
 `dotnet ef migrations remove --force` may inspect or change a live database; the fixture blocks all
 connection opens and tests local file removal only. Offline bundle verification builds the executable and runs
-`--help`. The bounded native profile also applies bundles, Connector-executed scripts and MySQL CLI scripts
-in both modes, with upgrade/data-preservation/downgrade/rollback and cleanup checks. SQL*Plus remains a
-separate client acceptance boundary. See the release checklist for exact package/EF identities.
+`--help`. The EF Core 8 release checklist tracks the verified tooling and live migration profiles.
 
 ## Seeding and namespace ownership
 
-`UseSeeding` and `UseAsyncSeeding` run after successful `EnsureCreated` schema processing, including when it
-returns false. Configure the callback matching the sync/async operation; configuring only the opposite callback
-fails before schema work. The callback runs in a new owned transaction after a fresh target-scope check. Failure
-disposes that transaction but does not undo preceding DDL. No migration lock or automatic retry is supplied;
-callbacks must handle concurrent calls and be idempotent. Both modes have native sync/async acceptance for
-callbacks in an existing namespace: successful writes commit and a callback that writes then throws rolls back.
-Namespace creation and earlier DDL/model-data transactions retain their separate acceptance boundaries.
+Use `HasData` for data managed by the model and run other application seeding explicitly
+after successful schema creation or migration. The application owns transaction handling and
+coordination for that initialization.
 
 For an application-owned MySQL database, `EnableOceanBaseDatabaseManagement("application_database")`
 also enables namespace creation and `EnsureDeleted`. It declares ownership of the **entire database**,
@@ -822,7 +806,7 @@ keep their passwords/privileges and follow the existing-schema table-creation pr
 drops the entire declared user with CASCADE, including objects outside the EF model.
 
 The password callback runs only for user creation. Empty values, double quotes and control characters
-are rejected before DDL. EF Core 9 command logs and execution interceptors receive redacted `CREATE USER`
+are rejected before DDL. EF Core 8 command logs and execution interceptors receive redacted `CREATE USER`
 text even with sensitive logging enabled. The provider supplies the password to the underlying command
 for execution. Do not log callback/server exception messages containing credentials.
 User creation grants only CREATE SESSION and CREATE TABLE. A later grant/table failure can leave a user

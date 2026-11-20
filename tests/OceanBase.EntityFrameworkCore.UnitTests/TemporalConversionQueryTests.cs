@@ -7,6 +7,7 @@ using Microsoft.EntityFrameworkCore.Query;
 using Microsoft.EntityFrameworkCore.Query.SqlExpressions;
 using Microsoft.EntityFrameworkCore.Storage;
 using OceanBase.EntityFrameworkCore.Query;
+using OceanBase.EntityFrameworkCore.TestUtilities;
 using Xunit;
 
 namespace OceanBase.EntityFrameworkCore.UnitTests
@@ -37,9 +38,9 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
         [InlineData(OceanBaseCompatibilityMode.Oracle)]
         public void Duration_to_clock_keeps_full_scalar_range_and_does_not_wrap(OceanBaseCompatibilityMode mode)
         {
-            using var context = Create(mode);
+            using var context = Create(mode, keepTemporalConversions: true);
             var amount = TimeSpan.MaxValue;
-            var query = context.Rows.Where(row => TimeOnly.FromTimeSpan(EF.Parameter(amount)).Ticks > 0
+            var query = context.Rows.Where(row => TimeOnly.FromTimeSpan(amount).Ticks > 0
                     && TimeOnly.FromTimeSpan(row.Duration).Hour > 0)
                 .Select(row => TimeOnly.FromTimeSpan(row.Stamp.Subtract(row.OtherStamp))).OrderBy(value => value);
             var initial = query.ToQueryString();
@@ -109,12 +110,12 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             var methods = context.GetService<IMethodCallTranslatorProvider>();
             var logger = context.GetService<IDiagnosticsLogger<DbLoggerCategory.Query>>();
             var low = context.Model.FindEntityType(typeof(Row))!.FindProperty(nameof(Row.LowClock))!.GetRelationalTypeMapping();
-            var input = new ColumnExpression("LowClock", "r", typeof(TimeOnly), low, true);
+            var input = new TestColumnExpression("LowClock", "r", typeof(TimeOnly), low, true);
             var duration = methods.Translate(context.Model, input, typeof(TimeOnly).GetMethod(nameof(TimeOnly.ToTimeSpan))!, [], logger);
             Assert.NotNull(duration);
             Assert.Equal(mode == OceanBaseCompatibilityMode.MySql ? 6 : 7, duration.TypeMapping!.Precision);
             Assert.Equal(typeof(TimeSpan), duration.TypeMapping.ClrType);
-            var day = new ColumnExpression("Day", "r", typeof(DateOnly), source.FindMapping(typeof(DateOnly)), true);
+            var day = new TestColumnExpression("Day", "r", typeof(DateOnly), source.FindMapping(typeof(DateOnly)), true);
             var combined = methods.Translate(context.Model, day,
                 typeof(DateOnly).GetMethod(nameof(DateOnly.ToDateTime), [typeof(TimeOnly)])!, [input], logger);
             Assert.NotNull(combined);
@@ -144,15 +145,19 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             using var context = Create(mode);
             var source = context.GetService<IRelationalTypeMappingSource>();
             var factory = context.GetService<ISqlExpressionFactory>();
-            var stamp = new ColumnExpression("Stamp", "r", typeof(DateTime), source.FindMapping(typeof(DateTime)), true);
+            var stamp = new TestColumnExpression("Stamp", "r", typeof(DateTime), source.FindMapping(typeof(DateTime)), true);
             var malformed = factory.Function(OceanBaseTemporalMemberTranslator.TimeOfDayMarker, [stamp], nullable: true,
                 argumentsPropagateNullability: [false], typeof(TimeOnly), source.FindMapping(typeof(TimeSpan)));
             var generator = new OceanBaseQuerySqlGenerator(context.GetService<QuerySqlGeneratorDependencies>(), mode);
             Assert.Throws<InvalidOperationException>(() => generator.GetCommand(malformed));
         }
 
-        private static Context Create(OceanBaseCompatibilityMode mode)
-            => new(new DbContextOptionsBuilder<Context>().UseOceanBase("Server=offline;Database=temporal_conversion", mode).Options);
+        private static Context Create(OceanBaseCompatibilityMode mode, bool keepTemporalConversions = false)
+        {
+            var builder = new DbContextOptionsBuilder<Context>().UseOceanBase("Server=offline;Database=temporal_conversion", mode);
+            if (keepTemporalConversions) builder.ReplaceService<IEvaluatableExpressionFilter, TemporalConversionFilter>().EnableServiceProviderCaching(false);
+            return new Context(builder.Options);
+        }
 
         private sealed class Context(DbContextOptions<Context> options) : DbContext(options)
         {

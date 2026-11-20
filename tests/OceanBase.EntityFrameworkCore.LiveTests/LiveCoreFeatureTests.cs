@@ -193,55 +193,33 @@ namespace OceanBase.EntityFrameworkCore.LiveTests
 
         [Theory]
         [MemberData(nameof(Cases))]
-        public Task EnsureCreated_seeding_commits_and_rolls_back_inside_the_existing_namespace(OceanBaseCompatibilityMode mode, bool async)
-        {
-            var calls = 0;
-            var abort = false;
-            return LiveStorageTable.WithTable<Context>(mode, async, false, (options, table) =>
-                new Context(new DbContextOptionsBuilder<Context>(options).ReplaceService<IModelCacheKeyFactory, CacheKey>()
-                    .UseSeeding((db, performed) =>
-                    {
-                        Assert.False(async);
-                        Assert.False(performed);
-                        Assert.NotNull(db.Database.CurrentTransaction);
-                        calls++;
-                        db.Add(new SeedRow { Id = abort ? 2 : 1, Name = abort ? "rollback" : "committed" });
-                        db.SaveChanges();
-                        if (abort) throw new SeedAbort();
-                    })
-                    .UseAsyncSeeding(async (db, performed, token) =>
-                    {
-                        Assert.True(async);
-                        Assert.False(performed);
-                        Assert.NotNull(db.Database.CurrentTransaction);
-                        calls++;
-                        db.Add(new SeedRow { Id = abort ? 2 : 1, Name = abort ? "rollback" : "committed" });
-                        await db.SaveChangesAsync(token);
-                        if (abort) throw new SeedAbort();
-                    }).Options, table, Kind.Seeding), async (context, _, stage) =>
+        public Task Application_owned_initialization_commits_and_rolls_back_in_the_existing_namespace(OceanBaseCompatibilityMode mode, bool async)
+            => WithTables(mode, async, Kind.Seeding, [""], async (context, stage) =>
+            {
+                stage("ensure existing schema and commit initialization");
+                Assert.False(async ? await context.Database.EnsureCreatedAsync() : context.Database.EnsureCreated());
+                await using (var transaction = async ? await context.Database.BeginTransactionAsync() : context.Database.BeginTransaction())
                 {
-                    stage("existing namespace EnsureCreated invokes matching callback and commits");
-                    Assert.False(async ? await context.Database.EnsureCreatedAsync() : context.Database.EnsureCreated());
-                    Assert.Equal(1, calls);
-                    Assert.Null(context.Database.CurrentTransaction);
-                    context.ChangeTracker.Clear();
-                    var committed = Assert.Single(await Read(context.Set<SeedRow>().AsNoTracking(), async));
-                    Assert.Equal((1, "committed"), (committed.Id, committed.Name));
+                    context.Add(new SeedRow { Id = 1, Name = "committed" });
+                    await Save(context, async);
+                    if (async) await transaction.CommitAsync();
+                    else transaction.Commit();
+                }
 
-                    stage("throwing seeding callback rolls back its completed write");
-                    abort = true;
-                    await Assert.ThrowsAsync<SeedAbort>(async () =>
-                    {
-                        if (async) await context.Database.EnsureCreatedAsync();
-                        else context.Database.EnsureCreated();
-                    });
-                    Assert.Equal(2, calls);
-                    Assert.Null(context.Database.CurrentTransaction);
-                    context.ChangeTracker.Clear();
-                    committed = Assert.Single(await Read(context.Set<SeedRow>().AsNoTracking(), async));
-                    Assert.Equal((1, "committed"), (committed.Id, committed.Name));
-                });
-        }
+                stage("roll back a later initialization write");
+                await using (var transaction = async ? await context.Database.BeginTransactionAsync() : context.Database.BeginTransaction())
+                {
+                    context.Add(new SeedRow { Id = 2, Name = "rollback" });
+                    await Save(context, async);
+                    if (async) await transaction.RollbackAsync();
+                    else transaction.Rollback();
+                }
+
+                Assert.Null(context.Database.CurrentTransaction);
+                context.ChangeTracker.Clear();
+                var committed = Assert.Single(await Read(context.Set<SeedRow>().AsNoTracking(), async));
+                Assert.Equal((1, "committed"), (committed.Id, committed.Name));
+            });
 
         private static Task WithTables(OceanBaseCompatibilityMode mode, bool async, Kind kind, string[] suffixes,
             Func<Context, Action<string>, Task> run)
@@ -348,6 +326,5 @@ namespace OceanBase.EntityFrameworkCore.LiveTests
             public Owner Owner { get; set; } = null!;
         }
         private sealed class SeedRow { public int Id { get; set; } public string Name { get; set; } = ""; }
-        private sealed class SeedAbort : Exception;
     }
 }

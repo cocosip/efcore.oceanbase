@@ -6,6 +6,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="../TestUtilities/ScaffoldingCatalogConnection.cs" Link="ScaffoldingCatalogConnection.cs" />
+    <Compile Include="../TestUtilities/TemporalConversionFilter.cs" Link="TemporalConversionFilter.cs" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
     <PackageReference Include="Microsoft.EntityFrameworkCore" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" PrivateAssets="all" IncludeAssets="all" />

@@ -25,8 +25,7 @@ public sealed class BooleanCollectionRootTests
         foreach (var mode in new[] { OceanBaseCompatibilityMode.MySql, OceanBaseCompatibilityMode.Oracle })
         foreach (var async in new[] { false, true })
         foreach (var relationalNulls in new[] { false, true })
-        foreach (var translation in new ParameterizedCollectionTranslationMode?[] { null, ParameterizedCollectionTranslationMode.Parameterize })
-            yield return new object[] { mode, async, relationalNulls, translation! };
+            yield return new object[] { mode, async, relationalNulls };
     }
 
     [Theory]
@@ -118,7 +117,7 @@ public sealed class BooleanCollectionRootTests
     [Theory]
     [MemberData(nameof(ExplicitModes))]
     public async Task Captured_boolean_roots_rebind_and_bind_current_values(
-        OceanBaseCompatibilityMode mode, bool async, bool relationalNulls, ParameterizedCollectionTranslationMode? translation)
+        OceanBaseCompatibilityMode mode, bool async, bool relationalNulls)
     {
         using var table = new DataTable();
         table.Columns.Add("Value", typeof(object));
@@ -126,7 +125,7 @@ public sealed class BooleanCollectionRootTests
         table.Rows.Add(false);
         table.Rows.Add(DBNull.Value);
         var capture = new Capture(table);
-        await using var context = Create<NativeRow>(mode, capture, relationalNulls, translation);
+        await using var context = Create<NativeRow>(mode, capture, relationalNulls);
         bool?[] values = [true, null, false, true];
         var query = context.Rows.Where(row => values.Contains(row.Optional))
             .Select(row => row.Optional);
@@ -154,7 +153,7 @@ public sealed class BooleanCollectionRootTests
         convertedTable.Rows.Add(new OceanBaseDecimal(0m));
         convertedTable.Rows.Add(DBNull.Value);
         var convertedCapture = new Capture(convertedTable);
-        await using var convertedContext = Create<ConvertedRow>(mode, convertedCapture, relationalNulls, translation);
+        await using var convertedContext = Create<ConvertedRow>(mode, convertedCapture, relationalNulls);
         bool?[] convertedValues = [true, null, false];
         var convertedQuery = convertedContext.ConvertedRows
             .Where(row => convertedValues.Contains(row.Flag))
@@ -166,7 +165,7 @@ public sealed class BooleanCollectionRootTests
     }
 
     private static TestContext<T> Create<T>(OceanBaseCompatibilityMode mode, Capture capture,
-        bool relationalNulls = false, ParameterizedCollectionTranslationMode? translation = null) where T : class
+        bool relationalNulls = false) where T : class
     {
         var builder = new DbContextOptionsBuilder<TestContext<T>>()
             .UseOceanBase("Server=offline;Database=boolean_roots", mode)
@@ -174,7 +173,6 @@ public sealed class BooleanCollectionRootTests
             .AddInterceptors(new NoNetwork(), capture);
         var extension = builder.Options.Extensions.OfType<RelationalOptionsExtension>().Single()
             .WithUseRelationalNulls(relationalNulls);
-        if (translation.HasValue) extension = extension.WithParameterizedCollectionTranslationMode(translation.Value);
         ((IDbContextOptionsBuilderInfrastructure)builder).AddOrUpdateExtension(extension);
         return new TestContext<T>(builder.Options);
     }

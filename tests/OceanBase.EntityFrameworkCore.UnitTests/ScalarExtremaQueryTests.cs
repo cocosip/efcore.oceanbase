@@ -4,7 +4,6 @@ using System.Data.Common;
 using System.Linq;
 using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Internal;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Query;
@@ -84,30 +83,6 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
         [Theory]
         [InlineData(OceanBaseCompatibilityMode.MySql)]
         [InlineData(OceanBaseCompatibilityMode.Oracle)]
-        public void All_numeric_families_support_typed_variadic_arrays_and_nullable_operands(OceanBaseCompatibilityMode mode)
-        {
-            using var context = CreateContext(mode);
-            var row = Expression.Parameter(typeof(Row), "r");
-            foreach (var numeric in NumericTypes)
-            foreach (var type in new[] { numeric, typeof(Nullable<>).MakeGenericType(numeric) })
-            {
-                var property = Expression.Property(row, numeric.Name);
-                var operand = type == numeric ? (Expression)property : Expression.Convert(property, type);
-                var bound = Expression.Convert(Expression.Constant(Convert.ChangeType(1, numeric)), type);
-                var initializer = Expression.NewArrayInit(type, operand, bound, Expression.Default(type));
-                var values = Array.CreateInstance(type, 2);
-                values.SetValue(Convert.ChangeType(1, numeric), 0);
-                var predicate = Expression.AndAlso(Expression.LessThanOrEqual(Variadic("Least", type, initializer), bound),
-                    Expression.GreaterThanOrEqual(Variadic("Greatest", type, Expression.Constant(values)), operand));
-                var sql = context.Rows.Where(Expression.Lambda<Func<Row, bool>>(predicate, row)).ToQueryString();
-                Assert.Contains("LEAST(", sql);
-                Assert.Contains("GREATEST(", sql);
-            }
-        }
-
-        [Theory]
-        [InlineData(OceanBaseCompatibilityMode.MySql)]
-        [InlineData(OceanBaseCompatibilityMode.Oracle)]
         public void First_mapping_owns_result_and_preserves_independent_operand_converters(OceanBaseCompatibilityMode mode)
         {
             using var context = CreateContext(mode);
@@ -116,8 +91,8 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             var entity = context.Model.FindEntityType(typeof(Row))!;
             var plain = entity.FindProperty(nameof(Row.Decimal))!.GetRelationalTypeMapping();
             var reversed = entity.FindProperty(nameof(Row.AlternateDecimal))!.GetRelationalTypeMapping();
-            var first = new SqlConstantExpression(2m, typeof(decimal), reversed);
-            var later = new SqlConstantExpression(3m, typeof(decimal), plain);
+            var first = new SqlConstantExpression(Expression.Constant(2m), reversed);
+            var later = new SqlConstantExpression(Expression.Constant(3m), plain);
             var unmapped = Expression.Constant(1m);
             var max = typeof(decimal).GetMethod(nameof(decimal.Max), [typeof(decimal), typeof(decimal)])!;
             var result = Native(visitor.Translate(Expression.Call(max, first, later)));
@@ -132,11 +107,10 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             Assert.Equal(nameof(DbDataReader.GetValue), result.TypeMapping.GetDataReaderMethod().Name);
             Assert.Same(reversed, Native(visitor.Translate(Expression.Call(max, unmapped, first))).Arguments![0].TypeMapping);
             Assert.Same(plain, Native(visitor.Translate(Expression.Call(max, later, first))).Arguments![0].TypeMapping);
-            Assert.Same(first, visitor.Translate(Variadic("Least", typeof(decimal), Expression.NewArrayInit(typeof(decimal), first))));
 
             var doubleCarrier = (RelationalTypeMapping)source.FindMapping(typeof(double))!
                 .WithComposedConverter(new ValueConverter<float, double>(v => v, v => (float)v));
-            var floatModel = new SqlConstantExpression(2f, typeof(float), doubleCarrier);
+            var floatModel = new SqlConstantExpression(Expression.Constant(2f), doubleCarrier);
             var min = typeof(Math).GetMethod(nameof(Math.Min), [typeof(float), typeof(float)])!;
             var doubleResult = Assert.IsType<SqlFunctionExpression>(visitor.Translate(Expression.Call(min, floatModel, Expression.Constant(1f))));
             Assert.Equal("LEAST", doubleResult.Name);
@@ -144,7 +118,7 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
 
             var singleCarrier = (RelationalTypeMapping)source.FindMapping(typeof(float))!
                 .WithComposedConverter(new ValueConverter<decimal, float>(v => (float)v, v => (decimal)v));
-            var singleModel = new SqlConstantExpression(2m, typeof(decimal), singleCarrier);
+            var singleModel = new SqlConstantExpression(Expression.Constant(2m), singleCarrier);
             var mixedResult = Assert.IsType<SqlFunctionExpression>(visitor.Translate(Expression.Call(max, singleModel, first)));
             Assert.Equal(OceanBaseMathTranslator.SingleResultMarker, mixedResult.Name);
             Assert.Same(singleCarrier, mixedResult.TypeMapping);
@@ -159,7 +133,7 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             foreach (var rejected in new[] { text, changesNull, new DecimalTypeMapping(plain.StoreType),
                 new DecimalTypeMapping(mode == OceanBaseCompatibilityMode.MySql ? "DATETIME" : "DATE") })
             {
-                var invalid = new SqlConstantExpression(1m, typeof(decimal), rejected);
+                var invalid = new SqlConstantExpression(Expression.Constant(1m), rejected);
                 Assert.Null(visitor.Translate(Expression.Call(max, invalid, later)));
             }
         }
@@ -167,32 +141,18 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
         [Theory]
         [InlineData(OceanBaseCompatibilityMode.MySql)]
         [InlineData(OceanBaseCompatibilityMode.Oracle)]
-        public void Cache_keys_freeze_only_numeric_extrema_values_and_preserve_other_key_parts(OceanBaseCompatibilityMode mode)
+        public void Cache_keys_preserve_async_and_relational_null_semantics(OceanBaseCompatibilityMode mode)
         {
-            using var cache = new MemoryCache(new MemoryCacheOptions());
-            using var context = CreateContext(mode, collectionMode: ParameterizedCollectionTranslationMode.Constantize, configure: b => b.UseMemoryCache(cache));
-            using var other = CreateContext(mode, collectionMode: ParameterizedCollectionTranslationMode.Parameterize, configure: b => b.UseMemoryCache(cache));
+            using var context = CreateContext(mode);
+            using var other = CreateContext(mode, relationalNulls: true);
             var keys = context.GetService<ICompiledQueryCacheKeyGenerator>();
             var otherKeys = other.GetService<ICompiledQueryCacheKeyGenerator>();
-            int[] values = [11, 2, 3, 4, 5, 6, 7, 8, 9];
-            var call = Variadic("Least", typeof(int), Expression.Constant(values));
-            var original = keys.GenerateCacheKey(call, false);
-            var hash = original.GetHashCode();
-            values[0] = 22;
-            var changed = keys.GenerateCacheKey(call, false);
-            Assert.Equal(hash, original.GetHashCode());
-            Assert.Equal(hash, changed.GetHashCode());
-            Assert.NotEqual(original, changed);
-            Assert.Equal(changed, keys.GenerateCacheKey(Variadic("Least", typeof(int), Expression.Constant(values.ToArray())), false));
-            values[0] = 11;
-            Assert.Equal(original, keys.GenerateCacheKey(call, false));
-            Assert.NotEqual(original, keys.GenerateCacheKey(call, true));
             Assert.Same(context.Model, other.Model);
-            Assert.NotEqual(original, otherKeys.GenerateCacheKey(call, false));
 
             Expression<Func<Row, bool>> first = r => r.Id > 0;
             Expression<Func<Row, bool>> second = r => r.Id > 0;
             Assert.Equal(keys.GenerateCacheKey(first, false), keys.GenerateCacheKey(second, false));
+            Assert.NotEqual(keys.GenerateCacheKey(first, false), keys.GenerateCacheKey(first, true));
             Assert.NotEqual(keys.GenerateCacheKey(first, false), otherKeys.GenerateCacheKey(first, false));
         }
 
@@ -203,7 +163,7 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             using var cache = new MemoryCache(new MemoryCacheOptions());
             var compilations = 0;
             using var context = CreateContext(OceanBaseCompatibilityMode.MySql, configure: b =>
-                b.UseMemoryCache(cache).LogTo(_ => compilations++, [CoreEventId.QueryCompilationStarting]));
+                b.EnableServiceProviderCaching(false).UseMemoryCache(cache).LogTo(_ => compilations++, [CoreEventId.QueryCompilationStarting]));
             Assert.Same(cache, context.GetService<IMemoryCache>());
             var threshold = 105;
             var query = context.Rows.Where(r => r.Id > threshold).Select(r => r.Text);
@@ -219,14 +179,14 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
         public void Extrema_compose_with_subqueries_aggregates_math_and_coalesce(OceanBaseCompatibilityMode mode, bool nulls)
         {
             using var context = CreateContext(mode, nulls);
-            var query = context.Rows.Where(r => context.Rows.Any(inner => inner.Id != r.Id && EF.Functions.Greatest(inner.Optional, r.Int32) > 1))
+            var query = context.Rows.Where(r => context.Rows.Any(inner => inner.Id != r.Id && Math.Max(inner.Optional ?? 0, r.Int32) > 1))
                 .GroupBy(r => r.Id).OrderBy(g => Math.Max(g.Min(r => r.Decimal), 2m))
-                .Select(g => g.Sum(r => Math.Abs(EF.Functions.Least(r.Optional, 7) ?? 0)));
+                .Select(g => g.Sum(r => Math.Abs(Math.Min(r.Optional ?? 0, 7))));
             var sql = query.ToQueryString();
             Assert.Contains("EXISTS (", sql);
             Assert.Contains("GREATEST(", sql);
             Assert.Contains("ORDER BY GREATEST(MIN(", sql);
-            Assert.Contains("SUM(ABS(COALESCE(LEAST(", sql);
+            Assert.Contains("SUM(ABS(LEAST(COALESCE(", sql);
         }
 
         [Theory]
@@ -253,56 +213,16 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
         }
 
         [Theory]
-        [InlineData(OceanBaseCompatibilityMode.MySql, false)]
-        [InlineData(OceanBaseCompatibilityMode.Oracle, true)]
-        public void Variadic_shapes_translate_and_keep_independent_null_tests(
-            OceanBaseCompatibilityMode mode, bool relationalNulls)
-        {
-            using var context = CreateContext(mode, relationalNulls);
-            int?[] captured = [null, 7, -5];
-            var query = context.Rows
-                .Where(r => EF.Functions.Least(r.Optional, r.Int32, null) == null
-                    && EF.Functions.Greatest(r.Optional, r.Int32) != null
-                    && EF.Functions.Greatest(new int?[] { -4, null }) == null
-                    && EF.Functions.Least(captured) == null
-                    && EF.Functions.Least(8, 4, 2) < r.Id
-                    && EF.Functions.Greatest(r.Optional) == r.Optional)
-                .Select(r => EF.Functions.Least(r.Optional, r.Int32) ?? EF.Functions.Greatest(new[] { 2 }));
-            var sql = query.ToQueryString();
-            Assert.Contains("GREATEST(-4, NULL) IS NULL", sql);
-            Assert.Contains("LEAST(NULL, 7, -5) IS NULL", sql);
-            Assert.Contains("LEAST(8, 4, 2)", sql);
-            Assert.Contains("IS NOT NULL", sql);
-            Assert.Contains("COALESCE(LEAST(", sql);
-            Assert.DoesNotContain("GREATEST(2)", sql);
-            var singletonNull = context.Rows.Where(r => r.Optional == EF.Functions.Least(new int?[] { null })).ToQueryString();
-            Assert.Contains("IS NULL", singletonNull);
-            Assert.DoesNotContain("LEAST(", singletonNull);
-        }
-
-        [Theory]
         [InlineData(OceanBaseCompatibilityMode.MySql)]
         [InlineData(OceanBaseCompatibilityMode.Oracle)]
         public void Invalid_shapes_and_method_families_do_not_translate(OceanBaseCompatibilityMode mode)
         {
             using var context = CreateContext(mode);
-            int[]? absent = null;
-            Assert.Throws<InvalidOperationException>(() => context.Rows.Where(r => EF.Functions.Least<int>() == r.Id).ToQueryString());
-            Assert.Throws<InvalidOperationException>(() => context.Rows.Where(r => EF.Functions.Greatest(new int[] { }) == r.Id).ToQueryString());
-            Assert.Throws<InvalidOperationException>(() => context.Rows.Where(r => EF.Functions.Least(absent!) == r.Id).ToQueryString());
-            Assert.Throws<InvalidOperationException>(() => context.Rows.Where(r => EF.Functions.Least(new int[r.Id]) == r.Id).ToQueryString());
-            Assert.Throws<InvalidOperationException>(() => context.Rows.Where(r => EF.Functions.Greatest(r.Text, "abc") == "xyz").ToQueryString());
-            Assert.Throws<InvalidOperationException>(() => context.Rows.Where(r => EF.Functions.Least(r.Id > 0, false)).ToQueryString());
             Assert.Throws<InvalidOperationException>(() => context.Rows.Where(r => Math.Min((nint)r.Id, 0) == 0).ToQueryString());
             Assert.Throws<InvalidOperationException>(() => context.Rows.Where(r => Min(r.Id, 0) == 0).ToQueryString());
-            Assert.Null(CreateVisitor(context).Translate(Variadic("Least", typeof(int),
-                Expression.Parameter(typeof(int[]), "__values"))));
         }
 
         private static int Min(int a, int b) => Math.Min(a, b);
-
-        private static MethodCallExpression Variadic(string name, Type type, Expression values)
-            => Expression.Call(typeof(RelationalDbFunctionsExtensions), name, [type], Expression.Property(null, typeof(EF), nameof(EF.Functions)), values);
 
         private static RelationalSqlTranslatingExpressionVisitor CreateVisitor(TestContext context)
         {
@@ -318,13 +238,10 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
                 ? Assert.IsType<SqlFunctionExpression>(Assert.Single(function.Arguments!)) : function;
         }
 
-        private static TestContext CreateContext(OceanBaseCompatibilityMode mode, bool relationalNulls = false,
-            ParameterizedCollectionTranslationMode? collectionMode = null, Action<DbContextOptionsBuilder<TestContext>>? configure = null)
+        private static TestContext CreateContext(OceanBaseCompatibilityMode mode, bool relationalNulls = false, Action<DbContextOptionsBuilder<TestContext>>? configure = null)
         {
             var builder = new DbContextOptionsBuilder<TestContext>().UseOceanBase("Server=localhost;Database=test", mode);
             var extension = builder.Options.Extensions.OfType<RelationalOptionsExtension>().Single().WithUseRelationalNulls(relationalNulls);
-            if (collectionMode.HasValue)
-                extension = extension.WithParameterizedCollectionTranslationMode(collectionMode.Value);
             ((IDbContextOptionsBuilderInfrastructure)builder).AddOrUpdateExtension(extension);
             configure?.Invoke(builder);
             return new TestContext(builder.Options, mode);

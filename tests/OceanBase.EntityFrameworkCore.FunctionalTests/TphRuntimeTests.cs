@@ -175,8 +175,8 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
             var command = Assert.Single(commands.Items);
             Assert.Contains("INNER JOIN", command.Text);
             Assert.Contains("Kind = " + KindLiteral(mode, "Sensor"), command.Text);
-            Assert.Contains("ON t.AssetId = t1.AssetId", command.Template);
-            Assert.Contains("WHERE t0.TenantId = ?", command.Template);
+            Assert.Contains("ON t.AssetId = t0.AssetId", command.Template);
+            Assert.Contains("WHERE t1.TenantId = ?", command.Template);
             Assert.Contains("t.TenantId = ?", command.Template);
             Assert.Equal(new object?[] { 1, 1 }, command.Inputs);
             AssertClean(context, commands);

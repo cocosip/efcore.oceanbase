@@ -51,7 +51,7 @@ public sealed class LiveStringLiteralTests
                 Assert.Equal(expected, Assert.Single(await query.ToListAsync()));
                 if (!string.IsNullOrEmpty(text))
                 {
-                    var filtered = query.Where(value => value == EF.Constant(text));
+                    var filtered = query.WhereLiteral(text, (value, literalText) => value == literalText);
                     Assert.Equal(text, Assert.Single(filtered.ToList()));
                     Assert.Equal(text, Assert.Single(await filtered.ToListAsync()));
                 }

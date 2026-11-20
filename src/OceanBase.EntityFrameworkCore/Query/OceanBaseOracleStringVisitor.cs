@@ -18,6 +18,14 @@ namespace OceanBase.EntityFrameworkCore.Query
                     // Oracle concat may return NULL, but does not propagate a single NULL operand.
                     return factory.Function("CONCAT", [(SqlExpression)Visit(binary.Left), (SqlExpression)Visit(binary.Right)],
                         nullable: true, argumentsPropagateNullability: [false, false], typeof(string), binary.TypeMapping);
+                case SqlFunctionExpression { IsBuiltIn: true, Name: "COALESCE", Arguments: [var first, var fallback] } coalesce:
+                    var visitedFirst = (SqlExpression)Visit(first);
+                    var visitedFallback = (SqlExpression)Visit(fallback);
+                    if (visitedFallback is SqlConstantExpression { Value: null })
+                        return visitedFirst;
+                    if (visitedFirst is SqlConstantExpression { Value: null })
+                        return visitedFallback;
+                    return coalesce.Update(coalesce.Instance, [visitedFirst, visitedFallback]);
                 case SqlFunctionExpression { IsBuiltIn: true, Name: OceanBaseStringTranslator.OracleSearchMarker,
                     Arguments: { Count: 3 } args, Type: var type }
                     when type == typeof(bool) && args[2] is SqlConstantExpression { Value: int }:
@@ -83,7 +91,8 @@ namespace OceanBase.EntityFrameworkCore.Query
         private SqlExpression Normalize(SqlExpression expression, object? value)
         {
             return ProviderValue(expression, value) is null or ""
-                ? factory.Constant(null, expression.Type, expression.TypeMapping)
+                ? factory.Constant(null, expression.Type.IsValueType && Nullable.GetUnderlyingType(expression.Type) is null
+                    ? typeof(Nullable<>).MakeGenericType(expression.Type) : expression.Type, expression.TypeMapping)
                 : expression;
         }
 

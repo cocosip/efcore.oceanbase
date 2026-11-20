@@ -1,13 +1,14 @@
 # EF Core Version Support
 
-EF Core 10 is the current development baseline. The EF Core 9 port is on its own branch. EF Core 8 follows it. Check package
+EF Core 10 is the current development baseline. EF Core 9 and EF Core 8 have their own branches.
+The EF8 branch started from the EF9 implementation at `7ca675f`. Check package
 availability and publication status on the intended feed before release.
 
 | EF major | Branch | Provider line / target asset | Current state |
 | --- | --- | --- | --- |
 | 10 | `efcore/10.0` | `OceanBase.EntityFrameworkCore` 10.x / `net10.0` | Active implementation; accepted profiles and remaining publication steps are in the [release checklist](efcore-10-release-checklist.md) |
 | 9 | `efcore/9.0` | 9.x / `net9.0` | Port from `efcore/10.0` under the [EF Core 9 inventories](../README.md#version-inventories) |
-| 8 | `efcore/8.0` (planned) | 8.x / `net8.0` | Port from `efcore/9.0` after the EF Core 9 port is complete, under the [EF Core 8 inventories](../README.md#version-inventories) |
+| 8 | `efcore/8.0` | 8.x / `net8.0` | Port implemented. See the [release checklist](efcore-8-release-checklist.md) for verified profiles and open gates. |
 | 11 | `dev` when development begins | 11.x / target to be verified | Development has yet to begin |
 
 The EF10 provider asset requires a .NET 10 application target or a compatible later target that receives

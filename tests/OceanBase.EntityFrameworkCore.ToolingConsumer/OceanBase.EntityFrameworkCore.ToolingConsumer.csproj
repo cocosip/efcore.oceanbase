@@ -1,11 +1,11 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFramework>net9.0</TargetFramework>
+    <TargetFramework>net8.0</TargetFramework>
     <ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally>
     <IsPackable>false</IsPackable>
-    <OceanBaseProviderVersion Condition="'$(OceanBaseProviderVersion)' == ''">9.0.0</OceanBaseProviderVersion>
-    <OceanBaseConsumerEfCoreVersion Condition="'$(OceanBaseConsumerEfCoreVersion)' == ''">9.0.0</OceanBaseConsumerEfCoreVersion>
+    <OceanBaseProviderVersion Condition="'$(OceanBaseProviderVersion)' == ''">8.0.0</OceanBaseProviderVersion>
+    <OceanBaseConsumerEfCoreVersion Condition="'$(OceanBaseConsumerEfCoreVersion)' == ''">8.0.0</OceanBaseConsumerEfCoreVersion>
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="../OceanBase.EntityFrameworkCore.PackageConsumer/RecoverySmoke.cs" Link="RecoverySmoke.cs"
@@ -18,5 +18,6 @@
     <PackageReference Include="Microsoft.EntityFrameworkCore" Version="$(OceanBaseConsumerEfCoreVersion)" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="$(OceanBaseConsumerEfCoreVersion)" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Proxies" Version="$(OceanBaseConsumerEfCoreVersion)" />
+    <PackageReference Include="System.Text.Json" Version="8.0.5" Condition="'$(OceanBaseConsumerEfCoreVersion)' == '8.0.0'" />
   </ItemGroup>
 </Project>

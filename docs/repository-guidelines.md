@@ -41,7 +41,7 @@ Existing working files may retain their prior endings until rewritten or checked
 normalizes text when staging. Use an LF-capable editor. Do not discard local changes to refresh line endings.
 
 The current [CI workflow](../.github/workflows/ci.yml) triggers automatically on pushes and pull requests
-targeting `efcore/9.0`. It runs offline Release solution tests and the package-content gate on Windows
+targeting `efcore/8.0`. It runs offline Release solution tests and the package-content gate on Windows
 and Linux using PowerShell 7. The workflow ends after package validation. Record revision-specific
 evidence and platform exclusions in the release checklist.
 

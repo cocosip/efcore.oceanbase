@@ -163,7 +163,7 @@ public sealed class LiveBinaryStorageTests
                 Assert.Equal(index + 2, Assert.Single(async ? await query.ToArrayAsync() : query.ToArray()));
             }
             stage("Guid literal predicates");
-            var literals = context.Set<Row>().Where(row => row.BinaryToken == EF.Constant(Known) && row.TextToken == EF.Constant(Known))
+            var literals = context.Set<Row>().WhereLiteral(Known, (row, literal) => row.BinaryToken == literal && row.TextToken == literal)
                 .OrderBy(row => row.Id).Select(row => row.Id);
             Assert.Equal(new[] { 1, 4 }, async ? await literals.ToArrayAsync() : literals.ToArray());
             stage("server hexadecimal/text identity");

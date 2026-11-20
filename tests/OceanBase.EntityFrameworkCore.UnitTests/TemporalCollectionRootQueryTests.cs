@@ -1,14 +1,13 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text;
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Internal;
 using Microsoft.EntityFrameworkCore.Infrastructure;
-using Microsoft.EntityFrameworkCore.Query;
 using Microsoft.EntityFrameworkCore.Storage;
+using Microsoft.EntityFrameworkCore.Storage.Json;
 using Xunit;
-
-#pragma warning disable EF1001 // EF9-only collection options infrastructure.
 
 namespace OceanBase.EntityFrameworkCore.UnitTests;
 
@@ -127,20 +126,19 @@ public sealed class TemporalCollectionRootQueryTests
         foreach (var value in new[] { new TimeSpan(1, 2, 3, 4, 500), -new TimeSpan(1, 2, 3, 4, 500) })
         {
             var json = mapping.JsonValueReaderWriter!.ToJsonString(value);
-
-            Assert.Equal(value, mapping.JsonValueReaderWriter.FromJsonString(json));
+            var reader = new Utf8JsonReaderManager(new JsonReaderData(Encoding.UTF8.GetBytes(json)), null);
+            Assert.Equal(JsonTokenType.String, reader.MoveNext());
+            Assert.Equal(value, mapping.JsonValueReaderWriter.FromJson(ref reader));
         }
     }
 
     [Theory]
-    [InlineData(OceanBaseCompatibilityMode.MySql, ParameterizedCollectionTranslationMode.Constantize)]
-    [InlineData(OceanBaseCompatibilityMode.MySql, ParameterizedCollectionTranslationMode.Parameterize)]
-    [InlineData(OceanBaseCompatibilityMode.Oracle, ParameterizedCollectionTranslationMode.Constantize)]
-    [InlineData(OceanBaseCompatibilityMode.Oracle, ParameterizedCollectionTranslationMode.Parameterize)]
+    [InlineData(OceanBaseCompatibilityMode.MySql)]
+    [InlineData(OceanBaseCompatibilityMode.Oracle)]
     public void Captured_temporal_roots_rebind_and_preserve_empty_metadata(
-        OceanBaseCompatibilityMode mode, ParameterizedCollectionTranslationMode translation)
+        OceanBaseCompatibilityMode mode)
     {
-        using var context = CreateContext(mode, translation);
+        using var context = CreateContext(mode);
         DateTime?[] dateTimes = [new DateTime(2026, 11, 12, 1, 2, 3), null];
         DateTimeOffset?[] offsets = [new DateTimeOffset(2026, 11, 12, 1, 2, 3, TimeSpan.FromHours(8)), null];
         DateOnly?[] dates = [new DateOnly(2026, 11, 12), null];
@@ -158,14 +156,6 @@ public sealed class TemporalCollectionRootQueryTests
         AssertTemporal(dateQuery, () => dates = []);
         AssertTemporal(timeQuery, () => times = []);
         AssertTemporal(durationQuery, () => durations = []);
-
-        DateTime?[] unsupported = [new DateTime(2026, 11, 12)];
-        using var unconfigured = CreateContext(mode, null);
-        Assert.Throws<InvalidOperationException>(() => unconfigured.Rows
-            .Where(row => EF.Parameter(unsupported).Contains(row.OccurredAt)).ToQueryString());
-        using var singleParameter = CreateContext(mode, ParameterizedCollectionTranslationMode.Parameterize);
-        Assert.Throws<InvalidOperationException>(() => singleParameter.Rows
-            .Where(row => EF.Parameter(unsupported).Contains(row.OccurredAt)).ToQueryString());
     }
 
     private static void AssertTemporal(IQueryable query, Action clear)
@@ -182,16 +172,10 @@ public sealed class TemporalCollectionRootQueryTests
             || sql.Contains("WHERE 0", StringComparison.Ordinal));
     }
 
-    private static TestContext CreateContext(OceanBaseCompatibilityMode mode, ParameterizedCollectionTranslationMode? translation = null)
+    private static TestContext CreateContext(OceanBaseCompatibilityMode mode)
     {
         var builder = new DbContextOptionsBuilder<TestContext>()
             .UseOceanBase("Server=localhost;Database=temporal_roots", mode);
-        if (translation.HasValue)
-        {
-            var extension = builder.Options.Extensions.OfType<RelationalOptionsExtension>().Single()
-                .WithParameterizedCollectionTranslationMode(translation.Value);
-            ((IDbContextOptionsBuilderInfrastructure)builder).AddOrUpdateExtension(extension);
-        }
         return new TestContext(builder.Options);
     }
 

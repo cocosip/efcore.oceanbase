@@ -104,9 +104,9 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             foreach (var name in new[] { nameof(TimeOnly.AddHours), nameof(TimeOnly.AddMinutes) })
             {
                 var method = typeof(TimeOnly).GetMethod(name, [typeof(double)])!;
-                Assert.Null(methods.Translate(context.Model, new ColumnExpression("Clock", "r", typeof(TimeOnly), text, false),
+                Assert.Null(methods.Translate(context.Model, new TestColumnExpression("Clock", "r", typeof(TimeOnly), text, false),
                     method, [factory.Constant(0.5)], logger));
-                Assert.Null(methods.Translate(context.Model, new ColumnExpression("Clock", "r", typeof(TimeOnly), clock, false),
+                Assert.Null(methods.Translate(context.Model, new TestColumnExpression("Clock", "r", typeof(TimeOnly), clock, false),
                     method, [factory.Constant(0.5, nullNumber)], logger));
             }
         }

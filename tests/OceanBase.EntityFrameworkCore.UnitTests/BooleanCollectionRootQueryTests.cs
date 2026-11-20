@@ -21,17 +21,15 @@ public sealed class BooleanCollectionRootQueryTests
     {
         foreach (var mode in new[] { OceanBaseCompatibilityMode.MySql, OceanBaseCompatibilityMode.Oracle })
         foreach (var relationalNulls in new[] { false, true })
-        foreach (var translation in new ParameterizedCollectionTranslationMode?[] { null, ParameterizedCollectionTranslationMode.Constantize,
-                     ParameterizedCollectionTranslationMode.Parameterize })
-            yield return new object[] { mode, relationalNulls, translation! };
+            yield return new object[] { mode, relationalNulls };
     }
 
     [Theory]
     [MemberData(nameof(Modes))]
     public void Captured_boolean_roots_keep_current_values_duplicates_nulls_and_typed_empty_rows(
-        OceanBaseCompatibilityMode mode, bool relationalNulls, ParameterizedCollectionTranslationMode? translation)
+        OceanBaseCompatibilityMode mode, bool relationalNulls)
     {
-        using var context = Create(mode, relationalNulls, translation);
+        using var context = Create(mode, relationalNulls);
         bool?[] values = [];
         var query = context.Rows.SelectMany(row => values.Where(value => value != row.Optional));
         foreach (var input in new bool?[][] { [], [true, null, false, true], [null, null], [false], [] })
@@ -51,9 +49,9 @@ public sealed class BooleanCollectionRootQueryTests
     [Theory]
     [MemberData(nameof(Modes))]
     public void Inline_boolean_roots_preserve_the_element_type_through_empty_pruning(
-        OceanBaseCompatibilityMode mode, bool relationalNulls, ParameterizedCollectionTranslationMode? translation)
+        OceanBaseCompatibilityMode mode, bool relationalNulls)
     {
-        using var context = Create(mode, relationalNulls, translation);
+        using var context = Create(mode, relationalNulls);
         var emptyQueries = new IQueryable[]
         {
             context.Rows.Select(row => new bool[] { }.Count(value => row.Id > 0)),
@@ -76,7 +74,7 @@ public sealed class BooleanCollectionRootQueryTests
     [InlineData(OceanBaseCompatibilityMode.Oracle)]
     public void Null_converting_boolean_roots_remain_rejected(OceanBaseCompatibilityMode mode)
     {
-        using var context = Create(mode, false, null);
+        using var context = Create(mode, false);
         var source = context.GetService<IRelationalTypeMappingSource>();
         var mapping = (RelationalTypeMapping)source.FindMapping(typeof(int))!.WithComposedConverter(
             new ValueConverter<bool, int>(
@@ -89,19 +87,18 @@ public sealed class BooleanCollectionRootQueryTests
         var visitor = new OceanBaseCollectionParameterExpandingVisitor(context.GetService<ISqlExpressionFactory>(),
             values, () => { }, source, mode);
         var message = Assert.Throws<NotSupportedException>(() => visitor.Visit(
-            new ValuesExpression("v", parameter, new[] { "Value" })));
+            new TableValuedFunctionExpression("v", "OceanBaseCollection", [parameter])
+                .AddAnnotation(OceanBaseQueryableMethodTranslatingExpressionVisitorFactory.ParameterCollectionAnnotation, new[] { "Value" })));
         Assert.Contains("Boolean", message.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Theory]
-    [InlineData(OceanBaseCompatibilityMode.MySql, ParameterizedCollectionTranslationMode.Constantize)]
-    [InlineData(OceanBaseCompatibilityMode.MySql, ParameterizedCollectionTranslationMode.Parameterize)]
-    [InlineData(OceanBaseCompatibilityMode.Oracle, ParameterizedCollectionTranslationMode.Constantize)]
-    [InlineData(OceanBaseCompatibilityMode.Oracle, ParameterizedCollectionTranslationMode.Parameterize)]
+    [InlineData(OceanBaseCompatibilityMode.MySql)]
+    [InlineData(OceanBaseCompatibilityMode.Oracle)]
     public void Captured_boolean_roots_rebind_current_values_and_empty_metadata(
-        OceanBaseCompatibilityMode mode, ParameterizedCollectionTranslationMode translation)
+        OceanBaseCompatibilityMode mode)
     {
-        using var context = Create(mode, false, translation);
+        using var context = Create(mode, false);
         bool[] values = [true, false, true];
         var query = context.Rows.Where(row => values.Contains(row.Value));
 
@@ -132,24 +129,15 @@ public sealed class BooleanCollectionRootQueryTests
         Assert.True(listSql.Contains("WHERE 1 = 0", StringComparison.Ordinal)
             || listSql.Contains("WHERE 0", StringComparison.Ordinal), listSql);
 
-        bool[] unsupportedValues = [true];
-        using var unconfigured = Create(mode, false, null);
-        Assert.Throws<InvalidOperationException>(() => unconfigured.Rows
-            .Where(row => EF.Parameter(unsupportedValues).Contains(row.Value)).ToQueryString());
-        using var singleParameter = Create(mode, false, ParameterizedCollectionTranslationMode.Parameterize);
-        Assert.Throws<InvalidOperationException>(() => singleParameter.Rows
-            .Where(row => EF.Parameter(unsupportedValues).Contains(row.Value)).ToQueryString());
     }
 
-    private static TestContext Create(OceanBaseCompatibilityMode mode, bool relationalNulls,
-        ParameterizedCollectionTranslationMode? translation)
+    private static TestContext Create(OceanBaseCompatibilityMode mode, bool relationalNulls)
     {
         var builder = new DbContextOptionsBuilder<TestContext>()
             .UseOceanBase("Server=offline;Database=boolean_roots", mode)
             .EnableServiceProviderCaching(false);
         var extension = builder.Options.Extensions.OfType<RelationalOptionsExtension>().Single()
             .WithUseRelationalNulls(relationalNulls);
-        if (translation.HasValue) extension = extension.WithParameterizedCollectionTranslationMode(translation.Value);
         ((IDbContextOptionsBuilderInfrastructure)builder).AddOrUpdateExtension(extension);
         return new TestContext(builder.Options);
     }

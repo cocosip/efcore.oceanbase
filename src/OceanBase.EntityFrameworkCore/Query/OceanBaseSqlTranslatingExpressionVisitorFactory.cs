@@ -16,11 +16,8 @@ namespace OceanBase.EntityFrameworkCore.Query
     {
         internal const string LeftShiftMarker = "__oceanbase_internal_left_shift";
         internal const string RightShiftMarker = "__oceanbase_internal_right_shift";
+        internal const string ExclusiveOrMarker = "__oceanbase_internal_xor";
         internal const string BooleanValueMarker = "__oceanbase_internal_boolean_value";
-        private static readonly MethodInfo Least =
-            ((Func<DbFunctions, int[], int>)RelationalDbFunctionsExtensions.Least<int>).Method.GetGenericMethodDefinition();
-        private static readonly MethodInfo Greatest =
-            ((Func<DbFunctions, int[], int>)RelationalDbFunctionsExtensions.Greatest<int>).Method.GetGenericMethodDefinition();
         private static readonly Dictionary<MethodInfo, string> ScalarMethods = CreateScalarMethods();
         private static readonly HashSet<MethodInfo> BooleanEqualsMethods =
         [
@@ -69,20 +66,6 @@ namespace OceanBase.EntityFrameworkCore.Query
             QueryableMethodTranslatingExpressionVisitor queryableMethodTranslatingExpressionVisitor)
             => new Visitor(dependencies, queryCompilationContext, queryableMethodTranslatingExpressionVisitor);
 
-        private static string? GetVariadicFunction(MethodInfo method)
-        {
-            if (!method.IsGenericMethod || method.DeclaringType != typeof(RelationalDbFunctionsExtensions))
-                return null;
-            var definition = method.GetGenericMethodDefinition();
-            return definition == Least ? "LEAST" : definition == Greatest ? "GREATEST" : null;
-        }
-
-        internal static Array? GetConstantValues(MethodCallExpression call)
-            => GetVariadicFunction(call.Method) is not null && OceanBaseMathTranslator.IsNumeric(call.Type)
-                && call.Arguments[1] is ConstantExpression { Value: Array { Length: > 0 } values } constant
-                && constant.Type == call.Type.MakeArrayType() && values.GetType() == constant.Type
-                    ? values : null;
-
         private static Dictionary<MethodInfo, string> CreateScalarMethods()
         {
             var methods = new Dictionary<MethodInfo, string>();
@@ -129,8 +112,7 @@ namespace OceanBase.EntityFrameworkCore.Query
                 {
                     SqlBinaryExpression binary when binary.OperatorType is ExpressionType.Equal or ExpressionType.NotEqual
                         or ExpressionType.LessThan or ExpressionType.LessThanOrEqual or ExpressionType.GreaterThan
-                        or ExpressionType.GreaterThanOrEqual or ExpressionType.AndAlso or ExpressionType.OrElse
-                        or ExpressionType.ExclusiveOr => new SqlBinaryExpression(binary.OperatorType, binary.Left, binary.Right, typeof(bool), mapping),
+                        or ExpressionType.GreaterThanOrEqual or ExpressionType.AndAlso or ExpressionType.OrElse => new SqlBinaryExpression(binary.OperatorType, binary.Left, binary.Right, typeof(bool), mapping),
                     SqlUnaryExpression unary when unary.OperatorType is ExpressionType.Equal or ExpressionType.NotEqual
                         || unary.OperatorType == ExpressionType.Not && unary.Operand.Type == typeof(bool)
                         => new SqlUnaryExpression(unary.OperatorType, unary.Operand, typeof(bool), mapping),
@@ -145,6 +127,7 @@ namespace OceanBase.EntityFrameworkCore.Query
             {
                 var result = base.Translate(expression, applyDefaultTypeMapping);
                 return result?.Type == typeof(bool) && (applyDefaultTypeMapping || result.TypeMapping is not null)
+                    && _queryCompilationContext is not OceanBaseQueryCompilationContextFactory.Context { TranslatingUpdate: true }
                     ? BooleanOperand(result) : result;
             }
 
@@ -174,7 +157,7 @@ namespace OceanBase.EntityFrameworkCore.Query
                         return QueryCompilationContext.NotTranslatedExpression;
                     // EF's converter compensation recurses through unary IS NULL and changes its operand to a truth test.
                     return new SqlBinaryExpression(ExpressionType.NotEqual, operand,
-                        new SqlConstantExpression(null, typeof(bool), operand.TypeMapping), typeof(bool),
+                        Dependencies.SqlExpressionFactory.Constant(null, typeof(bool?), operand.TypeMapping), typeof(bool),
                         Dependencies.TypeMappingSource.FindMapping(typeof(bool)));
                 }
                 return base.VisitMember(expression);
@@ -256,9 +239,9 @@ namespace OceanBase.EntityFrameworkCore.Query
                         return QueryCompilationContext.NotTranslatedExpression;
                     var factory = Dependencies.SqlExpressionFactory;
                     // Keep XOR until after null processing; nullable inequality has different compensation.
-                    return new SqlBinaryExpression(ExpressionType.ExclusiveOr,
-                        factory.ApplyDefaultTypeMapping(left), factory.ApplyDefaultTypeMapping(right), typeof(bool),
-                        Dependencies.TypeMappingSource.FindMapping(typeof(bool)));
+                    return factory.Function(ExclusiveOrMarker,
+                        [factory.ApplyDefaultTypeMapping(left), factory.ApplyDefaultTypeMapping(right)], nullable: true,
+                        argumentsPropagateNullability: [true, true], typeof(bool), Dependencies.TypeMappingSource.FindMapping(typeof(bool)));
                 }
                 if (expression.Method is null && expression.NodeType is ExpressionType.LeftShift or ExpressionType.RightShift)
                 {
@@ -275,10 +258,19 @@ namespace OceanBase.EntityFrameworkCore.Query
                     && Unwrap(expression.Type) != typeof(bool))
                 {
                     // EF removes small-integer promotions here, losing the bitwise result's width and sign.
-                    return Visit(expression.Left) is SqlExpression left && Visit(expression.Right) is SqlExpression right
-                        ? Dependencies.SqlExpressionFactory.MakeBinary(expression.NodeType, left, right, typeMapping: null)
-                            ?? QueryCompilationContext.NotTranslatedExpression
-                        : QueryCompilationContext.NotTranslatedExpression;
+                    if (Visit(expression.Left) is not SqlExpression left || Visit(expression.Right) is not SqlExpression right)
+                        return QueryCompilationContext.NotTranslatedExpression;
+                    var factory = Dependencies.SqlExpressionFactory;
+                    if (expression.NodeType != ExpressionType.ExclusiveOr)
+                        return factory.MakeBinary(expression.NodeType, left, right, typeMapping: null)
+                            ?? QueryCompilationContext.NotTranslatedExpression;
+
+                    var type = Unwrap(expression.Type);
+                    var mapping = left.Type == type ? left.TypeMapping : right.Type == type ? right.TypeMapping : null;
+                    mapping ??= Dependencies.TypeMappingSource.FindMapping(type);
+                    return factory.Function(ExclusiveOrMarker,
+                        [factory.ApplyTypeMapping(left, mapping), factory.ApplyTypeMapping(right, mapping)], nullable: true,
+                        argumentsPropagateNullability: [true, true], type, mapping);
                 }
                 var translated = base.VisitBinary(expression);
                 return translated is SqlBinaryExpression { OperatorType: ExpressionType.Add or ExpressionType.Subtract } arithmetic
@@ -312,9 +304,7 @@ namespace OceanBase.EntityFrameworkCore.Query
                             _queryCompilationContext.RegisterRuntimeParameter(name, Expression.Lambda(
                                 Expression.Call(typeof(OceanBaseExplicitTrimTranslator), nameof(OceanBaseExplicitTrimTranslator.EncodeParameter),
                                     Type.EmptyTypes, context, Expression.Constant(nameInContext), Expression.Constant(mode)), context));
-                            if (_queryCompilationContext.ParametersToConstantize.Contains(nameInContext))
-                                _queryCompilationContext.ParametersToConstantize.Add(name);
-                            set = new SqlParameterExpression(name, typeof(string), nullable: false, text);
+                            set = new SqlParameterExpression(name, typeof(string), text);
                             break;
                         case NewArrayExpression { NodeType: ExpressionType.NewArrayInit } trimArray:
                             var elements = new List<SqlExpression>();
@@ -343,7 +333,7 @@ namespace OceanBase.EntityFrameworkCore.Query
                         var factory = Dependencies.SqlExpressionFactory;
                         return factory.Case([
                             new CaseWhenClause(factory.OrElse(factory.IsNull(left), factory.IsNull(right)),
-                                new SqlConstantExpression(null, typeof(int), Dependencies.TypeMappingSource.FindMapping(typeof(int)))),
+                                Dependencies.SqlExpressionFactory.Constant(null, typeof(int?), Dependencies.TypeMappingSource.FindMapping(typeof(int)))),
                             new CaseWhenClause(factory.Equal(left, right), factory.Constant(0)),
                             new CaseWhenClause(factory.GreaterThan(left, right), factory.Constant(1)),
                             new CaseWhenClause(factory.LessThan(left, right), factory.Constant(-1))], elseResult: null);
@@ -357,7 +347,7 @@ namespace OceanBase.EntityFrameworkCore.Query
                     var mapping = Dependencies.TypeMappingSource.FindMapping(typeof(int));
                     var boolean = Dependencies.TypeMappingSource.FindMapping(typeof(bool));
                     var left = BooleanOperand(instance);
-                    var nullBoolean = new SqlConstantExpression(null, typeof(bool), boolean);
+                    var nullBoolean = Dependencies.SqlExpressionFactory.Constant(null, typeof(bool?), boolean);
                     SqlExpression right;
                     if (argument is ConstantExpression { Value: null })
                         right = nullBoolean;
@@ -365,17 +355,17 @@ namespace OceanBase.EntityFrameworkCore.Query
                         right = BooleanOperand(translated);
                     else
                         return QueryCompilationContext.NotTranslatedExpression;
-                    var nullInteger = new SqlConstantExpression(null, typeof(int), mapping);
+                    var nullInteger = Dependencies.SqlExpressionFactory.Constant(null, typeof(int?), mapping);
                     // Signed CASE results avoid MySQL unsigned subtraction, even for canonical 0/1 storage.
                     return Dependencies.SqlExpressionFactory.Case(
                         [new CaseWhenClause(new SqlBinaryExpression(ExpressionType.Equal, left, nullBoolean, typeof(bool), boolean), nullInteger),
                         new CaseWhenClause(new SqlBinaryExpression(ExpressionType.Equal, right, nullBoolean, typeof(bool), boolean),
-                            call.Method == BooleanObjectCompare ? new SqlConstantExpression(1, typeof(int), mapping) : nullInteger),
+                            call.Method == BooleanObjectCompare ? Dependencies.SqlExpressionFactory.Constant(1, typeof(int), mapping) : nullInteger),
                         new CaseWhenClause(new SqlBinaryExpression(ExpressionType.Equal, left, right, typeof(bool), boolean),
-                            new SqlConstantExpression(0, typeof(int), mapping)),
+                            Dependencies.SqlExpressionFactory.Constant(0, typeof(int), mapping)),
                         new CaseWhenClause(new SqlBinaryExpression(ExpressionType.GreaterThan, left, right, typeof(bool), boolean),
-                            new SqlConstantExpression(1, typeof(int), mapping))],
-                        new SqlConstantExpression(-1, typeof(int), mapping));
+                            Dependencies.SqlExpressionFactory.Constant(1, typeof(int), mapping))],
+                        Dependencies.SqlExpressionFactory.Constant(-1, typeof(int), mapping));
                 }
                 if (BooleanStringMethods.Contains(call.Method) && call.Object is { } receiver
                     && Unwrap(Unbox(receiver).Type) == typeof(bool))
@@ -388,12 +378,12 @@ namespace OceanBase.EntityFrameworkCore.Query
                     var text = Dependencies.TypeMappingSource.FindMapping(typeof(string));
                     return Dependencies.SqlExpressionFactory.Case(
                         [new CaseWhenClause(new SqlBinaryExpression(ExpressionType.Equal, value,
-                            new SqlConstantExpression(true, typeof(bool), boolean), typeof(bool), boolean),
-                            new SqlConstantExpression(bool.TrueString, typeof(string), text)),
+                            Dependencies.SqlExpressionFactory.Constant(true, typeof(bool), boolean), typeof(bool), boolean),
+                            Dependencies.SqlExpressionFactory.Constant(bool.TrueString, typeof(string), text)),
                         new CaseWhenClause(new SqlBinaryExpression(ExpressionType.Equal, value,
-                            new SqlConstantExpression(false, typeof(bool), boolean), typeof(bool), boolean),
-                            new SqlConstantExpression(bool.FalseString, typeof(string), text))],
-                        new SqlConstantExpression(receiver.Type == typeof(bool?) ? string.Empty : null, typeof(string), text));
+                            Dependencies.SqlExpressionFactory.Constant(false, typeof(bool), boolean), typeof(bool), boolean),
+                            Dependencies.SqlExpressionFactory.Constant(bool.FalseString, typeof(string), text))],
+                        Dependencies.SqlExpressionFactory.Constant(receiver.Type == typeof(bool?) ? string.Empty : null, typeof(string), text));
                 }
                 if (BooleanEqualsMethods.Contains(call.Method))
                 {
@@ -419,7 +409,7 @@ namespace OceanBase.EntityFrameworkCore.Query
                         return QueryCompilationContext.NotTranslatedExpression;
                     var mapping = Dependencies.TypeMappingSource.FindMapping(typeof(bool));
                     var fallback = call.Arguments.Count == 0
-                        ? new SqlConstantExpression(false, typeof(bool), mapping) : Visit(call.Arguments[0]) as SqlExpression;
+                        ? Dependencies.SqlExpressionFactory.Constant(false, typeof(bool), mapping) : Visit(call.Arguments[0]) as SqlExpression;
                     return fallback is null ? QueryCompilationContext.NotTranslatedExpression
                         : Dependencies.SqlExpressionFactory.Coalesce(BooleanOperand(instance), BooleanOperand(fallback), mapping);
                 }
@@ -427,32 +417,15 @@ namespace OceanBase.EntityFrameworkCore.Query
                 if (ScalarMethods.TryGetValue(call.Method, out var function))
                     return TranslateArguments(function, call.Type, call.Arguments);
 
-                function = GetVariadicFunction(call.Method);
-                if (function is null)
+                var result = base.VisitMethodCall(call);
+                if (result is SqlBinaryExpression binary && binary.Type == typeof(bool)
+                    && binary.Left.Type == typeof(TimeSpan) && binary.Right.Type == typeof(TimeSpan))
                 {
-                    var translated = base.VisitMethodCall(call);
-                    if (translated is SqlBinaryExpression binary && binary.Type == typeof(bool)
-                        && binary.Left.Type == typeof(TimeSpan) && binary.Right.Type == typeof(TimeSpan))
-                    {
-                        var left = binary.Left;
-                        var right = binary.Right;
-                        if (NormalizeDurations(ref left, ref right)) return binary.Update(left, right);
-                    }
-                    return translated;
+                    var left = binary.Left;
+                    var right = binary.Right;
+                    if (NormalizeDurations(ref left, ref right)) return binary.Update(left, right);
                 }
-                if (!OceanBaseMathTranslator.IsNumeric(call.Type))
-                    return QueryCompilationContext.NotTranslatedExpression;
-
-                var type = Unwrap(call.Type);
-                if (call.Arguments[1] is NewArrayExpression { NodeType: ExpressionType.NewArrayInit } initializer)
-                    return TranslateArguments(function, type, initializer.Expressions);
-                if (GetConstantValues(call) is not { } values)
-                    return QueryCompilationContext.NotTranslatedExpression;
-
-                var operands = new SqlExpression[values.Length];
-                for (var i = 0; i < operands.Length; i++)
-                    operands[i] = new SqlConstantExpression(values.GetValue(i), type, typeMapping: null);
-                return Build(function, type, operands) ?? QueryCompilationContext.NotTranslatedExpression;
+                return result;
             }
 
             private bool NormalizeDurations(ref SqlExpression left, ref SqlExpression right)

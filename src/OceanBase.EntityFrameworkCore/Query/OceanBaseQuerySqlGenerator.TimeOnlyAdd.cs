@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore.Query.SqlExpressions;
 
@@ -38,18 +39,23 @@ namespace OceanBase.EntityFrameworkCore.Query
                 return expression;
             }
 
-            // .NET 10 TimeOnly casts the entire binary product to Int64 with saturation, then wraps ticks.
-            var scale = expression.Name == OceanBaseTemporalMethodTranslator.TimeOnlyHoursToTicksMarker ? "36000000000" : "600000000";
+            // Use the runtime's wrapped overflow results because .NET 8's unchecked cast is architecture-dependent.
+            var hours = expression.Name == OceanBaseTemporalMethodTranslator.TimeOnlyHoursToTicksMarker;
+            var scale = hours ? "36000000000" : "600000000";
+            var positiveOverflow = (hours ? TimeOnly.MinValue.AddHours(double.MaxValue) : TimeOnly.MinValue.AddMinutes(double.MaxValue))
+                .Ticks.ToString(CultureInfo.InvariantCulture);
+            var negativeOverflow = (hours ? TimeOnly.MinValue.AddHours(-double.MaxValue) : TimeOnly.MinValue.AddMinutes(-double.MaxValue))
+                .Ticks.ToString(CultureInfo.InvariantCulture);
             var suffix = _mode == OceanBaseCompatibilityMode.MySql ? "E0" : "D";
             Sql.Append("(CASE WHEN ");
             Visit(input);
-            Sql.Append(" >= 9223372036854775808").Append(suffix).Append(" THEN 9223372036854775807 WHEN ");
+            Sql.Append(" >= 9223372036854775808").Append(suffix).Append(" THEN ").Append(positiveOverflow).Append(" WHEN ");
             Visit(input);
-            Sql.Append(" <= -9223372036854775808").Append(suffix).Append(" THEN -9223372036854775808 ELSE CASE WHEN ");
+            Sql.Append(" <= -9223372036854775808").Append(suffix).Append(" THEN ").Append(negativeOverflow).Append(" ELSE CASE WHEN ");
             Product();
-            Sql.Append(" >= 9223372036854775808").Append(suffix).Append(" THEN 9223372036854775807 WHEN ");
+            Sql.Append(" >= 9223372036854775808").Append(suffix).Append(" THEN ").Append(positiveOverflow).Append(" WHEN ");
             Product();
-            Sql.Append(" <= -9223372036854775808").Append(suffix).Append(" THEN -9223372036854775808 ELSE ");
+            Sql.Append(" <= -9223372036854775808").Append(suffix).Append(" THEN ").Append(negativeOverflow).Append(" ELSE ");
             if (_mode == OceanBaseCompatibilityMode.MySql)
             {
                 Sql.Append("CAST(TRUNCATE(");

@@ -118,8 +118,13 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
             Assert.StartsWith("UPDATE OracleRows __ob_bulk_target SET Active = (SELECT CASE", command.Template);
             Assert.Contains("THEN N'Y'", command.Template);
             Assert.Contains("THEN N'N'", command.Template);
-            var target = filtered ? "o2" : "o0";
+            var target = filtered ? "o" : "o0";
             Assert.Equal(2, Regex.Matches(command.Template, $@"{target}.TenantId = __ob_bulk_target.TenantId AND {target}.Id = __ob_bulk_target.Id").Count);
+            if (filtered)
+            {
+                Assert.Equal(2, Regex.Matches(command.Template, @"o1.TenantId = \?").Count);
+                Assert.Contains("o.TenantId = t0.TenantId AND o.Id = t0.Id0", command.Template);
+            }
             Assert.Equal(filtered ? new object[] { context.TenantId, context.TenantId } : [], command.Values);
             Assert.DoesNotContain("__ob_bulk_target.GroupId", command.Template);
         }
@@ -157,8 +162,8 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
             Assert.Equal(4, async ? await query.ExecuteUpdateAsync(setters => setters.SetProperty(pair => pair.Target.Name, pair => pair.Source.Name))
                 : query.ExecuteUpdate(setters => setters.SetProperty(pair => pair.Target.Name, pair => pair.Source.Name)));
             var command = Assert.Single(capture.Commands);
-            Assert.Contains("Name = (SELECT o1.Name", command.Template);
-            Assert.Contains("INNER JOIN ( SELECT o0.Id, o0.Name FROM OracleRows o0 WHERE o0.TenantId = ? ) o1", command.Template);
+            Assert.Contains("Name = (SELECT t.Name", command.Template);
+            Assert.Contains("FROM OracleRows o0 WHERE o0.TenantId = ? ) t ON o.GroupId = t.Id", command.Template);
             Assert.Equal(new object[] { context.TenantId, context.TenantId, context.TenantId, context.TenantId }, command.Values);
             Assert.Equal(2, Regex.Matches(command.Template, @"o.TenantId = __ob_bulk_target.TenantId AND o.Id = __ob_bulk_target.Id").Count);
             Assert.DoesNotContain("o0.Id = __ob_bulk_target.Id", command.Template);
@@ -179,7 +184,7 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
             var command = Assert.Single(capture.Commands);
             Assert.StartsWith("UPDATE OracleGroups __ob_bulk_target SET OptionalEnabled = (SELECT CASE", command.Template);
             Assert.Contains("o.OptionalActive = N'Y' THEN N'T'", command.Template);
-            Assert.Contains("o.OptionalActive = N'N' THEN N'F' END", command.Template);
+            Assert.Contains("o.OptionalActive = N'N' THEN N'F' ELSE NULL END", command.Template);
             Assert.Equal(2, Regex.Matches(command.Template, "LEFT JOIN OracleGroups o0").Count);
             Assert.Equal(2, Regex.Matches(command.Template, @"o0.Id = __ob_bulk_target.Id").Count);
             Assert.DoesNotContain("__ob_bulk_target.TenantId", command.Template);

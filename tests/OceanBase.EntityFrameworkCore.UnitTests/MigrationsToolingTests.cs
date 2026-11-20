@@ -51,7 +51,7 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
                 typeof(ToolingContext).Assembly, new OperationReporter(null), Array.Empty<string>()).Build(context);
             using var scope = services.CreateScope();
             var migration = scope.ServiceProvider.GetRequiredService<IMigrationsScaffolder>()
-                .ScaffoldMigration("Initial", "Tooling.Sample", "Migrations", "C#", dryRun: true);
+                .ScaffoldMigration("Initial", "Tooling.Sample", "Migrations", "C#");
             Assert.Contains("CreateTable(", migration.MigrationCode);
             Assert.Contains("OceanBase:Identity", migration.MigrationCode);
             Assert.Contains("defaultValue: \"Y\"", migration.MigrationCode);

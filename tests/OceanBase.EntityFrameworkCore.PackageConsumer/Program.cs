@@ -56,7 +56,6 @@ namespace PackageConsumer
                 SplitQuerySmoke.Run(mode);
                 LazyLoadingSmoke.Run(mode);
                 SchemaSmoke.Run(mode);
-                SeedingSmoke.Run(mode);
                 ModelDataSmoke.Run(mode);
                 BulkDmlSmoke.Run(mode);
                 MigrationsSmoke.Run(mode);
@@ -229,7 +228,7 @@ namespace PackageConsumer
                         throw new Exception("Packed provider used storage-space Boolean XOR or a converted result.");
                     if (value is null)
                     {
-                        if (xorCommand.Parameters.Count != 0 || !xorSql.Contains("(NULL) = 1 THEN 1", StringComparison.Ordinal))
+                        if (xorCommand.Parameters.Count != 0 || !xorSql.Contains("<> NULL", StringComparison.Ordinal))
                             throw new Exception("Packed provider retained a stale nullable Boolean capture.");
                     }
                     else
@@ -665,30 +664,10 @@ namespace PackageConsumer
                         throw new Exception($"Packed provider did not translate numeric function {function}");
                 }
 
-                int[] membershipValues = [1, 2];
-                var membershipQuery = context.Set<Row>().Where(row => membershipValues.Contains(row.Id));
-                foreach (var values in new[] { new[] { 1, 2 }, Array.Empty<int>(), new[] { 1, 2, 2, 3, 4, 5 }, Array.Empty<int>() })
-                {
-                    membershipValues = values;
-                    var membershipSql = membershipQuery.ToQueryString();
-                    if (!membershipSql.Contains(values.Length == 0 ? "WHERE 0" : " IN (", StringComparison.Ordinal))
-                        throw new Exception("Packed integer membership failed or reused stale collection SQL.");
-                }
-#pragma warning disable EF1001 // Exercise the EF9 collection options used by the packed Provider.
-                foreach (var collectionMode in new ParameterizedCollectionTranslationMode?[]
-                    { null, ParameterizedCollectionTranslationMode.Constantize, null, ParameterizedCollectionTranslationMode.Constantize })
-                {
-                    using var membershipContext = CreateMembershipContext(mode, collectionMode);
-                    var sqlWithMode = MembershipSql(membershipContext, [41, 42]);
-                    var hasParameters = sqlWithMode.Contains(mode == OceanBaseCompatibilityMode.MySql ? "@" : ":", StringComparison.Ordinal);
-                    if (hasParameters != (collectionMode != ParameterizedCollectionTranslationMode.Constantize))
-                        throw new Exception("Compiled membership query reused another context's collection mode.");
-                }
-                using (var explicitParameterContext = CreateMembershipContext(mode, ParameterizedCollectionTranslationMode.Parameterize))
                 {
                     int[] explicitValues = [41, 42];
-                    var explicitQuery = explicitParameterContext.Set<Row>()
-                        .Where(row => EF.Parameter(explicitValues).Contains(row.Id));
+                    var explicitQuery = context.Set<Row>()
+                        .Where(row => explicitValues.Contains(row.Id));
                     foreach (var input in new[] { explicitValues, [], [42, 17, 42] })
                     {
                         explicitValues = input;
@@ -701,7 +680,7 @@ namespace PackageConsumer
                     }
 
                     string?[] explicitTextValues = ["one", null, "two"];
-                    var explicitTextQuery = explicitParameterContext.Set<Row>()
+                    var explicitTextQuery = context.Set<Row>()
                         .Where(row => explicitTextValues.Contains(row.SearchText));
                     var explicitTextSql = explicitTextQuery.ToQueryString();
                     if (!explicitTextSql.Contains(" IN (", StringComparison.Ordinal)
@@ -712,7 +691,7 @@ namespace PackageConsumer
                         throw new Exception("Packed provider reused a nonempty explicit text parameter root.");
 
                     bool?[] explicitBooleanValues = [true, null, false];
-                    var explicitBooleanQuery = explicitParameterContext.Set<Row>()
+                    var explicitBooleanQuery = context.Set<Row>()
                         .Where(row => explicitBooleanValues.Contains(row.OptionalBoolean));
                     var explicitBooleanSql = explicitBooleanQuery.ToQueryString();
                     if (explicitBooleanSql.Contains("JSON", StringComparison.OrdinalIgnoreCase)
@@ -725,7 +704,7 @@ namespace PackageConsumer
                         throw new Exception("Packed provider reused a nonempty explicit Boolean parameter root.");
 
                     DateTime?[] explicitTemporalValues = [new DateTime(2026, 11, 12, 1, 2, 3), null];
-                    var explicitTemporalQuery = explicitParameterContext.Set<Row>()
+                    var explicitTemporalQuery = context.Set<Row>()
                         .Where(row => explicitTemporalValues.Contains(row.LegacyStamp));
                     var explicitTemporalSql = explicitTemporalQuery.ToQueryString();
                     if (explicitTemporalSql.Contains("JSON", StringComparison.OrdinalIgnoreCase)
@@ -771,15 +750,12 @@ namespace PackageConsumer
                 foreach (var values in new[] { new[] { 3, 1, 3 }, Array.Empty<int>(), new[] { 1, 2, 3, 4, 5, 6 }, Array.Empty<int>() })
                 {
                     rootValues = values;
-                    var rootSql = rootQuery.ToQueryString();
-                    if (rootSql.Contains("UNION ALL VALUES", StringComparison.Ordinal)
-                        || (values.Length > 0 && rootSql.Split("UNION ALL SELECT", StringSplitOptions.None).Length - 1 != values.Length - 1)
-                        || (values.Length == 0 && !rootSql.Contains("WHERE 0", StringComparison.Ordinal)
-                            && !rootSql.Contains("WHERE 1 = 0", StringComparison.Ordinal)))
-                        throw new Exception("Packed general collection root has invalid or stale row SQL: " + rootSql);
-                    if (mode == OceanBaseCompatibilityMode.Oracle && values.Length > 0
-                        && rootSql.Split("FROM DUAL", StringSplitOptions.None).Length - 1 != values.Length)
-                        throw new Exception("Oracle collection SELECT arms do not each have FROM DUAL.");
+                    using var rootCommand = rootQuery.CreateDbCommand();
+                    if (!rootCommand.CommandText.Contains("JSON_TABLE(", StringComparison.Ordinal)
+                        || rootCommand.Parameters.Count != 1
+                        || rootCommand.Parameters[0].DbType != DbType.String
+                        || !Equals(rootCommand.Parameters[0].Value, System.Text.Json.JsonSerializer.Serialize(values)))
+                        throw new Exception("Packed composed integer collection lost its JSON parameter or reused stale values.");
                 }
 
                 VerifyIntegerRoots(context, mode, sbyte.MinValue, sbyte.MaxValue, false);
@@ -793,9 +769,8 @@ namespace PackageConsumer
                 VerifyNumericRoots(context, mode, decimal.MinValue, decimal.MaxValue, 0.0000000000000000000000000001m, "DECIMAL(65,30)", "NUMBER");
                 VerifyNumericRoots(context, mode, float.MinValue, float.MaxValue, float.Epsilon, "FLOAT", "BINARY_FLOAT");
                 VerifyNumericRoots(context, mode, double.MinValue, double.MaxValue, double.Epsilon, "DOUBLE", "BINARY_DOUBLE");
-                using var explicitNumericContext = CreateMembershipContext(mode, ParameterizedCollectionTranslationMode.Parameterize);
                 decimal[] explicitNumericValues = [1.25m, 2.5m];
-                var explicitNumericQuery = explicitNumericContext.Set<Row>()
+                var explicitNumericQuery = context.Set<Row>()
                     .Where(row => explicitNumericValues.Contains(row.Amount));
                 if (!explicitNumericQuery.ToQueryString().Contains(" IN (", StringComparison.Ordinal))
                     throw new Exception("Packed provider did not expand an explicitly parameterized numeric root.");
@@ -996,7 +971,7 @@ namespace PackageConsumer
                     && float.MinNumber(row.Wide, 1f) > 0f
                     && MathF.Max(row.Wide, 2f) > 1f
                     && decimal.Min(row.Amount, 5m) > 0m
-                    && EF.Functions.Greatest(row.Id, 2, 3) > 1).ToQueryString();
+                    && Math.Max(row.Id, 3) > 1).ToQueryString();
                 var wideColumn = aggregateIdentifiers.DelimitIdentifier(nameof(Row.Wide), "r");
                 var singleStoreType = mode == OceanBaseCompatibilityMode.MySql ? "FLOAT" : "BINARY_FLOAT";
                 var wideExtremumPattern = System.Text.RegularExpressions.Regex.Escape($"CAST(GREATEST({wideColumn}, ")
@@ -1005,17 +980,6 @@ namespace PackageConsumer
                     || extrema.Split("GREATEST(", StringSplitOptions.None).Length != 5
                     || !System.Text.RegularExpressions.Regex.IsMatch(extrema, wideExtremumPattern))
                     throw new Exception("Packed scalar extrema lost native translation or Single normalization: " + extrema);
-
-                int[] extremaValues = [1, 2, 3, 4, 5, 6, 7, 8, 9];
-                var capturedExtremum = context.Set<Row>().Where(row => EF.Functions.Least(extremaValues) < row.Id);
-                foreach (var current in new[] { 1, 11, 1 })
-                {
-                    extremaValues[0] = current;
-                    var capturedSql = capturedExtremum.ToQueryString();
-                    var expected = "LEAST(" + current.ToString(System.Globalization.CultureInfo.InvariantCulture) + ", 2, 3,";
-                    if (!capturedSql.Contains(expected, StringComparison.Ordinal))
-                        throw new Exception("Packed extrema reused stale captured values: " + capturedSql);
-                }
 
                 var roundEven = context.Set<Row>().Where(row => Math.Round(row.Amount, 2) > 0m).ToQueryString();
                 var roundAway = context.Set<Row>().Where(row =>
@@ -1314,7 +1278,7 @@ namespace PackageConsumer
 
             var empty = context.Set<Row>().Select(row => new string[] { }.Count(value => row.Id > 0)).ToQueryString();
             if (!empty.Contains("WHERE 1 = 0", StringComparison.Ordinal)
-                || !empty.Contains(mode == OceanBaseCompatibilityMode.MySql ? "SELECT NULL AS `Value`" : "TO_NCHAR(NULL)",
+                || !empty.Contains(mode == OceanBaseCompatibilityMode.MySql ? "NULL AS `Value`" : "TO_NCHAR(NULL)",
                     StringComparison.Ordinal))
                 throw new Exception("Packed text collection root lost its typed empty relation: " + empty);
         }
@@ -1424,6 +1388,16 @@ namespace PackageConsumer
             foreach (var input in new T?[][] { [], [minimum, maximum, minimum, null], [null, null], [maximum], [] })
             {
                 values = input;
+                if (typeof(T) == typeof(int) || typeof(T) == typeof(long))
+                {
+                    using var rootCommand = query.CreateDbCommand();
+                    if (!rootCommand.CommandText.Contains("JSON_TABLE(", StringComparison.Ordinal)
+                        || rootCommand.Parameters.Count != 1
+                        || rootCommand.Parameters[0].DbType != DbType.String
+                        || !Equals(rootCommand.Parameters[0].Value, System.Text.Json.JsonSerializer.Serialize(input)))
+                        throw new Exception("Packed signed integer root lost its JSON parameter or current values.");
+                    continue;
+                }
                 var sql = query.ToQueryString();
                 var target = mode == OceanBaseCompatibilityMode.Oracle ? "NUMBER" : unsigned ? "UNSIGNED" : "SIGNED";
                 var emptyProjection = mode == OceanBaseCompatibilityMode.Oracle
@@ -1554,23 +1528,6 @@ namespace PackageConsumer
             public override InterceptionResult ConnectionOpening(DbConnection connection, ConnectionEventData eventData, InterceptionResult result)
                 => InterceptionResult.Suppress();
         }
-
-        private static string MembershipSql(ConsumerContext context, int[] values)
-            => context.Set<Row>().Where(row => values.Contains(row.Id)).ToQueryString();
-
-        private static ConsumerContext CreateMembershipContext(OceanBaseCompatibilityMode mode, ParameterizedCollectionTranslationMode? collectionMode)
-        {
-            var builder = new DbContextOptionsBuilder<ConsumerContext>().UseOceanBase("Server=localhost;Database=package_smoke", mode);
-            if (collectionMode.HasValue)
-            {
-                var extension = builder.Options.Extensions.OfType<RelationalOptionsExtension>().Single()
-                    .WithParameterizedCollectionTranslationMode(collectionMode.Value);
-                ((IDbContextOptionsBuilderInfrastructure)builder).AddOrUpdateExtension(extension);
-            }
-            return new ConsumerContext(builder.Options, mode);
-        }
-
-#pragma warning restore EF1001
 
         private sealed class ConsumerContext(DbContextOptions<ConsumerContext> options, OceanBaseCompatibilityMode mode) : DbContext(options)
         {

@@ -11,7 +11,7 @@ using static OceanBase.EntityFrameworkCore.Metadata.OceanBaseRelationalAnnotatio
 
 namespace OceanBase.EntityFrameworkCore.Design
 {
-    // EF10's sequence C# fragment omits provider annotations and has no override seam.
+    // EF8's sequence C# fragment omits provider annotations and has no override seam.
 #pragma warning disable EF1001
     internal sealed class OceanBaseCSharpModelGenerator(ModelCodeGeneratorDependencies dependencies,
         IOperationReporter reporter, IServiceProvider serviceProvider, ICSharpHelper code)
@@ -43,8 +43,7 @@ namespace OceanBase.EntityFrameworkCore.Design
             var position = generated.IndexOf(marker, StringComparison.Ordinal);
             if (position < 0 || position != generated.LastIndexOf(marker, StringComparison.Ordinal))
                 throw new InvalidOperationException("The EF Core C# context template cannot preserve OceanBase sequence annotations.");
-            scaffolded.ContextFile = new ScaffoldedFile(scaffolded.ContextFile.Path,
-                generated.Insert(position + 1, allocation.AppendLine().ToString()));
+            scaffolded.ContextFile.Code = generated.Insert(position + 1, allocation.AppendLine().ToString());
             return scaffolded;
         }
     }

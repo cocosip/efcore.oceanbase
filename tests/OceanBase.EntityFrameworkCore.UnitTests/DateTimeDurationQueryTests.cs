@@ -60,7 +60,7 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             var factory = context.GetService<ISqlExpressionFactory>();
             var logger = context.GetService<IDiagnosticsLogger<DbLoggerCategory.Query>>();
             var mapping = source.FindMapping(typeof(DateTime), "DATE")!;
-            var input = new ColumnExpression("DateStamp", "r", typeof(DateTime), mapping, true);
+            var input = new TestColumnExpression("DateStamp", "r", typeof(DateTime), mapping, true);
             foreach (var name in new[] { nameof(DateTime.Add), nameof(DateTime.Subtract) })
             {
                 var result = Assert.IsType<SqlFunctionExpression>(methods.Translate(context.Model, input,
@@ -99,14 +99,14 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             foreach (var name in new[] { nameof(DateTime.Add), nameof(DateTime.Subtract) })
             {
                 var method = typeof(DateTime).GetMethod(name, [typeof(TimeSpan)])!;
-                var input = new ColumnExpression("Stamp", "r", typeof(DateTime), date, true);
+                var input = new TestColumnExpression("Stamp", "r", typeof(DateTime), date, true);
                 Assert.NotNull(methods.Translate(context.Model, input, method, [factory.Constant(TimeSpan.Zero, duration)], logger));
                 Assert.Null(methods.Translate(context.Model, input, method, [factory.Constant(TimeSpan.Zero, text)], logger));
                 Assert.Null(methods.Translate(context.Model, input, method, [factory.Constant(TimeSpan.Zero, nullDuration)], logger));
-                Assert.Null(methods.Translate(context.Model, new ColumnExpression("Stamp", "r", typeof(DateTime), nullDate, true),
+                Assert.Null(methods.Translate(context.Model, new TestColumnExpression("Stamp", "r", typeof(DateTime), nullDate, true),
                     method, [factory.Constant(TimeSpan.Zero, duration)], logger));
                 var promoted = Assert.IsType<SqlFunctionExpression>(methods.Translate(context.Model,
-                    new ColumnExpression("Stamp", "r", typeof(DateTime), narrow, true), method,
+                    new TestColumnExpression("Stamp", "r", typeof(DateTime), narrow, true), method,
                     [factory.Constant(TimeSpan.Zero, duration)], logger));
                 Assert.Equal(mode == OceanBaseCompatibilityMode.MySql ? "DATETIME(6)" : "TIMESTAMP(7)", promoted.TypeMapping!.StoreType);
             }
@@ -121,7 +121,7 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             var factory = context.GetService<ISqlExpressionFactory>();
             var source = context.GetService<IRelationalTypeMappingSource>();
             var mapping = source.FindMapping(typeof(DateTime))!;
-            var stamp = new ColumnExpression("Stamp", "r", typeof(DateTime), mapping, true);
+            var stamp = new TestColumnExpression("Stamp", "r", typeof(DateTime), mapping, true);
             var duration = factory.Constant(TimeSpan.Zero, source.FindMapping(typeof(TimeSpan)));
             foreach (var marker in new[] { OceanBaseTemporalMethodTranslator.DateTimeAddDurationMarker,
                 OceanBaseTemporalMethodTranslator.DateTimeSubtractDurationMarker })

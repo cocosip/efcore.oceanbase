@@ -104,7 +104,7 @@ internal static class ManyToManySmoke
             if (ReadRows)
             {
                 if (!command.CommandText.Replace("`", "").Replace("\"", "").StartsWith(
-                    "SELECT s.Id, s.Name, s0.CourseId, s0.StudentId, s0.Id, s0.Name", StringComparison.Ordinal))
+                    "SELECT s.Id, s.Name, t.CourseId, t.StudentId, t.Id, t.Name", StringComparison.Ordinal))
                     throw new Exception("Packed many-to-many projection changed independently of fixture rows.");
                 table.Rows.Add(1, "one", 10, 1, 10, "course");
                 table.Rows.Add(2, "empty", DBNull.Value, DBNull.Value, DBNull.Value, DBNull.Value);

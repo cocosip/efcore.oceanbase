@@ -78,14 +78,15 @@ namespace OceanBase.EntityFrameworkCore.LiveTests
                         Assert.Equal(new[] { 2, 1 }, async ? await chronological.ToArrayAsync() : chronological.ToArray());
 
                         var expected = stamp + sessionShift;
-                        var match = context.Set<Row>().Where(row => row.WallClock == expected && row.WallClock == EF.Constant(expected));
+                        var match = context.Set<Row>().Where(row => row.WallClock == expected)
+                            .WhereLiteral(expected, (row, literal) => row.WallClock == literal);
                         Assert.Equal(1, Assert.Single(async ? await match.ToArrayAsync() : match.ToArray()).Id);
                         var rawSql = "SELECT \"WallClock\" AS \"Value\" FROM " + table + " WHERE \"Id\" = 1";
                         var raw = context.Database.SqlQueryRaw<DateTime>(rawSql);
                         Assert.Equal(expected, async ? await raw.SingleAsync() : raw.Single());
                         var comparand = milliseconds + sessionShift + TimeSpan.FromTicks(1);
-                        var precise = context.Set<Row>().Where(row => row.Id == 1 && row.Milliseconds < comparand
-                            && row.Milliseconds < EF.Constant(comparand));
+                        var precise = context.Set<Row>().Where(row => row.Id == 1 && row.Milliseconds < comparand)
+                            .WhereLiteral(comparand, (row, literal) => row.Milliseconds < literal);
                         Assert.Single(async ? await precise.ToArrayAsync() : precise.ToArray());
                         context.ChangeTracker.Clear();
                     }

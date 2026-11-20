@@ -42,6 +42,7 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
             Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? "table''s comment" : "table''''s comment", forward);
             Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? "column''s comment" : "column''''s comment", forward);
             Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? "MODIFY COLUMN" : "MODIFY (", forward);
+            Assert.Contains("initial row", forward);
             Assert.Contains(Expand, forward);
             Assert.DoesNotContain("START TRANSACTION", forward);
             var reverse = migrator.GenerateScript(Expand, Migration.InitialDatabase);
@@ -59,14 +60,20 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
 
         [Theory]
         [MemberData(nameof(Modes))]
-        public async Task Migrate_applies_once_and_reverts_with_owned_lock_and_history(OceanBaseCompatibilityMode mode, bool async)
+        public async Task Serialized_migrations_apply_once_and_revert_with_history(OceanBaseCompatibilityMode mode, bool async)
         {
             var capture = new Capture();
             await using var context = Create(mode, capture);
             if (async) await context.Database.MigrateAsync(); else context.Database.Migrate();
             Assert.Equal(new[] { Initial, Expand }, capture.Applied.OrderBy(id => id));
-            Assert.False(capture.LockHeld);
+            Assert.DoesNotContain(capture.Commands, c => c.Sql.Contains("__EFMigrationsHistoryLock", StringComparison.Ordinal));
+            Assert.All(capture.Commands, c => Assert.Null(c.Transaction));
             Assert.Contains(capture.Commands, c => c.Sql.StartsWith("CREATE TABLE", StringComparison.Ordinal) && c.Sql.Contains("Rows", StringComparison.Ordinal));
+            var seed = Assert.Single(capture.Commands, c => c.Sql.StartsWith("INSERT", StringComparison.Ordinal)
+                && c.Sql.Contains("Rows", StringComparison.Ordinal));
+            var initialHistory = Assert.Single(capture.Commands, c => c.Sql.StartsWith("INSERT", StringComparison.Ordinal)
+                && c.Sql.Contains(Initial, StringComparison.Ordinal));
+            Assert.True(capture.Commands.IndexOf(seed) < capture.Commands.IndexOf(initialHistory));
             Assert.All(capture.Commands, c => Assert.Equal(async, c.Async));
             if (mode == OceanBaseCompatibilityMode.Oracle)
                 Assert.All(capture.Commands.Where(c => !c.Sql.StartsWith("BEGIN", StringComparison.Ordinal)
@@ -75,20 +82,18 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
             var count = capture.Commands.Count;
             if (async) await context.Database.MigrateAsync(); else context.Database.Migrate();
             Assert.DoesNotContain(capture.Commands.Skip(count), c => c.Sql.Contains("ALTER TABLE", StringComparison.Ordinal));
-            if (mode == OceanBaseCompatibilityMode.Oracle)
-                Assert.DoesNotContain(capture.Commands.Skip(count), c => c.Sql.Contains("CREATE TABLE", StringComparison.Ordinal)
-                    && c.Sql.Contains("__EFMigrationsHistoryLock", StringComparison.Ordinal));
+            Assert.DoesNotContain(capture.Commands.Skip(count), c => c.Sql.Contains("CREATE TABLE", StringComparison.Ordinal)
+                || c.Sql.StartsWith("INSERT", StringComparison.Ordinal));
             var migrator = context.GetService<IMigrator>();
             if (async) await migrator.MigrateAsync(Migration.InitialDatabase); else migrator.Migrate(Migration.InitialDatabase);
             Assert.Empty(capture.Applied);
-            Assert.False(capture.LockHeld);
             Assert.Null(context.Database.CurrentTransaction);
             Assert.Equal(ConnectionState.Closed, context.Database.GetDbConnection().State);
         }
 
         [Theory]
         [MemberData(nameof(Modes))]
-        public async Task Migration_failure_and_cancellation_do_not_record_success_or_leave_a_lock(OceanBaseCompatibilityMode mode, bool async)
+        public async Task Migration_failure_and_cancellation_do_not_record_success(OceanBaseCompatibilityMode mode, bool async)
         {
             using var source = new CancellationTokenSource();
             Exception failure = async ? new OperationCanceledException(source.Token) : new InvalidOperationException("synthetic alter failure");
@@ -98,24 +103,22 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
                 : Assert.ThrowsAny<Exception>(() => context.Database.Migrate());
             Assert.Same(failure, actual);
             Assert.Equal(new[] { Initial }, capture.Applied);
-            Assert.False(capture.LockHeld);
             Assert.Null(context.Database.CurrentTransaction);
             Assert.Equal(ConnectionState.Closed, context.Database.GetDbConnection().State);
         }
 
         [Theory]
         [MemberData(nameof(Modes))]
-        public async Task Missing_opt_in_wrong_namespace_or_busy_lock_never_executes_migration_DDL(OceanBaseCompatibilityMode mode, bool async)
+        public async Task Missing_opt_in_or_wrong_namespace_never_executes_migration_DDL(OceanBaseCompatibilityMode mode, bool async)
         {
-            foreach (var boundary in new[] { "no-opt-in", "wrong-scope", "busy" })
+            foreach (var boundary in new[] { "no-opt-in", "wrong-scope" })
             {
-                var capture = new Capture { Scope = boundary == "wrong-scope" ? "other" : "offline", LockHeld = boundary == "busy" };
+                var capture = new Capture { Scope = boundary == "wrong-scope" ? "other" : "offline" };
                 await using var context = Create(mode, capture, optIn: boundary != "no-opt-in");
                 if (async) await Assert.ThrowsAnyAsync<Exception>(() => context.Database.MigrateAsync());
                 else Assert.ThrowsAny<Exception>(() => context.Database.Migrate());
                 Assert.DoesNotContain(capture.Commands, c => c.Sql.Contains("CREATE TABLE", StringComparison.Ordinal) && c.Sql.Contains("Rows", StringComparison.Ordinal));
                 Assert.Empty(capture.Applied);
-                Assert.Equal(boundary == "busy", capture.LockHeld);
             }
         }
 
@@ -140,33 +143,21 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
 
         [Theory]
         [MemberData(nameof(Modes))]
-        public async Task Caller_transaction_and_wrong_seeder_reject_before_any_command(OceanBaseCompatibilityMode mode, bool async)
+        public async Task Caller_transaction_rejects_before_any_command(OceanBaseCompatibilityMode mode, bool async)
         {
             var capture = new Capture();
-            await using (var context = Create(mode, capture))
-            {
-                await using var transaction = await context.Database.BeginTransactionAsync();
-                if (async) await Assert.ThrowsAsync<NotSupportedException>(() => context.Database.MigrateAsync());
-                else Assert.Throws<NotSupportedException>(() => context.Database.Migrate());
-                Assert.Same(transaction, context.Database.CurrentTransaction);
-                Assert.Empty(capture.Commands);
-            }
-            await using (var context = Create(mode, capture, configure: builder =>
-            {
-                if (async) builder.UseSeeding((_, _) => { });
-                else builder.UseAsyncSeeding((_, _, _) => Task.CompletedTask);
-            }))
-            {
-                if (async) await Assert.ThrowsAsync<InvalidOperationException>(() => context.Database.MigrateAsync());
-                else Assert.Throws<InvalidOperationException>(() => context.Database.Migrate());
-                Assert.Empty(capture.Commands);
-            }
+            await using var context = Create(mode, capture);
+            await using var transaction = await context.Database.BeginTransactionAsync();
+            if (async) await Assert.ThrowsAsync<NotSupportedException>(() => context.Database.MigrateAsync());
+            else Assert.Throws<NotSupportedException>(() => context.Database.Migrate());
+            Assert.Same(transaction, context.Database.CurrentTransaction);
+            Assert.Empty(capture.Commands);
         }
 
         [Theory]
         [InlineData(OceanBaseCompatibilityMode.MySql)]
         [InlineData(OceanBaseCompatibilityMode.Oracle)]
-        public async Task Pre_cancelled_migration_does_not_open_or_claim_a_lock(OceanBaseCompatibilityMode mode)
+        public async Task Pre_cancelled_migration_does_not_open_the_connection(OceanBaseCompatibilityMode mode)
         {
             var capture = new Capture();
             await using var context = Create(mode, capture);
@@ -175,44 +166,6 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
             await Assert.ThrowsAnyAsync<OperationCanceledException>(() => context.Database.MigrateAsync(cancellation.Token));
             Assert.Empty(capture.Commands);
             Assert.Equal(ConnectionState.Closed, context.Database.GetDbConnection().State);
-        }
-
-        [Theory]
-        [MemberData(nameof(Modes))]
-        public async Task Bootstrap_failure_releases_lock_and_release_failure_preserves_original_error(OceanBaseCompatibilityMode mode, bool async)
-        {
-            foreach (var bootstrap in new[] { true, false })
-            {
-                var error = new InvalidOperationException("synthetic primary failure");
-                var cleanup = new InvalidOperationException("synthetic unlock failure");
-                var capture = new Capture
-                {
-                    BootstrapFailure = bootstrap ? error : null,
-                    Failure = bootstrap ? null : error,
-                    ReleaseFailure = bootstrap ? null : cleanup
-                };
-                await using var context = Create(mode, capture);
-                var actual = async ? await Assert.ThrowsAnyAsync<Exception>(() => context.Database.MigrateAsync())
-                    : Assert.ThrowsAny<Exception>(() => context.Database.Migrate());
-                Assert.Same(error, actual);
-                Assert.Equal(!bootstrap, capture.LockHeld);
-                if (!bootstrap) Assert.Same(cleanup, error.Data["OceanBase.MigrationCleanupError"]);
-                Assert.Equal(ConnectionState.Closed, context.Database.GetDbConnection().State);
-            }
-        }
-
-        [Theory]
-        [MemberData(nameof(Modes))]
-        public async Task Uncertain_lock_claim_is_cleaned_up_using_only_its_owner_token(OceanBaseCompatibilityMode mode, bool async)
-        {
-            var error = new InvalidOperationException("claim committed but response lost");
-            var capture = new Capture { ClaimFailure = error };
-            await using var context = Create(mode, capture);
-            var actual = async ? await Assert.ThrowsAsync<InvalidOperationException>(() => context.Database.MigrateAsync())
-                : Assert.Throws<InvalidOperationException>(() => context.Database.Migrate());
-            Assert.Same(error, actual);
-            Assert.False(capture.LockHeld);
-            Assert.Empty(capture.Applied);
         }
 
         [Theory]
@@ -229,33 +182,16 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
 
         [Theory]
         [MemberData(nameof(Modes))]
-        public async Task Matching_seeders_run_under_the_lock_for_changed_and_unchanged_migrations(OceanBaseCompatibilityMode mode, bool async)
+        public async Task History_creation_failure_preserves_the_error_and_never_runs_migration_operations(OceanBaseCompatibilityMode mode, bool async)
         {
-            var capture = new Capture();
-            var changes = new List<bool>();
-            var fail = false;
-            var error = new InvalidOperationException("synthetic seeder failure");
-            void Seed(DbContext _, bool changed)
-            {
-                Assert.True(capture.LockHeld);
-                changes.Add(changed);
-                if (fail) throw error;
-            }
-            await using var context = Create(mode, capture, configure: builder =>
-            {
-                if (async) builder.UseAsyncSeeding((db, changed, _) => { Seed(db, changed); return Task.CompletedTask; });
-                else builder.UseSeeding(Seed);
-            });
-            for (var i = 0; i < 2; i++)
-                if (async) await context.Database.MigrateAsync(); else context.Database.Migrate();
-            Assert.Equal(new[] { true, false }, changes);
-            fail = true;
+            var failure = new InvalidOperationException("synthetic history creation failure");
+            var capture = new Capture { BootstrapFailure = failure };
+            await using var context = Create(mode, capture);
             var actual = async ? await Assert.ThrowsAsync<InvalidOperationException>(() => context.Database.MigrateAsync())
                 : Assert.Throws<InvalidOperationException>(() => context.Database.Migrate());
-            Assert.Same(error, actual);
-            Assert.Equal(new[] { Initial, Expand }, capture.Applied.OrderBy(id => id));
-            Assert.False(capture.LockHeld);
-            Assert.Null(context.Database.CurrentTransaction);
+            Assert.Same(failure, actual);
+            Assert.Empty(capture.Applied);
+            Assert.DoesNotContain(capture.Commands, command => command.Sql.Contains("Rows", StringComparison.Ordinal));
             Assert.Equal(ConnectionState.Closed, context.Database.GetDbConnection().State);
         }
 
@@ -298,15 +234,16 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
 
         internal static void ConfigureModel(ModelBuilder builder, bool evolved)
         {
-            builder.HasAnnotation("ProductVersion", "10.0.0");
+            builder.HasAnnotation("ProductVersion", "8.0.0");
             var row = builder.Entity("MigrationRow");
             row.ToTable("Rows", table => table.HasComment("table's comment"));
             row.Property<int>("Id").ValueGeneratedOnAdd();
             row.HasKey("Id");
             row.Property<string>("Code").HasMaxLength(evolved ? 64 : 32).IsRequired().HasComment("column's comment");
+            row.HasData(new { Id = 7, Code = "initial row" });
         }
 
-        private sealed record Command(string Sql, bool Async);
+        private sealed record Command(string Sql, bool Async, DbTransaction? Transaction);
         public sealed class RetryingFactory(ExecutionStrategyDependencies dependencies) : IExecutionStrategyFactory
         {
             public IExecutionStrategy Create() => new RetryingStrategy(dependencies);
@@ -320,40 +257,15 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
         {
             public List<Command> Commands { get; } = new();
             public HashSet<string> Applied { get; } = new();
-            public bool LockHeld { get; set; }
             public string Scope { get; init; } = "offline";
             public Exception? Failure { get; init; }
             public Exception? BootstrapFailure { get; init; }
-            public Exception? ReleaseFailure { get; init; }
-            public Exception? ClaimFailure { get; init; }
             private bool _history;
-            private bool _lockTable;
-            private string? _owner;
 
             private int Execute(DbCommand command, bool async)
             {
                 var sql = command.CommandText;
-                Commands.Add(new(sql, async));
-                if (sql.Contains("__EFMigrationsHistoryLock", StringComparison.Ordinal))
-                {
-                    if (sql.Contains("CREATE TABLE", StringComparison.Ordinal)) _lockTable = true;
-                    if (sql.StartsWith("INSERT", StringComparison.Ordinal))
-                    {
-                        if (LockHeld) return 0;
-                        LockHeld = true;
-                        _owner = Regex.Match(sql, @"[a-f0-9]{8}-[a-f0-9-]{27}").Value;
-                        Assert.NotEmpty(_owner);
-                        if (ClaimFailure is { } claim) throw claim;
-                        return 1;
-                    }
-                    if (sql.StartsWith("DELETE", StringComparison.Ordinal))
-                    {
-                        if (_owner is null || !sql.Contains(_owner, StringComparison.Ordinal)) return 0;
-                        if (ReleaseFailure is { } cleanup) throw cleanup;
-                        LockHeld = false; return 1;
-                    }
-                    return 0;
-                }
+                Commands.Add(new(sql, async, command.Transaction));
                 if (sql.Contains("CREATE TABLE", StringComparison.Ordinal) && sql.Contains("__EFMigrationsHistory", StringComparison.Ordinal))
                 {
                     if (BootstrapFailure is { } bootstrap) throw bootstrap;
@@ -373,9 +285,7 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
                 => ValueTask.FromResult(InterceptionResult<int>.SuppressWithResult(Execute(command, true)));
             private object Scalar(DbCommand command, bool async)
             {
-                Commands.Add(new(command.CommandText, async));
-                if (command.CommandText.StartsWith("SELECT COUNT", StringComparison.Ordinal)
-                    && command.CommandText.Contains("__EFMigrationsHistoryLock", StringComparison.Ordinal)) return _lockTable ? 1 : 0;
+                Commands.Add(new(command.CommandText, async, command.Transaction));
                 return command.CommandText.StartsWith("SELECT COUNT", StringComparison.Ordinal) ? _history ? 1 : 0 : Scope;
             }
             public override InterceptionResult<object> ScalarExecuting(DbCommand command, CommandEventData data, InterceptionResult<object> result)
@@ -385,10 +295,10 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
                 => ValueTask.FromResult(InterceptionResult<object>.SuppressWithResult(Scalar(command, true)));
             private DbDataReader Reader(DbCommand command, bool async)
             {
-                Commands.Add(new(command.CommandText, async));
+                Commands.Add(new(command.CommandText, async, command.Transaction));
                 var table = new DataTable();
                 table.Columns.Add("MigrationId", typeof(string)); table.Columns.Add("ProductVersion", typeof(string));
-                foreach (var id in Applied.OrderBy(id => id)) table.Rows.Add(id, "10.0.0");
+                foreach (var id in Applied.OrderBy(id => id)) table.Rows.Add(id, "8.0.0");
                 return table.CreateDataReader();
             }
             public override InterceptionResult<DbDataReader> ReaderExecuting(DbCommand command, CommandEventData data, InterceptionResult<DbDataReader> result)
@@ -404,11 +314,14 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
     public sealed class InitialSchemaMigration : Migration
     {
         protected override void Up(MigrationBuilder builder)
-            => builder.CreateTable("Rows", columns: table => new
+        {
+            builder.CreateTable("Rows", columns: table => new
             {
                 Id = table.Column<int>(nullable: false).Annotation("OceanBase:Identity", true),
                 Code = table.Column<string>(maxLength: 32, nullable: false, comment: "column's comment")
             }, constraints: table => table.PrimaryKey("PK_Rows", row => row.Id), comment: "table's comment");
+            builder.InsertData("Rows", new[] { "Id", "Code" }, new object[] { 7, "initial row" });
+        }
         protected override void Down(MigrationBuilder builder) => builder.DropTable("Rows");
         protected override void BuildTargetModel(ModelBuilder builder) => MigrationsTests.ConfigureModel(builder, false);
     }

@@ -8,6 +8,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Query;
 using Microsoft.EntityFrameworkCore.Storage;
+using OceanBase.EntityFrameworkCore.TestUtilities;
 using Xunit;
 
 namespace OceanBase.EntityFrameworkCore.LiveTests
@@ -557,7 +558,7 @@ namespace OceanBase.EntityFrameworkCore.LiveTests
                         -11.0 / scale, -10.0 / scale, -1.75 / scale, -1.0 / scale, -0.75 / scale,
                         0.75 / scale, 1.0 / scale, 1.75 / scale, 10.0 / scale, 11.0 / scale })
                     {
-                        stage(name + " signed/wrapped fractional parameters and saturated Int64 boundaries");
+                        stage(name + " signed/wrapped fractional parameters and Int64 overflow boundaries");
                         amount = value;
                         try
                         {
@@ -640,13 +641,13 @@ namespace OceanBase.EntityFrameworkCore.LiveTests
                 var fixedDay = new DateOnly(2024, 2, 29);
                 await Check(context, async, row => (DateTime?)row.Day!.Value.ToDateTime(fixedClock),
                     row => row.Day?.ToDateTime(fixedClock));
-                await Check(context, async, row => (DateTime?)EF.Parameter(fixedDay).ToDateTime(row.Clock!.Value),
+                await Check(context, async, row => (DateTime?)fixedDay.ToDateTime(row.Clock!.Value),
                     row => row.Clock.HasValue ? fixedDay.ToDateTime(row.Clock.Value) : null);
                 foreach (var date in new[] { DateOnly.MinValue, DateOnly.MaxValue })
                 {
                     var duration = date == DateOnly.MinValue ? TimeSpan.Zero
                         : TimeSpan.FromDays(1).Subtract(TimeSpan.FromTicks(mode == OceanBaseCompatibilityMode.MySql ? 10 : 1));
-                    await Check(context, async, row => (DateTime?)EF.Parameter(date).ToDateTime(TimeOnly.FromTimeSpan(EF.Parameter(duration))),
+                    await Check(context, async, row => (DateTime?)date.ToDateTime(TimeOnly.FromTimeSpan(duration)),
                         _ => date.ToDateTime(TimeOnly.FromTimeSpan(duration)));
                 }
 
@@ -662,7 +663,7 @@ namespace OceanBase.EntityFrameworkCore.LiveTests
                     TimeSpan.FromDays(1).Subtract(TimeSpan.FromTicks(1)), TimeSpan.FromDays(1).Subtract(TimeSpan.FromTicks(10)),
                     TimeSpan.FromDays(1), TimeSpan.MinValue, TimeSpan.MaxValue })
                 {
-                    await Check(context, async, row => (TimeOnly?)TimeOnly.FromTimeSpan(EF.Parameter(offset)), _ => Clock(offset));
+                    await Check(context, async, row => (TimeOnly?)TimeOnly.FromTimeSpan(offset), _ => Clock(offset));
                 }
 
                 stage("normal, wrapping, equal and fractional IsBetween endpoints and refreshed parameters");
@@ -693,7 +694,7 @@ namespace OceanBase.EntityFrameworkCore.LiveTests
                     => value.HasValue && value.Value >= TimeSpan.Zero && value.Value < TimeSpan.FromDays(1)
                         && (mode != OceanBaseCompatibilityMode.MySql || value.Value.Ticks % 10 == 0)
                         ? TimeOnly.FromTimeSpan(value.Value) : null;
-            });
+            }, keepTemporalConversions: true);
 
         private static Task SetZone(Context context, bool async, string zone)
         {
@@ -747,11 +748,13 @@ namespace OceanBase.EntityFrameworkCore.LiveTests
 
         private static Task<T[]> Read<T>(IQueryable<T> query, bool async) => async ? query.ToArrayAsync() : Task.FromResult(query.ToArray());
 
-        private static Task WithTable(OceanBaseCompatibilityMode mode, bool async, bool nulls, Func<Context, Action<string>, Task> run)
+        private static Task WithTable(OceanBaseCompatibilityMode mode, bool async, bool nulls, Func<Context, Action<string>, Task> run,
+            bool keepTemporalConversions = false)
             => LiveStorageTable.WithTable<Context>(mode, async, false, (options, table) =>
             {
                 var builder = new DbContextOptionsBuilder<Context>(options).UseQueryTrackingBehavior(QueryTrackingBehavior.NoTracking)
                     .EnableServiceProviderCaching(false).ReplaceService<IModelCacheKeyFactory, CacheKey>();
+                if (keepTemporalConversions) builder.ReplaceService<IEvaluatableExpressionFilter, TemporalConversionFilter>();
                 ((IDbContextOptionsBuilderInfrastructure)builder).AddOrUpdateExtension(
                     builder.Options.Extensions.OfType<RelationalOptionsExtension>().Single().WithUseRelationalNulls(nulls));
                 return new Context(builder.Options, mode, table);

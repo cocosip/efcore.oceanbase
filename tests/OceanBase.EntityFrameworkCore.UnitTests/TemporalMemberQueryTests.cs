@@ -80,8 +80,8 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             using var context = CreateContext(mode);
             var duration = TimeSpan.FromTicks(9_007_199_254_740_990L);
             var minimum = TimeSpan.MinValue;
-            var sql = context.Rows.Where(row => row.Zoned.Add(EF.Constant(duration)).UtcTicks > 0
-                    || row.Zoned.Subtract(EF.Constant(minimum)).UtcTicks > 0)
+            var sql = context.Rows.Where(row => row.Zoned.Add(duration).UtcTicks > 0
+                    || row.Zoned.Subtract(minimum).UtcTicks > 0)
                 .Select(row => (DateTimeOffset?)row.Zoned.Subtract(row.Duration)).ToQueryString();
 
             Assert.Contains("9007199254740990", sql);
@@ -173,8 +173,8 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
         {
             using var context = CreateContext(mode);
             var anchor = new DateTimeOffset(2024, 2, 29, 0, 0, 0, TimeSpan.Zero).AddTicks(1234560);
-            var sql = context.Rows.Where(row => row.ConvertedZoned!.Value.Subtract(EF.Constant(anchor)).Ticks == 0
-                    && EF.Constant(anchor).Subtract(row.ConvertedZoned.Value).Ticks == 0).ToQueryString();
+            var sql = context.Rows.Where(row => row.ConvertedZoned!.Value.Subtract(anchor).Ticks == 0
+                    && anchor.Subtract(row.ConvertedZoned.Value).Ticks == 0).ToQueryString();
 
             Assert.Contains("00:30:00.123456", sql);
             Assert.DoesNotContain("00:00:00.123456", sql);
@@ -554,7 +554,7 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
                 var method = typeof(DateOnly).GetMethod(name, [typeof(int)])!;
                 foreach (var inputMapping in new[] { mapping, converted })
                 {
-                    var input = new ColumnExpression("Date", "r", typeof(DateOnly), inputMapping, true);
+                    var input = new TestColumnExpression("Date", "r", typeof(DateOnly), inputMapping, true);
                     var result = Assert.IsType<SqlFunctionExpression>(methods.Translate(context.Model, input, method,
                         [factory.Constant(-1, integer)], logger));
                     Assert.Same(inputMapping, result.TypeMapping);
@@ -575,7 +575,7 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             var source = context.GetService<IRelationalTypeMappingSource>();
             var mapping = source.FindMapping(typeof(DateOnly))!;
             var integer = source.FindMapping(typeof(int))!;
-            var input = new ColumnExpression("Date", "r", typeof(DateOnly), mapping, true);
+            var input = new TestColumnExpression("Date", "r", typeof(DateOnly), mapping, true);
             var amount = factory.Constant(1, integer);
             foreach (var marker in new[] { OceanBaseTemporalMethodTranslator.DateOnlyAddMonthsMarker,
                 OceanBaseTemporalMethodTranslator.DateOnlyAddYearsMarker })
@@ -676,7 +676,7 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
                 var method = typeof(DateTime).GetMethod(name, [typeof(int)])!;
                 foreach (var inputMapping in new[] { mapping, converted })
                 {
-                    var input = new ColumnExpression("Stamp", "r", typeof(DateTime), inputMapping, true);
+                    var input = new TestColumnExpression("Stamp", "r", typeof(DateTime), inputMapping, true);
                     var result = Assert.IsType<SqlFunctionExpression>(methods.Translate(context.Model, input, method,
                         [factory.Constant(-1, integer)], logger));
                     Assert.Same(inputMapping, result.TypeMapping);
@@ -728,7 +728,7 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             var source = context.GetService<IRelationalTypeMappingSource>();
             var mapping = source.FindMapping(typeof(DateTime))!;
             var integer = source.FindMapping(typeof(int))!;
-            var stamp = new ColumnExpression("Stamp", "r", typeof(DateTime), mapping, true);
+            var stamp = new TestColumnExpression("Stamp", "r", typeof(DateTime), mapping, true);
             var amount = factory.Constant(1, integer);
             foreach (var marker in new[] { OceanBaseTemporalMethodTranslator.DateTimeAddMonthsMarker,
                 OceanBaseTemporalMethodTranslator.DateTimeAddYearsMarker })

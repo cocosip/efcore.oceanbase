@@ -2,7 +2,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory)][ValidateNotNullOrEmpty()][string]$ProviderVersion,
-    [Parameter(Mandatory)][ValidateSet('9.0.0', '9.0.23')][string]$EfCoreVersion,
+    [Parameter(Mandatory)][ValidateSet('8.0.0', '8.0.34')][string]$EfCoreVersion,
     [Parameter(Mandatory)][ValidateNotNullOrEmpty()][string]$PackageFeed,
     [switch]$SkipBundle
 )
@@ -76,8 +76,8 @@ if (-not $toolingAssets.libraries."OceanBase.EntityFrameworkCore/$ProviderVersio
     -not $toolingAssets.libraries."Microsoft.EntityFrameworkCore.Proxies/$EfCoreVersion") {
     throw 'Wrong provider or EF runtime package version.'
 }
-$toolingCachedDll = Join-Path $toolingRoot "artifacts/tooling-packages/oceanbase.entityframeworkcore/$ProviderVersion/lib/net9.0/OceanBase.EntityFrameworkCore.dll"
-$toolingConsumerDll = Join-Path $toolingWorkspace 'bin/Debug/net9.0/OceanBase.EntityFrameworkCore.dll'
+$toolingCachedDll = Join-Path $toolingRoot "artifacts/tooling-packages/oceanbase.entityframeworkcore/$ProviderVersion/lib/net8.0/OceanBase.EntityFrameworkCore.dll"
+$toolingConsumerDll = Join-Path $toolingWorkspace 'bin/Debug/net8.0/OceanBase.EntityFrameworkCore.dll'
 if ((Get-FileHash $toolingCachedDll).Hash -ne (Get-FileHash $toolingConsumerDll).Hash) {
     throw 'Tooling output does not contain the selected packaged provider assembly.'
 }

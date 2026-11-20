@@ -6,14 +6,11 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Internal;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using OceanBaseConnector;
 using Xunit;
-
-#pragma warning disable EF1001 // EF9-only collection options infrastructure.
 
 namespace OceanBase.EntityFrameworkCore.FunctionalTests
 {
@@ -65,6 +62,14 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
                     Assert.Equal(input.Length == 0 ? [] : new T?[] { minimum, maximum, null }, rows);
                     Assert.Equal(input, values);
                     var sql = Assert.Single(capture.Sql);
+                    if (typeof(T) == typeof(int) || typeof(T) == typeof(long))
+                    {
+                        Assert.Contains("JSON_TABLE(", sql);
+                        var parameter = Assert.Single(capture.Inputs);
+                        Assert.Equal(DbType.String, parameter.DbType);
+                        Assert.Equal(System.Text.Json.JsonSerializer.Serialize(input), parameter.Value);
+                        continue;
+                    }
                     Assert.Equal(input.Length == 0, sql.Contains("WHERE 1 = 0", StringComparison.Ordinal));
                     Assert.Equal(Math.Max(0, input.Length - 1), sql.Split("UNION ALL SELECT").Length - 1);
                     var actual = capture.Inputs.Where(parameter => parameter.Value is not DBNull).ToArray();
@@ -172,24 +177,16 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
         }
 
         [Theory]
-        [InlineData(OceanBaseCompatibilityMode.MySql, false, false, ParameterizedCollectionTranslationMode.Constantize)]
-        [InlineData(OceanBaseCompatibilityMode.MySql, true, false, ParameterizedCollectionTranslationMode.Constantize)]
-        [InlineData(OceanBaseCompatibilityMode.MySql, false, true, ParameterizedCollectionTranslationMode.Constantize)]
-        [InlineData(OceanBaseCompatibilityMode.MySql, true, true, ParameterizedCollectionTranslationMode.Constantize)]
-        [InlineData(OceanBaseCompatibilityMode.Oracle, false, false, ParameterizedCollectionTranslationMode.Constantize)]
-        [InlineData(OceanBaseCompatibilityMode.Oracle, true, false, ParameterizedCollectionTranslationMode.Constantize)]
-        [InlineData(OceanBaseCompatibilityMode.Oracle, false, true, ParameterizedCollectionTranslationMode.Constantize)]
-        [InlineData(OceanBaseCompatibilityMode.Oracle, true, true, ParameterizedCollectionTranslationMode.Constantize)]
-        [InlineData(OceanBaseCompatibilityMode.MySql, false, false, ParameterizedCollectionTranslationMode.Parameterize)]
-        [InlineData(OceanBaseCompatibilityMode.MySql, true, false, ParameterizedCollectionTranslationMode.Parameterize)]
-        [InlineData(OceanBaseCompatibilityMode.MySql, false, true, ParameterizedCollectionTranslationMode.Parameterize)]
-        [InlineData(OceanBaseCompatibilityMode.MySql, true, true, ParameterizedCollectionTranslationMode.Parameterize)]
-        [InlineData(OceanBaseCompatibilityMode.Oracle, false, false, ParameterizedCollectionTranslationMode.Parameterize)]
-        [InlineData(OceanBaseCompatibilityMode.Oracle, true, false, ParameterizedCollectionTranslationMode.Parameterize)]
-        [InlineData(OceanBaseCompatibilityMode.Oracle, false, true, ParameterizedCollectionTranslationMode.Parameterize)]
-        [InlineData(OceanBaseCompatibilityMode.Oracle, true, true, ParameterizedCollectionTranslationMode.Parameterize)]
-        public async Task Explicit_parameter_integer_roots_rebind_and_bind_current_values(
-            OceanBaseCompatibilityMode mode, bool async, bool relationalNulls, ParameterizedCollectionTranslationMode translation)
+        [InlineData(OceanBaseCompatibilityMode.MySql, false, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false, true)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true, true)]
+        public async Task Captured_integer_roots_rebind_and_bind_current_values(
+            OceanBaseCompatibilityMode mode, bool async, bool relationalNulls)
         {
             using var table = new DataTable();
             table.Columns.Add("Value", typeof(object));
@@ -197,9 +194,9 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
             table.Rows.Add(17);
             table.Rows.Add(1);
             var capture = new Capture(table);
-            await using var context = Create<int>(mode, capture, relationalNulls, translation);
+            await using var context = Create<int>(mode, capture, relationalNulls);
             int[] values = [1, 17, 1];
-            var query = context.Rows.Where(row => EF.Parameter(values).Contains(row.Id)).Select(row => row.Id);
+            var query = context.Rows.Where(row => values.Contains(row.Id)).Select(row => row.Id);
 
             foreach (var input in new[] { values, new[] { 17 }, Array.Empty<int>() })
             {
@@ -216,32 +213,24 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
         }
 
         [Theory]
-        [InlineData(OceanBaseCompatibilityMode.MySql, false, false, ParameterizedCollectionTranslationMode.Constantize)]
-        [InlineData(OceanBaseCompatibilityMode.MySql, true, false, ParameterizedCollectionTranslationMode.Constantize)]
-        [InlineData(OceanBaseCompatibilityMode.MySql, false, true, ParameterizedCollectionTranslationMode.Constantize)]
-        [InlineData(OceanBaseCompatibilityMode.MySql, true, true, ParameterizedCollectionTranslationMode.Constantize)]
-        [InlineData(OceanBaseCompatibilityMode.Oracle, false, false, ParameterizedCollectionTranslationMode.Constantize)]
-        [InlineData(OceanBaseCompatibilityMode.Oracle, true, false, ParameterizedCollectionTranslationMode.Constantize)]
-        [InlineData(OceanBaseCompatibilityMode.Oracle, false, true, ParameterizedCollectionTranslationMode.Constantize)]
-        [InlineData(OceanBaseCompatibilityMode.Oracle, true, true, ParameterizedCollectionTranslationMode.Constantize)]
-        [InlineData(OceanBaseCompatibilityMode.MySql, false, false, ParameterizedCollectionTranslationMode.Parameterize)]
-        [InlineData(OceanBaseCompatibilityMode.MySql, true, false, ParameterizedCollectionTranslationMode.Parameterize)]
-        [InlineData(OceanBaseCompatibilityMode.MySql, false, true, ParameterizedCollectionTranslationMode.Parameterize)]
-        [InlineData(OceanBaseCompatibilityMode.MySql, true, true, ParameterizedCollectionTranslationMode.Parameterize)]
-        [InlineData(OceanBaseCompatibilityMode.Oracle, false, false, ParameterizedCollectionTranslationMode.Parameterize)]
-        [InlineData(OceanBaseCompatibilityMode.Oracle, true, false, ParameterizedCollectionTranslationMode.Parameterize)]
-        [InlineData(OceanBaseCompatibilityMode.Oracle, false, true, ParameterizedCollectionTranslationMode.Parameterize)]
-        [InlineData(OceanBaseCompatibilityMode.Oracle, true, true, ParameterizedCollectionTranslationMode.Parameterize)]
-        public async Task Explicit_parameter_nullable_integer_roots_bind_null_cells(
-            OceanBaseCompatibilityMode mode, bool async, bool relationalNulls, ParameterizedCollectionTranslationMode translation)
+        [InlineData(OceanBaseCompatibilityMode.MySql, false, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false, true)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true, true)]
+        public async Task Captured_nullable_integer_roots_bind_null_cells(
+            OceanBaseCompatibilityMode mode, bool async, bool relationalNulls)
         {
             using var table = new DataTable();
             table.Columns.Add("Value", typeof(object));
             table.Rows.Add(17);
             var capture = new Capture(table);
-            await using var context = Create<int>(mode, capture, relationalNulls, translation);
+            await using var context = Create<int>(mode, capture, relationalNulls);
             int?[] values = [17, null, 17];
-            var query = context.Rows.Where(row => EF.Parameter(values).Contains(row.Value)).Select(row => row.Value);
+            var query = context.Rows.Where(row => values.Contains(row.Value)).Select(row => row.Value);
 
             foreach (var input in new int?[][] { values, [null], [] })
             {
@@ -317,14 +306,13 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
         private enum UnsignedState : ulong { Zero = 0, Maximum = ulong.MaxValue }
 
         private static TestContext<T> Create<T>(OceanBaseCompatibilityMode mode, Capture capture,
-            bool relationalNulls = false, ParameterizedCollectionTranslationMode? translation = null) where T : struct
+            bool relationalNulls = false) where T : struct
         {
             var builder = new DbContextOptionsBuilder<TestContext<T>>()
                 .UseOceanBase("Server=offline;Database=integer_roots", mode).EnableServiceProviderCaching(false)
                 .AddInterceptors(new NoNetwork(), capture);
             var extension = builder.Options.Extensions.OfType<RelationalOptionsExtension>().Single()
                 .WithUseRelationalNulls(relationalNulls);
-            if (translation.HasValue) extension = extension.WithParameterizedCollectionTranslationMode(translation.Value);
             ((IDbContextOptionsBuilderInfrastructure)builder).AddOrUpdateExtension(extension);
             return new TestContext<T>(builder.Options);
         }

@@ -2,9 +2,11 @@ using System;
 using System.Collections.Generic;
 using System.Data;
 using System.Linq.Expressions;
+using System.Text;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Storage;
+using Microsoft.EntityFrameworkCore.Storage.Json;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using OceanBaseConnector;
 using Xunit;
@@ -196,8 +198,13 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
                 Assert.Equal(1m, parameter.Value);
                 Assert.Equal("1", mapping.JsonValueReaderWriter!.ToJsonString(true));
                 Assert.Equal("0", mapping.JsonValueReaderWriter.ToJsonString(false));
-                Assert.Equal(true, mapping.JsonValueReaderWriter.FromJsonString("1"));
-                Assert.Equal(false, mapping.JsonValueReaderWriter.FromJsonString("0"));
+                foreach (var (json, expected) in new[] { ("1", true), ("0", false) })
+                {
+                    var reader = new Utf8JsonReaderManager(new JsonReaderData(Encoding.UTF8.GetBytes("[" + json + "]")), queryLogger: null);
+                    reader.MoveNext();
+                    reader.MoveNext();
+                    Assert.Equal(expected, mapping.JsonValueReaderWriter.FromJson(ref reader));
+                }
             }
             else
             {

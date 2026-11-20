@@ -1,6 +1,6 @@
 # OceanBase EF Core samples
 
-Run these console projects manually from the repository root with the .NET 10 SDK and the .NET 9 runtime. Both projects
+Run these console projects manually from the repository root with the .NET 10 SDK and the .NET 8 runtime. Both projects
 live outside the CI solution and report individual passes and failures in the terminal. They use
 unique `EFT_` tables in the selected test database or schema and verify cleanup through the catalog.
 
@@ -28,7 +28,7 @@ operations in the selected scenarios. The default live run uses asynchronous EF 
 
 ## Migration validation
 
-`OceanBaseProviderValidation` uses PowerShell 7 and an EF Core 9 `dotnet-ef` tool. Its runner
+`OceanBaseProviderValidation` uses PowerShell 7 and an EF Core 8 `dotnet-ef` tool. Its runner
 scaffolds `InitialJournal` and `AddJournalNotes` with `dotnet ef migrations add` for each selected
 mode. Each run leaves the generated C# files, snapshot, and forward, idempotent and rollback SQL
 under its own `artifacts/sample-migrations-*/` directory, printed in the terminal.

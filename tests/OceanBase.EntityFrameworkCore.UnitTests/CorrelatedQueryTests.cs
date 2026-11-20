@@ -37,7 +37,8 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             Assert.Contains("ORDER BY c0.RowKey", sql);
             Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? "LIMIT " : "FETCH FIRST ", sql);
             Assert.Matches(@"\) \w+ ON 1 = 1", sql);
-            Assert.StartsWith("SELECT", sql);
+            using var command = query.CreateDbCommand();
+            Assert.StartsWith("SELECT", Flat(command.CommandText));
         }
 
         [Theory]
@@ -74,7 +75,7 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             Assert.Equal(2, Regex.Matches(sql, "ON 1 = 1").Count);
             Assert.DoesNotContain("APPLY", sql);
             Assert.Contains("c0.RowKey > c.RowKey", sql);
-            Assert.Contains("c1.RowKey > c2.RowKey", sql);
+            Assert.Contains("c1.RowKey > t.RowKey", sql);
             Assert.Contains("c1.Value = c.Value", sql);
         }
 

@@ -378,15 +378,10 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
                 Assert.Same(mapping.Converter, result.TypeMapping.Converter);
                 Assert.Equal(mapping.IsUnicode, result.TypeMapping.IsUnicode);
             }
-            char[] characters = ['x'];
-            var query = context.Rows.Where(row => row.Required.Trim(EF.Constant(characters)) == "body");
-            var before = query.ToQueryString();
-            Assert.DoesNotContain("_ob_trim_", before);
-            characters[0] = 'y';
-            var after = query.ToQueryString();
-            Assert.NotEqual(before, after);
-            characters[0] = 'x';
-            Assert.Equal(before, query.ToQueryString());
+            var first = context.Rows.Where(row => row.Required.Trim(new[] { 'x' }) == "body").ToQueryString();
+            var second = context.Rows.Where(row => row.Required.Trim(new[] { 'y' }) == "body").ToQueryString();
+            Assert.DoesNotContain("_ob_trim_", first);
+            Assert.NotEqual(first, second);
         }
 
         [Theory]

@@ -156,7 +156,7 @@ public sealed class DateOnlyDayNumberFunctionalTests
             Assert.Contains("ADD_MONTHS(TRUNC(\"r\".\"Date\", 'MM'), ", sql);
             Assert.Contains("LEAST(EXTRACT(DAY FROM \"r\".\"Date\") - 1", sql);
             Assert.Contains("LAST_DAY(ADD_MONTHS(TRUNC(", sql);
-            if (years) Assert.Contains("(\"r\".\"Id\" + :__amount_0) * 12", sql);
+            if (years) Assert.Matches(@"\(""r""\.""Id"" \+ :__amount_\w+\) \* 12", sql);
         }
         else Assert.Contains(years ? " YEAR)" : " MONTH)", sql);
     }

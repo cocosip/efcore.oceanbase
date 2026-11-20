@@ -37,9 +37,9 @@ namespace OceanBase.EntityFrameworkCore.Query
             if (needle.TypeMapping?.Converter?.ProviderClrType is { } needleCarrier && needleCarrier != typeof(string)) return null;
             var integer = mappings.FindMapping(typeof(int))!;
             var wide = mappings.FindMapping(typeof(long))!;
-            var start = arguments.Count < 2 ? factory.Constant(0L, wide)
+            SqlExpression start = arguments.Count < 2 ? factory.Constant(0L, wide)
                 : factory.Convert(factory.ApplyDefaultTypeMapping(arguments[1]), typeof(long), wide);
-            var count = arguments.Count == 3 ? factory.Convert(factory.ApplyDefaultTypeMapping(arguments[2]), typeof(long), wide)
+            SqlExpression count = arguments.Count == 3 ? factory.Convert(factory.ApplyDefaultTypeMapping(arguments[2]), typeof(long), wide)
                 : factory.Subtract(Length(factory, mode, instance, wide), start, wide);
             return mode == OceanBaseCompatibilityMode.Oracle
                 ? factory.Function(OracleMarker, [instance, needle, start, count], nullable: true,
@@ -76,7 +76,7 @@ namespace OceanBase.EntityFrameworkCore.Query
                     factory.Coalesce(offset, minusOne, wide));
             }
             return factory.Case([new CaseWhenClause(valid, factory.Convert(result, typeof(int), integer))],
-                factory.Constant(null, typeof(int), integer));
+                factory.Constant(null, typeof(int?), integer));
         }
 
         private static SqlExpression Length(ISqlExpressionFactory factory, OceanBaseCompatibilityMode mode,

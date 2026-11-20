@@ -151,6 +151,21 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             Assert.ThrowsAny<ArgumentException>(() => context.GetService<IRelationalConnection>().DbConnection);
         }
 
+        [Fact]
+        public void Reconfiguring_an_existing_connection_with_a_string_creates_a_new_connection()
+        {
+            using var original = new OceanBaseConnector.OceanBaseConnection("Server=offline;Database=original");
+            var builder = new DbContextOptionsBuilder<TestContext>()
+                .UseOceanBase(original, OceanBaseCompatibilityMode.MySql)
+                .UseOceanBase("Server=offline;Database=replacement", OceanBaseCompatibilityMode.MySql);
+
+            using var context = new TestContext(builder.Options);
+            var replacement = context.Database.GetDbConnection();
+            Assert.NotSame(original, replacement);
+            Assert.Equal("replacement", replacement.Database);
+            Assert.Equal("original", original.Database);
+        }
+
         [Theory]
         [InlineData(OceanBaseCompatibilityMode.MySql)]
         [InlineData(OceanBaseCompatibilityMode.Oracle)]

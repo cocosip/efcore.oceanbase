@@ -75,6 +75,19 @@ namespace OceanBase.EntityFrameworkCore.Query
 
         protected override Expression VisitTableValuedFunction(TableValuedFunctionExpression function)
         {
+            if (function.FindAnnotation(OceanBaseCollectionParameterExpandingVisitor.EmptyColumnsAnnotation)
+                ?.Value is IReadOnlyList<string> columns)
+            {
+                GenerateEmptyCollection(function, columns);
+                return function;
+            }
+            if (function.FindAnnotation(OceanBaseQueryableMethodTranslatingExpressionVisitorFactory.EmptyElementTypeAnnotation) is not null)
+            {
+                GenerateEmptyCollection(function, ["_ord", "Value"]);
+                return function;
+            }
+            if (function.FindAnnotation(OceanBaseQueryableMethodTranslatingExpressionVisitorFactory.ParameterCollectionAnnotation) is not null)
+                throw new InvalidOperationException("Collection parameters must be expanded before SQL generation.");
             if (function.FindAnnotation(OceanBaseQueryableMethodTranslatingExpressionVisitorFactory.JsonCollectionAnnotation)
                 ?.Value is not bool isInt32)
                 return base.VisitTableValuedFunction(function);
@@ -92,31 +105,39 @@ namespace OceanBase.EntityFrameworkCore.Query
             return function;
         }
 
+        private void GenerateEmptyCollection(TableValuedFunctionExpression function, IReadOnlyList<string> columns)
+        {
+            Sql.Append("(SELECT ");
+            for (var index = 0; index < columns.Count; index++)
+            {
+                if (index > 0) Sql.Append(", ");
+                GenerateCollectionCast(function.Arguments[index]);
+                Sql.Append(AliasSeparator).Append(Dependencies.SqlGenerationHelper.DelimitIdentifier(columns[index]));
+            }
+            GeneratePseudoFromClause();
+            Sql.Append(" WHERE 1 = 0)").Append(AliasSeparator)
+                .Append(Dependencies.SqlGenerationHelper.DelimitIdentifier(function.Alias));
+        }
+
         protected override void GenerateValues(ValuesExpression valuesExpression)
         {
-            var rows = valuesExpression.RowValues
-                ?? throw new InvalidOperationException("Collection parameters must be expanded before SQL generation.");
-            var empty = rows.Count == 0;
-            var prototypes = empty ? valuesExpression.FindAnnotation(OceanBaseCollectionParameterExpandingVisitor.EmptyColumnsAnnotation)
-                ?.Value as IReadOnlyList<SqlExpression> : null;
-            if (empty && (prototypes is null || prototypes.Count != valuesExpression.ColumnNames.Count))
-                throw new NotSupportedException("An empty collection root requires retained element mapping metadata.");
-            for (var row = 0; row < (empty ? 1 : rows.Count); row++)
+            var rows = valuesExpression.RowValues;
+            for (var row = 0; row < rows.Count; row++)
             {
                 if (row > 0) Sql.AppendLine().Append("UNION ALL ");
                 Sql.Append("SELECT ");
-                var columns = empty ? prototypes! : rows[row].Values;
+                var columns = rows[row].Values;
                 for (var column = 0; column < columns.Count; column++)
                 {
                     if (column > 0) Sql.Append(", ");
                     var expression = columns[column];
-                    if (empty) GenerateCollectionCast(expression);
-                    else if (row == 0 && expression is SqlUnaryExpression { OperatorType: ExpressionType.Convert } conversion
-                        && conversion.Type == conversion.Operand.Type
+                    if (row == 0 && expression is SqlUnaryExpression { OperatorType: ExpressionType.Convert } conversion
+                        && (conversion.Type == conversion.Operand.Type || conversion.Operand is SqlConstantExpression { Value: null })
                         && ReferenceEquals(conversion.TypeMapping, conversion.Operand.TypeMapping))
                         GenerateCollectionCast(conversion.Operand);
                     // Oracle UNION branches need common parameter types/charsets (1790/12704).
-                    else if (_mode == OceanBaseCompatibilityMode.Oracle && valuesExpression.ColumnNames[column] == "Value"
+                    else if ((row == 0 || _mode == OceanBaseCompatibilityMode.Oracle)
+                        && valuesExpression.ColumnNames[column] == "Value"
                         && expression is SqlParameterExpression or SqlConstantExpression
                             or OceanBaseCollectionParameterExpandingVisitor.CollectionBinding)
                         GenerateCollectionCast(expression);
@@ -125,7 +146,6 @@ namespace OceanBase.EntityFrameworkCore.Query
                         Sql.Append(AliasSeparator).Append(Dependencies.SqlGenerationHelper.DelimitIdentifier(valuesExpression.ColumnNames[column]));
                 }
                 GeneratePseudoFromClause();
-                if (empty) Sql.Append(" WHERE 1 = 0");
             }
         }
 
@@ -214,43 +234,10 @@ namespace OceanBase.EntityFrameworkCore.Query
                         != OceanBaseTemporalMethodTranslator.IsTickDurationMapping(sqlBinaryExpression.Right.TypeMapping))
                     throw new NotSupportedException("Comparisons mixing tick-based date differences and stored duration carriers require normalization.");
             }
-            if (sqlBinaryExpression.OperatorType == ExpressionType.ExclusiveOr && sqlBinaryExpression.Type == typeof(bool))
-            {
-                Sql.Append("(");
-                GenerateBooleanValue(sqlBinaryExpression.Left);
-                Sql.Append(" <> ");
-                GenerateBooleanValue(sqlBinaryExpression.Right);
-                Sql.Append(")");
-                return sqlBinaryExpression;
-            }
-            if (sqlBinaryExpression.OperatorType is ExpressionType.And or ExpressionType.Or or ExpressionType.ExclusiveOr
+            if (sqlBinaryExpression.OperatorType is ExpressionType.And or ExpressionType.Or
                 && IntegerCode(sqlBinaryExpression.Type) is { } code)
             {
-                ValidateInteger(sqlBinaryExpression);
-                ValidateInteger(sqlBinaryExpression.Left);
-                ValidateInteger(sqlBinaryExpression.Right);
-                if (_mode == OceanBaseCompatibilityMode.MySql)
-                {
-                    var signed = UnsignedMaximum(code) is null;
-                    Sql.Append(signed ? "CAST(" : "(");
-                    BitwiseOperand(sqlBinaryExpression.Left);
-                    Sql.Append(sqlBinaryExpression.OperatorType == ExpressionType.And ? " & "
-                        : sqlBinaryExpression.OperatorType == ExpressionType.Or ? " | " : " ^ ");
-                    BitwiseOperand(sqlBinaryExpression.Right);
-                    Sql.Append(signed ? " AS SIGNED)" : ")");
-                }
-                else if (sqlBinaryExpression.OperatorType == ExpressionType.And)
-                    OracleBitAnd(sqlBinaryExpression, code);
-                else
-                {
-                    Sql.Append("(");
-                    BitwiseOperand(sqlBinaryExpression.Left);
-                    Sql.Append(" + ");
-                    BitwiseOperand(sqlBinaryExpression.Right);
-                    Sql.Append(sqlBinaryExpression.OperatorType == ExpressionType.Or ? " - " : " - 2 * ");
-                    OracleBitAnd(sqlBinaryExpression, code);
-                    Sql.Append(")");
-                }
+                GenerateBitwise(sqlBinaryExpression, sqlBinaryExpression.OperatorType, sqlBinaryExpression.Left, sqlBinaryExpression.Right, code);
                 return sqlBinaryExpression;
             }
 
@@ -376,10 +363,16 @@ namespace OceanBase.EntityFrameworkCore.Query
 
         private void GenerateBooleanValue(SqlExpression operand)
         {
+            if (operand is SqlConstantExpression { Value: null })
+            {
+                Sql.Append("NULL");
+                return;
+            }
+
             var mapping = operand.TypeMapping;
             var carrier = mapping?.Converter?.ProviderClrType ?? mapping?.ClrType;
             var code = Type.GetTypeCode(carrier is null ? null : Nullable.GetUnderlyingType(carrier) ?? carrier);
-            if (operand.Type != typeof(bool) || mapping is null || mapping.Converter?.ConvertsNulls == true
+            if ((Nullable.GetUnderlyingType(operand.Type) ?? operand.Type) != typeof(bool) || mapping is null || mapping.Converter?.ConvertsNulls == true
                 || code is not (TypeCode.Boolean or TypeCode.SByte or TypeCode.Byte or TypeCode.Int16 or TypeCode.UInt16
                     or TypeCode.Int32 or TypeCode.UInt32 or TypeCode.Int64 or TypeCode.UInt64 or TypeCode.Single
                     or TypeCode.Double or TypeCode.Decimal or TypeCode.String))
@@ -403,27 +396,55 @@ namespace OceanBase.EntityFrameworkCore.Query
             Sql.Append(")");
         }
 
-        private void OracleBitAnd(SqlBinaryExpression expression, TypeCode code)
+        private void GenerateBitwise(SqlExpression result, ExpressionType operation, SqlExpression left, SqlExpression right, TypeCode code)
+        {
+            ValidateInteger(result);
+            ValidateInteger(left);
+            ValidateInteger(right);
+            if (_mode == OceanBaseCompatibilityMode.MySql)
+            {
+                var signed = UnsignedMaximum(code) is null;
+                Sql.Append(signed ? "CAST(" : "(");
+                BitwiseOperand(left);
+                Sql.Append(operation == ExpressionType.And ? " & " : operation == ExpressionType.Or ? " | " : " ^ ");
+                BitwiseOperand(right);
+                Sql.Append(signed ? " AS SIGNED)" : ")");
+            }
+            else if (operation == ExpressionType.And)
+                OracleBitAnd(left, right, code);
+            else
+            {
+                Sql.Append("(");
+                BitwiseOperand(left);
+                Sql.Append(" + ");
+                BitwiseOperand(right);
+                Sql.Append(operation == ExpressionType.Or ? " - " : " - 2 * ");
+                OracleBitAnd(left, right, code);
+                Sql.Append(")");
+            }
+        }
+
+        private void OracleBitAnd(SqlExpression left, SqlExpression right, TypeCode code)
         {
             if (code == TypeCode.UInt64)
             {
                 // OceanBase's NUMBER BITAND path converts to Int64; each half must stay below 2^32.
                 Sql.Append("(BITAND(TRUNC(");
-                BitwiseOperand(expression.Left);
+                BitwiseOperand(left);
                 Sql.Append(" / 4294967296), TRUNC(");
-                BitwiseOperand(expression.Right);
+                BitwiseOperand(right);
                 Sql.Append(" / 4294967296)) * 4294967296 + BITAND(MOD(");
-                Visit(expression.Left);
+                Visit(left);
                 Sql.Append(", 4294967296), MOD(");
-                Visit(expression.Right);
+                Visit(right);
                 Sql.Append(", 4294967296)))");
             }
             else
             {
                 Sql.Append("BITAND(");
-                Visit(expression.Left);
+                Visit(left);
                 Sql.Append(", ");
-                Visit(expression.Right);
+                Visit(right);
                 Sql.Append(")");
             }
         }
@@ -464,6 +485,25 @@ namespace OceanBase.EntityFrameworkCore.Query
             if (sqlFunctionExpression.Name is OceanBaseTemporalMethodTranslator.TimeOnlyFromTicksMarker
                 or OceanBaseTemporalMethodTranslator.TimeOnlyHoursToTicksMarker or OceanBaseTemporalMethodTranslator.TimeOnlyMinutesToTicksMarker)
                 return GenerateTimeOnlyAdd(sqlFunctionExpression);
+            if (sqlFunctionExpression.Name == OceanBaseSqlTranslatingExpressionVisitorFactory.ExclusiveOrMarker)
+            {
+                if (sqlFunctionExpression is not { IsBuiltIn: true, Instance: null, Schema: null, Arguments: [var left, var right],
+                        IsNullable: true, ArgumentsPropagateNullability: [true, true] })
+                    throw new InvalidOperationException("Invalid internal exclusive-or expression.");
+                if (sqlFunctionExpression.Type == typeof(bool))
+                {
+                    Sql.Append("(");
+                    GenerateBooleanValue(left);
+                    Sql.Append(" <> ");
+                    GenerateBooleanValue(right);
+                    Sql.Append(")");
+                }
+                else if (IntegerCode(sqlFunctionExpression.Type) is { } code)
+                    GenerateBitwise(sqlFunctionExpression, ExpressionType.ExclusiveOr, left, right, code);
+                else
+                    throw new InvalidOperationException("Invalid internal exclusive-or expression.");
+                return sqlFunctionExpression;
+            }
             if (sqlFunctionExpression.Name == OceanBaseSqlTranslatingExpressionVisitorFactory.BooleanValueMarker)
             {
                 if (sqlFunctionExpression is not { IsBuiltIn: true, Instance: null, Schema: null, Arguments.Count: 1,

@@ -6,6 +6,16 @@ namespace OceanBase.EntityFrameworkCore.Query
 {
     internal sealed partial class OceanBaseQuerySqlGenerator
     {
+        private void GenerateFrom(SelectExpression select)
+        {
+            Sql.AppendLine().Append("FROM ");
+            for (var index = 0; index < select.Tables.Count; index++)
+            {
+                if (index > 0) Sql.AppendLine();
+                Visit(select.Tables[index]);
+            }
+        }
+
         protected override Expression VisitUpdate(UpdateExpression update)
         {
             if (_mode == OceanBaseCompatibilityMode.Oracle)

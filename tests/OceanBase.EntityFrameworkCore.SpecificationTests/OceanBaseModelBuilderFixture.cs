@@ -6,18 +6,11 @@ using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Infrastructure;
-using Microsoft.EntityFrameworkCore.ModelBuilding;
 using Microsoft.EntityFrameworkCore.TestUtilities;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace OceanBase.EntityFrameworkCore.SpecificationTests
 {
-    public sealed class OceanBaseModelBuilderFixture(OceanBaseCompatibilityMode mode)
-        : RelationalModelBuilderTest.RelationalModelBuilderFixture
-    {
-        public override TestHelpers TestHelpers { get; } = new OceanBaseModelTestHelpers(mode);
-    }
-
     internal sealed class OceanBaseModelTestHelpers : RelationalTestHelpers
     {
         private readonly OceanBaseCompatibilityMode _mode;

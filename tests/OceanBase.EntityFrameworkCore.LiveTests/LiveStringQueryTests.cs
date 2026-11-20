@@ -492,7 +492,6 @@ namespace OceanBase.EntityFrameworkCore.LiveTests
                 var query = rows.OrderBy(row => row.Id).Select(row => new
                 {
                     row.Id, Both = (string?)row.Plain!.Trim(characters), Start = (string?)row.Plain!.TrimStart(characters),
-                    Forced = (string?)row.Plain!.Trim(EF.Constant(characters)),
                     End = (string?)row.Plain!.TrimEnd(characters), National = (string?)row.National!.Trim(characters),
                     Fixed = (string?)row.Fixed!.Trim(characters), NationalFixed = (string?)row.NationalFixed!.Trim(characters),
                     Lob = (string?)row.Large!.Trim(characters), Converted = (string?)row.Converted!.TrimStart(characters)
@@ -516,7 +515,6 @@ namespace OceanBase.EntityFrameworkCore.LiveTests
                     Assert.Equal(seed.Select(row => new
                     {
                         row.Id, Both = Normalize(row.Plain?.Trim(characters), mode), Start = Normalize(row.Plain?.TrimStart(characters), mode),
-                        Forced = Normalize(row.Plain?.Trim(characters), mode),
                         End = Normalize(row.Plain?.TrimEnd(characters), mode), National = Normalize(row.National?.Trim(characters), mode),
                         Fixed = Normalize(row.Fixed?.Trim(characters), mode), NationalFixed = Normalize(row.NationalFixed?.Trim(characters), mode),
                         Lob = row.Large?.Trim(characters), Converted = Decode(Normalize(Encode(row.Converted)?.TrimStart(characters), mode))

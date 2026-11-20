@@ -117,7 +117,6 @@ namespace OceanBase.EntityFrameworkCore.Storage
 
         public bool EnsureCreated()
         {
-            ValidateSeeder(async: false);
             bool created;
             if (!DatabaseManagementEnabled) created = CreateTables(onlyIfEmpty: true);
             else
@@ -126,14 +125,12 @@ namespace OceanBase.EntityFrameworkCore.Storage
                 created = ManageDatabase(delete: false, checkExists: true);
                 created = CreateTables(onlyIfEmpty: !created) || created;
             }
-            Seed(created);
             return created;
         }
 
         public async Task<bool> EnsureCreatedAsync(CancellationToken cancellationToken = default)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            ValidateSeeder(async: true);
             bool created;
             if (!DatabaseManagementEnabled) created = await CreateTablesAsync(onlyIfEmpty: true, cancellationToken).ConfigureAwait(false);
             else
@@ -142,7 +139,6 @@ namespace OceanBase.EntityFrameworkCore.Storage
                 created = await ManageDatabaseAsync(delete: false, checkExists: true, cancellationToken).ConfigureAwait(false);
                 created = await CreateTablesAsync(onlyIfEmpty: !created, cancellationToken).ConfigureAwait(false) || created;
             }
-            await SeedAsync(created, cancellationToken).ConfigureAwait(false);
             return created;
         }
 

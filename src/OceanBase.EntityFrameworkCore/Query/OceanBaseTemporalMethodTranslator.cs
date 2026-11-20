@@ -408,7 +408,7 @@ namespace OceanBase.EntityFrameworkCore.Query
                 // FromTimeSpan validates a clock range; unlike Add it must never wrap invalid durations.
                 var valid = factory.AndAlso(factory.GreaterThanOrEqual(ticks, factory.Constant(0L, integer)),
                     factory.LessThan(ticks, factory.Constant(TimeSpan.TicksPerDay, integer)));
-                var guarded = factory.Case([new CaseWhenClause(valid, ticks)], new SqlConstantExpression(null, typeof(long), integer));
+                var guarded = factory.Case([new CaseWhenClause(valid, ticks)], factory.Constant(null, typeof(long?), integer));
                 return factory.Function(TimeOnlyFromTicksMarker, [guarded], nullable: true,
                     argumentsPropagateNullability: [false], typeof(TimeOnly), mappingSource.FindMapping(typeof(TimeOnly)));
             }
@@ -449,7 +449,7 @@ namespace OceanBase.EntityFrameworkCore.Query
             // EF compensates nullable comparison values to false; guard the method's NULL result explicitly.
             var missing = factory.OrElse(factory.IsNull(instance), factory.OrElse(factory.IsNull(start), factory.IsNull(end)));
             return factory.Case([new CaseWhenClause(missing,
-                factory.Constant(null, typeof(bool), mappingSource.FindMapping(typeof(bool))))], factory.OrElse(normal, wrapped));
+                factory.Constant(null, typeof(bool?), mappingSource.FindMapping(typeof(bool))))], factory.OrElse(normal, wrapped));
 
             SqlExpression? MapBound(SqlExpression bound)
             {

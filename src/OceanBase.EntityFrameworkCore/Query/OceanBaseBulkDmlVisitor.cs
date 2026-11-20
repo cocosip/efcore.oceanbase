@@ -102,7 +102,7 @@ namespace OceanBase.EntityFrameworkCore.Query
                 return factory.Case(
                     [new CaseWhenClause(factory.Equal(value, factory.Constant(true, source)), factory.Constant(true, target)),
                         new CaseWhenClause(factory.Equal(value, factory.Constant(false, source)), factory.Constant(false, target))],
-                    factory.Constant(null, value.Type, target));
+                    factory.Constant(null, typeof(bool?), target));
             }
             throw new NotSupportedException("Bulk server expressions with incompatible value converters require an explicit provider translation.");
         }

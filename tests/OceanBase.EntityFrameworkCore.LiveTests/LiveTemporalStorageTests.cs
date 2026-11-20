@@ -91,7 +91,8 @@ namespace OceanBase.EntityFrameworkCore.LiveTests
                 var stamp = new DateTime(2024, 2, 29, 12, 34, 56);
                 await InsertAndRead(context, new Row { Id = 2, OracleDate = stamp, Day = SeedDay }, async);
                 var comparand = stamp.AddTicks(1);
-                var query = context.Set<Row>().Where(row => row.OracleDate < comparand && row.OracleDate < EF.Constant(comparand));
+                var query = context.Set<Row>().Where(row => row.OracleDate < comparand)
+                    .WhereLiteral(comparand, (row, literal) => row.OracleDate < literal);
                 Assert.Single(async ? await query.ToArrayAsync() : query.ToArray());
                 var invalid = new Row { Id = 99, OracleDate = comparand };
                 context.Add(invalid);
@@ -200,8 +201,11 @@ namespace OceanBase.EntityFrameworkCore.LiveTests
                 var result = async ? await query.SingleAsync() : query.Single();
                 Assert.True(result.Stamp && result.Clock && result.Zoned && result.Duration);
                 Assert.Equal(9, result.Choice);
-                var literal = context.Set<Row>().Where(row => row.FacetedStamp < EF.Constant(stamp) && row.FacetedClock < EF.Constant(clock)
-                    && row.FacetedDuration < EF.Constant(duration) && row.FacetedZoned < EF.Constant(zoned));
+                var literal = context.Set<Row>()
+                    .WhereLiteral(stamp, (row, value) => row.FacetedStamp < value)
+                    .WhereLiteral(clock, (row, value) => row.FacetedClock < value)
+                    .WhereLiteral(duration, (row, value) => row.FacetedDuration < value)
+                    .WhereLiteral(zoned, (row, value) => row.FacetedZoned < value);
                 Assert.Single(async ? await literal.ToArrayAsync() : literal.ToArray());
                 if (mode == OceanBaseCompatibilityMode.Oracle)
                 {

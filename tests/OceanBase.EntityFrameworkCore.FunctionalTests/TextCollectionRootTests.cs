@@ -59,21 +59,17 @@ public sealed class TextCollectionRootTests
     }
 
     [Theory]
-    [InlineData(OceanBaseCompatibilityMode.MySql, false, null)]
-    [InlineData(OceanBaseCompatibilityMode.MySql, true, null)]
-    [InlineData(OceanBaseCompatibilityMode.MySql, false, ParameterizedCollectionTranslationMode.Parameterize)]
-    [InlineData(OceanBaseCompatibilityMode.MySql, true, ParameterizedCollectionTranslationMode.Parameterize)]
-    [InlineData(OceanBaseCompatibilityMode.Oracle, false, null)]
-    [InlineData(OceanBaseCompatibilityMode.Oracle, true, null)]
-    [InlineData(OceanBaseCompatibilityMode.Oracle, false, ParameterizedCollectionTranslationMode.Parameterize)]
-    [InlineData(OceanBaseCompatibilityMode.Oracle, true, ParameterizedCollectionTranslationMode.Parameterize)]
+    [InlineData(OceanBaseCompatibilityMode.MySql, false)]
+    [InlineData(OceanBaseCompatibilityMode.MySql, true)]
+    [InlineData(OceanBaseCompatibilityMode.Oracle, false)]
+    [InlineData(OceanBaseCompatibilityMode.Oracle, true)]
     public async Task Captured_text_roots_bind_current_values_and_read_nullable_rows(
-        OceanBaseCompatibilityMode mode, bool async, ParameterizedCollectionTranslationMode? translation)
+        OceanBaseCompatibilityMode mode, bool async)
     {
         using var table = new DataTable();
         table.Columns.Add("Text", typeof(object));
         var capture = new Capture(table);
-        await using var context = CreateExplicit(mode, capture, translation);
+        await using var context = Create(mode, capture);
         string?[] values = ["one", null, "two"];
         var query = context.Rows.Where(row => values.Contains(row.Text)).Select(row => row.Text);
 
@@ -100,22 +96,18 @@ public sealed class TextCollectionRootTests
     }
 
     [Theory]
-    [InlineData(OceanBaseCompatibilityMode.MySql, false, null)]
-    [InlineData(OceanBaseCompatibilityMode.MySql, true, null)]
-    [InlineData(OceanBaseCompatibilityMode.MySql, false, ParameterizedCollectionTranslationMode.Parameterize)]
-    [InlineData(OceanBaseCompatibilityMode.MySql, true, ParameterizedCollectionTranslationMode.Parameterize)]
-    [InlineData(OceanBaseCompatibilityMode.Oracle, false, null)]
-    [InlineData(OceanBaseCompatibilityMode.Oracle, true, null)]
-    [InlineData(OceanBaseCompatibilityMode.Oracle, false, ParameterizedCollectionTranslationMode.Parameterize)]
-    [InlineData(OceanBaseCompatibilityMode.Oracle, true, ParameterizedCollectionTranslationMode.Parameterize)]
+    [InlineData(OceanBaseCompatibilityMode.MySql, false)]
+    [InlineData(OceanBaseCompatibilityMode.MySql, true)]
+    [InlineData(OceanBaseCompatibilityMode.Oracle, false)]
+    [InlineData(OceanBaseCompatibilityMode.Oracle, true)]
     public async Task Captured_converted_text_roots_bind_provider_values(
-        OceanBaseCompatibilityMode mode, bool async, ParameterizedCollectionTranslationMode? translation)
+        OceanBaseCompatibilityMode mode, bool async)
     {
         using var table = new DataTable();
         table.Columns.Add("Text", typeof(object));
         table.Rows.Add("reader!");
         var capture = new Capture(table);
-        await using var context = CreateExplicit(mode, capture, translation);
+        await using var context = Create(mode, capture);
         List<string?> values = ["one", "two"];
         var query = context.ConvertedRows
             .Where(row => values.Contains(row.Text)).Select(row => row.Text);
@@ -164,21 +156,10 @@ public sealed class TextCollectionRootTests
     private static TestContext Create(OceanBaseCompatibilityMode mode, Capture capture)
         => new(Options(mode, capture));
 
-    private static TestContext CreateExplicit(OceanBaseCompatibilityMode mode, Capture capture,
-        ParameterizedCollectionTranslationMode? translation)
-        => new(Options(mode, capture, translation));
-
-    private static DbContextOptions<TestContext> Options(OceanBaseCompatibilityMode mode, Capture capture,
-        ParameterizedCollectionTranslationMode? collectionMode = null)
+    private static DbContextOptions<TestContext> Options(OceanBaseCompatibilityMode mode, Capture capture)
     {
         var builder = new DbContextOptionsBuilder<TestContext>().UseOceanBase("Server=offline;Database=text_roots", mode)
             .EnableServiceProviderCaching(false).AddInterceptors(new NoNetwork(), capture);
-        if (collectionMode is { } configured)
-        {
-            var extension = builder.Options.Extensions.OfType<RelationalOptionsExtension>().Single()
-                .WithParameterizedCollectionTranslationMode(configured);
-            ((IDbContextOptionsBuilderInfrastructure)builder).AddOrUpdateExtension(extension);
-        }
         return builder.Options;
     }
 

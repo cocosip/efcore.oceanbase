@@ -2,6 +2,8 @@ using System;
 using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using OceanBaseSamples;
 
 namespace OceanBaseProviderValidation;
@@ -20,7 +22,7 @@ internal static class Program
             var history = profile.Prefix + "H";
             var journal = profile.Prefix + "J";
             var line = profile.Prefix + "L";
-            var tables = new[] { history, history + "Lock", journal, line };
+            var tables = new[] { history, journal, line };
             Console.WriteLine($"OceanBase EF Core migration sample ({profile.Mode})");
 
             stage = "connect and validate object scope";
@@ -28,6 +30,7 @@ internal static class Program
             {
                 commands = observer;
                 await using var context = profile.Create(connection, scope, observer);
+                var migrator = context.GetService<IMigrator>();
                 var migrations = context.Database.GetMigrations().ToArray();
                 Require(migrations.Length == 2 && migrations[0].EndsWith("_InitialJournal", StringComparison.Ordinal)
                     && migrations[1].EndsWith("_AddJournalNotes", StringComparison.Ordinal), "Generate both migrations with Run-Migrations.ps1.");
@@ -35,7 +38,7 @@ internal static class Program
                 stage = "apply initial migration and insert a row";
                 var first = migrations[0];
                 Require((await context.Database.GetPendingMigrationsAsync()).SequenceEqual(migrations), "Expected two pending migrations.");
-                await context.Database.MigrateAsync(first);
+                await migrator.MigrateAsync(first);
                 await using (var initial = (profile with { Revision = 1 }).Create(connection, scope, observer))
                 {
                     initial.Lines.Add(new JournalLine
@@ -61,7 +64,7 @@ internal static class Program
                 Passed(profile, stage);
 
                 stage = "roll back upgrade, preserve row and reapply twice";
-                await context.Database.MigrateAsync(first);
+                await migrator.MigrateAsync(first);
                 Require((await context.Database.GetAppliedMigrationsAsync()).SequenceEqual([first]), "Rollback must remove the second history row.");
                 await using (var restored = (profile with { Revision = 1 }).Create(connection, scope, observer))
                     Require(await restored.Lines.AnyAsync(entry => entry.Number == 1 && entry.Journal.Id == 1),
@@ -73,7 +76,7 @@ internal static class Program
                 Passed(profile, stage);
 
                 stage = "roll back to zero";
-                await context.Database.MigrateAsync("0");
+                await migrator.MigrateAsync(Migration.InitialDatabase);
                 Require(!(await context.Database.GetAppliedMigrationsAsync()).Any(), "Expected an empty migration history.");
                 Require(!await SampleDatabase.Exists(context, profile.Mode, journal)
                     && !await SampleDatabase.Exists(context, profile.Mode, line), "Rollback to zero must drop both application tables.");

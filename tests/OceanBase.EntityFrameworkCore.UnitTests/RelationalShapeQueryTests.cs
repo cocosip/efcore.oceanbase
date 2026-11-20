@@ -11,7 +11,7 @@ using Microsoft.EntityFrameworkCore.Storage.Internal;
 using OceanBaseConnector;
 using Xunit;
 
-#pragma warning disable EF1001 // EF9-only collection options infrastructure.
+#pragma warning disable EF1001 // Assert EF8 collection element metadata.
 
 namespace OceanBase.EntityFrameworkCore.UnitTests
 {
@@ -22,7 +22,7 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
         [InlineData(OceanBaseCompatibilityMode.MySql, true)]
         [InlineData(OceanBaseCompatibilityMode.Oracle, false)]
         [InlineData(OceanBaseCompatibilityMode.Oracle, true)]
-        public void Captured_integer_arrays_and_lists_expand_to_scalar_membership(OceanBaseCompatibilityMode mode, bool relationalNulls)
+        public void Captured_integer_arrays_and_lists_use_json_membership(OceanBaseCompatibilityMode mode, bool relationalNulls)
         {
             using var context = CreateContext(mode, relationalNulls);
             int[] values = [2, 7, 11];
@@ -39,9 +39,9 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             foreach (var query in queries)
             {
                 var sql = query.ToQueryString();
-                Assert.Contains(" IN (", sql);
+                Assert.True(sql.Contains(" IN (", StringComparison.Ordinal) || sql.Contains("EXISTS (", StringComparison.Ordinal), sql);
                 Assert.True(sql.Contains(mode == OceanBaseCompatibilityMode.MySql ? "@" : ":", StringComparison.Ordinal), query.Expression + "\n" + sql);
-                Assert.DoesNotContain("JSON", sql, StringComparison.OrdinalIgnoreCase);
+                Assert.Contains("JSON_TABLE(", sql);
             }
         }
 
@@ -110,7 +110,7 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
         [InlineData(OceanBaseCompatibilityMode.MySql, true)]
         [InlineData(OceanBaseCompatibilityMode.Oracle, false)]
         [InlineData(OceanBaseCompatibilityMode.Oracle, true)]
-        public void Membership_modes_and_inline_converted_values_keep_the_inherited_boundaries(OceanBaseCompatibilityMode mode, bool relationalNulls)
+        public void Captured_and_inline_membership_use_the_expected_bindings(OceanBaseCompatibilityMode mode, bool relationalNulls)
         {
             using var context = CreateContext(mode, relationalNulls);
             int[] values = [int.MinValue, 7, int.MaxValue];
@@ -118,38 +118,11 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             Assert.Contains(" IN (", context.Rows.Where(row => Enumerable.Contains(values, row.Converted)).ToQueryString());
             RowState[] states = [RowState.Inactive, RowState.Active];
             Assert.Contains(" IN (", context.Rows.Where(row => Enumerable.Contains(states, row.State)).ToQueryString());
-            var constant = context.Rows.Where(row => Enumerable.Contains(EF.Constant(values), row.Id)).ToQueryString();
+            var constant = context.Rows.Where(row => Enumerable.Contains(new[] { int.MinValue, 7, int.MaxValue }, row.Id)).ToQueryString();
             Assert.Contains("-2147483648, 7, 2147483647", constant);
             Assert.DoesNotContain("@values", constant);
             Assert.DoesNotContain(":values", constant);
-            using var constants = CreateContext(mode, relationalNulls, ParameterizedCollectionTranslationMode.Constantize);
-            Assert.Contains("-2147483648, 7, 2147483647", constants.Rows.Where(row => Enumerable.Contains(values, row.Id)).ToQueryString());
-            using var parameters = CreateContext(mode, relationalNulls, ParameterizedCollectionTranslationMode.Parameterize);
-            Assert.Contains("JSON_TABLE(", parameters.Rows.Where(row => Enumerable.Contains(values, row.Id)).ToQueryString());
-            Assert.Contains("JSON_TABLE(", context.Rows.Where(row => Enumerable.Contains(EF.Parameter(values), row.Id)).ToQueryString());
-            Assert.Throws<NotSupportedException>(() => parameters.Rows.Where(row => values.Contains(row.Converted)).ToQueryString());
-        }
-
-        [Theory]
-        [InlineData(OceanBaseCompatibilityMode.MySql, false)]
-        [InlineData(OceanBaseCompatibilityMode.MySql, true)]
-        [InlineData(OceanBaseCompatibilityMode.Oracle, false)]
-        [InlineData(OceanBaseCompatibilityMode.Oracle, true)]
-        public void Context_collection_modes_do_not_reuse_another_modes_compiled_query(OceanBaseCompatibilityMode mode, bool constantFirst)
-        {
-            int[] values = [43, 47, 53];
-            foreach (var constant in new[] { constantFirst, !constantFirst, constantFirst })
-            {
-                using var context = CreateContext(mode, collectionMode: constant ? ParameterizedCollectionTranslationMode.Constantize : null);
-                var sql = context.Rows.TagWith(constantFirst ? "constant-first" : "default-first")
-                    .Where(row => Enumerable.Contains(values, row.Id)).ToQueryString();
-                Assert.Equal(constant, sql.Contains("43, 47, 53", StringComparison.Ordinal));
-                Assert.Equal(!constant, sql.Contains(mode == OceanBaseCompatibilityMode.MySql ? "@__ob_collection_" : ":__ob_collection_", StringComparison.Ordinal));
-            }
-            using var defaults = CreateContext(mode);
-            using var parameters = CreateContext(mode, collectionMode: ParameterizedCollectionTranslationMode.Parameterize);
-            Assert.DoesNotContain("JSON_TABLE(", defaults.Rows.Where(row => Enumerable.Contains(values, row.Id)).ToQueryString());
-            Assert.Contains("JSON_TABLE(", parameters.Rows.Where(row => Enumerable.Contains(values, row.Id)).ToQueryString());
+            Assert.Contains("JSON_TABLE(", context.Rows.Where(row => Enumerable.Contains(values, row.Id)).ToQueryString());
         }
 
         [Theory]
@@ -160,9 +133,9 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
         public void Membership_null_empty_negation_projection_and_case_are_processed_by_EF(OceanBaseCompatibilityMode mode, bool relationalNulls)
         {
             using var context = CreateContext(mode, relationalNulls);
-            int?[] values = [];
-            var query = context.Rows.Select(row => new { Match = Enumerable.Contains(values, row.Optional),
-                Not = !Enumerable.Contains(values, row.Optional), Choice = Enumerable.Contains(values, row.Optional) ? 7 : 9 });
+            short?[] values = [];
+            var query = context.Rows.Select(row => new { Match = Enumerable.Contains(values, row.OptionalSmall),
+                Not = !Enumerable.Contains(values, row.OptionalSmall), Choice = Enumerable.Contains(values, row.OptionalSmall) ? 7 : 9 });
             var empty = query.ToQueryString();
             Assert.DoesNotContain(" IN (", empty);
             Assert.DoesNotContain("IN ()", empty);
@@ -179,14 +152,14 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             Assert.Contains(" IN (", mixed);
             Assert.Contains("CASE", mixed);
             Assert.Equal(!relationalNulls, mixed.Contains("IS NULL", StringComparison.Ordinal));
-            Assert.Contains(" IN (", context.Rows.Select(row => (bool?)Enumerable.Contains(values, row.Optional)).ToQueryString());
-            Assert.Contains(" IN (", context.Rows.Where(row => !Enumerable.Contains(values, row.Optional)).ToQueryString());
+            Assert.Contains(" IN (", context.Rows.Select(row => (bool?)Enumerable.Contains(values, row.OptionalSmall)).ToQueryString());
+            Assert.Contains(" IN (", context.Rows.Where(row => !Enumerable.Contains(values, row.OptionalSmall)).ToQueryString());
             values = null!;
             Assert.Equal(empty, query.ToQueryString());
-            Assert.DoesNotContain(" IN (", context.Rows.Where(row => !Enumerable.Contains(values!, row.Optional)).ToQueryString());
-            Assert.DoesNotContain(" IN (", context.Rows.Where(row => Enumerable.Contains(Array.Empty<int>(), row.Id)).ToQueryString());
-            int[] required = [];
-            var requiredQuery = context.Rows.Select(row => Enumerable.Contains(required, row.Id));
+            Assert.DoesNotContain(" IN (", context.Rows.Where(row => !Enumerable.Contains(values!, row.OptionalSmall)).ToQueryString());
+            Assert.DoesNotContain("IN ()", context.Rows.Where(row => Enumerable.Contains(new short[] { }, row.Small)).ToQueryString());
+            short[] required = [];
+            var requiredQuery = context.Rows.Select(row => Enumerable.Contains(required, row.Small));
             var emptyRequired = requiredQuery.ToQueryString();
             required = null!;
             Assert.Equal(emptyRequired, requiredQuery.ToQueryString());
@@ -272,13 +245,11 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             Assert.DoesNotContain("COUNT_BIG", converted);
         }
 
-        private static TestContext CreateContext(OceanBaseCompatibilityMode mode, bool relationalNulls = false,
-            ParameterizedCollectionTranslationMode? collectionMode = null)
+        private static TestContext CreateContext(OceanBaseCompatibilityMode mode, bool relationalNulls = false)
         {
             var builder = new DbContextOptionsBuilder<TestContext>().UseOceanBase("Server=localhost;Database=test", mode);
             var extension = builder.Options.Extensions.OfType<RelationalOptionsExtension>().Single()
                 .WithUseRelationalNulls(relationalNulls);
-            if (collectionMode.HasValue) extension = extension.WithParameterizedCollectionTranslationMode(collectionMode.Value);
             ((IDbContextOptionsBuilderInfrastructure)builder).AddOrUpdateExtension(extension);
             return new TestContext(builder.Options);
         }
@@ -299,6 +270,8 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             public int Id { get; set; }
             public int ParentId { get; set; }
             public int? Optional { get; set; }
+            public short Small { get; set; }
+            public short? OptionalSmall { get; set; }
             public int Converted { get; set; }
             public RowState State { get; set; }
         }

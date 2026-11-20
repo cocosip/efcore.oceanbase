@@ -62,7 +62,7 @@ public sealed class ManyToManyRuntimeTests(ITestOutputHelper output)
         Assert.Contains("EXISTS", first.Sql);
         Assert.Contains("INNER JOIN", first.Sql);
         Assert.Contains("WHERE c.TenantId = ?", Template(first.Sql));
-        Assert.Matches(@"WHERE s.Id = m.StudentId AND c0.Name =", Unquote(first.Sql));
+        Assert.Contains("WHERE s.Id = m.StudentId AND t.Name =", Unquote(first.Sql));
         context.TenantId = 2;
         name = "a'_%";
         capture.Items.Clear();
@@ -107,7 +107,7 @@ public sealed class ManyToManyRuntimeTests(ITestOutputHelper output)
             Assert.Equal(3, context.ChangeTracker.Entries().Count(e => e.Metadata.Name == "Membership"));
             Assert.All(rows, s => Assert.True(context.Entry(s).Collection(s => s.Courses).IsLoaded));
         }
-        AssertIncludeProjection(Assert.Single(capture.Items).Sql, "s0", tracking);
+        AssertIncludeProjection(Assert.Single(capture.Items).Sql, "t0", tracking);
         capture.Items.Clear();
         context.ChangeTracker.Clear();
         capture.Results = IncludeTable(tracking);
@@ -135,11 +135,11 @@ public sealed class ManyToManyRuntimeTests(ITestOutputHelper output)
         Assert.Same(rows[0], Assert.Single(rows[0].Courses[0].Students));
         Assert.Empty(rows[1].Courses);
         var command = Assert.Single(capture.Items);
-        AssertIncludeProjection(command.Sql, "s1", tracking);
+        AssertIncludeProjection(command.Sql, "t1", tracking);
         var sql = Unquote(command.Sql);
-        Assert.Contains("ROW_NUMBER() OVER(PARTITION BY m.StudentId ORDER BY c0.Id)", sql);
-        Assert.Contains("WHERE s0.row <= 1", sql);
-        Assert.Contains("WHERE c0.Id > ?", Template(command.Sql));
+        Assert.Contains("ROW_NUMBER() OVER(PARTITION BY m.StudentId ORDER BY t.Id)", sql);
+        Assert.Contains("WHERE t0.row <= 1", sql);
+        Assert.Contains("WHERE t.Id > ?", Template(command.Sql));
         Assert.Contains("WHERE c.TenantId = ?", Template(command.Sql));
         Assert.Equal(new object?[] { 1, minimum }, command.Inputs);
         Assert.Equal(tracking == QueryTrackingBehavior.TrackAll ? 4 : 0, context.ChangeTracker.Entries().Count());
@@ -158,7 +158,7 @@ public sealed class ManyToManyRuntimeTests(ITestOutputHelper output)
             ? $"SELECT s.Id, s.Name, {related}.Id, {related}.Name, {related}.TenantId, {related}.CourseId, {related}.StudentId"
             : $"SELECT s.Id, s.Name, {related}.CourseId, {related}.StudentId, {related}.Id, {related}.Name, {related}.TenantId", sql);
         Assert.Contains($"ON s.Id = {related}.StudentId", sql);
-        Assert.Contains("ON m.CourseId = c0.Id", sql);
+        Assert.Contains("ON m.CourseId = t.Id", sql);
     }
 
     [Theory]
@@ -192,9 +192,9 @@ public sealed class ManyToManyRuntimeTests(ITestOutputHelper output)
         else Assert.Empty(context.ChangeTracker.Entries());
         var sql = Unquote(Assert.Single(capture.Items).Sql);
         Assert.StartsWith(tracking == QueryTrackingBehavior.NoTracking
-            ? "SELECT a.Id, a.Title, s.Id, s.Name, s.ArticleId, s.TagId"
-            : "SELECT a.Id, a.Title, s.ArticleId, s.TagId, s.Note, s.Version, s.Id, s.Name", sql);
-        Assert.Contains("ON a.Id = s.ArticleId", sql);
+            ? "SELECT a.Id, a.Title, t0.Id, t0.Name, t0.ArticleId, t0.TagId"
+            : "SELECT a.Id, a.Title, t0.ArticleId, t0.TagId, t0.Note, t0.Version, t0.Id, t0.Name", sql);
+        Assert.Contains("ON a.Id = t0.ArticleId", sql);
         Assert.Contains("ON a0.TagId = t.Id", sql);
     }
 

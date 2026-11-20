@@ -14,8 +14,11 @@ namespace OceanBase.EntityFrameworkCore.Query
         IRelationalTypeMappingSource mappings, IModel model) : ExpressionVisitor
     {
         private readonly Metadata _metadata = new();
-        private readonly Dictionary<string, RelationalTypeMapping> _contextual = [];
+        private readonly Dictionary<TableExpressionBase, RelationalTypeMapping> _contextual = new(ReferenceEqualityComparer.Instance);
         private bool _applyProjectionMappings;
+
+        internal RelationalTypeMapping? GetContextualMapping(TableExpressionBase table, string column)
+            => Root(table, column) is { } root ? _contextual.GetValueOrDefault(root) : null;
 
         public Expression Normalize(Expression expression, bool applyProjectionMappings = false)
         {
@@ -77,37 +80,64 @@ namespace OceanBase.EntityFrameworkCore.Query
                 && Root(element) is { } root ? _contextual.GetValueOrDefault(root) : null;
 
         private bool IsDefault(ColumnExpression column)
-            => ReferenceEquals(column.TypeMapping, mappings.FindMapping(column.Type, model));
+            => column.TypeMapping is { } current && mappings.FindMapping(column.Type, model) is { } baseline
+                && current.StoreType == baseline.StoreType && ReferenceEquals(current.Converter, baseline.Converter);
 
-        private string? Root(ColumnExpression column)
+        private static TableExpressionBase? Root(ColumnExpression column) => Root(column.Table, column.Name);
+
+        private static TableExpressionBase? Root(TableExpressionBase table, string column)
         {
-            var key = (column.TableAlias, column.Name);
-            var visited = new HashSet<(string, string)>();
-            while (visited.Add(key))
+            while (true)
             {
-                if (key.Name == "Value" && _metadata.UntypedRoots.Contains(key.TableAlias)) return key.TableAlias;
-                if (!_metadata.Forwarded.TryGetValue(key, out var forwarded)) return null;
-                key = (forwarded.TableAlias, forwarded.Name);
+                switch (table)
+                {
+                    case JoinExpressionBase join:
+                        table = join.Table;
+                        break;
+                    case SelectExpression select
+                        when select.Projection.FirstOrDefault(p => p.Alias == column)?.Expression is ColumnExpression forwarded:
+                        (table, column) = (forwarded.Table, forwarded.Name);
+                        break;
+                    case TableValuedFunctionExpression collection when column == "Value"
+                        && (collection.FindAnnotation(OceanBaseQueryableMethodTranslatingExpressionVisitorFactory.ParameterCollectionAnnotation) is not null
+                            || collection.FindAnnotation(OceanBaseQueryableMethodTranslatingExpressionVisitorFactory.EmptyElementTypeAnnotation) is not null):
+                        return collection;
+                    case ValuesExpression values:
+                        var index = values.ColumnNames.ToList().IndexOf("Value");
+                        return column == "Value" && index >= 0 && values.RowValues.All(row => row.Values[index].TypeMapping is null)
+                            ? values : null;
+                    default:
+                        return null;
+                }
             }
-            return null;
         }
 
         private static void Validate(RelationalTypeMapping expected, RelationalTypeMapping actual)
         {
-            if (expected.StoreType != actual.StoreType || !ReferenceEquals(expected.Converter, actual.Converter))
+            if (!Equivalent(expected, actual))
                 throw new InvalidOperationException(RelationalStrings.ConflictingTypeMappingsInferredForColumn("Value"));
         }
+
+        private static bool Equivalent(RelationalTypeMapping expected, RelationalTypeMapping actual)
+            => ReferenceEquals(expected, actual)
+                || ReferenceEquals(expected.Converter, actual.Converter)
+                    && (expected.StoreType == actual.StoreType
+                        // Oracle NUMBER(p) and NUMBER(p,0) use the same integral carrier.
+                        || expected.ClrType == actual.ClrType
+                            && expected.StoreTypeNameBase == "NUMBER" && actual.StoreTypeNameBase == "NUMBER"
+                            && expected.Precision == actual.Precision && expected.Precision is not null
+                            && expected.Scale.GetValueOrDefault() == 0 && actual.Scale.GetValueOrDefault() == 0
+                            && (expected.StoreType == actual.StoreType.Replace(",0)", ")", StringComparison.Ordinal)
+                                || actual.StoreType == expected.StoreType.Replace(",0)", ")", StringComparison.Ordinal)));
 
         private sealed class Metadata : ExpressionVisitor
         {
             private bool _requiresMapping;
-            public HashSet<string> UntypedRoots { get; } = [];
             public List<ColumnExpression> Columns { get; } = [];
             public List<ColumnExpression> Requirements { get; } = [];
             public List<ScalarSubqueryExpression> ResultRequirements { get; } = [];
             public HashSet<ColumnExpression> Projections { get; } = new(ReferenceEqualityComparer.Instance);
             public HashSet<ColumnExpression> NullTests { get; } = new(ReferenceEqualityComparer.Instance);
-            public Dictionary<(string, string), ColumnExpression> Forwarded { get; } = [];
 
             protected override Expression VisitExtension(Expression node)
             {
@@ -143,17 +173,6 @@ namespace OceanBase.EntityFrameworkCore.Query
                     new ProjectionBindings(Projections).Visit(shaped.ShaperExpression);
                     return Visit(shaped.QueryExpression);
                 }
-                if (node is ValuesExpression values)
-                {
-                    var index = values.ColumnNames.ToList().IndexOf("Value");
-                    if (index >= 0 && (values.ValuesParameter is { TypeMapping: null }
-                        || values.RowValues is { } rows && rows.All(row => row.Values[index].TypeMapping is null)))
-                        UntypedRoots.Add(values.Alias);
-                }
-                if (node is SelectExpression { Alias: { } alias } select)
-                    foreach (var projection in select.Projection)
-                        if (projection.Expression is ColumnExpression forwarded)
-                            Forwarded[(alias, projection.Alias)] = forwarded;
                 if (node is ProjectionExpression { Expression: ColumnExpression projected }) Projections.Add(projected);
                 if (node is ColumnExpression { TypeMapping: not null } column)
                 {

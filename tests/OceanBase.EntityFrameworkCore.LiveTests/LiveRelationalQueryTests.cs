@@ -3,12 +3,8 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Internal;
 using Microsoft.EntityFrameworkCore.Infrastructure;
-using Microsoft.EntityFrameworkCore.Query;
 using Xunit;
-
-#pragma warning disable EF1001 // EF9-only collection options infrastructure.
 
 namespace OceanBase.EntityFrameworkCore.LiveTests
 {
@@ -54,14 +50,14 @@ namespace OceanBase.EntityFrameworkCore.LiveTests
                 stage("read JSON ordinality and signed Int64 extrema");
                 List<long?> values = [long.MinValue, null, long.MaxValue, long.MinValue];
                 var singleRow = rows.Where(row => row.Id == 1);
-                var projected = singleRow.Select(row => EF.Parameter(values).ElementAt(0));
+                var projected = singleRow.Select(row => values.ElementAt(0));
                 Assert.Equal(long.MinValue, Assert.Single(await Read(projected, async)));
                 values[0] = long.MaxValue;
                 Assert.Equal(long.MaxValue, Assert.Single(await Read(projected, async)));
                 values[0] = null;
                 Assert.Null(Assert.Single(await Read(projected, async)));
                 values[3] = long.MaxValue;
-                var duplicates = singleRow.Select(row => EF.Parameter(values).Count(value => value == long.MaxValue));
+                var duplicates = singleRow.Select(row => values.Count(value => value == long.MaxValue));
                 Assert.Equal(2, Assert.Single(await Read(duplicates, async)));
 
                 stage("join a JSON collection and execute an independent converted predicate");
@@ -69,7 +65,7 @@ namespace OceanBase.EntityFrameworkCore.LiveTests
                 var joined = rows.Join(keys, row => row.Id, key => key, (row, key) => new { row.Rank, Key = key })
                     .Where(row => row.Rank == Rank.Mid).OrderBy(row => row.Key).Select(row => row.Key);
                 Assert.Equal(new[] { 4, 4 }, await Read(joined, async));
-            }, ParameterizedCollectionTranslationMode.Parameterize);
+            });
 
         [Theory]
         [MemberData(nameof(Cases))]
@@ -289,7 +285,6 @@ namespace OceanBase.EntityFrameworkCore.LiveTests
                 var positive = rows.Where(row => values.Contains(row.Bucket)).OrderBy(row => row.Id).Select(row => row.Id);
                 var negative = rows.Where(row => !values.Contains(row.Bucket)).OrderBy(row => row.Id).Select(row => row.Id);
                 var listed = rows.Where(row => list.Contains(row.Bucket)).OrderBy(row => row.Id).Select(row => row.Id);
-                var forced = rows.Where(row => EF.Parameter(values).Contains(row.Bucket)).OrderBy(row => row.Id).Select(row => row.Id);
                 foreach (var input in new int?[][] { [], [10, null, 10], [20], [null, null], [], [10] })
                 {
                     stage("captured nullable membership length=" + input.Length);
@@ -298,7 +293,6 @@ namespace OceanBase.EntityFrameworkCore.LiveTests
                     var expectedPositive = seed.Where(row => Membership(row.Bucket, input, relationalNulls) == true).Select(row => row.Id).ToArray();
                     Assert.Equal(expectedPositive, await Read(positive, async));
                     Assert.Equal(expectedPositive, await Read(listed, async));
-                    Assert.Equal(expectedPositive, await Read(forced, async));
                     Assert.Equal(seed.Where(row => Membership(row.Bucket, input, relationalNulls) == false).Select(row => row.Id), await Read(negative, async));
                 }
                 stage("inline null membership and explicit comparer rejection");
@@ -308,33 +302,6 @@ namespace OceanBase.EntityFrameworkCore.LiveTests
                 Assert.Equal(6, async ? await rows.CountAsync() : rows.Count());
                 Assert.Empty(context.ChangeTracker.Entries());
             });
-
-        [Theory]
-        [MemberData(nameof(Cases))]
-        public async Task Explicit_parameter_membership_requires_and_honors_the_configured_collection_mode(OceanBaseCompatibilityMode mode, bool async, bool relationalNulls)
-        {
-            foreach (var translation in new[] { ParameterizedCollectionTranslationMode.Constantize, ParameterizedCollectionTranslationMode.Parameterize })
-                await WithTable(mode, async, relationalNulls, async (context, stage) =>
-                {
-                    int?[] values = [];
-                    List<int?> list = [];
-                    var rows = context.Set<Row>();
-                    var forced = rows.Where(row => EF.Parameter(values).Contains(row.Bucket)).OrderBy(row => row.Id).Select(row => row.Id);
-                    var listed = rows.Where(row => EF.Parameter(list).Contains(row.Bucket)).OrderBy(row => row.Id).Select(row => row.Id);
-                    var constants = rows.Where(row => EF.Constant(values).Contains(row.Bucket)).OrderBy(row => row.Id).Select(row => row.Id);
-                    foreach (var input in new int?[][] { [], [10, null, 10], [20], [null, null], [], [10] })
-                    {
-                        stage($"explicit membership mode={translation},length={input.Length}");
-                        values = input;
-                        list = input.ToList();
-                        var expected = Seed().Where(row => Membership(row.Bucket, input, relationalNulls) == true).Select(row => row.Id);
-                        Assert.Equal(expected, await Read(forced, async));
-                        Assert.Equal(expected, await Read(listed, async));
-                        Assert.Equal(expected, await Read(constants, async));
-                    }
-                    Assert.Equal(6, async ? await rows.CountAsync() : rows.Count());
-                }, translation);
-        }
 
         [Theory]
         [MemberData(nameof(Cases))]
@@ -427,9 +394,10 @@ namespace OceanBase.EntityFrameworkCore.LiveTests
                     var matched = context.Set<Row>().Where(row => row.Id == 1).SelectMany(row => values.Where(value =>
                         value == EF.Property<string?>(row, property)));
                     AssertMultiset(expected.ToArray(), await Read(matched, async));
-                    var constants = context.Set<Row>().Where(row => row.Id == 1).SelectMany(row => EF.Constant(values).Where(value =>
-                        value == EF.Property<string?>(row, property)));
-                    AssertMultiset(expected.ToArray(), await Read(constants, async));
+                    var inline = context.Set<Row>().Where(row => row.Id == 1).SelectMany(row =>
+                        new string?[] { "one", "ONE", "one ", "oné", "海", null }.Where(value =>
+                            value == EF.Property<string?>(row, property)));
+                    AssertMultiset(expected.Where(value => value is null || value.Length <= 4).ToArray(), await Read(inline, async));
                 }
             });
 
@@ -558,15 +526,13 @@ namespace OceanBase.EntityFrameworkCore.LiveTests
             }
         }
 
-        private static Task WithTable(OceanBaseCompatibilityMode mode, bool async, bool relationalNulls, Func<QueryContext, Action<string>, Task> run,
-            ParameterizedCollectionTranslationMode? translation = null)
+        private static Task WithTable(OceanBaseCompatibilityMode mode, bool async, bool relationalNulls, Func<QueryContext, Action<string>, Task> run)
             => LiveStorageTable.WithTable<QueryContext>(mode, async, false,
                 (options, table) =>
                 {
                     var builder = new DbContextOptionsBuilder<QueryContext>(options).UseQueryTrackingBehavior(QueryTrackingBehavior.NoTracking)
                         .ReplaceService<IModelCacheKeyFactory, CacheKey>();
                     var extension = builder.Options.Extensions.OfType<RelationalOptionsExtension>().Single().WithUseRelationalNulls(relationalNulls);
-                    if (translation.HasValue) extension = extension.WithParameterizedCollectionTranslationMode(translation.Value);
                     ((IDbContextOptionsBuilderInfrastructure)builder).AddOrUpdateExtension(extension);
                     return new QueryContext(builder.Options, mode, table);
                 },

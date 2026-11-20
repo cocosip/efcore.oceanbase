@@ -224,7 +224,7 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
             Assert.Empty(result[2].Children!);
             Assert.Matches(mode == OceanBaseCompatibilityMode.MySql
                 ? @"^SELECT CASE WHEN (\w+)\.c IS NULL THEN NULL ELSE \1\.Id END, \1\.c IS NULL, \1\.Id, \w+\.Id FROM"
-                : @"^SELECT CASE WHEN (\w+)\.c IS NULL THEN NULL ELSE \1\.Id END, CASE WHEN \1\.c IS NULL THEN 1 WHEN \1\.c IS NOT NULL THEN 0 END, \1\.Id, \w+\.Id FROM",
+                : @"^SELECT CASE WHEN (\w+)\.c IS NULL THEN NULL ELSE \1\.Id END, CASE WHEN \1\.c IS NULL THEN 1 WHEN NOT \(\1\.c IS NULL\) THEN 0 ELSE NULL END, \1\.Id, \w+\.Id FROM",
                 commands.Items[^1].Sql);
             AssertClean(context, commands);
         }

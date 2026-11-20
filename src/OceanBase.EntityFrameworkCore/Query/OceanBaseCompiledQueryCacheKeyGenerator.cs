@@ -1,5 +1,4 @@
 using System.Linq.Expressions;
-using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Query;
 
 namespace OceanBase.EntityFrameworkCore.Query
@@ -12,8 +11,7 @@ namespace OceanBase.EntityFrameworkCore.Query
         private static readonly ConstantArraySnapshot Snapshot = new();
 
         public override object GenerateCacheKey(Expression query, bool async)
-            => (base.GenerateCacheKey(Snapshot.Visit(query), async),
-                RelationalOptionsExtension.Extract(RelationalDependencies.ContextOptions).ParameterizedCollectionTranslationMode);
+            => base.GenerateCacheKey(Snapshot.Visit(query), async);
 
         private sealed class ConstantArraySnapshot : ExpressionVisitor
         {
@@ -24,9 +22,7 @@ namespace OceanBase.EntityFrameworkCore.Query
                     && visited.Arguments[0] is ConstantExpression { Value: char[] characters })
                     return visited.Update(visited.Object, [Expression.Constant(characters.Clone(), typeof(char[]))]);
                 // EF compares arrays structurally; a cached key must not observe later mutations.
-                return OceanBaseSqlTranslatingExpressionVisitorFactory.GetConstantValues(visited) is { } values
-                    ? visited.Update(visited.Object, [visited.Arguments[0], Expression.Constant(values.Clone(), values.GetType())])
-                    : visited;
+                return visited;
             }
         }
     }

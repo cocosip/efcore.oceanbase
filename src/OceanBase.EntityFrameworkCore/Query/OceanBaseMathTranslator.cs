@@ -193,12 +193,12 @@ namespace OceanBase.EntityFrameworkCore.Query
             var absolute = sqlExpressionFactory.Function("ABS", [value], nullable: true,
                 argumentsPropagateNullability: [false], method.ReturnType, valueMapping);
             var signZero = sqlExpressionFactory.Constant(Convert.ChangeType(0, sign.Type), signMapping);
-            var signIsNull = sqlExpressionFactory.Equal(sign, sqlExpressionFactory.Constant(null, sign.Type, signMapping));
+            var signIsNull = sqlExpressionFactory.Equal(sign, sqlExpressionFactory.Constant(null, typeof(Nullable<>).MakeGenericType(sign.Type), signMapping));
             var negative = sqlExpressionFactory.Constant(Convert.ChangeType(-1, method.ReturnType), valueMapping);
             var positive = sqlExpressionFactory.Constant(Convert.ChangeType(1, method.ReturnType), valueMapping);
             var multiplier = sqlExpressionFactory.Case(
                 [
-                    new CaseWhenClause(signIsNull, sqlExpressionFactory.Constant(null, method.ReturnType, valueMapping)),
+                    new CaseWhenClause(signIsNull, sqlExpressionFactory.Constant(null, typeof(Nullable<>).MakeGenericType(method.ReturnType), valueMapping)),
                     new CaseWhenClause(sqlExpressionFactory.LessThan(sign, signZero), negative)
                 ], positive);
             return sqlExpressionFactory.Multiply(absolute, multiplier, valueMapping);
