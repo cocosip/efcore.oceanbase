@@ -1,0 +1,124 @@
+name: CI/CD
+
+on:
+  push:
+    branches:
+      - master
+      - 'efcore/**'
+    tags:
+      - 'v*.*.*'
+  pull_request:
+    branches:
+      - master
+      - 'efcore/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nuget-${{ github.ref }}
+
+jobs:
+  verify:
+    if: github.ref_name != 'dev'
+    strategy:
+      fail-fast: false
+      matrix:
+        os: ${{ github.ref_type == 'tag' && fromJSON('["windows-latest"]') || fromJSON('["ubuntu-latest","windows-latest"]') }}
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: pwsh
+    env:
+      DOTNET_NOLOGO: true
+      DOTNET_CLI_TELEMETRY_OPTOUT: true
+      OceanBasePackagePrefix: Sharp
+      NuGetAuditMode: all
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            10.0.x
+            9.0.x
+            8.0.x
+      - name: Resolve package version
+        id: release
+        run: |
+          $project = 'src/OceanBase.EntityFrameworkCore/OceanBase.EntityFrameworkCore.csproj'
+          $version = dotnet msbuild $project -nologo -getProperty:Version
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if ($env:GITHUB_REF_TYPE -eq 'tag') {
+            if ($version -cnotmatch '^\d+\.\d+\.\d+$' -or $env:GITHUB_REF_NAME -cne "v$version") {
+              throw "Release tag '$env:GITHUB_REF_NAME' must match the stable project version '$version'."
+            }
+            $major = ($version -split '\.')[0]
+            git merge-base --is-ancestor HEAD "refs/remotes/origin/efcore/$major.0"
+            if ($LASTEXITCODE -ne 0) { throw "Release commit must belong to efcore/$major.0." }
+          } else {
+            $version = "$version-ci.$env:GITHUB_RUN_NUMBER.$env:GITHUB_RUN_ATTEMPT"
+          }
+          "version=$version" >> $env:GITHUB_OUTPUT
+      - name: Run Release tests
+        run: dotnet test OceanBase.EntityFrameworkCore.slnx -c Release -m:1 -nr:false
+      - name: Pack and verify the package
+        env:
+          RELEASE_VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          $project = 'src/OceanBase.EntityFrameworkCore/OceanBase.EntityFrameworkCore.csproj'
+          $version = $env:RELEASE_VERSION
+          $package = "artifacts/release/Sharp.OceanBase.EntityFrameworkCore.$version.nupkg"
+          dotnet pack $project -c Release --no-restore "-p:PackageVersion=$version" -o artifacts/release -m:1 -nr:false
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          ./tests/OceanBase.EntityFrameworkCore.PackageConsumer/Verify-Package.ps1 `
+            -PackagePath $package -ExpectedVersion $version -ExpectedSourceRevision $env:GITHUB_SHA
+      - name: Run the isolated package consumer
+        if: github.ref_type == 'tag'
+        env:
+          RELEASE_VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          $consumer = 'tests/OceanBase.EntityFrameworkCore.PackageConsumer'
+          $project = "$consumer/OceanBase.EntityFrameworkCore.PackageConsumer.csproj"
+          $feed = (Resolve-Path artifacts/release).Path
+          dotnet restore $project --packages artifacts/release-cache `
+            "-p:RestoreAdditionalProjectSources=$feed" "-p:OceanBaseProviderVersion=$env:RELEASE_VERSION" `
+            -p:NuGetAudit=true
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          dotnet run --project $project -c Release --no-restore "-p:OceanBaseProviderVersion=$env:RELEASE_VERSION"
+      - uses: actions/upload-artifact@v4
+        if: github.ref_type == 'tag'
+        with:
+          name: nuget-package
+          path: artifacts/release/*.nupkg
+          if-no-files-found: error
+
+  publish:
+    if: github.ref_type == 'tag'
+    needs: verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - uses: actions/download-artifact@v4
+        with:
+          name: nuget-package
+          path: packages
+      - uses: NuGet/login@v1
+        id: login
+        with:
+          user: virtual
+      - name: Publish verified package
+        shell: pwsh
+        env:
+          NUGET_API_KEY: ${{ steps.login.outputs.NUGET_API_KEY }}
+        run: |
+          $packages = @(Get-ChildItem -LiteralPath packages -Filter '*.nupkg' -File)
+          if ($packages.Count -ne 1) { throw 'Expected one verified NuGet package.' }
+          dotnet nuget push $packages[0].FullName --source https://api.nuget.org/v3/index.json --api-key $env:NUGET_API_KEY

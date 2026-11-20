@@ -24,9 +24,15 @@ Verify any claimed later runtime through its own consumer checks.
   The `dev` branch itself is excluded from CI/CD.
 - Each of `efcore/8.0`, `efcore/9.0` and `efcore/10.0` must run its own CI/CD and build the provider package
   for its matching EF Core major.
-- Publishing a provider package to NuGet requires a release tag on the intended release commit. Runs
-  without a release tag may build validation packages and must skip NuGet publication. Follow the
-  [release authorization rules](../repository-guidelines.md#git-and-releases).
+- Use the same [CI/CD workflow](../../.github/workflows/ci-cd.yml) on all three release branches.
+  Branch and pull request runs test and verify a validation package on Windows and Linux.
+- Use `v8.0.0`, `v9.0.0` or `v10.0.0` for the initial stable releases. The tag must match the
+  project version and identify a commit on its matching version branch. The Windows tag run tests the
+  branch, verifies the stable package and runs its isolated consumer. GitHub Actions publishes that artifact.
+- Configure NuGet Trusted Publishing for `cocosip/efcore.oceanbase`, workflow `ci-cd.yml`,
+  owner `virtual` and package `Sharp.OceanBase.EntityFrameworkCore`. The initial policy must allow
+  new packages. Follow the [release authorization rules](../repository-guidelines.md#git-and-releases)
+  before creating or pushing a release tag.
 
 ## Porting and dependency rules
 
