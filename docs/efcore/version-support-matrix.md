@@ -1,6 +1,6 @@
 # EF Core Version Support
 
-EF Core 10 is the current development baseline. EF Core 8 and 9 are planned ports. Check package
+EF Core 10 is the current development baseline. The EF Core 9 port is on its own branch. EF Core 8 follows it. Check package
 availability and publication status on the intended feed before release.
 
 | EF major | Branch | Provider line / target asset | Current state |
@@ -33,8 +33,7 @@ Verify any claimed later runtime through its own consumer checks.
   model/query generation and tooling on each branch.
 - Keep the package ID `OceanBase.EntityFrameworkCore`. Match its major to EF Core and bound dependencies
   to that major: 8.x uses `[8.0.0,9.0.0)`, 9.x uses `[9.0.0,10.0.0)`, and 10.x uses `[10.0.0,11.0.0)`.
-  The EF10 range is implemented in [Directory.Packages.props](../../Directory.Packages.props); the others
-  are requirements for future ports.
+  The branch defines its range in [Directory.Packages.props](../../Directory.Packages.props).
 - Review target-major breaking changes and the current Provider feature contract. EF release notes,
   inherited EF behavior and EF10 test results do not automatically establish support on a port.
 - Keep shared code small. Backport only EF-independent fixes deliberately; each version must build and

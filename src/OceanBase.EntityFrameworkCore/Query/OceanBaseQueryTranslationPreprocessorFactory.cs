@@ -1,6 +1,7 @@
 using System;
 using System.Linq;
 using System.Linq.Expressions;
+using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.EntityFrameworkCore.Query;
 using Microsoft.EntityFrameworkCore.Storage;
 
@@ -20,11 +21,11 @@ namespace OceanBase.EntityFrameworkCore.Query
             public override Expression NormalizeQueryableMethod(Expression expression)
             {
                 var normalized = base.NormalizeQueryableMethod(expression);
-                return new ReferenceDefaults(Dependencies.TypeMappingSource, normalized).Visit(normalized);
+                return new ReferenceDefaults(Dependencies.TypeMappingSource, QueryCompilationContext.Model, normalized).Visit(normalized);
             }
         }
 
-        private sealed class ReferenceDefaults(ITypeMappingSource mappings, Expression root) : ExpressionVisitor
+        private sealed class ReferenceDefaults(ITypeMappingSource mappings, IModel model, Expression root) : ExpressionVisitor
         {
             protected override Expression VisitUnary(UnaryExpression node)
             {
@@ -71,13 +72,15 @@ namespace OceanBase.EntityFrameworkCore.Query
                     return Expression.Call(terminal.MakeGenericMethod(type), defaulted);
                 }
                 if (method != QueryableMethods.DefaultIfEmptyWithoutArgument) return visited;
-                if (type.IsValueType || type == typeof(object) || !OceanBaseDefaultIfEmptyProjection.HasObjectProjection(node.Arguments[0]))
-                    return visited;
+                var objectProjection = OceanBaseDefaultIfEmptyProjection.HasObjectProjection(node.Arguments[0]);
+                if (model.FindEntityType(type) is not null && !objectProjection) return visited;
+                if (!objectProjection || type.IsValueType || type == typeof(object))
+                    return Expression.Call(OceanBaseDefaultIfEmptyProjection.DefaultRowsMethod.MakeGenericMethod(type), visited.Arguments[0]);
                 // Hide the object shape from navigation snapshots, which otherwise reconstruct it after the default row.
                 var parameter = Expression.Parameter(type, "defaultProjection");
                 var boxed = Expression.Call(QueryableMethods.Select.MakeGenericMethod(type, typeof(object)), visited.Arguments[0],
                     Expression.Lambda(Expression.Convert(parameter, typeof(object)), parameter));
-                var defaults = Expression.Call(QueryableMethods.DefaultIfEmptyWithoutArgument.MakeGenericMethod(typeof(object)), boxed);
+                var defaults = Expression.Call(OceanBaseDefaultIfEmptyProjection.DefaultRowsMethod.MakeGenericMethod(typeof(object)), boxed);
                 return Expression.Call(QueryableMethods.Cast.MakeGenericMethod(type), defaults);
             }
 

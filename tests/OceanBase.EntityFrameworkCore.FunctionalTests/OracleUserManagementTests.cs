@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.Data;
 using System.Data.Common;
+using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -38,10 +40,9 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
             var statements = capture.Commands.Select(c => c.Sql).ToArray();
             Assert.StartsWith("SELECT USERNAME FROM SYS.DBA_USERS WHERE USERNAME = :", statements[0]);
             Assert.Equal(new object?[] { "owned" }, capture.Commands[0].Values);
-            Assert.Equal("CREATE USER \"owned\" IDENTIFIED BY \"" + password + "\"", statements[1]);
+            Assert.Equal("CREATE USER \"owned\" IDENTIFIED BY <redacted>", statements[1]);
             Assert.Equal("GRANT CREATE SESSION, CREATE TABLE TO \"owned\"", statements[2]);
             Assert.Contains(statements, statement => statement.StartsWith("CREATE TABLE", StringComparison.Ordinal));
-            Assert.Equal("CREATE USER \"owned\" IDENTIFIED BY <redacted>", capture.Commands[1].LogSql);
             Assert.Contains("IDENTIFIED BY <redacted>", string.Join("\n", messages));
             Assert.DoesNotContain(password, string.Join("\n", messages));
             Assert.All(capture.Commands, command => { Assert.Equal(27, command.Timeout); Assert.Equal(async, command.Async); });
@@ -49,6 +50,84 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
             Assert.Same(management, capture.Commands[1].Connection);
             Assert.NotSame(management, context.Database.GetDbConnection());
             using var targetCommand = context.Database.GetDbConnection().CreateCommand();
+        }
+
+        [Theory]
+        [InlineData(false, false)]
+        [InlineData(false, true)]
+        [InlineData(true, false)]
+        [InlineData(true, true)]
+        public async Task Credential_reaches_only_the_executing_command_and_is_cleared_after_execution(bool async, bool fail)
+        {
+            const string password = "synthetic-private-password";
+            const string redacted = "CREATE USER \"owned\" IDENTIFIED BY <redacted>";
+            var failure = fail ? new InvalidOperationException("synthetic execution failure") : null;
+            var capture = new Capture { ExecuteCredentialCommand = true, ExecutionFailure = failure };
+            var messages = new List<string>();
+            await using var context = Create(capture, () => password, builder =>
+            {
+                builder.EnableSensitiveDataLogging().LogTo(messages.Add, LogLevel.Information);
+            });
+            var creator = context.GetService<IRelationalDatabaseCreator>();
+            if (failure is not null)
+            {
+                if (async) Assert.Same(failure, await Assert.ThrowsAsync<InvalidOperationException>(() => creator.CreateAsync()));
+                else Assert.Same(failure, Assert.Throws<InvalidOperationException>(() => creator.Create()));
+                Assert.Single(capture.Commands);
+            }
+            else if (async) await creator.CreateAsync();
+            else creator.Create();
+
+            var native = Assert.IsType<CredentialCommand>(capture.NativeCommand);
+            Assert.Equal("CREATE USER \"owned\" IDENTIFIED BY \"" + password + "\"", native.ExecutedSql);
+            Assert.Equal(redacted, native.CommandText);
+            Assert.True(native.WasDisposed);
+            Assert.Equal(redacted, capture.Commands[0].Sql);
+            Assert.Contains(redacted, string.Join("\n", messages));
+            Assert.DoesNotContain(password, string.Join("\n", messages));
+        }
+
+        [Theory]
+        [InlineData(false, "/* tag */\n-- request\n{0} /* end */", true, false)]
+        [InlineData(true, "/* tag */\n-- request\n{0} /* end */", true, false)]
+        [InlineData(false, "{0} DEFAULT TABLESPACE users", true, false)]
+        [InlineData(true, "{0} DEFAULT TABLESPACE users", true, false)]
+        [InlineData(false, "/* {0} */ ALTER SESSION SET CURRENT_SCHEMA = owned", false, false)]
+        [InlineData(true, "-- {0}\nALTER SESSION SET CURRENT_SCHEMA = owned", false, false)]
+        [InlineData(false, "SELECT '{0}' FROM DUAL", false, false)]
+        [InlineData(true, "{0} /* {0} */", false, false)]
+        [InlineData(false, "/* tag */ {0}", false, true)]
+        [InlineData(true, "/* tag */ {0}", false, true)]
+        public async Task Interception_preserves_sql_edits_and_limits_credential_substitution_to_the_original_statement(
+            bool async, string sqlFormat, bool substitute, bool suppress)
+        {
+            const string password = "synthetic-private-password";
+            const string redacted = "CREATE USER \"owned\" IDENTIFIED BY <redacted>";
+            const string executable = "CREATE USER \"owned\" IDENTIFIED BY \"" + password + "\"";
+            var modifiedSql = string.Format(sqlFormat, redacted);
+            var capture = new Capture
+            {
+                ExecuteCredentialCommand = true,
+                EditCredentialCommand = command =>
+                {
+                    command.CommandText = modifiedSql;
+                    return suppress ? InterceptionResult<int>.SuppressWithResult(0) : default;
+                }
+            };
+            var messages = new List<string>();
+            await using var context = Create(capture, () => password, builder =>
+                builder.EnableSensitiveDataLogging().LogTo(messages.Add, LogLevel.Information));
+            var creator = context.GetService<IRelationalDatabaseCreator>();
+
+            if (async) await creator.CreateAsync();
+            else creator.Create();
+
+            var native = Assert.IsType<CredentialCommand>(capture.NativeCommand);
+            var expectedSql = substitute ? string.Format(sqlFormat, executable) : modifiedSql;
+            Assert.Equal(suppress ? null : expectedSql, native.ExecutedSql);
+            Assert.Equal(suppress ? redacted : modifiedSql, native.CommandText);
+            Assert.True(native.WasDisposed);
+            Assert.DoesNotContain(password, string.Join("\n", messages));
         }
 
         [Theory]
@@ -210,7 +289,7 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
             await using var context = Create(capture, () => "synthetic", scope: scope);
             var creator = context.GetService<IRelationalDatabaseCreator>();
             if (async) await creator.CreateAsync(); else creator.Create();
-            Assert.Equal("CREATE USER \"own\"\"ed\" IDENTIFIED BY \"synthetic\"", capture.Commands[0].Sql);
+            Assert.Equal("CREATE USER \"own\"\"ed\" IDENTIFIED BY <redacted>", capture.Commands[0].Sql);
             Assert.Equal("GRANT CREATE SESSION, CREATE TABLE TO \"own\"\"ed\"", capture.Commands[1].Sql);
             Assert.True(async ? await creator.EnsureDeletedAsync() : creator.EnsureDeleted());
             Assert.Equal(new object?[] { scope }, capture.Commands[2].Values);
@@ -359,7 +438,43 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
         {
             public object Create(DbContext context, bool designTime) => (((TestContext)context).InvalidModel, designTime);
         }
-        private sealed record Command(string Sql, string LogSql, DbConnection Connection, bool Async, int Timeout, object?[] Values);
+        private sealed record Command(string Sql, DbConnection Connection, bool Async, int Timeout, object?[] Values);
+
+        private sealed class CredentialCommand(DbCommand command, Exception? failure) : DbCommand
+        {
+            public string? ExecutedSql { get; private set; }
+            public bool WasDisposed { get; private set; }
+            [AllowNull] public override string CommandText { get => command.CommandText; set => command.CommandText = value; }
+            public override int CommandTimeout { get => command.CommandTimeout; set => command.CommandTimeout = value; }
+            public override CommandType CommandType { get => command.CommandType; set => command.CommandType = value; }
+            public override bool DesignTimeVisible { get => command.DesignTimeVisible; set => command.DesignTimeVisible = value; }
+            public override UpdateRowSource UpdatedRowSource { get => command.UpdatedRowSource; set => command.UpdatedRowSource = value; }
+            protected override DbConnection? DbConnection { get => command.Connection; set => command.Connection = value; }
+            protected override DbTransaction? DbTransaction { get => command.Transaction; set => command.Transaction = value; }
+            protected override DbParameterCollection DbParameterCollection => command.Parameters;
+            protected override DbParameter CreateDbParameter() => command.CreateParameter();
+            public override void Cancel() => throw new NotSupportedException();
+            public override void Prepare() => throw new NotSupportedException();
+            public override object ExecuteScalar() => throw new NotSupportedException();
+            protected override DbDataReader ExecuteDbDataReader(CommandBehavior behavior) => throw new NotSupportedException();
+
+            public override int ExecuteNonQuery()
+            {
+                ExecutedSql = CommandText;
+                if (failure is not null) throw failure;
+                return 0;
+            }
+
+            protected override void Dispose(bool disposing)
+            {
+                if (disposing)
+                {
+                    command.Dispose();
+                    WasDisposed = true;
+                }
+                base.Dispose(disposing);
+            }
+        }
 
         private sealed class Capture : DbConnectionInterceptor, IDbCommandInterceptor
         {
@@ -373,6 +488,10 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
             public string? FailPrefix { get; init; }
             public Exception? Failure { get; init; }
             public Exception? CleanupFailure { get; set; }
+            public bool ExecuteCredentialCommand { get; init; }
+            public Func<DbCommand, InterceptionResult<int>>? EditCredentialCommand { get; init; }
+            public Exception? ExecutionFailure { get; init; }
+            public DbCommand? NativeCommand { get; private set; }
             public Action? BeforeFailure { get; init; }
             public CancellationToken LastToken { get; private set; }
             public override InterceptionResult ConnectionOpening(DbConnection connection, ConnectionEventData eventData, InterceptionResult result)
@@ -404,9 +523,17 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
             public ValueTask<InterceptionResult<int>> NonQueryExecutingAsync(DbCommand command, CommandEventData eventData,
                 InterceptionResult<int> result, CancellationToken cancellationToken = default)
                 => ValueTask.FromResult(Execute(command, eventData, true, cancellationToken));
+            public DbCommand CommandInitialized(CommandEndEventData eventData, DbCommand command)
+            {
+                if (!ExecuteCredentialCommand || !command.CommandText.StartsWith("CREATE USER", StringComparison.Ordinal))
+                    return command;
+                return NativeCommand = new CredentialCommand(command, ExecutionFailure);
+            }
             private InterceptionResult<int> Execute(DbCommand command, CommandEventData eventData, bool async, CancellationToken token = default)
             {
                 Record(command, eventData, async, token);
+                if (ExecuteCredentialCommand && command.CommandText.StartsWith("CREATE USER", StringComparison.Ordinal))
+                    return EditCredentialCommand?.Invoke(command) ?? default;
                 if (command.CommandText.StartsWith("CREATE USER", StringComparison.Ordinal)) Exists = true;
                 if (command.CommandText.StartsWith("DROP USER", StringComparison.Ordinal)) Exists = false;
                 return InterceptionResult<int>.SuppressWithResult(0);
@@ -414,7 +541,7 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
             private void Record(DbCommand command, CommandEventData eventData, bool async, CancellationToken token = default)
             {
                 LastToken = token;
-                Commands.Add(new Command(command.CommandText, eventData.LogCommandText, command.Connection!, async, command.CommandTimeout,
+                Commands.Add(new Command(command.CommandText, command.Connection!, async, command.CommandTimeout,
                     command.Parameters.Cast<DbParameter>().Select(p => p.Value).ToArray()));
                 if (FailPrefix is not null && command.CommandText.StartsWith(FailPrefix, StringComparison.Ordinal))
                 { BeforeFailure?.Invoke(); throw Failure!; }

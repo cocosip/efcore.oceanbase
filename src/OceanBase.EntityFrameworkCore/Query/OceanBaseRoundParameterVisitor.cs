@@ -10,7 +10,8 @@ namespace OceanBase.EntityFrameworkCore.Query;
 internal sealed class OceanBaseRoundParameterVisitor(
     ISqlExpressionFactory factory,
     IRelationalTypeMappingSource mappingSource,
-    ParametersCacheDecorator parameters,
+    IReadOnlyDictionary<string, object?> parameters,
+    Action disableCaching,
     OceanBaseCompatibilityMode mode) : ExpressionVisitor
 {
     protected override Expression VisitExtension(Expression node)
@@ -28,10 +29,10 @@ internal sealed class OceanBaseRoundParameterVisitor(
             })
             return base.VisitExtension(node);
 
-        var dictionary = parameters.GetAndDisableCaching();
+        disableCaching();
         var resolvedInput = (SqlExpression)Visit(input);
-        var resolvedDigits = Read(digits, dictionary, midpoint: false);
-        var resolvedRule = Read(rule, dictionary, midpoint: true);
+        var resolvedDigits = Read(digits, parameters, midpoint: false);
+        var resolvedRule = Read(rule, parameters, midpoint: true);
         var translator = new OceanBaseRoundTranslator(factory, mappingSource, mode);
         var translated = translator.TranslateResolved(resolvedInput, type, resolvedDigits,
             (MidpointRounding)resolvedRule);

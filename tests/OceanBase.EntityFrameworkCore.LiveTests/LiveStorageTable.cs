@@ -48,6 +48,7 @@ internal static class LiveStorageTable
             Assert.False(string.IsNullOrWhiteSpace(scope));
             await using var context = createContext(new DbContextOptionsBuilder<TContext>()
                 .UseOceanBase(configured, mode).EnableOceanBaseSchemaManagement(scope)
+                .EnableServiceProviderCaching(false)
                 .AddInterceptors(observer).Options, table);
             if (noBackslashEscapes)
             {
@@ -81,7 +82,7 @@ internal static class LiveStorageTable
         {
             var cleanupFailures = new List<Exception>();
             // DDL creates alphabetically, then adds FKs; callers declare principals before dependents.
-            foreach (var createdTable in tables.Reverse().Where(observer.CreatedTables.Contains))
+            foreach (var createdTable in Enumerable.Reverse(tables).Where(observer.CreatedTables.Contains))
             {
                 try
                 {

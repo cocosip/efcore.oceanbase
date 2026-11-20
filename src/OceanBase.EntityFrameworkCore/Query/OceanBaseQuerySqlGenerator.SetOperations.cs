@@ -35,6 +35,33 @@ namespace OceanBase.EntityFrameworkCore.Query
             base.GenerateSetOperation(setOperation);
         }
 
+        protected override void GenerateSetOperationOperand(SetOperationBase setOperation, SelectExpression operand)
+        {
+            // EF9 leaves nested operands of the same kind ungrouped, including non-associative difference.
+            if (operand is
+                {
+                    Tables: [SetOperationBase nested],
+                    Predicate: null, Orderings: [], Offset: null, Limit: null,
+                    IsDistinct: false, Having: null, GroupBy: []
+                }
+                && nested.GetType() == setOperation.GetType()
+                && (nested is ExceptExpression || nested.IsDistinct != setOperation.IsDistinct)
+                && operand.Projection.Count == nested.Source1.Projection.Count
+                && operand.Projection.Select((projection, i) => projection.Expression is ColumnExpression column
+                    && column.TableAlias == nested.Alias && column.Name == nested.Source1.Projection[i].Alias).All(matches => matches))
+            {
+                Sql.AppendLine("(");
+                using (Sql.Indent())
+                {
+                    Visit(operand);
+                }
+                Sql.AppendLine().Append(")");
+                return;
+            }
+
+            base.GenerateSetOperationOperand(setOperation, operand);
+        }
+
         private static bool HasLobProjection(SelectExpression select)
             => select.Projection.Any(p => p.Expression.TypeMapping?.StoreTypeNameBase.Trim().ToUpperInvariant() is "CLOB" or "NCLOB" or "BLOB");
     }

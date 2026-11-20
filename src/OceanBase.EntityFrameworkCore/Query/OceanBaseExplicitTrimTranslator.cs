@@ -27,7 +27,7 @@ namespace OceanBase.EntityFrameworkCore.Query
             => Methods.Contains(method) && method.GetParameters()[0].ParameterType == typeof(char[]);
 
         internal static string EncodeParameter(QueryContext context, string name, OceanBaseCompatibilityMode mode)
-            => EncodeSet((char[]?)context.Parameters[name], mode);
+            => EncodeSet((char[]?)context.ParameterValues[name], mode);
 
         internal static string EncodeSet(char[]? characters, OceanBaseCompatibilityMode mode)
         {

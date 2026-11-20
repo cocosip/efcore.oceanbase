@@ -44,7 +44,7 @@ public sealed class NonnumericAggregateQueryTests
             : selector ? QueryableMethods.MaxWithSelector : QueryableMethods.MaxWithoutSelector;
         var method = definition.MakeGenericMethod(selector ? [typeof(Row), type] : [type]);
         var result = Assert.IsType<SqlFunctionExpression>(context.GetService<IAggregateMethodCallTranslatorProvider>()
-            .Translate(context.Model, method, new EnumerableExpression(operand).ApplyPredicate(predicate).SetDistinct(true), [],
+            .Translate(context.Model, method, new EnumerableExpression(operand).ApplyPredicate(predicate).ApplyDistinct(), [],
                 context.GetService<IDiagnosticsLogger<DbLoggerCategory.Query>>()));
         Assert.Equal(minimum ? "MIN" : "MAX", result.Name);
         Assert.Same(mapping, result.TypeMapping);
@@ -123,10 +123,11 @@ public sealed class NonnumericAggregateQueryTests
                 Stamp = group.Where(row => row.Id > threshold).Select(row => row.Stamp).Distinct().Max()
             });
         var sql = query.ToQueryString();
-        Assert.Contains("MIN(CASE", sql);
-        Assert.Contains("MAX(CASE", sql);
-        Assert.Contains("HAVING", sql);
-        Assert.Contains("ORDER BY", sql);
+        var unquoted = sql.Replace("`", "", StringComparison.Ordinal).Replace("\"", "", StringComparison.Ordinal);
+        Assert.Matches(@"MIN\(DISTINCT \(CASE\s+WHEN \w+\.Id > (?:\?|:\w+) THEN \w+\.Text\s+END\)\)", unquoted);
+        Assert.Matches(@"MAX\(DISTINCT \(CASE\s+WHEN \w+\.Id > (?:\?|:\w+) THEN \w+\.Stamp\s+END\)\)", unquoted);
+        Assert.Matches(@"HAVING MIN\(\w+\.Stamp\) > TIMESTAMP '2000-01-02", unquoted);
+        Assert.Matches(@"ORDER BY MAX\(\w+\.Text\)", unquoted);
         Assert.DoesNotContain("COALESCE", sql);
         Assert.DoesNotContain("CAST(", sql);
     }

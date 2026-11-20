@@ -156,7 +156,7 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
                 .Select(row => new { A = row.Optional & mask, B = row.Optional | mask,
                     C = row.Optional ^ mask, D = ~row.Optional, E = ~row.OptionalUnsigned,
                     F = row.OptionalUnsignedWide & 9223372036854775808UL }).ToQueryString();
-            Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? "@mask" : ":mask", sql);
+            Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? "@__mask_0" : ":__mask_0", sql);
             Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? " ^ " : "BITAND(", sql);
             Assert.Equal(!relationalNulls, sql.Contains("IS NULL", StringComparison.Ordinal));
             var nullTest = context.Rows.Where(row => (row.Optional & mask) == null).ToQueryString();

@@ -195,7 +195,7 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
             await using var context = Create(capture);
             var code = "visible";
             var query = context.Set<QuotedRow>().Join(context.Set<Group>(), row => row.GroupId, group => group.Id,
-                (row, group) => new { Row = row, Group = group }).IgnoreQueryFilters(["Tenant"])
+                (row, group) => new { Row = row, Group = group }).IgnoreQueryFilters().Where(pair => pair.Row.GroupId > 0)
                 .Where(pair => pair.Group.Code == code);
             Assert.Equal(4, async ? await query.ExecuteUpdateAsync(setters => setters.SetProperty(pair => pair.Row.GroupId, pair => pair.Group.Id))
                 : query.ExecuteUpdate(setters => setters.SetProperty(pair => pair.Row.GroupId, pair => pair.Group.Id)));
@@ -267,7 +267,7 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
             {
                 var row = model.Entity<Row>().ToTable("OracleRows");
                 row.HasKey(value => new { value.TenantId, value.Id });
-                row.HasQueryFilter("Tenant", value => value.TenantId == TenantId);
+                row.HasQueryFilter(value => value.TenantId == TenantId);
                 row.Property(value => value.Active).HasConversion(new BoolToStringConverter("N", "Y"));
                 row.Property(value => value.OptionalActive).HasConversion(new BoolToStringConverter("N", "Y"));
                 var group = model.Entity<Group>().ToTable("OracleGroups");
@@ -276,8 +276,7 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
                 var quoted = model.Entity<QuotedRow>().ToTable("Rows\"Target", "Own\"Scope");
                 quoted.HasKey(value => new { value.TenantId, value.BusinessId });
                 quoted.Property(value => value.BusinessId).HasColumnName("business\"key").HasConversion<string>();
-                quoted.HasQueryFilter("Tenant", value => value.TenantId == TenantId);
-                quoted.HasQueryFilter("PositiveGroup", value => value.GroupId > 0);
+                quoted.HasQueryFilter(value => value.TenantId == TenantId && value.GroupId > 0);
                 model.Entity<KeylessRow>().ToTable("OracleKeylessRows").HasNoKey();
             }
         }

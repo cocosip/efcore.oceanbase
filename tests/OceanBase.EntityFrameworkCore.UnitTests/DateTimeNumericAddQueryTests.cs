@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Internal;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Query;
@@ -324,15 +325,16 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             var repeatedInput = reverse ? digit : ordinary;
             var repeatedMapping = cloneMapping ? mapping.WithStoreTypeAndSize(mapping.StoreType, null) : mapping;
             if (cloneMapping) Assert.NotSame(mapping, repeatedMapping);
-            var secondOccurrence = new SqlParameterExpression(repeatedInput.InvariantName, repeatedInput.Name,
-                repeatedInput.Type, cloneMapping ? !repeatedInput.IsNullable : repeatedInput.IsNullable,
-                repeatedInput.TranslationMode, repeatedMapping);
+            var secondOccurrence = new SqlParameterExpression(repeatedInput.Name, repeatedInput.Type,
+                cloneMapping ? !repeatedInput.IsNullable : repeatedInput.IsNullable, repeatedMapping);
             var values = new Dictionary<string, object?> { ["8_anchor"] = 11, ["_ob_8_anchor"] = 22 };
             var processor = context.GetService<IRelationalParameterBasedSqlProcessorFactory>()
-                .Create(new RelationalParameterBasedSqlProcessorParameters(false, ParameterTranslationMode.MultipleParameters));
-            var processed = processor.Process(reverse ? factory.Add(ordinary, factory.Add(digit, secondOccurrence))
-                : factory.Add(digit, factory.Add(ordinary, secondOccurrence)), new ParametersCacheDecorator(values));
-            var addition = Assert.IsType<SqlBinaryExpression>(processed);
+                .Create(new RelationalParameterBasedSqlProcessorParameters(false, new HashSet<string>()));
+            var expression = reverse ? factory.Add(ordinary, factory.Add(digit, secondOccurrence))
+                : factory.Add(digit, factory.Add(ordinary, secondOccurrence));
+            var processed = processor.Optimize(ProjectScalar(expression), values, out _);
+            var addition = Assert.IsType<SqlBinaryExpression>(
+                Assert.Single(Assert.IsType<SelectExpression>(processed).Projection).Expression);
             var repeated = Assert.IsType<SqlBinaryExpression>(addition.Right);
             Assert.Equal(Assert.IsType<SqlParameterExpression>(repeated.Left).Name,
                 Assert.IsType<SqlParameterExpression>(repeated.Right).Name);
@@ -373,9 +375,9 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             var shifted = new SqlParameterExpression("8_amount", typeof(int), shiftedMapping);
             var values = new Dictionary<string, object?> { ["8_amount"] = 11 };
             var processor = context.GetService<IRelationalParameterBasedSqlProcessorFactory>()
-                .Create(new RelationalParameterBasedSqlProcessorParameters(false, ParameterTranslationMode.MultipleParameters));
-            var processed = processor.Process(factory.Add(ordinary, factory.Add(shifted, factory.Add(ordinary, shifted))),
-                new ParametersCacheDecorator(values));
+                .Create(new RelationalParameterBasedSqlProcessorParameters(false, new HashSet<string>()));
+            var expression = factory.Add(ordinary, factory.Add(shifted, factory.Add(ordinary, shifted)));
+            var processed = processor.Optimize(ProjectScalar(expression), values, out _);
             var generator = new OceanBaseQuerySqlGenerator(context.GetService<QuerySqlGeneratorDependencies>(), OceanBaseCompatibilityMode.Oracle);
             using var command = new OceanBaseCommand();
             foreach (var parameter in generator.GetCommand(processed).Parameters) parameter.AddDbParameter(command, values);
@@ -383,6 +385,9 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             Assert.Equal(11, command.Parameters[0].Value);
             Assert.Equal(111, command.Parameters[1].Value);
         }
+
+        private static SelectExpression ProjectScalar(SqlExpression expression)
+            => new(null, [], null, [], null, [new ProjectionExpression(expression, "Value")], false, [], null, null);
 
         private static Context Create(OceanBaseCompatibilityMode mode)
             => new(new DbContextOptionsBuilder<Context>().UseOceanBase("Server=offline;Database=numeric_date_add", mode).Options);

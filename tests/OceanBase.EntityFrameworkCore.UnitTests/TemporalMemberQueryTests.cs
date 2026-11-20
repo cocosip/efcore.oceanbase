@@ -226,7 +226,7 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             var amount = -13;
             var sql = context.Rows.Select(row => new { Days = row.Date.AddDays(amount), Months = row.Date.AddMonths(amount),
                 Years = row.Date.AddYears(amount) }).ToQueryString();
-            Assert.Contains("CAST((\"r\".\"Date\" + :amount) AS DATE)", sql);
+            Assert.Contains("CAST((\"r\".\"Date\" + :__amount_0) AS DATE)", sql);
             Assert.Equal(3, sql.Split(" AS DATE)").Length - 1);
         }
 
@@ -528,7 +528,7 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
                 && row.Date.AddYears(row.Id - amount).Year > 2000).ToQueryString();
 
             Assert.Contains("(\"r\".\"Id\" + 1) * 12", sql);
-            Assert.Contains("(\"r\".\"Id\" - :amount) * 12", sql);
+            Assert.Contains("(\"r\".\"Id\" - :__amount_0) * 12", sql);
         }
 
         [Theory]
@@ -699,7 +699,7 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             var years = context.Rows.Where(row => row.Stamp.AddYears(row.Id + 1).Year > 2000
                     && row.Stamp.AddYears(row.Id - amount).Year > 2000).ToQueryString();
             Assert.Contains("(\"r\".\"Id\" + 1) * 12", years);
-            Assert.Contains("(\"r\".\"Id\" - :amount) * 12", years);
+            Assert.Contains("(\"r\".\"Id\" - :__amount_0) * 12", years);
         }
 
         [Theory]
@@ -1355,7 +1355,7 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
                     new ValueConverter<TimeSpan, TimeSpan>(value => value, value => value, convertsNulls: true))
                 : (RelationalTypeMapping)source.FindMapping(typeof(OceanBaseIntervalDayToSecond))!.WithComposedConverter(
                     new ValueConverter<TimeSpan, OceanBaseIntervalDayToSecond>(
-                        value => new OceanBaseIntervalDayToSecond(false, 0, 0, 0, 0),
+                        value => new OceanBaseIntervalDayToSecond(false, 0, 0, 0, 0, 0, 9, 9),
                         value => value.ToTimeSpan(), convertsNulls: true));
 
             Assert.Null(members.Translate(factory.Constant(TimeSpan.FromSeconds(1), mapping),
@@ -1410,7 +1410,7 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
                     new ValueConverter<TimeSpan, TimeSpan>(value => value, value => value, convertsNulls: true))
                 : (RelationalTypeMapping)source.FindMapping(typeof(OceanBaseIntervalDayToSecond))!.WithComposedConverter(
                     new ValueConverter<TimeSpan, OceanBaseIntervalDayToSecond>(
-                        value => new OceanBaseIntervalDayToSecond(false, 0, 0, 0, 0),
+                        value => new OceanBaseIntervalDayToSecond(false, 0, 0, 0, 0, 0, 9, 9),
                         value => value.ToTimeSpan(), convertsNulls: true));
 
             Assert.Null(members.Translate(factory.Constant(TimeSpan.FromSeconds(1), mapping), ticks, typeof(long), logger));
@@ -1730,7 +1730,7 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
                     new ValueConverter<TimeSpan, TimeSpan>(value => value, value => value, convertsNulls: true))
                 : (RelationalTypeMapping)source.FindMapping(typeof(OceanBaseIntervalDayToSecond))!.WithComposedConverter(
                     new ValueConverter<TimeSpan, OceanBaseIntervalDayToSecond>(
-                        value => new OceanBaseIntervalDayToSecond(false, 0, 0, 0, 0),
+                        value => new OceanBaseIntervalDayToSecond(false, 0, 0, 0, 0, 0, 9, 9),
                         value => value.ToTimeSpan(), convertsNulls: true));
 
             Assert.Null(members.Translate(factory.Constant(TimeSpan.FromSeconds(1), mapping),

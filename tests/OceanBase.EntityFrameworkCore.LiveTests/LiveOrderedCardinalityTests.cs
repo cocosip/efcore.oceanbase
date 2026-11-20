@@ -44,7 +44,7 @@ namespace OceanBase.EntityFrameworkCore.LiveTests
                     Assert.Equal(expected.Skip(skip), await List(ordered.Skip(skip), async));
                 }
                 Assert.Equal(expected.Take(3).Select(row => row.Id), await List(ordered.Take(3).Select(row => row.Id), async));
-                Assert.Equal(expected.Reverse().Select(row => row.Id), await List(ordered.Reverse().Select(row => row.Id), async));
+                Assert.Equal(Enumerable.Reverse(expected).Select(row => row.Id), await List(ordered.Reverse().Select(row => row.Id), async));
                 Assert.Empty(await List(context.Set<Row>().Where(row => row.Id < 0).OrderBy(row => row.Id).Skip(1).Take(2), async));
                 var floor = 0;
                 var filtered = context.Set<Row>().Where(row => row.Id > floor).OrderBy(row => row.Id).Select(row => row.Id);

@@ -298,7 +298,9 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
                 }
                 else
                 {
-                    Assert.Matches(new Regex(@"OFFSET :p ROWS FETCH NEXT :p\d+ ROWS ONLY", RegexOptions.IgnoreCase), capture.Sql!);
+                    var offset = ":" + capture.ParameterNames[0].TrimStart(':');
+                    var limit = ":" + capture.ParameterNames[1].TrimStart(':');
+                    Assert.Contains($"OFFSET {offset} ROWS FETCH NEXT {limit} ROWS ONLY", capture.Sql!, StringComparison.OrdinalIgnoreCase);
                     Assert.Equal(new object?[] { 1, 2 }, capture.Values);
                     Assert.DoesNotContain(" AS ", capture.Sql!, StringComparison.Ordinal);
                 }
@@ -313,7 +315,8 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
             if (mode == OceanBaseCompatibilityMode.MySql)
                 Assert.Contains("LIMIT 18446744073709551615 OFFSET ?", offsetCapture.Sql!, StringComparison.OrdinalIgnoreCase);
             else
-                Assert.Contains("OFFSET :p ROWS", offsetCapture.Sql!, StringComparison.OrdinalIgnoreCase);
+                Assert.Contains($"OFFSET :{Assert.Single(offsetCapture.ParameterNames).TrimStart(':')} ROWS",
+                    offsetCapture.Sql!, StringComparison.OrdinalIgnoreCase);
             Assert.Equal(3, Convert.ToInt32(offsetCapture.Values[^1]));
         }
 
@@ -322,20 +325,15 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
         [InlineData(OceanBaseCompatibilityMode.MySql, true)]
         [InlineData(OceanBaseCompatibilityMode.Oracle, false)]
         [InlineData(OceanBaseCompatibilityMode.Oracle, true)]
-        public async Task Named_filters_compose_disable_selectively_and_refresh_context_parameters(OceanBaseCompatibilityMode mode, bool async)
+        public async Task Composed_filters_can_be_disabled_and_refresh_context_parameters(OceanBaseCompatibilityMode mode, bool async)
         {
             var capture = new ReaderCapture { Results = Table([typeof(int)], [7]) };
             await using var context = CreateContext(mode, capture);
-            foreach (var disabled in new[] { "none", "Active", "Tenant", "all" })
+            foreach (var disabled in new[] { "none", "all" })
             {
                 var name = "first' ? @tenant";
                 IQueryable<FilteredRow> source = context.Set<FilteredRow>();
-                source = disabled switch
-                {
-                    "none" => source,
-                    "all" => source.IgnoreQueryFilters(),
-                    _ => source.IgnoreQueryFilters([disabled])
-                };
+                if (disabled == "all") source = source.IgnoreQueryFilters();
                 var query = source.Where(row => row.Name == name).Select(row => row.Id);
                 foreach (var tenant in new[] { 1, 2, 1 })
                 {
@@ -343,7 +341,7 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
                     name = "tenant-" + tenant + "' ? @tenant";
                     var result = async ? await query.ToListAsync() : query.ToList();
                     Assert.Equal(new[] { 7 }, result);
-                    var hasTenant = disabled is "none" or "Active";
+                    var hasTenant = disabled == "none";
                     Assert.Equal(hasTenant ? new object?[] { tenant, name } : [name], capture.Values);
                     var sql = Unquote(capture.Sql!);
                     var alias = Regex.Match(sql, @"^SELECT (\w+)\.Id\r?\n").Groups[1].Value;
@@ -352,7 +350,7 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
                         : ":" + capture.ParameterNames[index].TrimStart(':');
                     var predicates = new List<string>();
                     if (hasTenant) predicates.Add(alias + ".TenantId = " + Bind(0));
-                    if (disabled is "none" or "Tenant")
+                    if (hasTenant)
                         predicates.Add(mode == OceanBaseCompatibilityMode.MySql ? "NOT (" + alias + ".IsDeleted)"
                             : alias + ".IsDeleted = 0");
                     predicates.Add(alias + ".Name = " + Bind(hasTenant ? 1 : 0));
@@ -360,7 +358,7 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
                     Assert.DoesNotContain(name, capture.Sql!);
                 }
             }
-            Assert.Equal(12, capture.Executions);
+            Assert.Equal(6, capture.Executions);
             Assert.Empty(context.ChangeTracker.Entries());
         }
 
@@ -388,8 +386,7 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
                 modelBuilder.Entity<FilteredRow>(row =>
                 {
                     row.Property(r => r.Name).HasMaxLength(80);
-                    row.HasQueryFilter("Tenant", r => r.TenantId == TenantId);
-                    row.HasQueryFilter("Active", r => !r.IsDeleted);
+                    row.HasQueryFilter(r => r.TenantId == TenantId && !r.IsDeleted);
                 });
                 modelBuilder.Entity<Parent>(parent =>
                 {

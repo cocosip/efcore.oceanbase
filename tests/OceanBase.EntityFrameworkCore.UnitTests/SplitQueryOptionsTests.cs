@@ -68,7 +68,7 @@ public sealed class SplitQueryOptionsTests
         using var context = Create(mode);
         foreach (var async in new[] { false, true })
         {
-            var compilation = context.GetService<IQueryCompilationContextFactory>().CreatePrecompiled(async);
+            var compilation = context.GetService<IQueryCompilationContextFactory>().CreatePrecompiled(async, new HashSet<string>());
             Assert.IsAssignableFrom<RelationalQueryCompilationContext>(compilation);
             Assert.True(compilation.IsPrecompiling);
             Assert.False(compilation.IsBuffering);

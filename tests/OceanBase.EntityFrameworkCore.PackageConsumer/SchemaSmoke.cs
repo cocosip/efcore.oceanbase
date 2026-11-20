@@ -150,7 +150,7 @@ namespace PackageConsumer
                 {
                     capture.Target = target;
                     var created = async ? context.Database.EnsureCreatedAsync().GetAwaiter().GetResult() : context.Database.EnsureCreated();
-                    if (!created || passwordCalls != 1 || capture.Commands[1] != "CREATE USER \"owned\" IDENTIFIED BY \"synthetic-private-password\""
+                    if (!created || passwordCalls != 1 || capture.Commands[1] != "CREATE USER \"owned\" IDENTIFIED BY <redacted>"
                         || capture.Commands[2] != "GRANT CREATE SESSION, CREATE TABLE TO \"owned\"")
                         throw new Exception("Packed Oracle user creation/grants failed.");
                     if (string.Join("\n", messages).Contains("synthetic-private-password", StringComparison.Ordinal)

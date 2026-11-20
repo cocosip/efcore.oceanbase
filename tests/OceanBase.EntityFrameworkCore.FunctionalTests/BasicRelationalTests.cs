@@ -46,7 +46,17 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
                     Assert.DoesNotContain("@", commands.Sql[^1]);
                 }
                 else
-                    Assert.Contains(":minimum", commands.Sql[^1]);
+                {
+                    var minimumParameter = ":" + Assert.Single(commands.Inputs, parameter => Equals(parameter.Value, value))
+                        .ParameterName.TrimStart(':');
+                    var nameParameter = ":" + Assert.Single(commands.StringInputs).ParameterName.TrimStart(':');
+                    Assert.Contains($"SELECT \"c\".\"Id\" + {minimumParameter}", commands.Sql[^1]);
+                    Assert.Contains($"\"c\".\"Id\" > {minimumParameter}", commands.Sql[^1]);
+                    Assert.Contains($"\"c\".\"Name\" = {nameParameter}", commands.Sql[^1]);
+                    Assert.Equal(new object?[] { value, name }, commands.Values);
+                }
+                commands.Inputs.Clear();
+                commands.StringInputs.Clear();
             }
         }
 
@@ -994,8 +1004,6 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
             var commands = new CommandCapture { Results = table };
             await using var context = CreateContext(mode, commands, relationalNulls);
             var source = context.Set<ArithmeticRow>();
-            var left = source.LeftJoin(source, a => a.Id, b => b.Value,
-                (a, b) => new { a.Id, Right = (int?)b!.Id });
             var groupJoin = from a in source
                             join b in source on a.Id equals b.Value into matches
                             from b in matches.DefaultIfEmpty()
@@ -1003,7 +1011,7 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
             var inner = source.Join(source, a => a.Id, b => b.Value, (a, b) => new { a.Id, Right = (int?)b.Id });
             var composite = source.Join(source, a => new { a.Id, a.Optional }, b => new { Id = b.Value, b.Optional },
                 (a, b) => new { a.Id, Right = (int?)b.Id });
-            foreach (var (joined, nullableRight) in new[] { (left, true), (groupJoin, true), (inner, false), (composite, false) })
+            foreach (var (joined, nullableRight) in new[] { (groupJoin, true), (inner, false), (composite, false) })
             {
                 table.Rows[0][1] = nullableRight ? DBNull.Value : new OceanBaseDecimal(7m);
                 var rows = async ? await joined.ToListAsync() : joined.ToList();
@@ -1013,9 +1021,8 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
                 Assert.Contains("JOIN", commands.Sql.Last());
             }
             Assert.Contains("LEFT JOIN", commands.Sql[0]);
-            Assert.Contains("LEFT JOIN", commands.Sql[1]);
-            Assert.Contains("INNER JOIN", commands.Sql[2]);
-            Assert.Contains(" AND ", commands.Sql[3]);
+            Assert.Contains("INNER JOIN", commands.Sql[1]);
+            Assert.Contains(" AND ", commands.Sql[2]);
             table.Rows.Clear();
             table.Columns.RemoveAt(1);
             table.Rows.Add(DBNull.Value);
@@ -1030,7 +1037,7 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
             Assert.True(commands.Sql.Last().Contains(" IN (", StringComparison.Ordinal)
                 || commands.Sql.Last().Contains("EXISTS (", StringComparison.Ordinal));
             table.Rows.Clear();
-            var noRows = async ? await left.ToListAsync() : left.ToList();
+            var noRows = async ? await groupJoin.ToListAsync() : groupJoin.ToList();
             Assert.Empty(noRows);
         }
 
@@ -2361,8 +2368,10 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
                 var sql = commands.Sql[^1];
                 Assert.Contains("WHERE", sql);
                 Assert.DoesNotContain("__oceanbase_internal_", sql);
-                Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? " & 31)" : "BITAND(:count, 31)", sql);
-                Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? " & 63)" : "BITAND(:count, 63)", sql);
+                var operand = mode == OceanBaseCompatibilityMode.Oracle
+                    ? ":" + Assert.Single(commands.Inputs).ParameterName.TrimStart(':') : "?";
+                Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? " & 31)" : $"BITAND({operand}, 31)", sql);
+                Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? " & 63)" : $"BITAND({operand}, 63)", sql);
             }
         }
 

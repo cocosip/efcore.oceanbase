@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore.Query;
 using Microsoft.EntityFrameworkCore.Query.SqlExpressions;
@@ -7,7 +8,7 @@ using Microsoft.EntityFrameworkCore.Storage;
 namespace OceanBase.EntityFrameworkCore.Query
 {
     internal sealed class OceanBaseOracleStringVisitor(
-        ISqlExpressionFactory factory, ParametersCacheDecorator parameters) : ExpressionVisitor
+        ISqlExpressionFactory factory, IReadOnlyDictionary<string, object?> parameters, Action disableCaching) : ExpressionVisitor
     {
         protected override Expression VisitExtension(Expression node)
         {
@@ -25,7 +26,7 @@ namespace OceanBase.EntityFrameworkCore.Query
                     object? value = needle switch
                     {
                         SqlConstantExpression constant => ProviderValue(constant, constant.Value),
-                        SqlParameterExpression parameter => ProviderValue(parameter, parameters.GetAndDisableCaching()[parameter.Name]),
+                        SqlParameterExpression parameter => ProviderValue(parameter, ReadParameter(parameter)),
                         _ => null
                     };
                     if (needle is SqlConstantExpression or SqlParameterExpression && value is null or "")
@@ -38,7 +39,7 @@ namespace OceanBase.EntityFrameworkCore.Query
                     var indexValue = indexNeedle switch
                     {
                         SqlConstantExpression constant => ProviderValue(constant, constant.Value),
-                        SqlParameterExpression parameter => ProviderValue(parameter, parameters.GetAndDisableCaching()[parameter.Name]),
+                        SqlParameterExpression parameter => ProviderValue(parameter, ReadParameter(parameter)),
                         _ => null
                     };
                     return OceanBaseStringIndexOfTranslator.Build(factory, OceanBaseCompatibilityMode.Oracle,
@@ -50,7 +51,7 @@ namespace OceanBase.EntityFrameworkCore.Query
                     var insertedValue = inserted switch
                     {
                         SqlConstantExpression constant => ProviderValue(constant, constant.Value),
-                        SqlParameterExpression parameter => ProviderValue(parameter, parameters.GetAndDisableCaching()[parameter.Name]),
+                        SqlParameterExpression parameter => ProviderValue(parameter, ReadParameter(parameter)),
                         _ => null
                     };
                     return insertedValue is "" ? factory.Constant(0L, insertLength.TypeMapping)
@@ -60,10 +61,16 @@ namespace OceanBase.EntityFrameworkCore.Query
                     return Normalize(constant, constant.Value);
                 case SqlParameterExpression parameter when IsProviderString(parameter):
                     // EF's standard cache key distinguishes null only; Oracle also treats empty as NULL.
-                    return Normalize(parameter, parameters.GetAndDisableCaching()[parameter.Name]);
+                    return Normalize(parameter, ReadParameter(parameter));
                 default:
                     return base.VisitExtension(node);
             }
+        }
+
+        private object? ReadParameter(SqlParameterExpression parameter)
+        {
+            disableCaching();
+            return parameters[parameter.Name];
         }
 
         private static bool IsProviderString(SqlExpression expression)

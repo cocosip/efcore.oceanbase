@@ -58,7 +58,7 @@ namespace OceanBase.EntityFrameworkCore.Query
             {
                 var pruned = base.Prune(query);
                 if (_emptyColumns.Count == 0) return pruned;
-                var remaining = new MetadataVisitor();
+                var remaining = new MetadataVisitor(referencesOnly: true);
                 remaining.Visit(pruned);
                 // EF's pruning reconstructs VALUES without annotations; match the surviving column identities.
                 return new EmptyColumnsVisitor(_emptyColumns, remaining.Mappings.Keys.ToHashSet()).Visit(pruned);
@@ -80,20 +80,23 @@ namespace OceanBase.EntityFrameworkCore.Query
                 return base.VisitExtension(node);
             }
 
-            protected override ValuesExpression ApplyTypeMappingsOnValuesExpression(ValuesExpression values)
+            protected override ValuesExpression ApplyTypeMappingsOnValuesExpression(ValuesExpression values, bool stripOrdering)
             {
-                if (values.ValuesParameter is not { } parameter) return base.ApplyTypeMappingsOnValuesExpression(values);
-                // EF10 requires an inferred comparison mapping even for already mapped standalone roots.
+                var columns = stripOrdering ? values.ColumnNames.Skip(1).ToArray() : values.ColumnNames;
+                if (values.RowValues is { Count: 0 } rows
+                    && values.FindAnnotation(OceanBaseQueryableMethodTranslatingExpressionVisitorFactory.EmptyElementTypeAnnotation) is { } empty)
+                    return (ValuesExpression)new ValuesExpression(values.Alias, rows, columns).AddAnnotation(empty.Name, empty.Value);
+                if (values.ValuesParameter is not { } parameter) return base.ApplyTypeMappingsOnValuesExpression(values, stripOrdering);
                 var element = TryGetInferredTypeMapping(values.Alias, "Value", out var inferred) ? inferred
                     : parameter.TypeMapping?.ElementTypeMapping as RelationalTypeMapping
                         ?? RelationalDependencies.TypeMappingSource.FindMapping(
                             OceanBaseCollectionParameterExpandingVisitor.ElementType(parameter.Type)!);
                 if (element is null || !OceanBaseCollectionParameterExpandingVisitor.IsSupportedCollectionElement(element))
-                    return base.ApplyTypeMappingsOnValuesExpression(values);
+                    return base.ApplyTypeMappingsOnValuesExpression(values, stripOrdering);
                 var collection = RelationalDependencies.TypeMappingSource.FindMapping(parameter.Type,
                     QueryCompilationContext.Model, element)
                     ?? throw new InvalidOperationException("A supported collection mapping is required for the query root.");
-                return values.Update(parameter.ApplyTypeMapping(collection));
+                return new ValuesExpression(values.Alias, (SqlParameterExpression)parameter.ApplyTypeMapping(collection), columns);
             }
         }
 
@@ -204,7 +207,7 @@ namespace OceanBase.EntityFrameworkCore.Query
         private static void ThrowContextualConverter()
             => throw new NotSupportedException("Single JSON collection parameters cannot use a contextual value converter.");
 
-        private sealed class MetadataVisitor : QueryVisitor
+        private sealed class MetadataVisitor(bool referencesOnly = false) : QueryVisitor
         {
             public List<ValuesExpression> EmptyRoots { get; } = [];
             public Dictionary<(string Alias, string Name), RelationalTypeMapping> Mappings { get; } = [];
@@ -216,6 +219,19 @@ namespace OceanBase.EntityFrameworkCore.Query
                     EmptyRoots.Add(values);
                 if (node is ColumnExpression { TypeMapping: { } mapping } column)
                     Mappings[(column.TableAlias, column.Name)] = mapping;
+                if (referencesOnly && node is SelectExpression select)
+                {
+                    // EF9 also visits identifiers that no longer render after projection and pruning.
+                    foreach (var table in select.Tables) Visit(table);
+                    foreach (var projection in select.Projection) Visit(projection);
+                    foreach (var grouping in select.GroupBy) Visit(grouping);
+                    foreach (var ordering in select.Orderings) Visit(ordering);
+                    Visit(select.Predicate);
+                    Visit(select.Having);
+                    Visit(select.Limit);
+                    Visit(select.Offset);
+                    return select;
+                }
                 return base.VisitExtension(node);
             }
         }
@@ -229,12 +245,13 @@ namespace OceanBase.EntityFrameworkCore.Query
                 if (node is ValuesExpression { RowValues.Count: 0 } values
                     && emptyColumns.TryGetValue(values.Alias, out var metadata))
                 {
-                    if (references.Contains((values.Alias, "_ord")) && !values.ColumnNames.Contains("_ord"))
+                    var hasOrdinal = references.Contains((values.Alias, "_ord"));
+                    var hasValue = references.Contains((values.Alias, "Value"));
+                    string[] columns = hasOrdinal && hasValue ? ["_ord", "Value"] : hasOrdinal ? ["_ord"] : ["Value"];
+                    if (!values.ColumnNames.SequenceEqual(columns))
                     {
-                        if (!values.ColumnNames.SequenceEqual(new[] { "Value" }) || references.Contains((values.Alias, "Value")))
-                            throw new NotSupportedException("Cannot recover the retained empty inline collection ordinal column.");
-                        // EF10 misnames the retained prefix when only the trailing Value column is pruned.
-                        var corrected = new ValuesExpression(values.Alias, values.RowValues, new[] { "_ord" });
+                        // Keep a typed value column when no column is referenced by a zero-row root.
+                        var corrected = new ValuesExpression(values.Alias, values.RowValues, columns);
                         foreach (var annotation in values.GetAnnotations())
                             corrected = (ValuesExpression)corrected.AddAnnotation(annotation.Name, annotation.Value);
                         values = corrected;

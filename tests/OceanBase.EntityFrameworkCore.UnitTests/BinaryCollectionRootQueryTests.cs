@@ -1,12 +1,15 @@
 using System;
 using System.Linq;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Internal;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Query;
 using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using OceanBase.EntityFrameworkCore.Query;
 using Xunit;
+
+#pragma warning disable EF1001 // EF9-only collection options infrastructure.
 
 namespace OceanBase.EntityFrameworkCore.UnitTests;
 
@@ -69,16 +72,16 @@ public sealed class BinaryCollectionRootQueryTests
     }
 
     [Theory]
-    [InlineData(OceanBaseCompatibilityMode.MySql, ParameterTranslationMode.Constant)]
-    [InlineData(OceanBaseCompatibilityMode.MySql, ParameterTranslationMode.MultipleParameters)]
-    [InlineData(OceanBaseCompatibilityMode.Oracle, ParameterTranslationMode.Constant)]
-    [InlineData(OceanBaseCompatibilityMode.Oracle, ParameterTranslationMode.MultipleParameters)]
-    public void Explicit_parameter_binary_roots_translate_and_rebind(
-        OceanBaseCompatibilityMode mode, ParameterTranslationMode translation)
+    [InlineData(OceanBaseCompatibilityMode.MySql, ParameterizedCollectionTranslationMode.Constantize)]
+    [InlineData(OceanBaseCompatibilityMode.MySql, ParameterizedCollectionTranslationMode.Parameterize)]
+    [InlineData(OceanBaseCompatibilityMode.Oracle, ParameterizedCollectionTranslationMode.Constantize)]
+    [InlineData(OceanBaseCompatibilityMode.Oracle, ParameterizedCollectionTranslationMode.Parameterize)]
+    public void Captured_binary_roots_translate_and_rebind(
+        OceanBaseCompatibilityMode mode, ParameterizedCollectionTranslationMode translation)
     {
         using var context = CreateContext(mode, translation);
         byte[]?[] values = [new byte[] { 1, 2 }, null, new byte[] { 3, 4 }];
-        var query = context.Rows.Where(row => EF.Parameter(values).Contains(row.Payload));
+        var query = context.Rows.Where(row => values.Contains(row.Payload));
 
         foreach (var input in new byte[]?[][] { values, [new byte[] { 7 }], [] })
         {
@@ -115,7 +118,7 @@ public sealed class BinaryCollectionRootQueryTests
     }
 
     private static TestContext CreateContext(OceanBaseCompatibilityMode mode,
-        ParameterTranslationMode? translation = null, bool relationalNulls = false)
+        ParameterizedCollectionTranslationMode? translation = null, bool relationalNulls = false)
     {
         var builder = new DbContextOptionsBuilder<TestContext>()
             .UseOceanBase("Server=localhost;Database=binary_roots", mode)
@@ -124,7 +127,7 @@ public sealed class BinaryCollectionRootQueryTests
         {
             var extension = builder.Options.Extensions.OfType<RelationalOptionsExtension>().Single()
                 .WithUseRelationalNulls(relationalNulls);
-            if (translation.HasValue) extension = extension.WithUseParameterizedCollectionMode(translation.Value);
+            if (translation.HasValue) extension = extension.WithParameterizedCollectionTranslationMode(translation.Value);
             ((IDbContextOptionsBuilderInfrastructure)builder).AddOrUpdateExtension(extension);
         }
 

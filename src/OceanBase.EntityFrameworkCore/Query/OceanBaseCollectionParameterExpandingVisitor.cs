@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Data.Common;
 using System.Linq;
 using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore;
@@ -14,15 +15,21 @@ using OceanBase.EntityFrameworkCore.Storage;
 namespace OceanBase.EntityFrameworkCore.Query
 {
     internal sealed class OceanBaseCollectionParameterExpandingVisitor(
-        ISqlExpressionFactory factory, RelationalParameterBasedSqlProcessorParameters processorParameters,
-        ParametersCacheDecorator parameters, IRelationalTypeMappingSource mappingSource,
-        OceanBaseCompatibilityMode compatibilityMode) : ExpressionVisitor
+        ISqlExpressionFactory factory, IReadOnlyDictionary<string, object?> parameters, Action disableCaching,
+        IRelationalTypeMappingSource mappingSource,
+        OceanBaseCompatibilityMode compatibilityMode, IReadOnlySet<string>? constantized = null,
+        bool constantizeByDefault = true) : ExpressionVisitor
     {
         internal const string EmptyColumnsAnnotation = "OceanBase:EmptyValuesColumns";
-        private readonly Dictionary<(string Name, string Invariant), List<object?>> _snapshots = [];
-        private readonly Dictionary<RelationalTypeMapping,
-            Dictionary<(string Name, string Invariant, ParameterTranslationMode Mode, int Index), SqlExpression>> _expanded
-            = new(ReferenceEqualityComparer.Instance);
+        private readonly Dictionary<string, List<object?>> _snapshots = [];
+        private readonly HashSet<string> _generated = new(StringComparer.Ordinal);
+        private HashSet<string>? _usedNames;
+        private Dictionary<string, object?>? _expandedValues;
+
+        internal IReadOnlyDictionary<string, object?> ParameterValues => _expandedValues ?? parameters;
+
+        internal Expression AttachBindings(Expression expression)
+            => _expandedValues is null ? expression : new BindingVisitor(_generated, _expandedValues).Visit(expression);
 
         protected override Expression VisitExtension(Expression node)
         {
@@ -34,9 +41,6 @@ namespace OceanBase.EntityFrameworkCore.Query
                 if (!(valuesExpression.ColumnNames.SequenceEqual(new[] { "Value" })
                     || valuesExpression.ColumnNames.SequenceEqual(new[] { "_ord", "Value" })))
                     throw new NotSupportedException("Unsupported general collection column layout.");
-                var rootMode = root.TranslationMode ?? processorParameters.CollectionParameterTranslationMode;
-                if (rootMode is not (ParameterTranslationMode.Constant or ParameterTranslationMode.MultipleParameters))
-                    throw new NotSupportedException("General collection roots require Constant or MultipleParameters translation.");
                 var rootValues = Snapshot(root);
                 var ordinalMapping = mappingSource.FindMapping(typeof(int))
                     ?? throw new InvalidOperationException("An integer mapping is required for collection ordinals.");
@@ -44,7 +48,7 @@ namespace OceanBase.EntityFrameworkCore.Query
                 var elementType = ScalarType(root, elementMapping);
                 for (var index = 0; index < rootValues.Count; index++)
                 {
-                    var scalar = Expand(root, elementMapping, elementType, rootMode, index, rootValues[index], "_value");
+                    var scalar = Expand(root, rootValues[index], elementType, elementMapping);
                     if (index == 0)
                         scalar = new SqlUnaryExpression(ExpressionType.Convert, scalar, scalar.Type, scalar.TypeMapping);
                     rows.Add(new RowValueExpression(valuesExpression.ColumnNames.Count == 1 ? [scalar]
@@ -61,31 +65,69 @@ namespace OceanBase.EntityFrameworkCore.Query
                 return result;
             }
 
-            if (node is not InExpression { ValuesParameter: { } source } membership
-                || compatibilityMode != OceanBaseCompatibilityMode.Oracle
-                || source.TypeMapping?.ElementTypeMapping is not RelationalTypeMapping mapping
-                || !OceanBaseOracleStringVisitor.IsProviderString(mapping))
+            if (node is not InExpression { ValuesParameter: { } source } membership)
+                return base.VisitExtension(node);
+            // EF9's IN parameter usually carries the scalar mapping directly.
+            var mapping = source.TypeMapping?.ElementTypeMapping as RelationalTypeMapping
+                ?? membership.Item.TypeMapping ?? source.TypeMapping;
+            if (mapping is null || !IsSupportedCollectionElement(mapping)
+                || constantizeByDefault && compatibilityMode != OceanBaseCompatibilityMode.Oracle)
                 return base.VisitExtension(node);
 
-            var values = Snapshot(source);
-
-            var mode = source.TranslationMode ?? processorParameters.CollectionParameterTranslationMode;
-            var bucket = mode != ParameterTranslationMode.MultipleParameters ? 1 : values.Count switch
-            {
-                <= 5 => 1,
-                <= 150 => 10,
-                <= 750 => 50,
-                <= 2000 => 100,
-                _ => 200
-            };
-            var count = values.Count + (bucket - values.Count % bucket) % bucket;
-            var scalars = new List<SqlExpression>(count);
             var type = ScalarType(source, mapping);
-            for (var index = 0; index < count; index++)
-                // Pad raw originals so the scalar visitor can classify provider-empty values before EF handles NULLs.
-                scalars.Add(Expand(source, mapping, type, mode, index, values[Math.Min(index, values.Count - 1)], "_text"));
-
+            var scalars = Snapshot(source).Select(value => Expand(source, value, type, mapping)).ToArray();
             return membership.Update((SqlExpression)Visit(membership.Item), scalars);
+        }
+
+        private SqlExpression Expand(SqlParameterExpression source, object? value, Type type, RelationalTypeMapping mapping)
+        {
+            if (constantizeByDefault || constantized?.Contains(source.Name) == true)
+                return factory.Constant(value, type, mapping);
+
+            _expandedValues ??= new Dictionary<string, object?>(parameters, StringComparer.Ordinal);
+            _usedNames ??= new HashSet<string>(parameters.Keys, StringComparer.OrdinalIgnoreCase);
+            var name = "__ob_collection_" + _generated.Count;
+            while (!_usedNames.Add(name))
+                name += "_";
+            _expandedValues.Add(name, value);
+            _generated.Add(name);
+            return new SqlParameterExpression(name, type, value is null, mapping);
+        }
+
+        private sealed class BindingVisitor(HashSet<string> names, IReadOnlyDictionary<string, object?> values) : ExpressionVisitor
+        {
+            protected override Expression VisitExtension(Expression node)
+                => node is SqlParameterExpression parameter && names.Contains(parameter.Name)
+                    ? new CollectionBinding(parameter, values[parameter.Name])
+                    : base.VisitExtension(node);
+        }
+
+        // EF9 can optimize against a private parameter dictionary, but command binding still receives the original.
+        internal sealed class CollectionBinding(SqlParameterExpression parameter, object? value)
+            : SqlExpression(parameter.Type, parameter.TypeMapping)
+        {
+            internal string Name => parameter.Name;
+            internal IRelationalParameter CreateParameter(string name)
+                => new BoundCollectionParameter(Name, name, parameter.TypeMapping!, value, parameter.IsNullable);
+
+            protected override Expression VisitChildren(ExpressionVisitor visitor) => this;
+
+            protected override void Print(ExpressionPrinter expressionPrinter) => expressionPrinter.Visit(parameter);
+
+            public override Expression Quote() => throw new NotSupportedException("Collection bindings are created at execution time.");
+        }
+
+        private sealed class BoundCollectionParameter(string invariantName, string name, RelationalTypeMapping mapping,
+            object? value, bool nullable) : IRelationalParameter
+        {
+            public string InvariantName => invariantName;
+
+            public void AddDbParameter(DbCommand command, object? _) => Bind(command);
+
+            public void AddDbParameter(DbCommand command, IReadOnlyDictionary<string, object?>? _) => Bind(command);
+
+            private void Bind(DbCommand command)
+                => command.Parameters.Add(mapping.CreateParameter(command, name, value, nullable));
         }
 
         internal static bool IsSupportedInteger(RelationalTypeMapping mapping)
@@ -169,13 +211,13 @@ namespace OceanBase.EntityFrameworkCore.Query
 
         private List<object?> Snapshot(SqlParameterExpression source)
         {
-            var dictionary = parameters.GetAndDisableCaching();
-            var identity = (source.Name, source.InvariantName);
+            disableCaching();
+            var identity = source.Name;
             if (!_snapshots.TryGetValue(identity, out var values))
             {
-                if (dictionary[source.Name] is { } value && value is not IEnumerable)
+                if (parameters[source.Name] is { } value && value is not IEnumerable)
                     throw new InvalidOperationException("Collection expansion requires an enumerable parameter value.");
-                values = ((IEnumerable?)dictionary[source.Name])?.Cast<object?>().ToList() ?? [];
+                values = ((IEnumerable?)parameters[source.Name])?.Cast<object?>().ToList() ?? [];
                 _snapshots.Add(identity, values);
             }
             return values;
@@ -195,26 +237,6 @@ namespace OceanBase.EntityFrameworkCore.Query
                 && Nullable.GetUnderlyingType(type) is null)
                 type = typeof(Nullable<>).MakeGenericType(type);
             return type;
-        }
-
-        private SqlExpression Expand(SqlParameterExpression source, RelationalTypeMapping mapping, Type type,
-            ParameterTranslationMode mode, int index, object? raw, string suffix)
-        {
-            if (!_expanded.TryGetValue(mapping, out var expanded))
-                _expanded.Add(mapping, expanded = []);
-            var key = (source.Name, source.InvariantName, mode, index);
-            if (expanded.TryGetValue(key, out var scalar)) return scalar;
-            if (mode == ParameterTranslationMode.Constant)
-                scalar = factory.Constant(raw, type, sensitive: true, mapping);
-            else
-            {
-                var dictionary = parameters.GetAndDisableCaching();
-                var name = Uniquifier.Uniquify(source.Name + suffix + index, dictionary, int.MaxValue);
-                dictionary.Add(name, raw);
-                scalar = new SqlParameterExpression(name, type, mapping);
-            }
-            expanded.Add(key, scalar);
-            return scalar;
         }
     }
 }

@@ -3,12 +3,15 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Internal;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.EntityFrameworkCore.Storage.Json;
 using Microsoft.EntityFrameworkCore.Storage.Internal;
 using OceanBaseConnector;
 using Xunit;
+
+#pragma warning disable EF1001 // EF9-only collection options infrastructure.
 
 namespace OceanBase.EntityFrameworkCore.UnitTests
 {
@@ -119,9 +122,9 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             Assert.Contains("-2147483648, 7, 2147483647", constant);
             Assert.DoesNotContain("@values", constant);
             Assert.DoesNotContain(":values", constant);
-            using var constants = CreateContext(mode, relationalNulls, ParameterTranslationMode.Constant);
+            using var constants = CreateContext(mode, relationalNulls, ParameterizedCollectionTranslationMode.Constantize);
             Assert.Contains("-2147483648, 7, 2147483647", constants.Rows.Where(row => Enumerable.Contains(values, row.Id)).ToQueryString());
-            using var parameters = CreateContext(mode, relationalNulls, ParameterTranslationMode.Parameter);
+            using var parameters = CreateContext(mode, relationalNulls, ParameterizedCollectionTranslationMode.Parameterize);
             Assert.Contains("JSON_TABLE(", parameters.Rows.Where(row => Enumerable.Contains(values, row.Id)).ToQueryString());
             Assert.Contains("JSON_TABLE(", context.Rows.Where(row => Enumerable.Contains(EF.Parameter(values), row.Id)).ToQueryString());
             Assert.Throws<NotSupportedException>(() => parameters.Rows.Where(row => values.Contains(row.Converted)).ToQueryString());
@@ -137,16 +140,16 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             int[] values = [43, 47, 53];
             foreach (var constant in new[] { constantFirst, !constantFirst, constantFirst })
             {
-                using var context = CreateContext(mode, collectionMode: constant ? ParameterTranslationMode.Constant : null);
+                using var context = CreateContext(mode, collectionMode: constant ? ParameterizedCollectionTranslationMode.Constantize : null);
                 var sql = context.Rows.TagWith(constantFirst ? "constant-first" : "default-first")
                     .Where(row => Enumerable.Contains(values, row.Id)).ToQueryString();
                 Assert.Equal(constant, sql.Contains("43, 47, 53", StringComparison.Ordinal));
-                Assert.Equal(!constant, sql.Contains(mode == OceanBaseCompatibilityMode.MySql ? "@values" : ":values", StringComparison.Ordinal));
+                Assert.Equal(!constant, sql.Contains(mode == OceanBaseCompatibilityMode.MySql ? "@__ob_collection_" : ":__ob_collection_", StringComparison.Ordinal));
             }
             using var defaults = CreateContext(mode);
-            using var multiple = CreateContext(mode, collectionMode: ParameterTranslationMode.MultipleParameters);
-            Assert.Equal(defaults.Rows.Where(row => Enumerable.Contains(values, row.Id)).ToQueryString(),
-                multiple.Rows.Where(row => Enumerable.Contains(values, row.Id)).ToQueryString());
+            using var parameters = CreateContext(mode, collectionMode: ParameterizedCollectionTranslationMode.Parameterize);
+            Assert.DoesNotContain("JSON_TABLE(", defaults.Rows.Where(row => Enumerable.Contains(values, row.Id)).ToQueryString());
+            Assert.Contains("JSON_TABLE(", parameters.Rows.Where(row => Enumerable.Contains(values, row.Id)).ToQueryString());
         }
 
         [Theory]
@@ -214,9 +217,6 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             var filtered = left.Where(row => row.Right > 3).ToQueryString();
             Assert.Contains("WHERE", filtered);
             Assert.NotEqual(leftSql, filtered);
-            var exact = context.Rows.LeftJoin(context.Rows, a => a.Id, b => b.ParentId,
-                (a, b) => new { a.Id, Right = (int?)b!.Id });
-            Assert.Contains("LEFT JOIN", exact.ToQueryString());
         }
 
         [Theory]
@@ -273,12 +273,12 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
         }
 
         private static TestContext CreateContext(OceanBaseCompatibilityMode mode, bool relationalNulls = false,
-            ParameterTranslationMode? collectionMode = null)
+            ParameterizedCollectionTranslationMode? collectionMode = null)
         {
             var builder = new DbContextOptionsBuilder<TestContext>().UseOceanBase("Server=localhost;Database=test", mode);
             var extension = builder.Options.Extensions.OfType<RelationalOptionsExtension>().Single()
                 .WithUseRelationalNulls(relationalNulls);
-            if (collectionMode.HasValue) extension = extension.WithUseParameterizedCollectionMode(collectionMode.Value);
+            if (collectionMode.HasValue) extension = extension.WithParameterizedCollectionTranslationMode(collectionMode.Value);
             ((IDbContextOptionsBuilderInfrastructure)builder).AddOrUpdateExtension(extension);
             return new TestContext(builder.Options);
         }

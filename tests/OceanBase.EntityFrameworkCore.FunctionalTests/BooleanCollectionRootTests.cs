@@ -6,12 +6,15 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Internal;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using OceanBaseConnector;
 using Xunit;
+
+#pragma warning disable EF1001 // EF9-only collection options infrastructure.
 
 namespace OceanBase.EntityFrameworkCore.FunctionalTests;
 
@@ -22,8 +25,8 @@ public sealed class BooleanCollectionRootTests
         foreach (var mode in new[] { OceanBaseCompatibilityMode.MySql, OceanBaseCompatibilityMode.Oracle })
         foreach (var async in new[] { false, true })
         foreach (var relationalNulls in new[] { false, true })
-        foreach (var translation in new[] { ParameterTranslationMode.Constant, ParameterTranslationMode.MultipleParameters })
-            yield return new object[] { mode, async, relationalNulls, translation };
+        foreach (var translation in new ParameterizedCollectionTranslationMode?[] { null, ParameterizedCollectionTranslationMode.Parameterize })
+            yield return new object[] { mode, async, relationalNulls, translation! };
     }
 
     [Theory]
@@ -114,8 +117,8 @@ public sealed class BooleanCollectionRootTests
 
     [Theory]
     [MemberData(nameof(ExplicitModes))]
-    public async Task Explicit_parameter_boolean_roots_rebind_and_bind_current_values(
-        OceanBaseCompatibilityMode mode, bool async, bool relationalNulls, ParameterTranslationMode translation)
+    public async Task Captured_boolean_roots_rebind_and_bind_current_values(
+        OceanBaseCompatibilityMode mode, bool async, bool relationalNulls, ParameterizedCollectionTranslationMode? translation)
     {
         using var table = new DataTable();
         table.Columns.Add("Value", typeof(object));
@@ -125,7 +128,7 @@ public sealed class BooleanCollectionRootTests
         var capture = new Capture(table);
         await using var context = Create<NativeRow>(mode, capture, relationalNulls, translation);
         bool?[] values = [true, null, false, true];
-        var query = context.Rows.Where(row => EF.Parameter(values).Contains(row.Optional))
+        var query = context.Rows.Where(row => values.Contains(row.Optional))
             .Select(row => row.Optional);
 
         foreach (var input in new bool?[][] { values, [null], [] })
@@ -154,7 +157,7 @@ public sealed class BooleanCollectionRootTests
         await using var convertedContext = Create<ConvertedRow>(mode, convertedCapture, relationalNulls, translation);
         bool?[] convertedValues = [true, null, false];
         var convertedQuery = convertedContext.ConvertedRows
-            .Where(row => EF.Parameter(convertedValues).Contains(row.Flag))
+            .Where(row => convertedValues.Contains(row.Flag))
             .Select(row => row.Flag);
         var convertedResult = async ? await convertedQuery.ToListAsync() : convertedQuery.ToList();
         Assert.Equal(new bool?[] { true, false, null }, convertedResult);
@@ -163,7 +166,7 @@ public sealed class BooleanCollectionRootTests
     }
 
     private static TestContext<T> Create<T>(OceanBaseCompatibilityMode mode, Capture capture,
-        bool relationalNulls = false, ParameterTranslationMode? translation = null) where T : class
+        bool relationalNulls = false, ParameterizedCollectionTranslationMode? translation = null) where T : class
     {
         var builder = new DbContextOptionsBuilder<TestContext<T>>()
             .UseOceanBase("Server=offline;Database=boolean_roots", mode)
@@ -171,7 +174,7 @@ public sealed class BooleanCollectionRootTests
             .AddInterceptors(new NoNetwork(), capture);
         var extension = builder.Options.Extensions.OfType<RelationalOptionsExtension>().Single()
             .WithUseRelationalNulls(relationalNulls);
-        if (translation.HasValue) extension = extension.WithUseParameterizedCollectionMode(translation.Value);
+        if (translation.HasValue) extension = extension.WithParameterizedCollectionTranslationMode(translation.Value);
         ((IDbContextOptionsBuilderInfrastructure)builder).AddOrUpdateExtension(extension);
         return new TestContext<T>(builder.Options);
     }

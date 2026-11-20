@@ -1,9 +1,11 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore.Query;
 using Microsoft.EntityFrameworkCore.Query.SqlExpressions;
 using Microsoft.EntityFrameworkCore.Storage;
+using Microsoft.EntityFrameworkCore.Storage.Internal;
 using OceanBaseConnector;
 
 namespace OceanBase.EntityFrameworkCore.Query
@@ -11,6 +13,7 @@ namespace OceanBase.EntityFrameworkCore.Query
     internal sealed partial class OceanBaseQuerySqlGenerator : QuerySqlGenerator
     {
         private readonly OceanBaseCompatibilityMode _mode;
+        private readonly List<(SqlParameterExpression Parameter, string Name)> _oracleParameters = [];
 
         public OceanBaseQuerySqlGenerator(QuerySqlGeneratorDependencies dependencies, OceanBaseCompatibilityMode mode)
             : base(dependencies)
@@ -19,6 +22,56 @@ namespace OceanBase.EntityFrameworkCore.Query
         }
 
         protected override string AliasSeparator => _mode == OceanBaseCompatibilityMode.Oracle ? " " : " AS ";
+
+        public override IRelationalCommand GetCommand(Expression queryExpression)
+        {
+            _oracleParameters.Clear();
+            return base.GetCommand(queryExpression);
+        }
+
+        protected override Expression VisitSqlParameter(SqlParameterExpression parameter)
+        {
+            if (_mode != OceanBaseCompatibilityMode.Oracle)
+                return base.VisitSqlParameter(parameter);
+
+            var mapping = parameter.TypeMapping!;
+            var helper = Dependencies.SqlGenerationHelper;
+            foreach (var (bound, name) in _oracleParameters)
+            {
+                if (bound.Name == parameter.Name
+                    && string.Equals(bound.TypeMapping!.StoreType, mapping.StoreType, StringComparison.OrdinalIgnoreCase)
+                    && Equals(bound.TypeMapping.Converter, mapping.Converter))
+                {
+                    Sql.Append(helper.GenerateParameterNamePlaceholder(name));
+                    return parameter;
+                }
+            }
+
+            var parameterName = helper.GenerateParameterName(parameter.Name);
+#pragma warning disable EF1001 // EF9's generated bind names can collide after Oracle name normalization.
+            var boundNames = Sql.Parameters.Select(bound => bound is TypeMappedRelationalParameter mapped
+                ? mapped.Name : helper.GenerateParameterName(bound.InvariantName)).ToHashSet(StringComparer.OrdinalIgnoreCase);
+#pragma warning restore EF1001
+            var uniqueName = parameterName;
+            for (var suffix = 1; boundNames.Contains(uniqueName); suffix++)
+                uniqueName = parameterName + "_" + suffix;
+            _oracleParameters.Add((parameter, uniqueName));
+            Sql.AddParameter(parameter.Name, uniqueName, mapping, parameter.IsNullable);
+            Sql.Append(helper.GenerateParameterNamePlaceholder(uniqueName));
+            return parameter;
+        }
+
+        protected override Expression VisitExtension(Expression extensionExpression)
+        {
+            if (extensionExpression is not OceanBaseCollectionParameterExpandingVisitor.CollectionBinding binding)
+                return base.VisitExtension(extensionExpression);
+            var helper = Dependencies.SqlGenerationHelper;
+            var name = binding.Name;
+            if (!Sql.Parameters.Any(parameter => parameter.InvariantName == name))
+                Sql.AddParameter(binding.CreateParameter(helper.GenerateParameterName(name)));
+            Sql.Append(helper.GenerateParameterNamePlaceholder(name));
+            return binding;
+        }
 
         protected override Expression VisitTableValuedFunction(TableValuedFunctionExpression function)
         {
@@ -63,8 +116,9 @@ namespace OceanBase.EntityFrameworkCore.Query
                         && ReferenceEquals(conversion.TypeMapping, conversion.Operand.TypeMapping))
                         GenerateCollectionCast(conversion.Operand);
                     // Oracle UNION branches need common parameter types/charsets (1790/12704).
-                    else if (_mode == OceanBaseCompatibilityMode.Oracle
-                        && expression is SqlParameterExpression or SqlConstantExpression)
+                    else if (_mode == OceanBaseCompatibilityMode.Oracle && valuesExpression.ColumnNames[column] == "Value"
+                        && expression is SqlParameterExpression or SqlConstantExpression
+                            or OceanBaseCollectionParameterExpandingVisitor.CollectionBinding)
                         GenerateCollectionCast(expression);
                     else Visit(expression);
                     if (row == 0)

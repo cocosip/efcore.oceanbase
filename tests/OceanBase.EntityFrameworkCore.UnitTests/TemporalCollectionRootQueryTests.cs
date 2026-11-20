@@ -2,10 +2,13 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Internal;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Query;
 using Microsoft.EntityFrameworkCore.Storage;
 using Xunit;
+
+#pragma warning disable EF1001 // EF9-only collection options infrastructure.
 
 namespace OceanBase.EntityFrameworkCore.UnitTests;
 
@@ -130,12 +133,12 @@ public sealed class TemporalCollectionRootQueryTests
     }
 
     [Theory]
-    [InlineData(OceanBaseCompatibilityMode.MySql, ParameterTranslationMode.Constant)]
-    [InlineData(OceanBaseCompatibilityMode.MySql, ParameterTranslationMode.MultipleParameters)]
-    [InlineData(OceanBaseCompatibilityMode.Oracle, ParameterTranslationMode.Constant)]
-    [InlineData(OceanBaseCompatibilityMode.Oracle, ParameterTranslationMode.MultipleParameters)]
-    public void Explicit_temporal_parameter_roots_rebind_and_preserve_empty_metadata(
-        OceanBaseCompatibilityMode mode, ParameterTranslationMode translation)
+    [InlineData(OceanBaseCompatibilityMode.MySql, ParameterizedCollectionTranslationMode.Constantize)]
+    [InlineData(OceanBaseCompatibilityMode.MySql, ParameterizedCollectionTranslationMode.Parameterize)]
+    [InlineData(OceanBaseCompatibilityMode.Oracle, ParameterizedCollectionTranslationMode.Constantize)]
+    [InlineData(OceanBaseCompatibilityMode.Oracle, ParameterizedCollectionTranslationMode.Parameterize)]
+    public void Captured_temporal_roots_rebind_and_preserve_empty_metadata(
+        OceanBaseCompatibilityMode mode, ParameterizedCollectionTranslationMode translation)
     {
         using var context = CreateContext(mode, translation);
         DateTime?[] dateTimes = [new DateTime(2026, 11, 12, 1, 2, 3), null];
@@ -144,11 +147,11 @@ public sealed class TemporalCollectionRootQueryTests
         TimeOnly?[] times = [new TimeOnly(1, 2, 3), null];
         List<TimeSpan?> durations = [new TimeSpan(1, 2, 3), null];
 
-        var dateTimeQuery = context.Rows.Where(row => EF.Parameter(dateTimes).Contains(row.OccurredAt));
-        var offsetQuery = context.Rows.Where(row => EF.Parameter(offsets).Contains(row.OccurredAtOffset));
-        var dateQuery = context.Rows.Where(row => EF.Parameter(dates).Contains(row.OccurredOn));
-        var timeQuery = context.Rows.Where(row => EF.Parameter(times).Contains(row.OccurredTime));
-        var durationQuery = context.Rows.Where(row => EF.Parameter(durations).Contains(row.Duration));
+        var dateTimeQuery = context.Rows.Where(row => dateTimes.Contains(row.OccurredAt));
+        var offsetQuery = context.Rows.Where(row => offsets.Contains(row.OccurredAtOffset));
+        var dateQuery = context.Rows.Where(row => dates.Contains(row.OccurredOn));
+        var timeQuery = context.Rows.Where(row => times.Contains(row.OccurredTime));
+        var durationQuery = context.Rows.Where(row => durations.Contains(row.Duration));
 
         AssertTemporal(dateTimeQuery, () => dateTimes = []);
         AssertTemporal(offsetQuery, () => offsets = []);
@@ -160,7 +163,7 @@ public sealed class TemporalCollectionRootQueryTests
         using var unconfigured = CreateContext(mode, null);
         Assert.Throws<InvalidOperationException>(() => unconfigured.Rows
             .Where(row => EF.Parameter(unsupported).Contains(row.OccurredAt)).ToQueryString());
-        using var singleParameter = CreateContext(mode, ParameterTranslationMode.Parameter);
+        using var singleParameter = CreateContext(mode, ParameterizedCollectionTranslationMode.Parameterize);
         Assert.Throws<InvalidOperationException>(() => singleParameter.Rows
             .Where(row => EF.Parameter(unsupported).Contains(row.OccurredAt)).ToQueryString());
     }
@@ -179,14 +182,14 @@ public sealed class TemporalCollectionRootQueryTests
             || sql.Contains("WHERE 0", StringComparison.Ordinal));
     }
 
-    private static TestContext CreateContext(OceanBaseCompatibilityMode mode, ParameterTranslationMode? translation = null)
+    private static TestContext CreateContext(OceanBaseCompatibilityMode mode, ParameterizedCollectionTranslationMode? translation = null)
     {
         var builder = new DbContextOptionsBuilder<TestContext>()
             .UseOceanBase("Server=localhost;Database=temporal_roots", mode);
         if (translation.HasValue)
         {
             var extension = builder.Options.Extensions.OfType<RelationalOptionsExtension>().Single()
-                .WithUseParameterizedCollectionMode(translation.Value);
+                .WithParameterizedCollectionTranslationMode(translation.Value);
             ((IDbContextOptionsBuilderInfrastructure)builder).AddOrUpdateExtension(extension);
         }
         return new TestContext(builder.Options);

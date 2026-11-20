@@ -19,8 +19,8 @@ try {
         throw 'Package ID or version does not match the requested provider build.'
     }
 
-    $assembly = @($archive.Entries | Where-Object FullName -CEQ 'lib/net10.0/OceanBase.EntityFrameworkCore.dll')
-    if ($assembly.Count -ne 1 -or $assembly[0].Length -eq 0) { throw 'Expected a nonempty net10.0 provider assembly.' }
+    $assembly = @($archive.Entries | Where-Object FullName -CEQ 'lib/net9.0/OceanBase.EntityFrameworkCore.dll')
+    if ($assembly.Count -ne 1 -or $assembly[0].Length -eq 0) { throw 'Expected a nonempty net9.0 provider assembly.' }
     if ($ExpectedSourceRevision) {
         $assemblyFile = [System.IO.Path]::GetTempFileName()
         try {
@@ -34,12 +34,12 @@ try {
         }
     }
     $groups = @($metadata.dependencies.group)
-    if ($groups.Count -ne 1 -or $groups[0].targetFramework -cne 'net10.0') {
-        throw 'Expected one net10.0 dependency group.'
+    if ($groups.Count -ne 1 -or $groups[0].targetFramework -cne 'net9.0') {
+        throw 'Expected one net9.0 dependency group.'
     }
     $expectedDependencies = @{
-        'Microsoft.EntityFrameworkCore' = '[10.0.0, 11.0.0)'
-        'Microsoft.EntityFrameworkCore.Relational' = '[10.0.0, 11.0.0)'
+        'Microsoft.EntityFrameworkCore' = '[9.0.0, 10.0.0)'
+        'Microsoft.EntityFrameworkCore.Relational' = '[9.0.0, 10.0.0)'
         'OceanBaseConnector' = '0.4.0'
     }
     $dependencies = @($groups[0].dependency)

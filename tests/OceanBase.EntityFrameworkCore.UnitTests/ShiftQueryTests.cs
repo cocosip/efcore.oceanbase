@@ -1,6 +1,7 @@
 using System;
 using System.Linq;
 using System.Linq.Expressions;
+using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Query;
@@ -59,8 +60,10 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             }
             else
             {
-                Assert.Contains("BITAND(:count, 31)", sql);
-                Assert.Contains("BITAND(:count, 63)", sql);
+                var bind = Regex.Match(sql, @"^-- (:\w+)='-1'").Groups[1].Value;
+                Assert.NotEmpty(bind);
+                Assert.Contains($"BITAND({bind}, 31)", sql);
+                Assert.Contains($"BITAND({bind}, 63)", sql);
                 Assert.Contains("POWER(2, ", sql);
                 if (left)
                 {

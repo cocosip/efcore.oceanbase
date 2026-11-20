@@ -1,9 +1,12 @@
 using System;
 using System.Linq;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Internal;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Query;
 using Xunit;
+
+#pragma warning disable EF1001 // EF9-only collection options infrastructure.
 
 namespace OceanBase.EntityFrameworkCore.UnitTests;
 
@@ -39,16 +42,16 @@ public sealed class GuidCollectionRootQueryTests
     }
 
     [Theory]
-    [InlineData(OceanBaseCompatibilityMode.MySql, ParameterTranslationMode.Constant)]
-    [InlineData(OceanBaseCompatibilityMode.MySql, ParameterTranslationMode.MultipleParameters)]
-    [InlineData(OceanBaseCompatibilityMode.Oracle, ParameterTranslationMode.Constant)]
-    [InlineData(OceanBaseCompatibilityMode.Oracle, ParameterTranslationMode.MultipleParameters)]
-    public void Explicit_parameter_guid_roots_translate_and_rebind(
-        OceanBaseCompatibilityMode mode, ParameterTranslationMode translation)
+    [InlineData(OceanBaseCompatibilityMode.MySql, ParameterizedCollectionTranslationMode.Constantize)]
+    [InlineData(OceanBaseCompatibilityMode.MySql, ParameterizedCollectionTranslationMode.Parameterize)]
+    [InlineData(OceanBaseCompatibilityMode.Oracle, ParameterizedCollectionTranslationMode.Constantize)]
+    [InlineData(OceanBaseCompatibilityMode.Oracle, ParameterizedCollectionTranslationMode.Parameterize)]
+    public void Captured_guid_roots_translate_and_rebind(
+        OceanBaseCompatibilityMode mode, ParameterizedCollectionTranslationMode translation)
     {
         using var context = CreateContext(mode, translation);
         Guid?[] values = [Token, null, Guid.Empty];
-        var query = context.Rows.Where(row => EF.Parameter(values).Contains(row.Token));
+        var query = context.Rows.Where(row => values.Contains(row.Token));
 
         foreach (var input in new Guid?[][] { values, [Token], [] })
         {
@@ -62,7 +65,7 @@ public sealed class GuidCollectionRootQueryTests
     }
 
     private static TestContext CreateContext(OceanBaseCompatibilityMode mode,
-        ParameterTranslationMode? translation = null)
+        ParameterizedCollectionTranslationMode? translation = null)
     {
         var builder = new DbContextOptionsBuilder<TestContext>()
             .UseOceanBase("Server=offline;Database=guid_roots", mode)
@@ -70,7 +73,7 @@ public sealed class GuidCollectionRootQueryTests
         if (translation.HasValue)
         {
             var extension = builder.Options.Extensions.OfType<RelationalOptionsExtension>().Single()
-                .WithUseParameterizedCollectionMode(translation.Value);
+                .WithParameterizedCollectionTranslationMode(translation.Value);
             ((IDbContextOptionsBuilderInfrastructure)builder).AddOrUpdateExtension(extension);
         }
 

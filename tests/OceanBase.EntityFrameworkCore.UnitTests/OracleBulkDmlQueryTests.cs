@@ -20,10 +20,10 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             var integer = table.FindColumn("Id")!.StoreTypeMapping;
             var target = new TableExpression("__ob_bulk_target", table);
             var nestedSource = SelectExpression.CreateImmutable("joined", [new TableExpression("__ob_bulk_target1", table)],
-                [new ProjectionExpression(new ColumnExpression("Id", "__ob_bulk_target1", typeof(int), integer, false), "Id")], new SqlAliasManager());
+                [new ProjectionExpression(new ColumnExpression("Id", "__ob_bulk_target1", typeof(int), integer, false), "Id")]);
             var setter = new SelectExpression(null, [new TableExpression("__ob_bulk_target2", table)], null, [], null,
-                [new ProjectionExpression(new ColumnExpression("Count", "__ob_bulk_target2", typeof(int), integer, false), "")], false, [], null, null, new SqlAliasManager());
-            var select = new SelectExpression(null, [target, new CrossJoinExpression(nestedSource)], null, [], null, [], false, [], null, null, new SqlAliasManager());
+                [new ProjectionExpression(new ColumnExpression("Count", "__ob_bulk_target2", typeof(int), integer, false), "")], false, [], null, null);
+            var select = new SelectExpression(null, [target, new CrossJoinExpression(nestedSource)], null, [], null, [], false, [], null, null);
             var update = new UpdateExpression(target, select,
                 [new ColumnValueSetter(new ColumnExpression("Count", target.Alias, typeof(int), integer, false), new ScalarSubqueryExpression(setter))]);
             var sql = Generator(context).GetCommand(update).CommandText;
@@ -54,7 +54,7 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
                 shape == "group" ? [column] : [], shape == "having" ? value : null,
                 shape == "projection" ? [new ProjectionExpression(column, "Count")] : [], shape == "distinct",
                 shape == "order" ? [new OrderingExpression(column, true)] : [],
-                shape == "offset" ? value : null, shape == "limit" ? value : null, new SqlAliasManager());
+                shape == "offset" ? value : null, shape == "limit" ? value : null);
             var update = new UpdateExpression(target, select, [new ColumnValueSetter(column, value)]);
             Assert.Contains("query shape", Assert.Throws<NotSupportedException>(() => Generator(context).GetCommand(update)).Message);
         }
@@ -67,8 +67,8 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             var integer = table.FindColumn("Id")!.StoreTypeMapping;
             var target = new TableExpression("__ob_bulk_target", table);
             var nested = SelectExpression.CreateImmutable("__ob_bulk_snapshot", [new TableExpression("__ob_bulk_target1", table)],
-                [new ProjectionExpression(new ColumnExpression("Id", "__ob_bulk_target1", typeof(int), integer, false), "Id")], new SqlAliasManager());
-            var select = new SelectExpression(null, [target, new CrossJoinExpression(nested)], null, [], null, [], false, [], null, null, new SqlAliasManager());
+                [new ProjectionExpression(new ColumnExpression("Id", "__ob_bulk_target1", typeof(int), integer, false), "Id")]);
+            var select = new SelectExpression(null, [target, new CrossJoinExpression(nested)], null, [], null, [], false, [], null, null);
             var id = new ColumnExpression("Id", target.Alias, typeof(int), integer, false);
             var count = new ColumnExpression("Count", target.Alias, typeof(int), integer, false);
             var update = new UpdateExpression(target, select, [new ColumnValueSetter(id, count), new ColumnValueSetter(count, id)]);

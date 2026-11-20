@@ -305,15 +305,16 @@ namespace OceanBase.EntityFrameworkCore.Query
                         case ConstantExpression constant:
                             set = factory.Constant(OceanBaseExplicitTrimTranslator.EncodeSet((char[]?)constant.Value, mode), text);
                             break;
-                        case QueryParameterExpression parameter:
+                        case ParameterExpression { Name: { } nameInContext } when nameInContext.StartsWith(QueryCompilationContext.QueryParameterPrefix, StringComparison.Ordinal):
                             // A genuine string runtime parameter avoids admitting mapped char[] collections.
                             var name = "_ob_trim_" + Guid.NewGuid().ToString("N");
                             var context = QueryCompilationContext.QueryContextParameter;
                             _queryCompilationContext.RegisterRuntimeParameter(name, Expression.Lambda(
                                 Expression.Call(typeof(OceanBaseExplicitTrimTranslator), nameof(OceanBaseExplicitTrimTranslator.EncodeParameter),
-                                    Type.EmptyTypes, context, Expression.Constant(parameter.Name), Expression.Constant(mode)), context));
-                            set = new SqlParameterExpression(name, name, typeof(string), nullable: false,
-                                parameter.TranslationMode, text);
+                                    Type.EmptyTypes, context, Expression.Constant(nameInContext), Expression.Constant(mode)), context));
+                            if (_queryCompilationContext.ParametersToConstantize.Contains(nameInContext))
+                                _queryCompilationContext.ParametersToConstantize.Add(name);
+                            set = new SqlParameterExpression(name, typeof(string), nullable: false, text);
                             break;
                         case NewArrayExpression { NodeType: ExpressionType.NewArrayInit } trimArray:
                             var elements = new List<SqlExpression>();

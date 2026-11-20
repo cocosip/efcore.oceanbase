@@ -63,7 +63,6 @@ namespace OceanBase.EntityFrameworkCore.Internal
             DatabaseManagementEnabled = copyFrom.DatabaseManagementEnabled;
             ManagementConnectionFactory = copyFrom.ManagementConnectionFactory;
             OracleUserPasswordFactory = copyFrom.OracleUserPasswordFactory;
-            ParameterizedCollectionModeConfigured = copyFrom.ParameterizedCollectionModeConfigured;
         }
 
         public OceanBaseCompatibilityMode CompatibilityMode { get; private set; }
@@ -71,7 +70,6 @@ namespace OceanBase.EntityFrameworkCore.Internal
         public bool DatabaseManagementEnabled { get; private set; }
         public Func<OceanBaseConnection>? ManagementConnectionFactory { get; private set; }
         public Func<string>? OracleUserPasswordFactory { get; private set; }
-        internal bool ParameterizedCollectionModeConfigured { get; private set; }
 
         public OceanBaseOptionsExtension WithManagementConnectionFactory(Func<OceanBaseConnection> factory)
         {
@@ -137,13 +135,6 @@ namespace OceanBase.EntityFrameworkCore.Internal
             {
                 CompatibilityMode = CompatibilityMode
             };
-
-        public override OceanBaseOptionsExtension WithUseParameterizedCollectionMode(ParameterTranslationMode mode)
-        {
-            var clone = (OceanBaseOptionsExtension)base.WithUseParameterizedCollectionMode(mode);
-            clone.ParameterizedCollectionModeConfigured = true;
-            return clone;
-        }
 
         protected override RelationalOptionsExtension Clone()
             => new OceanBaseOptionsExtension(this);
@@ -213,7 +204,8 @@ namespace OceanBase.EntityFrameworkCore.Internal
                     serviceProvider.GetRequiredService<QuerySqlGeneratorDependencies>(), CompatibilityMode));
             builder.TryAdd<IRelationalParameterBasedSqlProcessorFactory>(serviceProvider =>
                 new OceanBaseParameterBasedSqlProcessorFactory(
-                    serviceProvider.GetRequiredService<RelationalParameterBasedSqlProcessorDependencies>(), CompatibilityMode));
+                    serviceProvider.GetRequiredService<RelationalParameterBasedSqlProcessorDependencies>(),
+                    serviceProvider.GetRequiredService<IDbContextOptions>(), CompatibilityMode));
             builder.TryAdd<IRelationalTypeMappingSource>(serviceProvider =>
                 new OceanBaseTypeMappingSource(
                     serviceProvider.GetRequiredService<TypeMappingSourceDependencies>(),

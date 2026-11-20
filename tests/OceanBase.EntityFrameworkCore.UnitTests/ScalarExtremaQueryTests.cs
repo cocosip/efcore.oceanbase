@@ -4,6 +4,7 @@ using System.Data.Common;
 using System.Linq;
 using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Internal;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Query;
@@ -169,8 +170,8 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
         public void Cache_keys_freeze_only_numeric_extrema_values_and_preserve_other_key_parts(OceanBaseCompatibilityMode mode)
         {
             using var cache = new MemoryCache(new MemoryCacheOptions());
-            using var context = CreateContext(mode, collectionMode: ParameterTranslationMode.Constant, configure: b => b.UseMemoryCache(cache));
-            using var other = CreateContext(mode, collectionMode: ParameterTranslationMode.MultipleParameters, configure: b => b.UseMemoryCache(cache));
+            using var context = CreateContext(mode, collectionMode: ParameterizedCollectionTranslationMode.Constantize, configure: b => b.UseMemoryCache(cache));
+            using var other = CreateContext(mode, collectionMode: ParameterizedCollectionTranslationMode.Parameterize, configure: b => b.UseMemoryCache(cache));
             var keys = context.GetService<ICompiledQueryCacheKeyGenerator>();
             var otherKeys = other.GetService<ICompiledQueryCacheKeyGenerator>();
             int[] values = [11, 2, 3, 4, 5, 6, 7, 8, 9];
@@ -295,7 +296,7 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             Assert.Throws<InvalidOperationException>(() => context.Rows.Where(r => Math.Min((nint)r.Id, 0) == 0).ToQueryString());
             Assert.Throws<InvalidOperationException>(() => context.Rows.Where(r => Min(r.Id, 0) == 0).ToQueryString());
             Assert.Null(CreateVisitor(context).Translate(Variadic("Least", typeof(int),
-                new QueryParameterExpression("values", typeof(int[])))));
+                Expression.Parameter(typeof(int[]), "__values"))));
         }
 
         private static int Min(int a, int b) => Math.Min(a, b);
@@ -318,12 +319,12 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
         }
 
         private static TestContext CreateContext(OceanBaseCompatibilityMode mode, bool relationalNulls = false,
-            ParameterTranslationMode? collectionMode = null, Action<DbContextOptionsBuilder<TestContext>>? configure = null)
+            ParameterizedCollectionTranslationMode? collectionMode = null, Action<DbContextOptionsBuilder<TestContext>>? configure = null)
         {
             var builder = new DbContextOptionsBuilder<TestContext>().UseOceanBase("Server=localhost;Database=test", mode);
             var extension = builder.Options.Extensions.OfType<RelationalOptionsExtension>().Single().WithUseRelationalNulls(relationalNulls);
             if (collectionMode.HasValue)
-                extension = extension.WithUseParameterizedCollectionMode(collectionMode.Value);
+                extension = extension.WithParameterizedCollectionTranslationMode(collectionMode.Value);
             ((IDbContextOptionsBuilderInfrastructure)builder).AddOrUpdateExtension(extension);
             configure?.Invoke(builder);
             return new TestContext(builder.Options, mode);

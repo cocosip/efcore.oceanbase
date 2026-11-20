@@ -6,11 +6,14 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Internal;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Query;
 using OceanBaseConnector;
 using Xunit;
+
+#pragma warning disable EF1001 // EF9-only collection options infrastructure.
 
 namespace OceanBase.EntityFrameworkCore.FunctionalTests;
 
@@ -20,8 +23,8 @@ public sealed class TemporalCollectionRootTests
     {
         foreach (var mode in new[] { OceanBaseCompatibilityMode.MySql, OceanBaseCompatibilityMode.Oracle })
         foreach (var async in new[] { false, true })
-        foreach (var translation in new[] { ParameterTranslationMode.Constant, ParameterTranslationMode.MultipleParameters })
-            yield return new object[] { mode, async, translation };
+        foreach (var translation in new ParameterizedCollectionTranslationMode?[] { null, ParameterizedCollectionTranslationMode.Parameterize })
+            yield return new object[] { mode, async, translation! };
     }
 
     [Theory]
@@ -110,31 +113,31 @@ public sealed class TemporalCollectionRootTests
 
     [Theory]
     [MemberData(nameof(ExplicitModes))]
-    public Task Explicit_DateTime_parameter_roots_rebind_and_decode(
-        OceanBaseCompatibilityMode mode, bool async, ParameterTranslationMode translation)
+    public Task Captured_DateTime_roots_rebind_and_decode(
+        OceanBaseCompatibilityMode mode, bool async, ParameterizedCollectionTranslationMode? translation)
     {
         DateTime?[] values = [new DateTime(2026, 11, 12, 1, 2, 3), null];
         return Run(mode, async, mode == OceanBaseCompatibilityMode.Oracle ? "TIMESTAMP" : "DATETIME", typeof(DateTime),
-            context => context.Rows.Where(row => EF.Parameter(values).Contains(row.OccurredAt))
+            context => context.Rows.Where(row => values.Contains(row.OccurredAt))
                 .Select(row => row.OccurredAt), () => values = [], new DateTime(2026, 11, 13, 4, 5, 6), translation, false);
     }
 
     [Theory]
     [MemberData(nameof(ExplicitModes))]
-    public Task Explicit_TimeSpan_parameter_roots_rebind_and_decode(
-        OceanBaseCompatibilityMode mode, bool async, ParameterTranslationMode translation)
+    public Task Captured_TimeSpan_roots_rebind_and_decode(
+        OceanBaseCompatibilityMode mode, bool async, ParameterizedCollectionTranslationMode? translation)
     {
         TimeSpan?[] values = [new TimeSpan(1, 2, 3), null];
         return Run(mode, async, mode == OceanBaseCompatibilityMode.Oracle ? "INTERVAL DAY" : "TIME",
             mode == OceanBaseCompatibilityMode.Oracle ? typeof(OceanBaseIntervalDayToSecond) : typeof(TimeSpan),
-            context => context.Rows.Where(row => EF.Parameter(values).Contains(row.Duration))
+            context => context.Rows.Where(row => values.Contains(row.Duration))
                 .Select(row => row.Duration), () => values = [], new TimeSpan(4, 5, 6), translation, false);
     }
 
     private static async Task Run<T>(
         OceanBaseCompatibilityMode mode, bool async, string castType, Type providerValueType,
         Func<TestContext, IQueryable<T>> queryFactory, Action empty, object expected,
-        ParameterTranslationMode? translation = null, bool requireCast = true)
+        ParameterizedCollectionTranslationMode? translation = null, bool requireCast = true)
     {
         using var table = new DataTable();
         table.Columns.Add("Value", typeof(object));
@@ -182,7 +185,7 @@ public sealed class TemporalCollectionRootTests
     }
 
     private static TestContext Create(OceanBaseCompatibilityMode mode, Capture capture,
-        ParameterTranslationMode? translation = null)
+        ParameterizedCollectionTranslationMode? translation = null)
     {
         var builder = new DbContextOptionsBuilder<TestContext>()
             .UseOceanBase("Server=offline;Database=temporal_roots", mode)
@@ -191,7 +194,7 @@ public sealed class TemporalCollectionRootTests
         if (translation.HasValue)
         {
             var extension = builder.Options.Extensions.OfType<RelationalOptionsExtension>().Single()
-                .WithUseParameterizedCollectionMode(translation.Value);
+                .WithParameterizedCollectionTranslationMode(translation.Value);
             ((IDbContextOptionsBuilderInfrastructure)builder).AddOrUpdateExtension(extension);
         }
         return new TestContext(builder.Options);

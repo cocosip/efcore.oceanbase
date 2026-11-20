@@ -73,7 +73,7 @@ internal static class SampleDatabase
         finally
         {
             var cleanupFailures = new List<Exception>();
-            foreach (var name in names.Reverse().Where(observer.Created.Contains))
+            foreach (var name in Enumerable.Reverse(names).Where(observer.Created.Contains))
             {
                 try
                 {

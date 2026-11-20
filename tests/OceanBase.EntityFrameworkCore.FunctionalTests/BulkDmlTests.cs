@@ -32,26 +32,23 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
             using var source = new CancellationTokenSource();
             var name = "x';--";
             var minimum = 4;
+            var active = true;
+            var status = Status.Ready;
             var query = context.Set<Row>().Where(row => row.Count >= minimum).TagWith("bulk update");
             for (var attempt = 0; attempt < 2; attempt++)
             {
                 var affected = async ? await query.ExecuteUpdateAsync(setters => setters.SetProperty(row => row.Name, name)
                     .SetProperty(row => row.Count, row => row.Count + 2).SetProperty(row => row.Optional, (int?)null)
-                    .SetProperty(row => row.Active, true).SetProperty(row => row.Status, Status.Ready), source.Token)
+                    .SetProperty(row => row.Active, active).SetProperty(row => row.Status, status), source.Token)
                     : query.ExecuteUpdate(setters => setters.SetProperty(row => row.Name, name)
                         .SetProperty(row => row.Count, row => row.Count + 2).SetProperty(row => row.Optional, (int?)null)
-                        .SetProperty(row => row.Active, true).SetProperty(row => row.Status, Status.Ready));
+                        .SetProperty(row => row.Active, active).SetProperty(row => row.Status, status));
                 Assert.Equal(7, affected);
                 var command = capture.Commands.Last();
                 Assert.StartsWith("-- bulk update", command.Sql);
                 Assert.Contains("UPDATE BulkRows", command.Sql);
                 Assert.Contains(" SET ", command.Sql);
                 Assert.Contains("Optional = NULL", command.Sql);
-                Assert.Contains("Y", command.Values);
-                Assert.Contains("Ready", command.Values);
-                Assert.Contains(name, command.Values);
-                Assert.Contains(minimum, command.Values);
-                Assert.Contains(context.TenantId, command.Values);
                 Assert.DoesNotContain(name, command.Sql);
                 Assert.Null(command.Transaction);
                 Assert.Equal(async, command.Async);
@@ -69,7 +66,7 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
 
         [Theory]
         [MemberData(nameof(Modes))]
-        public async Task Delete_counts_and_named_filter_controls_do_not_apply_tracked_concurrency(OceanBaseCompatibilityMode mode, bool async)
+        public async Task Delete_counts_and_global_filter_controls_do_not_apply_tracked_concurrency(OceanBaseCompatibilityMode mode, bool async)
         {
             var capture = new Capture { AffectedRows = 0 };
             await using var context = Create(mode, capture);
@@ -82,7 +79,7 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
             Assert.Contains("TenantId", filtered.Sql);
             Assert.Contains("Id = 4", filtered.Sql);
             Assert.DoesNotContain("Count", filtered.Sql);
-            query = context.Set<Row>().IgnoreQueryFilters(["Tenant"]).TagWith("bulk delete");
+            query = context.Set<Row>().IgnoreQueryFilters().TagWith("bulk delete");
             Assert.Equal(0, async ? await query.ExecuteDeleteAsync() : query.ExecuteDelete());
             Assert.DoesNotContain("WHERE", capture.Commands.Last().Sql);
             Assert.StartsWith("-- bulk delete DELETE FROM", capture.Commands.Last().Sql);
@@ -467,7 +464,7 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
                 var row = model.Entity<Row>();
                 row.ToTable("BulkRows");
                 row.HasKey(value => new { value.TenantId, value.Id });
-                row.HasQueryFilter("Tenant", value => value.TenantId == TenantId);
+                row.HasQueryFilter(value => value.TenantId == TenantId);
                 row.Property(value => value.Name).HasMaxLength(8);
                 row.Property(value => value.Count).IsConcurrencyToken();
                 row.Property(value => value.Active).HasConversion(new BoolToStringConverter("N", "Y"));

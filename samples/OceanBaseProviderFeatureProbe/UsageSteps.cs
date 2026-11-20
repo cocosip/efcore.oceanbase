@@ -14,7 +14,7 @@ internal static partial class Scenarios
     [
         new("scalar-values-and-defaults", Shape.Usage, ScalarValues),
         new("linq-grouping-and-pagination", Shape.Usage, LinqQueries),
-        new("named-filters-and-tracking", Shape.Usage, FiltersAndTracking),
+        new("global-filters-and-tracking", Shape.Usage, FiltersAndTracking),
         new("parameterized-raw-sql", Shape.Usage, RawSql),
         new("bulk-update-and-delete", Shape.Usage, BulkWrites),
         new("optimistic-concurrency", Shape.Usage, Concurrency),
@@ -31,8 +31,7 @@ internal static partial class Scenarios
         record.Property(row => row.Payload).HasMaxLength(24);
         record.Property(row => row.Version).IsConcurrencyToken();
         record.HasIndex(row => new { row.Workspace, row.Title }).IsUnique();
-        record.HasQueryFilter("Workspace", row => row.Workspace == context.Workspace);
-        record.HasQueryFilter("Active", row => row.Active);
+        record.HasQueryFilter(row => row.Workspace == context.Workspace && row.Active);
     }
 
     private static async Task Seed(Context context, bool useAsync)
@@ -85,12 +84,11 @@ internal static partial class Scenarios
 
     private static async Task FiltersAndTracking(Context context, bool useAsync, Action<string> stage)
     {
-        stage("apply named filters, disable one and reload without tracking");
+        stage("apply the composed filter, disable all filters and reload without tracking");
         await Seed(context, useAsync);
         var source = context.Set<SampleRecord>();
         Assert.Equal(3, (await Read(source.AsNoTracking(), useAsync)).Count);
         Assert.Empty(context.ChangeTracker.Entries());
-        Assert.Equal(4, (await Read(source.IgnoreQueryFilters(["Active"]).AsNoTracking(), useAsync)).Count);
         Assert.Equal(5, (await Read(source.IgnoreQueryFilters().AsNoTracking(), useAsync)).Count);
         context.Workspace = 2;
         Assert.Equal("other", Assert.Single(await Read(source, useAsync)).Title);

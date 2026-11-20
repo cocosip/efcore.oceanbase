@@ -99,10 +99,10 @@ public sealed class CompiledModelTests
     [InlineData(Mode.MySql, true)]
     [InlineData(Mode.Oracle, false)]
     [InlineData(Mode.Oracle, true)]
-    public void Unsupported_ordinary_or_named_query_filters_fail_visibly(Mode mode, bool named)
+    public void Unsupported_simple_or_composed_query_filters_fail_visibly(Mode mode, bool composed)
     {
         using var context = new FilteredContext(new DbContextOptionsBuilder<Context>()
-            .UseOceanBase("Server=offline", mode).EnableServiceProviderCaching(false).Options, named);
+            .UseOceanBase("Server=offline", mode).EnableServiceProviderCaching(false).Options, composed);
         var error = Assert.Throws<InvalidOperationException>(() => Compile(context, mode));
         Assert.Contains("query filter", error.Message, StringComparison.OrdinalIgnoreCase);
     }
@@ -200,12 +200,12 @@ public sealed class CompiledModelTests
     {
         protected override bool UseMappingHints => false;
     }
-    public sealed class FilteredContext(DbContextOptions<Context> options, bool named) : Context(options)
+    public sealed class FilteredContext(DbContextOptions<Context> options, bool composed) : Context(options)
     {
         protected override void OnModelCreating(ModelBuilder model)
         {
             base.OnModelCreating(model);
-            if (named) model.Entity<Row>().HasQueryFilter("Enabled", row => row.Active);
+            if (composed) model.Entity<Row>().HasQueryFilter(row => row.Active && row.Id > 0);
             else model.Entity<Row>().HasQueryFilter(row => row.Active);
         }
     }

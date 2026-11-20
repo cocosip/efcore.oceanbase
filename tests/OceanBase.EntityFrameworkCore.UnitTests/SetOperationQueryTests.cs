@@ -95,7 +95,7 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             using var context = Create(OceanBaseCompatibilityMode.Oracle);
             var scalar = context.GetService<ISqlExpressionFactory>().Constant(1, context.GetService<IRelationalTypeMappingSource>().FindMapping(typeof(int)));
             var source = new SelectExpression(null, [], null, [], null,
-                [new ProjectionExpression(scalar, "Value")], false, [], null, null, new SqlAliasManager());
+                [new ProjectionExpression(scalar, "Value")], false, [], null, null);
             SetOperationBase set = operation == "Except"
                 ? new ExceptExpression("s", source, source, false)
                 : new IntersectExpression("s", source, source, false);

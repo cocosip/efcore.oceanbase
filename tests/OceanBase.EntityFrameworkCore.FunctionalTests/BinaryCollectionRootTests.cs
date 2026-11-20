@@ -47,10 +47,11 @@ public sealed class BinaryCollectionRootTests
         var sql = Assert.Single(capture.Sql);
         Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? "BINARY" : "BLOB", sql,
             StringComparison.OrdinalIgnoreCase);
-        Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? "UNION ALL SELECT NULL" : "UNION ALL SELECT TO_BLOB(NULL)", sql, StringComparison.OrdinalIgnoreCase);
-        Assert.NotEmpty(capture.Inputs);
-        Assert.All(capture.Inputs, parameter => Assert.Equal(DbType.Binary, parameter.DbType));
-        Assert.Contains(capture.Inputs, parameter => parameter.Value is byte[] bytes && bytes.SequenceEqual(expected));
+        Assert.True(sql.Contains(mode == OceanBaseCompatibilityMode.MySql ? "UNION ALL SELECT 1, NULL"
+            : "UNION ALL SELECT 1, TO_BLOB(NULL)", StringComparison.OrdinalIgnoreCase), sql);
+        var input = Assert.Single(capture.Inputs);
+        Assert.Equal(DbType.Binary, input.DbType);
+        Assert.Equal(expected, Assert.IsType<byte[]>(input.Value));
 
         empty();
         capture.Sql.Clear();

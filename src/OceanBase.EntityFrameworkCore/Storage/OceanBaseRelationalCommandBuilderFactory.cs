@@ -5,7 +5,7 @@ using System.Data.Common;
 using System.IO;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Storage;
-// EF10 parameter definitions let repeated binds retain mapping/converter/facet behavior; review on major upgrades.
+// EF9 parameter definitions let repeated binds retain mapping/converter/facet behavior; review on major upgrades.
 #pragma warning disable EF1001
 using Microsoft.EntityFrameworkCore.Storage.Internal;
 
@@ -43,7 +43,7 @@ namespace OceanBase.EntityFrameworkCore.Storage
         }
 
         private sealed class PositionalCommand(RelationalCommandBuilderDependencies dependencies, IRelationalCommandTemplate template)
-            : RelationalCommand(dependencies, template.CommandText, template.LogCommandText, WithBinding(template.Parameters))
+            : RelationalCommand(dependencies, template.CommandText, WithBinding(template.Parameters))
         {
             public override void PopulateFrom(IRelationalCommandTemplate commandTemplate)
                 => base.PopulateFrom(commandTemplate is PositionalCommand ? commandTemplate

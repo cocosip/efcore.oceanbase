@@ -4,12 +4,15 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Internal;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Query;
 using Microsoft.EntityFrameworkCore.Query.SqlExpressions;
 using Microsoft.EntityFrameworkCore.Storage;
 using OceanBase.EntityFrameworkCore.Query;
 using Xunit;
+
+#pragma warning disable EF1001 // EF9-only collection options infrastructure.
 
 namespace OceanBase.EntityFrameworkCore.UnitTests
 {
@@ -19,7 +22,7 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
         {
             foreach (var mode in new[] { OceanBaseCompatibilityMode.MySql, OceanBaseCompatibilityMode.Oracle })
             foreach (var relationalNulls in new[] { false, true })
-            foreach (var translation in new ParameterTranslationMode?[] { null, ParameterTranslationMode.Constant, ParameterTranslationMode.MultipleParameters })
+            foreach (var translation in new ParameterizedCollectionTranslationMode?[] { null, ParameterizedCollectionTranslationMode.Constantize, ParameterizedCollectionTranslationMode.Parameterize })
                 yield return new object[] { mode, relationalNulls, translation! };
         }
 
@@ -48,8 +51,8 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
 
         [Theory]
         [MemberData(nameof(Modes))]
-        public void Captured_arrays_lists_and_composed_shapes_use_typed_zero_rows_and_union_all(
-            OceanBaseCompatibilityMode mode, bool relationalNulls, ParameterTranslationMode? translation)
+        public void Captured_arrays_lists_and_composed_shapes_follow_the_configured_translation_mode(
+            OceanBaseCompatibilityMode mode, bool relationalNulls, ParameterizedCollectionTranslationMode? translation)
         {
             using var context = CreateContext(mode, relationalNulls, translation);
             int?[] values = [];
@@ -81,9 +84,15 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
                 {
                     var sql = query.ToQueryString();
                     Assert.DoesNotContain("UNION ALL VALUES", sql);
-                    Assert.DoesNotContain("JSON", sql);
                     Assert.DoesNotContain("AS INT)", sql);
                     Assert.DoesNotContain("AS NUMBER(3))", sql);
+                    if (translation == ParameterizedCollectionTranslationMode.Parameterize)
+                    {
+                        Assert.Contains("JSON_TABLE(", sql);
+                        Assert.DoesNotContain("UNION ALL SELECT", sql);
+                        continue;
+                    }
+                    Assert.DoesNotContain("JSON", sql);
                     if (capture.Length == 0) Assert.Contains("WHERE 1 = 0", sql);
                     if (capture.Length > 1) Assert.Contains("UNION ALL SELECT", sql);
                     if (mode == OceanBaseCompatibilityMode.Oracle)
@@ -96,7 +105,7 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
         [Theory]
         [MemberData(nameof(Modes))]
         public void Mapped_constant_and_nonempty_inline_roots_keep_lossless_carrier_casts(
-            OceanBaseCompatibilityMode mode, bool relationalNulls, ParameterTranslationMode? translation)
+            OceanBaseCompatibilityMode mode, bool relationalNulls, ParameterizedCollectionTranslationMode? translation)
         {
             using var context = CreateContext(mode, relationalNulls, translation);
             int[] values = [int.MinValue, int.MaxValue, 17, 17];
@@ -137,7 +146,7 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             int[] values = [1, 2];
             Assert.Contains("JSON_TABLE(", context.Rows.Where(row => EF.Parameter(values)
                 .Where(value => value > row.Id).Contains(row.Id)).ToQueryString());
-            using var parameterContext = CreateContext(mode, collectionMode: ParameterTranslationMode.Parameter);
+            using var parameterContext = CreateContext(mode, collectionMode: ParameterizedCollectionTranslationMode.Parameterize);
             Assert.Contains("JSON_TABLE(", parameterContext.Rows.Where(row => values
                 .Where(value => value > row.Id).Contains(row.Id)).ToQueryString());
             Assert.Contains("JOIN", context.Rows.Join(values, row => row.Converted, value => value, (row, value) => value).ToQueryString());
@@ -153,7 +162,7 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
         [InlineData(OceanBaseCompatibilityMode.Oracle)]
         public void Single_json_collection_parameters_reject_contextual_converters_in_composed_queries(OceanBaseCompatibilityMode mode)
         {
-            using var context = CreateContext(mode, collectionMode: ParameterTranslationMode.Parameter);
+            using var context = CreateContext(mode, collectionMode: ParameterizedCollectionTranslationMode.Parameterize);
             int[] values = [3, 20];
             Assert.Throws<NotSupportedException>(() => context.Rows
                 .Join(values, row => row.Converted, value => value, (row, value) => value).ToQueryString());
@@ -181,7 +190,7 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
         [Theory]
         [MemberData(nameof(Modes))]
         public void Originally_empty_inline_integral_roots_keep_zero_rows_in_subqueries_and_joins(
-            OceanBaseCompatibilityMode mode, bool relationalNulls, ParameterTranslationMode? translation)
+            OceanBaseCompatibilityMode mode, bool relationalNulls, ParameterizedCollectionTranslationMode? translation)
         {
             using var context = CreateContext(mode, relationalNulls, translation);
             foreach (var query in new IQueryable[]
@@ -194,7 +203,6 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
                 context.Rows.Select(row => new int?[] { }.Count(value => row.Id > 0)),
                 context.Rows.Select(row => new int?[] { }.Any(value => value > row.Optional)),
                 context.Rows.SelectMany(row => new int?[] { }.Where(value => value != row.Optional).Select(value => value)),
-                context.Rows.Join(new int?[] { }, row => row.Optional, value => value, (row, value) => value),
                 context.Rows.Where(row => context.Rows.Any(other => new int[] { }.Any(value => value > other.Id + row.Id))),
                 context.Rows.Select(row => new int[] { }.ElementAt(row.Id)),
                 context.Rows.Select(row => new int[] { }.Select(value => row.Id + 1).ElementAt(row.Id)),
@@ -323,21 +331,18 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
         }
 
         [Theory]
-        [InlineData(OceanBaseCompatibilityMode.MySql, ParameterTranslationMode.Constant)]
-        [InlineData(OceanBaseCompatibilityMode.Oracle, ParameterTranslationMode.Constant)]
-        [InlineData(OceanBaseCompatibilityMode.MySql, ParameterTranslationMode.MultipleParameters)]
-        [InlineData(OceanBaseCompatibilityMode.Oracle, ParameterTranslationMode.MultipleParameters)]
-        public void Runtime_roots_snapshot_once_preserve_mapping_indices_and_avoid_binding_collisions(
-            OceanBaseCompatibilityMode mode, ParameterTranslationMode translation)
+        [InlineData(OceanBaseCompatibilityMode.MySql)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle)]
+        public void Runtime_roots_snapshot_once_and_preserve_mapping_indices(OceanBaseCompatibilityMode mode)
         {
             using var context = CreateContext(mode);
             var factory = context.GetService<ISqlExpressionFactory>();
             var source = context.GetService<IRelationalTypeMappingSource>();
             var raw = new CountingEnumerable([17, null, 17, 3, 5, 7]);
             var dictionary = new Dictionary<string, object?> { ["values"] = raw, ["values_value0"] = 99 };
-            var decorator = new ParametersCacheDecorator(dictionary);
+            var canCache = true;
             var visitor = new OceanBaseCollectionParameterExpandingVisitor(factory,
-                new RelationalParameterBasedSqlProcessorParameters(false, translation), decorator, source, mode);
+                dictionary, () => canCache = false, source, mode);
             var results = new List<ValuesExpression>();
             foreach (var property in new[] { nameof(Row.Optional), nameof(Row.Converted) })
             {
@@ -356,22 +361,15 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
                     Assert.Same(source.FindMapping(typeof(int)), cells[0].TypeMapping);
                     var scalar = index == 0 ? Assert.IsType<SqlUnaryExpression>(cells[1]).Operand : cells[1];
                     Assert.Same(mapping, scalar.TypeMapping);
-                    if (translation == ParameterTranslationMode.Constant)
-                        Assert.Equal(raw.Values[index], Assert.IsType<SqlConstantExpression>(scalar).Value);
-                    else
-                    {
-                        var binding = Assert.IsType<SqlParameterExpression>(scalar);
-                        Assert.Equal(binding.Name, binding.InvariantName);
-                        Assert.Equal(raw.Values[index], dictionary[binding.InvariantName]);
-                    }
+                    Assert.Equal(raw.Values[index], Assert.IsType<SqlConstantExpression>(scalar).Value);
                 }
             }
             Assert.NotSame(results[0].RowValues![0].Values[1], results[1].RowValues![0].Values[1]);
             Assert.Equal(1, raw.Enumerations);
             Assert.Same(raw, dictionary["values"]);
             Assert.Equal(99, dictionary["values_value0"]);
-            Assert.False(decorator.CanCache);
-            Assert.Equal(translation == ParameterTranslationMode.Constant ? 2 : 14, dictionary.Count);
+            Assert.False(canCache);
+            Assert.Equal(2, dictionary.Count);
         }
 
         [Theory]
@@ -386,11 +384,11 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             foreach (var columns in new[] { new[] { "Value" }, new[] { "_ord", "Value" } })
             {
                 var dictionary = new Dictionary<string, object?> { ["values"] = null };
-                var decorator = new ParametersCacheDecorator(dictionary);
+                var canCache = true;
                 var root = new ValuesExpression("v", new SqlParameterExpression("values", typeof(int[]),
                     source.FindMapping(typeof(int[]), context.Model, mapping)), columns);
                 var visitor = new OceanBaseCollectionParameterExpandingVisitor(factory,
-                    new RelationalParameterBasedSqlProcessorParameters(false, ParameterTranslationMode.MultipleParameters), decorator, source, mode);
+                    dictionary, () => canCache = false, source, mode);
                 var expanded = Assert.IsType<ValuesExpression>(visitor.Visit(root));
                 Assert.Empty(expanded.RowValues!);
                 var prototypes = Assert.IsAssignableFrom<IReadOnlyList<SqlExpression>>(expanded.FindAnnotation(
@@ -402,7 +400,7 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
                 Assert.Contains("WHERE 1 = 0", sql);
                 Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? "CAST(NULL AS SIGNED)" : "CAST(NULL AS NUMBER)", sql);
                 Assert.Equal(mode == OceanBaseCompatibilityMode.Oracle, sql.Contains("FROM DUAL", StringComparison.Ordinal));
-                Assert.False(decorator.CanCache);
+                Assert.False(canCache);
                 Assert.Null(dictionary["values"]);
                 Assert.Single(dictionary);
             }
@@ -419,8 +417,7 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             var source = context.GetService<IRelationalTypeMappingSource>();
             var dictionary = new Dictionary<string, object?> { ["values"] = new[] { 1, 2 }, ["texts"] = new[] { "one", "two" } };
             var visitor = new OceanBaseCollectionParameterExpandingVisitor(factory,
-                new RelationalParameterBasedSqlProcessorParameters(false, ParameterTranslationMode.MultipleParameters),
-                new ParametersCacheDecorator(dictionary), source, mode);
+                dictionary, () => { }, source, mode);
             var mapping = source.FindMapping(typeof(int))!;
             var parameter = new SqlParameterExpression("values", typeof(int[]), source.FindMapping(typeof(int[]), context.Model, mapping));
             Assert.Contains("column layout", Assert.Throws<NotSupportedException>(() => visitor.Visit(
@@ -491,11 +488,11 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
         }
 
         private static TestContext CreateContext(OceanBaseCompatibilityMode mode, bool relationalNulls = false,
-            ParameterTranslationMode? collectionMode = null)
+            ParameterizedCollectionTranslationMode? collectionMode = null)
         {
             var builder = new DbContextOptionsBuilder<TestContext>().UseOceanBase("Server=localhost;Database=test", mode);
             var extension = builder.Options.Extensions.OfType<RelationalOptionsExtension>().Single().WithUseRelationalNulls(relationalNulls);
-            if (collectionMode.HasValue) extension = extension.WithUseParameterizedCollectionMode(collectionMode.Value);
+            if (collectionMode.HasValue) extension = extension.WithParameterizedCollectionTranslationMode(collectionMode.Value);
             ((IDbContextOptionsBuilderInfrastructure)builder).AddOrUpdateExtension(extension);
             return new TestContext(builder.Options, mode);
         }

@@ -7,12 +7,15 @@ using System.Numerics;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Internal;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Query;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using OceanBaseConnector;
 using Xunit;
+
+#pragma warning disable EF1001 // EF9-only collection options infrastructure.
 
 namespace OceanBase.EntityFrameworkCore.FunctionalTests
 {
@@ -23,14 +26,14 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
             foreach (var mode in new[] { OceanBaseCompatibilityMode.MySql, OceanBaseCompatibilityMode.Oracle })
             foreach (var async in new[] { false, true })
             foreach (var relationalNulls in new[] { false, true })
-            foreach (var translation in new[] { ParameterTranslationMode.Constant, ParameterTranslationMode.MultipleParameters })
-                yield return new object[] { mode, async, relationalNulls, translation };
+            foreach (var translation in new ParameterizedCollectionTranslationMode?[] { null, ParameterizedCollectionTranslationMode.Constantize })
+                yield return new object[] { mode, async, relationalNulls, translation! };
         }
 
         [Theory]
         [MemberData(nameof(Modes))]
         public async Task Numeric_roots_bind_exact_values_and_materialize_nullable_native_results(
-            OceanBaseCompatibilityMode mode, bool async, bool relationalNulls, ParameterTranslationMode translation)
+            OceanBaseCompatibilityMode mode, bool async, bool relationalNulls, ParameterizedCollectionTranslationMode? translation)
         {
             await Check(decimal.MinValue, decimal.MaxValue, 0.0000000000000000000000000001m, DbType.Decimal, "DECIMAL(65,30)", "NUMBER");
             await Check(float.MinValue, float.MaxValue, float.Epsilon, DbType.Single, "FLOAT", "BINARY_FLOAT");
@@ -61,7 +64,7 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
                     Assert.Equal(Math.Max(0, input.Length - 1), sql.Split("UNION ALL SELECT").Length - 1);
                     Assert.Equal(input.Length == 0, sql.Contains("WHERE 1 = 0", StringComparison.Ordinal));
                     var nonnull = capture.Inputs.Where(parameter => parameter.Value is not DBNull).ToArray();
-                    if (translation == ParameterTranslationMode.Constant) Assert.Empty(capture.Inputs);
+                    if (translation == ParameterizedCollectionTranslationMode.Constantize) Assert.Empty(capture.Inputs);
                     else
                     {
                         Assert.Equal(input.Where(value => value.HasValue).Select(value => (object)value!.Value), nonnull.Select(parameter => parameter.Value));
@@ -86,8 +89,8 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
 
         [Theory]
         [MemberData(nameof(Modes))]
-        public async Task Explicit_parameter_numeric_roots_rebind_and_bind_current_values(
-            OceanBaseCompatibilityMode mode, bool async, bool relationalNulls, ParameterTranslationMode translation)
+        public async Task Captured_numeric_roots_rebind_and_bind_current_values(
+            OceanBaseCompatibilityMode mode, bool async, bool relationalNulls, ParameterizedCollectionTranslationMode? translation)
         {
             await Check(decimal.MinValue, decimal.MaxValue, 1.25m, DbType.Decimal);
             await Check(-123.5f, 456.75f, 1.25f, DbType.Single);
@@ -104,7 +107,7 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
                 var capture = new Capture(table);
                 await using var context = Create<T>(mode, capture, relationalNulls, translation);
                 T[] values = [minimum, middle, maximum, middle];
-                var query = context.Rows.Where(row => EF.Parameter(values).Contains(row.Value)).Select(row => row.Value);
+                var query = context.Rows.Where(row => values.Contains(row.Value)).Select(row => row.Value);
 
                 foreach (var input in new[] { values, new[] { middle }, Array.Empty<T>() })
                 {
@@ -119,15 +122,15 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
                     Assert.Equal(input.Length == 0, sql.Contains("WHERE 1 = 0", StringComparison.Ordinal)
                         || sql.Contains("WHERE 0", StringComparison.Ordinal));
                     Assert.All(capture.Inputs, parameter => Assert.Equal(dbType, parameter.DbType));
-                    Assert.Equal(input, capture.Inputs.Select(parameter => Assert.IsType<T>(parameter.Value)));
+                    Assert.Equal(translation is null ? input : [], capture.Inputs.Select(parameter => Assert.IsType<T>(parameter.Value)));
                 }
             }
         }
 
         [Theory]
         [MemberData(nameof(Modes))]
-        public async Task Explicit_parameter_nullable_numeric_roots_bind_null_cells(
-            OceanBaseCompatibilityMode mode, bool async, bool relationalNulls, ParameterTranslationMode translation)
+        public async Task Captured_nullable_numeric_roots_bind_null_cells(
+            OceanBaseCompatibilityMode mode, bool async, bool relationalNulls, ParameterizedCollectionTranslationMode? translation)
         {
             await Check<decimal>(17.25m, DbType.Decimal);
             await Check<float>(17.25f, DbType.Single);
@@ -142,7 +145,7 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
                 var capture = new Capture(table);
                 await using var context = Create<T>(mode, capture, relationalNulls, translation);
                 T?[] values = [middle, null, middle];
-                var query = context.Rows.Where(row => EF.Parameter(values).Contains(row.Optional))
+                var query = context.Rows.Where(row => values.Contains(row.Optional))
                     .Select(row => row.Optional);
 
                 foreach (var input in new T?[][] { values, [null], [] })
@@ -167,7 +170,7 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
         [Theory]
         [MemberData(nameof(Modes))]
         public async Task Contextual_numeric_converters_keep_provider_bindings_readers_and_empty_bodies(
-            OceanBaseCompatibilityMode mode, bool async, bool relationalNulls, ParameterTranslationMode translation)
+            OceanBaseCompatibilityMode mode, bool async, bool relationalNulls, ParameterizedCollectionTranslationMode? translation)
         {
             using var table = new DataTable();
             table.Columns.Add("Value", typeof(double));
@@ -187,7 +190,7 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
                 var sql = Assert.Single(capture.Sql);
                 Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? " AS DOUBLE)" : " AS BINARY_DOUBLE)", sql);
                 Assert.Equal(input.Length == 0, sql.Contains("WHERE 1 = 0", StringComparison.Ordinal));
-                var expected = translation == ParameterTranslationMode.Constant ? []
+                var expected = translation == ParameterizedCollectionTranslationMode.Constantize ? []
                     : input.Where(value => value.HasValue).Select(value => (double)value!.Value).ToArray();
                 Assert.Equal(expected, capture.Inputs.Where(parameter => parameter.Value is not DBNull)
                     .Select(parameter => Assert.IsType<double>(parameter.Value)));
@@ -205,7 +208,7 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
             Assert.Equal(17, Assert.Single(async ? await integerQuery.ToListAsync() : integerQuery.ToList()));
             Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? " AS DECIMAL(65,30))" : " AS NUMBER)", Assert.Single(decimalCapture.Sql));
             Assert.All(decimalCapture.Inputs, parameter => { Assert.Equal(DbType.Decimal, parameter.DbType); Assert.Equal(0, parameter.Precision); Assert.Equal(0, parameter.Scale); });
-            if (translation == ParameterTranslationMode.MultipleParameters)
+            if (translation is null)
                 Assert.Equal(new decimal[] { 17m, int.MaxValue, 17m }, decimalCapture.Inputs.Where(parameter => parameter.Value is not DBNull)
                     .Select(parameter => Assert.IsType<decimal>(parameter.Value)));
 
@@ -220,7 +223,7 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
             Assert.Equal(17.25d, Assert.Single(async ? await singleQuery.ToListAsync() : singleQuery.ToList()));
             Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? " AS FLOAT)" : " AS BINARY_FLOAT)", Assert.Single(singleCapture.Sql));
             Assert.All(singleCapture.Inputs, parameter => Assert.Equal(DbType.Single, parameter.DbType));
-            if (translation == ParameterTranslationMode.MultipleParameters)
+            if (translation is null)
                 Assert.Equal(new float[] { 0f, 17.25f, float.MaxValue, 17.25f }, singleCapture.Inputs.Where(parameter => parameter.Value is not DBNull)
                     .Select(parameter => Assert.IsType<float>(parameter.Value)));
             singleCapture.Sql.Clear();
@@ -240,7 +243,7 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
             using var table = new DataTable();
             table.Columns.Add("Value", typeof(double));
             var capture = new Capture(table);
-            await using var context = Create<double>(mode, capture, false, ParameterTranslationMode.MultipleParameters);
+            await using var context = Create<double>(mode, capture, false, ParameterizedCollectionTranslationMode.Parameterize);
             double[] values = [];
             var query = context.Rows.SelectMany(row => values.Where(value => row.Id > 0));
             foreach (var invalid in new[] { double.NaN, double.PositiveInfinity, double.NegativeInfinity })
@@ -255,7 +258,7 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
         [Theory]
         [MemberData(nameof(Modes))]
         public async Task Projected_contextual_elements_use_their_own_readers_converters_and_current_bindings(
-            OceanBaseCompatibilityMode mode, bool async, bool relationalNulls, ParameterTranslationMode translation)
+            OceanBaseCompatibilityMode mode, bool async, bool relationalNulls, ParameterizedCollectionTranslationMode? translation)
         {
             using var table = new DataTable();
             table.Columns.Add("Value", typeof(object));
@@ -283,7 +286,7 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
                     Assert.Contains(mode == OceanBaseCompatibilityMode.MySql ? " AS DOUBLE)" : " AS BINARY_DOUBLE)", sql);
                     Assert.Equal(input.Length == 0, sql.Contains("WHERE 1 = 0", StringComparison.Ordinal));
                     Assert.Equal(Math.Max(0, input.Length - 1), sql.Split("UNION ALL SELECT").Length - 1);
-                    var expectedParameters = translation == ParameterTranslationMode.Constant ? []
+                    var expectedParameters = translation == ParameterizedCollectionTranslationMode.Constantize ? []
                         : input.Where(value => value.HasValue).Select(value => (double)value!.Value + 100d).ToArray();
                     Assert.Equal(expectedParameters, capture.Inputs.Where(parameter => parameter.Value is not DBNull)
                         .Select(parameter => Assert.IsType<double>(parameter.Value)));
@@ -306,7 +309,7 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
             var pair = Assert.Single(async ? await pairQuery.ToListAsync() : pairQuery.ToList());
             Assert.Equal(17.25m, pair.First);
             Assert.Equal(17.25m, pair.Second);
-            if (translation == ParameterTranslationMode.MultipleParameters)
+            if (translation is null)
                 Assert.Equal(new[] { 17.25d, 17.25d, 117.25d, 117.25d }, pairCapture.Inputs
                     .Where(parameter => parameter.Value is not DBNull).Select(parameter => Assert.IsType<double>(parameter.Value)));
 
@@ -331,14 +334,18 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
         }
 
         private static TestContext<T> Create<T>(OceanBaseCompatibilityMode mode, Capture capture,
-            bool relationalNulls, ParameterTranslationMode translation) where T : struct
+            bool relationalNulls, ParameterizedCollectionTranslationMode? translation) where T : struct
         {
             var builder = new DbContextOptionsBuilder<TestContext<T>>()
                 .UseOceanBase("Server=offline;Database=numeric_roots", mode).EnableServiceProviderCaching(false)
                 .AddInterceptors(new NoNetwork(), capture);
-            ((IDbContextOptionsBuilderInfrastructure)builder).AddOrUpdateExtension(
-                builder.Options.Extensions.OfType<RelationalOptionsExtension>().Single()
-                    .WithUseRelationalNulls(relationalNulls).WithUseParameterizedCollectionMode(translation));
+            var extension = builder.Options.Extensions.OfType<RelationalOptionsExtension>().Single()
+                .WithUseRelationalNulls(relationalNulls);
+            if (translation.HasValue)
+            {
+                extension = extension.WithParameterizedCollectionTranslationMode(translation.Value);
+            }
+            ((IDbContextOptionsBuilderInfrastructure)builder).AddOrUpdateExtension(extension);
             return new TestContext<T>(builder.Options, mode);
         }
 

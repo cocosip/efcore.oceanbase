@@ -41,7 +41,7 @@ Existing working files may retain their prior endings until rewritten or checked
 normalizes text when staging. Use an LF-capable editor. Do not discard local changes to refresh line endings.
 
 The current [CI workflow](../.github/workflows/ci.yml) triggers automatically on pushes and pull requests
-targeting `efcore/10.0`. It runs offline Release solution tests and the package-content gate on Windows
+targeting `efcore/9.0`. It runs offline Release solution tests and the package-content gate on Windows
 and Linux using PowerShell 7. The workflow ends after package validation. Record revision-specific
 evidence and platform exclusions in the release checklist.
 
@@ -120,7 +120,7 @@ secrets or open connections. Native execution requires the opt-in and
 `--filter FullyQualifiedName~LiveReadOnlyQueryTests`. Keep these filters distinct: default solution tests
 exclude this project, while an unfiltered explicit project run includes live cases. Native profile errors
 record only stage/type/server code/reader count, never arbitrary connector messages or inner exceptions.
-See `docs/efcore/efcore-10-release-checklist.md` for commands and the current environment boundary.
+See `docs/efcore/efcore-9-release-checklist.md` for the EF Core 9 acceptance status.
 
 Do not put credentials in source, tracked configuration, documentation, command output or test artifacts. Do not
 print secret values or full connection strings when configuring or diagnosing tests. Keep sensitive-data logging

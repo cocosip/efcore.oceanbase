@@ -9,13 +9,14 @@ using OceanBase.EntityFrameworkCore.Storage;
 
 namespace OceanBase.EntityFrameworkCore.Query
 {
-    internal sealed class OceanBaseBulkDmlVisitor(OceanBaseCompatibilityMode mode, ParametersCacheDecorator parameters,
+    internal sealed class OceanBaseBulkDmlVisitor(OceanBaseCompatibilityMode mode, IReadOnlyDictionary<string, object?> parameters, Action disableCaching,
         ISqlExpressionFactory factory) : ExpressionVisitor
     {
         protected override Expression VisitExtension(Expression node)
         {
             if (node is not UpdateExpression update) return base.VisitExtension(node);
-            IReadOnlyList<ColumnValueSetter> setters = update.ColumnValueSetters
+            // EF9 walks the SetProperty chain from its outermost call to its innermost.
+            IReadOnlyList<ColumnValueSetter> setters = update.ColumnValueSetters.Reverse()
                 .Select(setter => new ColumnValueSetter(setter.Column, EncodeValue(setter))).ToArray();
             var targets = new HashSet<(string Alias, string Name)>();
             foreach (var setter in setters)
@@ -29,7 +30,8 @@ namespace OceanBase.EntityFrameworkCore.Query
                         validation.ValidateWriteValue(constant.Value);
                         break;
                     case SqlParameterExpression parameter:
-                        validation.ValidateWriteValue(parameters.GetAndDisableCaching()[parameter.Name]);
+                        disableCaching();
+                        validation.ValidateWriteValue(parameters[parameter.Name]);
                         break;
                 }
             }

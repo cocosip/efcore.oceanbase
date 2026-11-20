@@ -13,7 +13,7 @@ namespace OceanBase.EntityFrameworkCore.Query
 
         public override object GenerateCacheKey(Expression query, bool async)
             => (base.GenerateCacheKey(Snapshot.Visit(query), async),
-                RelationalOptionsExtension.Extract(RelationalDependencies.ContextOptions).ParameterizedCollectionMode);
+                RelationalOptionsExtension.Extract(RelationalDependencies.ContextOptions).ParameterizedCollectionTranslationMode);
 
         private sealed class ConstantArraySnapshot : ExpressionVisitor
         {

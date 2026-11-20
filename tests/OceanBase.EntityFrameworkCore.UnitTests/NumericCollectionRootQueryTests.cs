@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Internal;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Query;
 using Microsoft.EntityFrameworkCore.Query.SqlExpressions;
@@ -9,6 +10,8 @@ using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using OceanBase.EntityFrameworkCore.Query;
 using Xunit;
+
+#pragma warning disable EF1001 // EF9-only collection options infrastructure.
 
 namespace OceanBase.EntityFrameworkCore.UnitTests
 {
@@ -19,7 +22,7 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
         [Theory]
         [MemberData(nameof(Modes))]
         public void Captured_numeric_roots_keep_carriers_duplicates_nulls_and_current_values(
-            OceanBaseCompatibilityMode mode, bool relationalNulls, ParameterTranslationMode? translation)
+            OceanBaseCompatibilityMode mode, bool relationalNulls, ParameterizedCollectionTranslationMode? translation)
         {
             Check(decimal.MinValue, decimal.MaxValue, 0.0000000000000000000000000001m, "DECIMAL(65,30)", "NUMBER");
             Check(float.MinValue, float.MaxValue, float.Epsilon, "FLOAT", "BINARY_FLOAT");
@@ -62,7 +65,7 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
         [Theory]
         [MemberData(nameof(Modes))]
         public void Inline_numeric_roots_keep_original_types_when_empty_or_pruned(
-            OceanBaseCompatibilityMode mode, bool relationalNulls, ParameterTranslationMode? translation)
+            OceanBaseCompatibilityMode mode, bool relationalNulls, ParameterizedCollectionTranslationMode? translation)
         {
             Check(decimal.MinValue, decimal.MaxValue, "DECIMAL(65,30)", "NUMBER");
             Check(float.MinValue, float.MaxValue, "FLOAT", "BINARY_FLOAT");
@@ -96,7 +99,7 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
         [Theory]
         [MemberData(nameof(Modes))]
         public void Contextual_numeric_converters_choose_the_provider_carrier_without_column_facets(
-            OceanBaseCompatibilityMode mode, bool relationalNulls, ParameterTranslationMode? translation)
+            OceanBaseCompatibilityMode mode, bool relationalNulls, ParameterizedCollectionTranslationMode? translation)
         {
             using var context = Create<decimal>(mode, relationalNulls, translation);
             decimal?[] decimals = [null, decimal.MinValue, decimal.MaxValue, 0.0000000000000000000000000001m];
@@ -121,7 +124,7 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
         [InlineData(OceanBaseCompatibilityMode.Oracle)]
         public void Numeric_roots_reject_nonfinite_constants_and_explicit_single_parameters(OceanBaseCompatibilityMode mode)
         {
-            using var context = Create<double>(mode, false, ParameterTranslationMode.Constant);
+            using var context = Create<double>(mode, false, ParameterizedCollectionTranslationMode.Constantize);
             double[] values = [double.NaN];
             var query = context.Rows.SelectMany(row => values.Where(value => row.Id > 0));
             foreach (var value in new[] { double.NaN, double.PositiveInfinity, double.NegativeInfinity })
@@ -130,20 +133,20 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
                 Assert.Throws<ArgumentOutOfRangeException>(() => query.ToQueryString());
             }
             values = [double.Epsilon, double.MaxValue];
-            Assert.Throws<NotSupportedException>(() => context.Rows.Where(row => EF.Parameter(values)
+            Assert.Throws<InvalidOperationException>(() => context.Rows.Where(row => EF.Parameter(values)
                 .Where(value => value > row.Value).Contains(row.Value)).ToQueryString());
             values = [double.NaN];
             Assert.Throws<ArgumentOutOfRangeException>(() => context.Rows
-                .Where(row => EF.Parameter(values).Contains(row.Value)).ToQueryString());
+                .Where(row => values.Contains(row.Value)).ToQueryString());
         }
 
         [Theory]
-        [InlineData(OceanBaseCompatibilityMode.MySql, ParameterTranslationMode.Constant)]
-        [InlineData(OceanBaseCompatibilityMode.MySql, ParameterTranslationMode.MultipleParameters)]
-        [InlineData(OceanBaseCompatibilityMode.Oracle, ParameterTranslationMode.Constant)]
-        [InlineData(OceanBaseCompatibilityMode.Oracle, ParameterTranslationMode.MultipleParameters)]
-        public void Explicit_parameter_numeric_roots_rebind_current_values_and_empty_metadata(
-            OceanBaseCompatibilityMode mode, ParameterTranslationMode translation)
+        [InlineData(OceanBaseCompatibilityMode.MySql, ParameterizedCollectionTranslationMode.Constantize)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, ParameterizedCollectionTranslationMode.Parameterize)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, ParameterizedCollectionTranslationMode.Constantize)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, ParameterizedCollectionTranslationMode.Parameterize)]
+        public void Captured_numeric_roots_rebind_current_values_and_empty_metadata(
+            OceanBaseCompatibilityMode mode, ParameterizedCollectionTranslationMode translation)
         {
             Check<decimal>(decimal.MinValue, decimal.MaxValue, 1.25m);
             Check<float>(-123.5f, 456.75f, 1.25f);
@@ -153,7 +156,7 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             {
                 using var context = Create<T>(mode, false, translation);
                 T[] values = [minimum, middle, maximum, middle];
-                var query = context.Rows.Where(row => EF.Parameter(values).Contains(row.Value));
+                var query = context.Rows.Where(row => values.Contains(row.Value));
                 foreach (var input in new[] { values, new[] { middle }, Array.Empty<T>() })
                 {
                     values = input;
@@ -166,7 +169,7 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
                 }
 
                 List<T> list = [minimum, middle, maximum];
-                var listQuery = context.Rows.Where(row => EF.Parameter(list).Contains(row.Value));
+                var listQuery = context.Rows.Where(row => list.Contains(row.Value));
                 list = [];
                 var listSql = listQuery.ToQueryString();
                 Assert.True(listSql.Contains("WHERE 1 = 0", StringComparison.Ordinal)
@@ -175,12 +178,12 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
         }
 
         [Theory]
-        [InlineData(OceanBaseCompatibilityMode.MySql, ParameterTranslationMode.Constant)]
-        [InlineData(OceanBaseCompatibilityMode.MySql, ParameterTranslationMode.MultipleParameters)]
-        [InlineData(OceanBaseCompatibilityMode.Oracle, ParameterTranslationMode.Constant)]
-        [InlineData(OceanBaseCompatibilityMode.Oracle, ParameterTranslationMode.MultipleParameters)]
-        public void Explicit_parameter_nullable_numeric_roots_preserve_null_and_empty_boundaries(
-            OceanBaseCompatibilityMode mode, ParameterTranslationMode translation)
+        [InlineData(OceanBaseCompatibilityMode.MySql, ParameterizedCollectionTranslationMode.Constantize)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, ParameterizedCollectionTranslationMode.Parameterize)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, ParameterizedCollectionTranslationMode.Constantize)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, ParameterizedCollectionTranslationMode.Parameterize)]
+        public void Captured_nullable_numeric_roots_preserve_null_and_empty_boundaries(
+            OceanBaseCompatibilityMode mode, ParameterizedCollectionTranslationMode translation)
         {
             Check<decimal>([null, 1.25m, null]);
             Check<float>([null, 1.25f, null]);
@@ -189,7 +192,7 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             void Check<T>(T?[] values) where T : struct
             {
                 using var context = Create<T>(mode, false, translation);
-                var query = context.Rows.Where(row => EF.Parameter(values).Contains(row.Optional));
+                var query = context.Rows.Where(row => values.Contains(row.Optional));
                 foreach (var input in new[] { values, new T?[] { null }, Array.Empty<T?>() })
                 {
                     values = input;
@@ -204,7 +207,7 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
         [Theory]
         [MemberData(nameof(Modes))]
         public void Contextually_converted_element_projections_use_the_property_carrier(
-            OceanBaseCompatibilityMode mode, bool relationalNulls, ParameterTranslationMode? translation)
+            OceanBaseCompatibilityMode mode, bool relationalNulls, ParameterizedCollectionTranslationMode? translation)
         {
             using var context = Create<decimal>(mode, relationalNulls, translation);
             decimal?[] values = [null, 17.25m];
@@ -286,18 +289,18 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             var predicate = factory.AndAlso(factory.GreaterThan(predicateColumn, factory.Constant(0m, native)),
                 factory.LessThan(contextual, factory.Constant(100m, converted)));
             var select = new SelectExpression(null, [root], predicate, [], null, [new ProjectionExpression(projected, "Value")],
-                false, [], null, null, new SqlAliasManager());
+                false, [], null, null);
             Assert.Contains("Conflicting type mappings", Assert.Throws<InvalidOperationException>(() =>
                 new OceanBaseCollectionProjectionTypeMappingNormalizer(source, context.Model).Normalize(select)).Message);
         }
 
         private static TestContext<T> Create<T>(OceanBaseCompatibilityMode mode, bool relationalNulls,
-            ParameterTranslationMode? translation) where T : struct
+            ParameterizedCollectionTranslationMode? translation) where T : struct
         {
             var builder = new DbContextOptionsBuilder<TestContext<T>>()
                 .UseOceanBase("Server=offline;Database=numeric_roots", mode).EnableServiceProviderCaching(false);
             var extension = builder.Options.Extensions.OfType<RelationalOptionsExtension>().Single().WithUseRelationalNulls(relationalNulls);
-            if (translation.HasValue) extension = extension.WithUseParameterizedCollectionMode(translation.Value);
+            if (translation.HasValue) extension = extension.WithParameterizedCollectionTranslationMode(translation.Value);
             ((IDbContextOptionsBuilderInfrastructure)builder).AddOrUpdateExtension(extension);
             return new TestContext<T>(builder.Options, mode);
         }

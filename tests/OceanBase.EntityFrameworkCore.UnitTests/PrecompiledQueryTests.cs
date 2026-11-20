@@ -61,7 +61,8 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             var references = ((string)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES")!).Split(Path.PathSeparator)
                 .Concat(AppDomain.CurrentDomain.GetAssemblies().Where(a => !a.IsDynamic && !string.IsNullOrEmpty(a.Location)).Select(a => a.Location))
                 .Distinct().Select(path => MetadataReference.CreateFromFile(path));
-            var parseOptions = CSharpParseOptions.Default.WithFeatures([new KeyValuePair<string, string>("InterceptorsNamespaces", "Microsoft.EntityFrameworkCore.GeneratedInterceptors")]);
+            var parseOptions = CSharpParseOptions.Default.WithFeatures(
+                [new KeyValuePair<string, string>("InterceptorsPreviewNamespaces", "Microsoft.EntityFrameworkCore.GeneratedInterceptors")]);
             var compilation = CSharpCompilation.Create("Precompiled_" + Guid.NewGuid().ToString("N"),
                 [CSharpSyntaxTree.ParseText(source, parseOptions, path: "QueryCalls.cs")], references,
                 new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));

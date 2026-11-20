@@ -9,10 +9,11 @@ using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Storage;
 using OceanBaseConnector;
+using Transaction = System.Transactions.Transaction;
 
 namespace OceanBase.EntityFrameworkCore.Storage
 {
-    internal sealed class OceanBaseRelationalConnection : RelationalConnection
+    internal sealed class OceanBaseRelationalConnection : RelationalConnection, ITransactionEnlistmentManager
     {
         private readonly OceanBaseCompatibilityMode _compatibilityMode;
         private OceanBaseConnection? _providerCreatedConnection;
@@ -21,6 +22,8 @@ namespace OceanBase.EntityFrameworkCore.Storage
         private System.Transactions.Transaction? _resettingAmbientTransaction;
         private bool _ownsConnection;
         private bool _borrowedAmbientConnectionWasReset;
+        private bool _openingWithoutEfAmbientTracking;
+        private bool _ambientConnectionLeaseIsImplicit;
 
         internal bool HasAmbientConnectionLease => _ambientConnectionLease is not null;
 
@@ -46,6 +49,14 @@ namespace OceanBase.EntityFrameworkCore.Storage
                 : OceanBaseConnector.OceanBaseCompatibilityMode.MySql;
 
         protected override bool SupportsAmbientTransactions => true;
+
+        // EF9 subscribes before native enlistment and records the transaction only on success.
+        // The Provider tracks ambient completion after native enlistment succeeds.
+        public override Transaction? CurrentAmbientTransaction
+            => _openingWithoutEfAmbientTracking ? null : base.CurrentAmbientTransaction;
+
+        Transaction? ITransactionEnlistmentManager.CurrentAmbientTransaction
+            => base.CurrentAmbientTransaction;
 
         protected override DbConnection CreateDbConnection()
             => _providerCreatedConnection = new OceanBaseConnection(ValidateConnectionString(GetValidatedConnectionString()));
@@ -82,7 +93,32 @@ namespace OceanBase.EntityFrameworkCore.Storage
             ValidateConnection(DbConnection);
             ValidateAmbientConnection();
             base.EnlistTransaction(transaction);
-            RetainAmbientConnection();
+            if (_ambientConnectionLease is null)
+            {
+                TrackAmbientConnection();
+            }
+        }
+
+        [return: NotNullIfNotNull(nameof(transaction))]
+        public override IDbContextTransaction? UseTransaction(DbTransaction? transaction, Guid transactionId)
+        {
+            ValidateLocalTransactionDuringOpen(transaction);
+            return base.UseTransaction(transaction, transactionId);
+        }
+
+        public override async Task<IDbContextTransaction?> UseTransactionAsync(DbTransaction? transaction, Guid transactionId,
+            CancellationToken cancellationToken = default)
+        {
+            ValidateLocalTransactionDuringOpen(transaction);
+            return await base.UseTransactionAsync(transaction, transactionId, cancellationToken).ConfigureAwait(false);
+        }
+
+        private void ValidateLocalTransactionDuringOpen(DbTransaction? transaction)
+        {
+            if (transaction is not null && _openingWithoutEfAmbientTracking && base.CurrentAmbientTransaction is not null)
+            {
+                throw new InvalidOperationException(RelationalStrings.ConflictingAmbientTransaction);
+            }
         }
 
         public override bool Open(bool errorsExpected = false)
@@ -92,9 +128,9 @@ namespace OceanBase.EntityFrameworkCore.Storage
             var entry = new OceanBaseConnectionOpenState(this);
             try
             {
-                var opened = base.Open(errorsExpected);
+                var opened = OpenWithoutEfAmbientTracking(errorsExpected);
                 ValidateConnection(DbConnection);
-                RetainAmbientConnection();
+                TrackAmbientConnection();
                 return opened;
             }
             catch (Exception error)
@@ -112,9 +148,9 @@ namespace OceanBase.EntityFrameworkCore.Storage
             var entry = new OceanBaseConnectionOpenState(this);
             try
             {
-                var opened = await base.OpenAsync(cancellationToken, errorsExpected).ConfigureAwait(false);
+                var opened = await OpenWithoutEfAmbientTrackingAsync(cancellationToken, errorsExpected).ConfigureAwait(false);
                 ValidateConnection(DbConnection);
-                RetainAmbientConnection();
+                TrackAmbientConnection();
                 return opened;
             }
             catch (Exception error)
@@ -124,31 +160,61 @@ namespace OceanBase.EntityFrameworkCore.Storage
             }
         }
 
+        private bool OpenWithoutEfAmbientTracking(bool errorsExpected = false)
+        {
+            var previous = _openingWithoutEfAmbientTracking;
+            _openingWithoutEfAmbientTracking = true;
+            try { return base.Open(errorsExpected); }
+            finally { _openingWithoutEfAmbientTracking = previous; }
+        }
+
+        private async Task<bool> OpenWithoutEfAmbientTrackingAsync(CancellationToken cancellationToken, bool errorsExpected)
+        {
+            var previous = _openingWithoutEfAmbientTracking;
+            _openingWithoutEfAmbientTracking = true;
+            try { return await base.OpenAsync(cancellationToken, errorsExpected).ConfigureAwait(false); }
+            finally { _openingWithoutEfAmbientTracking = previous; }
+        }
+
         private void ValidateAmbientConnection()
         {
             if (_borrowedAmbientConnectionWasReset && _ambientConnectionLease is not null)
             {
                 throw new InvalidOperationException(RelationalStrings.PendingAmbientTransaction);
             }
-            if (CurrentAmbientTransaction is { } current
+            if (base.CurrentAmbientTransaction is { } current
                 && (_ambientConnectionLease ?? EnlistedTransaction) is { } retained && retained != current)
             {
                 throw new InvalidOperationException(RelationalStrings.ConflictingAmbientTransaction);
             }
         }
 
-        private void RetainAmbientConnection()
+        private void TrackAmbientConnection()
         {
-            var transaction = CurrentAmbientTransaction ?? EnlistedTransaction;
-            if (transaction is null || _ambientConnectionLease is not null)
+            var ambient = base.CurrentAmbientTransaction;
+            if (ambient is null && _ambientConnectionLeaseIsImplicit)
             {
-                return;
+                throw new InvalidOperationException(RelationalStrings.PendingAmbientTransaction);
+            }
+            if (ambient is not null && !_ambientConnectionLeaseIsImplicit)
+            {
+                Dependencies.TransactionLogger.AmbientTransactionEnlisted(this, ambient);
+                ConnectionEnlistTransaction(ambient);
             }
 
-            // The Connector must stay open until its single-resource enlistment completes.
-            base.Open();
-            _ambientConnectionLease = transaction;
-            transaction.TransactionCompleted += ReleaseAmbientConnection;
+            var transaction = ambient ?? EnlistedTransaction;
+            if (transaction is not null && _ambientConnectionLease is null)
+            {
+                // The Connector must stay open until its single-resource enlistment completes.
+                OpenWithoutEfAmbientTracking();
+                _ambientConnectionLease = transaction;
+                _ambientConnectionLeaseIsImplicit = ambient is not null;
+                transaction.TransactionCompleted += ReleaseAmbientConnection;
+            }
+            else if (ambient is not null)
+            {
+                _ambientConnectionLeaseIsImplicit = true;
+            }
         }
 
         private void ReleaseAmbientConnection(object? sender, System.Transactions.TransactionEventArgs args)
@@ -163,6 +229,7 @@ namespace OceanBase.EntityFrameworkCore.Storage
             {
                 transaction.TransactionCompleted -= ReleaseAmbientConnection;
                 _ambientConnectionLease = null;
+                _ambientConnectionLeaseIsImplicit = false;
                 _borrowedAmbientConnectionWasReset = false;
             }
         }
@@ -327,7 +394,7 @@ namespace OceanBase.EntityFrameworkCore.Storage
         private void ValidateTransactionStart()
         {
             if (CurrentTransaction is not null) throw new InvalidOperationException(RelationalStrings.TransactionAlreadyStarted);
-            if (CurrentAmbientTransaction is not null) throw new InvalidOperationException(RelationalStrings.ConflictingAmbientTransaction);
+            if (base.CurrentAmbientTransaction is not null) throw new InvalidOperationException(RelationalStrings.ConflictingAmbientTransaction);
             if (EnlistedTransaction is not null) throw new InvalidOperationException(RelationalStrings.ConflictingEnlistedTransaction);
         }
 

@@ -100,11 +100,11 @@ namespace OceanBase.EntityFrameworkCore.LiveTests
 
                         stage($"optional composite reference across tenants {tracking} split={split}");
                         context.ChangeTracker.Clear();
-                        var acrossTenants = context.Set<Optional>().IgnoreQueryFilters(["Tenant"]).Include(row => row.Parent);
+                        var acrossTenants = context.Set<Optional>().IgnoreQueryFilters().Include(row => row.Parent);
                         var visible = await Read(Shape(acrossTenants, tracking, split).OrderBy(row => row.TenantId).ThenBy(row => row.Id), async);
                         Assert.Equal(new (int Tenant, int Id, int? ParentTenant, int? ParentId)[]
                         {
-                            (1, 1, 1, 1), (1, 2, null, null), (1, 3, null, null), (1, 4, 1, 1),
+                            (1, 1, 1, 1), (1, 2, null, null), (1, 3, 1, 3), (1, 4, 1, 1), (1, 5, 1, 1),
                             (2, 1, 2, 1), (2, 2, null, null)
                         }, visible.Select(row => (row.TenantId, row.Id, row.Parent?.TenantId, row.Parent?.Id)));
                         if (tracking != QueryTrackingBehavior.TrackAll) Assert.Empty(context.ChangeTracker.Entries());
@@ -145,31 +145,28 @@ namespace OceanBase.EntityFrameworkCore.LiveTests
 
         [Theory]
         [MemberData(nameof(Cases))]
-        public Task EF10_named_filters_disable_selectively_and_refresh_current_context_across_graph_sources(
+        public Task Composed_global_filters_disable_together_and_refresh_current_context_across_graph_sources(
             OceanBaseCompatibilityMode mode, bool async, bool nulls)
             => WithTables(mode, async, nulls, async (context, _, stage) =>
             {
                 foreach (var tracking in TrackingModes)
-                    foreach (var disable in new[] { 0, 1, 2, 3, 4 })
+                    foreach (var disabled in new[] { false, true })
                     {
                         IQueryable<Parent> source = context.Set<Parent>();
-                        if (disable == 1) source = source.IgnoreQueryFilters(["Active"]);
-                        if (disable == 2) source = source.IgnoreQueryFilters(["Tenant"]);
-                        if (disable == 3) source = source.IgnoreQueryFilters(["Tenant", "Active"]);
-                        if (disable == 4) source = source.IgnoreQueryFilters();
+                        if (disabled) source = source.IgnoreQueryFilters();
                         var query = Shape(source.Include(row => row.Children).ThenInclude(row => row.Detail).Include(row => row.Tags),
                             tracking, tracking != QueryTrackingBehavior.NoTracking).OrderBy(row => row.TenantId).ThenBy(row => row.Id);
                         foreach (var tenant in new[] { 1, 2, 1 })
                         {
-                            stage($"named filters {tracking} disable={disable} tenant={tenant}");
+                            stage($"composed filters {tracking} disabled={disabled} tenant={tenant}");
                             context.ChangeTracker.Clear();
                             context.TenantId = tenant;
                             var actual = await Read(query, async);
-                            CheckParents(actual, tenant, disable >= 2, disable is 1 or 3 or 4, details: true);
+                            CheckParents(actual, tenant, disabled, disabled, details: true);
                             foreach (var parent in actual)
                             {
                                 var tags = Links().Where(link => link.TenantId == parent.TenantId && link.ParentId == parent.Id)
-                                    .Join(Tags().Where(tag => (disable >= 2 || tag.TenantId == tenant) && (disable is 1 or 3 or 4 || !tag.IsDeleted)),
+                                    .Join(Tags().Where(tag => (disabled || tag.TenantId == tenant) && (disabled || !tag.IsDeleted)),
                                         link => (link.TenantId, link.TagId), tag => (tag.TenantId, tag.Id), (_, tag) => tag.Id).Order();
                                 Assert.Equal(tags, parent.Tags.Select(tag => tag.Id).Order());
                             }
@@ -221,7 +218,7 @@ namespace OceanBase.EntityFrameworkCore.LiveTests
                 {
                     stage($"pretracked filtered Include split={split}");
                     context.ChangeTracker.Clear();
-                    var deleted = Assert.Single(await Read(context.Set<Child>().IgnoreQueryFilters(["Active"]).AsTracking().Where(row => row.Id == 12), async));
+                    var deleted = Assert.Single(await Read(context.Set<Child>().IgnoreQueryFilters().AsTracking().Where(row => row.TenantId == context.TenantId && row.Id == 12), async));
                     var parent = Assert.Single(await Read(Shape(context.Set<Parent>().Where(row => row.Id == 1), QueryTrackingBehavior.TrackAll, split), async));
                     Assert.Same(deleted, Assert.Single(parent.Children));
                     Assert.False(context.Entry(parent).Collection(row => row.Children).IsLoaded);
@@ -386,7 +383,7 @@ namespace OceanBase.EntityFrameworkCore.LiveTests
                 parent.HasAlternateKey(row => new { row.TenantId, row.Code });
                 parent.Property(row => row.Code).HasMaxLength(32);
                 parent.Property(row => row.Name).HasMaxLength(80);
-                parent.HasQueryFilter("Tenant", row => row.TenantId == TenantId).HasQueryFilter("Active", row => !row.IsDeleted);
+                parent.HasQueryFilter(row => row.TenantId == TenantId && !row.IsDeleted);
                 parent.HasData(Parents().Select(row => new { row.TenantId, row.Id, row.Code, row.Name, row.IsDeleted }));
                 parent.OwnsOne(row => row.Address, owned =>
                 {
@@ -413,34 +410,34 @@ namespace OceanBase.EntityFrameworkCore.LiveTests
                 child.Property(row => row.Name).HasMaxLength(80);
                 child.HasOne(row => row.Parent).WithMany(row => row.Children).HasForeignKey(row => new { row.TenantId, row.ParentCode })
                     .HasPrincipalKey(row => new { row.TenantId, row.Code }).OnDelete(DeleteBehavior.NoAction);
-                child.HasQueryFilter("Tenant", row => row.TenantId == TenantId).HasQueryFilter("Active", row => !row.IsDeleted);
+                child.HasQueryFilter(row => row.TenantId == TenantId && !row.IsDeleted);
                 child.HasData(Children());
                 var detail = model.Entity<Detail>();
                 detail.ToTable(root + "D");
                 detail.HasKey(row => new { row.TenantId, row.ChildId });
                 detail.Property(row => row.Text).HasMaxLength(80);
                 detail.HasOne(row => row.Child).WithOne(row => row.Detail).HasForeignKey<Detail>(row => new { row.TenantId, row.ChildId }).OnDelete(DeleteBehavior.NoAction);
-                detail.HasQueryFilter("Tenant", row => row.TenantId == TenantId);
+                detail.HasQueryFilter(row => row.TenantId == TenantId);
                 detail.HasData(Details());
                 var optional = model.Entity<Optional>();
                 optional.ToTable(root + "O");
                 optional.HasKey(row => new { row.TenantId, row.Id });
                 optional.Property(row => row.Id).ValueGeneratedNever();
                 optional.HasOne(row => row.Parent).WithMany().HasForeignKey(row => new { row.TenantId, row.ParentId }).OnDelete(DeleteBehavior.NoAction);
-                optional.HasQueryFilter("Tenant", row => row.TenantId == TenantId).HasQueryFilter("Active", row => !row.IsDeleted);
+                optional.HasQueryFilter(row => row.TenantId == TenantId && !row.IsDeleted);
                 optional.HasData(Optionals());
                 var tag = model.Entity<Tag>();
                 tag.ToTable(root + "T");
                 tag.HasKey(row => new { row.TenantId, row.Id });
                 tag.Property(row => row.Id).ValueGeneratedNever();
                 tag.Property(row => row.Name).HasMaxLength(32);
-                tag.HasQueryFilter("Tenant", row => row.TenantId == TenantId).HasQueryFilter("Active", row => !row.IsDeleted);
+                tag.HasQueryFilter(row => row.TenantId == TenantId && !row.IsDeleted);
                 tag.HasData(Tags());
                 parent.HasMany(row => row.Tags).WithMany(row => row.Parents).UsingEntity<Link>(
                     right => right.HasOne(row => row.Tag).WithMany().HasForeignKey(row => new { row.TenantId, row.TagId }).OnDelete(DeleteBehavior.NoAction),
                     left => left.HasOne(row => row.Parent).WithMany().HasForeignKey(row => new { row.TenantId, row.ParentId }).OnDelete(DeleteBehavior.NoAction),
                     link => { link.ToTable(root + "J"); link.HasKey(row => new { row.TenantId, row.ParentId, row.TagId });
-                        link.HasQueryFilter("Tenant", row => row.TenantId == TenantId); link.HasData(Links()); });
+                        link.HasQueryFilter(row => row.TenantId == TenantId); link.HasData(Links()); });
             }
         }
         private sealed class CacheKey : IModelCacheKeyFactory

@@ -1,7 +1,10 @@
 # OceanBase.EntityFrameworkCore
 
-Entity Framework Core 10 provider for OceanBase MySQL and Oracle compatibility modes, using the public
-OceanBaseConnector 0.4.0 API. The package targets .NET 10 and accepts EF Core 10 patch versions in `[10.0.0,11.0.0)`.
+Entity Framework Core 9 provider for OceanBase MySQL and Oracle compatibility modes, using the public
+OceanBaseConnector 0.4.0 API. The package targets `net9.0` and accepts EF Core 9 patch versions in `[9.0.0,10.0.0)`.
+
+See the EF Core 9 feature matrix and release checklist in the repository for implementation status,
+known boundaries and tested profiles.
 
 - [Configuration](#configuration)
 - [Scalar mappings](#scalar-mappings)
@@ -170,8 +173,8 @@ TimeOnly.Add(TimeSpan), AddHours(double) and AddMinutes(double) wrap at 24 hours
 offsets, constants, refreshed parameters, native columns and NULLs. Scalar TimeSpan offsets use
 exact ticks across the full TimeSpan range; native duration columns retain their storage limits,
 and custom converted native duration columns are rejected. Date-difference tick results can be
-used as offsets. Numeric additions truncate the entire binary product to Int64 with .NET 10
-saturation before wrapping; this differs from DateTime's separate whole/fraction truncation.
+used as offsets. Numeric additions truncate the entire binary product to Int64 with saturation
+before wrapping. DateTime truncates the whole and fractional components separately.
 Clock results promote to TIME(6)/INTERVAL DAY TO SECOND(7), preserve contextual clock converters
 and apply the inverse converter once. MySQL returns NULL for results finer than a microsecond;
 Oracle retains 100ns ticks. Non-finite numeric inputs remain rejected by the numeric mapping.
@@ -392,8 +395,8 @@ coverage for single/split Include/ThenInclude, composite and alternate keys, opt
 references, owned references/collections and shadow owner keys, filtered Include and
 root paging, many-to-many shared identities, and all three tracking modes. Tracked
 filtered Includes retain pretracked entities through EF fixup; no-tracking queries
-return fresh filtered graphs. EF10 named Tenant/Active filters support selective/all
-disable and current-context parameter refresh in the tested parent/child/tag graphs.
+return fresh filtered graphs. On EF Core 9, combine tenant and active predicates in one
+`HasQueryFilter` expression per entity and use `IgnoreQueryFilters()` to disable all filters.
 Captured query values have native row checks and observed parameter binding. These checks
 do not prove identical SQL text or binding in every later split command; optional-reference
 tenant-component sensitivity with the Tenant filter disabled remains untested.
@@ -401,7 +404,7 @@ Concurrent-change isolation, arbitrary model/converter combinations and graph fa
 outside that graph profile. The following sections describe lazy-loading and compiled-model profiles.
 
 Lazy loading can use EF's injected `ILazyLoader`, or the optional official
-`Microsoft.EntityFrameworkCore.Proxies` package at the application's EF10 patch version:
+`Microsoft.EntityFrameworkCore.Proxies` package at the application's EF Core 9 patch version:
 
 ```csharp
 optionsBuilder.UseOceanBase(connectionString, OceanBaseCompatibilityMode.MySql)
@@ -433,13 +436,9 @@ Select the generated model with `UseModel(App.CompiledModels.AppDbContextModel.I
 `UseOceanBase`. Generate and select separate models for MySQL and Oracle; an incompatible mode fails during
 model initialization. Regenerate after model/provider changes. EF's compiled-model restrictions still apply,
 including unsupported query filters. The public compiled-model mapping helpers and interval JSON reader are
-infrastructure used by generated code; they do not add structured JSON property mappings. Experimental EF10
-managed precompiled queries have generator, C# compilation and native execution coverage for parameterized
-sync/async queries in both modes, including nullable and repeated parameters. A bounded Windows x64
-NativeAOT smoke test on EF 10.0.14 publishes and executes generated models and precompiled numeric/temporal
-queries, and checks built-in converted mappings with dynamic code disabled. Publishing still reports
-trim/AOT warnings; arbitrary converters, additional query shapes, other platforms and performance remain
-unverified. See C-01 in the gap matrix for the bounded scope.
+infrastructure used by generated code. Structured JSON property mappings are deferred. EF Core 9
+query precompilation and NativeAOT release profiles remain unverified. See C-01 in the EF Core 9
+gap matrix.
 
 ## Reverse engineering
 
@@ -489,17 +488,16 @@ forms and integer-backed enums through scalar parameters or constants and SELECT
 roots retain their original element type and produce zero-row SQL. Numeric-to-numeric converters keep
 their parameter/read hooks. Typing casts follow the provider carrier independently of column facets:
 MySQL SIGNED/UNSIGNED, DECIMAL(65,30), FLOAT or DOUBLE; Oracle NUMBER, BINARY_FLOAT or BINARY_DOUBLE.
-Non-finite floating inputs reject before execution. Explicit `EF.Parameter` roots are supported for integer
-and Boolean carriers when the context explicitly selects `Constant` or `MultipleParameters`; the provider
-expands them into scalar parameters rather than sending a JSON array. Other single-parameter roots,
-non-target carriers and null-converting converters are not supported by this path. Boolean roots preserve
-the provider Boolean carrier in MySQL and the decimal Boolean carrier in Oracle.
+Non-finite floating inputs reject before execution. Boolean roots use the provider Boolean carrier
+in MySQL and the decimal Boolean carrier in Oracle.
 
-Explicit single-parameter collection mode, or `EF.Parameter` with collection mode left unconfigured,
-supports captured Int32 and Int64 arrays/lists, including nullable elements. EF serializes the collection
-as a single JSON-text parameter and the server expands it with `JSON_TABLE`. This path preserves element
-order for ordered operators, duplicates and SQL NULL elements. It requires server support for
-`JSON_TABLE` and follows the size limit for text parameters.
+EF Core 9 uses scalar parameters for supported captured collections by default.
+`TranslateParameterizedCollectionsToConstants()` and `EF.Constant` select constant SQL.
+`TranslateParameterizedCollectionsToParameters()` uses one JSON-text parameter with `JSON_TABLE`
+for signed Int32/Int64 elements, including nullable elements. This path rejects contextual
+converters. Other supported carriers retain scalar bindings. Explicit `EF.Parameter` on a
+collection requires the signed integer JSON path. See the EF Core 9 gap matrix for collection
+scope and boundaries.
 
 Both modes support an explicit `string` property configured with `.HasColumnType("json")` for schema
 creation, projection, reverse engineering and whole-document writes through `SaveChanges`.
@@ -527,13 +525,6 @@ reject before execution. Use explicitly bounded RAW for comparable binary values
 RAW collection membership has native coverage. Oracle Queryable LOB set-operation
 exclusions still apply. This does not add a general LOB comparison API.
 
-Explicit temporal `EF.Parameter` arrays/lists for DateTime, DateTimeOffset, DateOnly, TimeOnly and TimeSpan
-are admitted when the context explicitly selects `Constant` or `MultipleParameters`. EF10 renders these
-explicit roots as scalar `IN` parameters; captured and inline temporal roots retain the provider's typed
-`VALUES` path. Current captures rebind, nullable values use the existing temporal readers and empty captures
-produce a false predicate. Unconfigured contexts and the single JSON-style collection parameter remain outside
-this contract. Ordinary whole-second temporal root values now have native coverage;
-wider precision, timezone and interval coercion remain separate acceptance boundaries.
 Direct contextually converted element projections support SelectMany, FirstOrDefault and Join,
 including nullable/empty roots and Distinct/Take composition. The owning numeric mapping controls
 bindings, projected readers and the CLR default fallback. Incompatible requirements for one root or
@@ -544,13 +535,9 @@ are covered by the bounded composition profile; wider converter combinations and
 Text collection roots support captured arrays/lists and empty inline arrays when the provider-owned mapping
 uses a string carrier and does not convert nulls. Model-to-string converters retain parameter and reader
 hooks; MySQL empty roots project an untyped SQL NULL and Oracle non-LOB text uses
-`TO_CHAR(NULL)`/`TO_NCHAR(NULL)` with the owning charset. Explicit
-`EF.Parameter(string[])`/`List<string?>` roots are also supported when the context explicitly selects
-`Constant` or `MultipleParameters`; the provider expands scalar values rather than sending a JSON array.
-Unconfigured contexts, EF's single JSON-style collection parameter, null-converting, binary and other
-non-text carriers remain unsupported by this path. Oracle empty-string normalization occurs after raw
-collection expansion. Bounded ASCII root UNION/membership results have native coverage;
-wider text facets, collation and LOB behavior remain unverified.
+`TO_CHAR(NULL)`/`TO_NCHAR(NULL)` with the owning charset. Oracle empty-string normalization occurs after
+raw collection expansion. Bounded ASCII root UNION/membership results have native baseline coverage.
+Wider text facets, collation and LOB behavior remain unverified.
 
 Text and temporal `Min/Max` support scalar/selector and nullable forms using native aggregates and
 the original mappings/readers. Supported temporal families are DateTime, DateTimeOffset, DateOnly,
@@ -690,7 +677,7 @@ increment range are omitted with a warning. MySQL sequence reverse engineering r
 reliable schema-qualified metadata integration in EF. The existing Connector can query the server's
 declared start through ordinary commands; its `GetSchema("Sequences")` result omits that field.
 Oracle sequence discovery covers each selected namespace, including when tables are explicitly selected.
-EF10 scaffolding preserves allocation annotations through provider design-time services. The
+Scaffolding preserves allocation annotations through provider design-time services. The
 private EF.Design build reference is excluded from the runtime package dependencies.
 
 Configure `UseOceanBaseHiLo` on an Int32 or Int64 primary key to allocate permanent keys from a shared
@@ -835,9 +822,9 @@ keep their passwords/privileges and follow the existing-schema table-creation pr
 drops the entire declared user with CASCADE, including objects outside the EF model.
 
 The password callback runs only for user creation. Empty values, double quotes and control characters
-are rejected before DDL. Built-in EF command logs redact credential SQL even with sensitive logging enabled.
-Application command interceptors/diagnostic listeners are trusted: they can inspect executable SQL and
-must log `LogCommandText` instead. Do not log callback/server exception messages containing credentials.
+are rejected before DDL. EF Core 9 command logs and execution interceptors receive redacted `CREATE USER`
+text even with sensitive logging enabled. The provider supplies the password to the underlying command
+for execution. Do not log callback/server exception messages containing credentials.
 User creation grants only CREATE SESSION and CREATE TABLE. A later grant/table failure can leave a user
 requiring manual repair; no automatic deletion, password reset or privilege reconciliation occurs. The
 provider clears the target pool before namespace DDL and again after success; other processes/sessions require
@@ -875,5 +862,4 @@ Direct literal/captured setters use column write bounds; broader server-computed
 separate acceptance. These are coverage boundaries, not demonstrated server defects.
 
 Review the feature inventory, gap inventory and release checklist under `docs/efcore` for implemented
-scope, deferred integrations and revision-specific acceptance. EF Core 8/9 adaptation is postponed until
-the EF10 provider stabilizes.
+scope, deferred integrations and revision-specific acceptance.

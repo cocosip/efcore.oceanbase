@@ -154,8 +154,8 @@ namespace Microsoft.EntityFrameworkCore
         /// The owned user name must not contain tenant routing (@). Requires an independent
         /// UseOceanBaseManagementConnection and a closed target with the exact user login.
         /// The password factory is invoked only when creating a user. Empty passwords, double quotes and control
-        /// characters reject before DDL. EF command logs redact the password even with sensitive logging enabled;
-        /// trusted application interceptors can inspect executable SQL and must log LogCommandText instead.
+        /// characters reject before DDL. EF command logs and execution interceptors receive redacted
+        /// CREATE USER text even with sensitive logging enabled.
         /// Creation grants CREATE SESSION and CREATE TABLE. DDL failures can require manual cleanup.
         /// </summary>
         public static DbContextOptionsBuilder EnableOceanBaseUserManagement(

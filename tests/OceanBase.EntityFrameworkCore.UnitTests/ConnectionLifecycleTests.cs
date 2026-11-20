@@ -95,6 +95,26 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
         }
 
         [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public async Task Connection_open_interceptor_observes_ambient_transaction_and_rejects_local_transaction(bool async)
+        {
+            var interceptor = new LocalTransactionDuringOpen();
+            await using var context = new DbContext(new DbContextOptionsBuilder()
+                .UseOceanBase("Server=localhost;Database=test", OceanBaseCompatibilityMode.MySql)
+                .AddInterceptors(new SuppressNetwork(), interceptor).Options);
+            var connection = context.GetService<IRelationalConnection>();
+            using var scope = new TransactionScope(TransactionScopeAsyncFlowOption.Enabled);
+
+            var error = async
+                ? await Assert.ThrowsAsync<InvalidOperationException>(() => connection.OpenAsync(CancellationToken.None))
+                : Assert.Throws<InvalidOperationException>(() => connection.Open());
+
+            Assert.Equal(Transaction.Current, interceptor.ObservedAmbientTransaction);
+            Assert.Equal(RelationalStrings.ConflictingAmbientTransaction, error.Message);
+        }
+
+        [Theory]
         [InlineData(OceanBaseCompatibilityMode.MySql, false)]
         [InlineData(OceanBaseCompatibilityMode.MySql, true)]
         [InlineData(OceanBaseCompatibilityMode.Oracle, false)]
@@ -241,6 +261,38 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             public override ValueTask<InterceptionResult> ConnectionOpeningAsync(DbConnection connection, ConnectionEventData eventData,
                 InterceptionResult result, CancellationToken cancellationToken = default)
                 => ValueTask.FromResult(InterceptionResult.Suppress());
+        }
+
+        private sealed class LocalTransactionDuringOpen : DbConnectionInterceptor
+        {
+            public Transaction? ObservedAmbientTransaction { get; private set; }
+
+            public override void ConnectionOpened(DbConnection connection, ConnectionEndEventData eventData)
+            {
+                if (ObservedAmbientTransaction is not null) return;
+                var relational = eventData.Context!.GetService<IRelationalConnection>();
+                ObservedAmbientTransaction = ((ITransactionEnlistmentManager)relational).CurrentAmbientTransaction;
+                using var transaction = new UnusedTransaction(connection);
+                relational.UseTransaction(transaction);
+            }
+
+            public override async Task ConnectionOpenedAsync(DbConnection connection, ConnectionEndEventData eventData,
+                CancellationToken cancellationToken = default)
+            {
+                if (ObservedAmbientTransaction is not null) return;
+                var relational = eventData.Context!.GetService<IRelationalConnection>();
+                ObservedAmbientTransaction = ((ITransactionEnlistmentManager)relational).CurrentAmbientTransaction;
+                using var transaction = new UnusedTransaction(connection);
+                await relational.UseTransactionAsync(transaction, cancellationToken);
+            }
+        }
+
+        private sealed class UnusedTransaction(DbConnection connection) : DbTransaction
+        {
+            protected override DbConnection DbConnection => connection;
+            public override System.Data.IsolationLevel IsolationLevel => System.Data.IsolationLevel.Unspecified;
+            public override void Commit() => throw new NotSupportedException();
+            public override void Rollback() => throw new NotSupportedException();
         }
 
         private sealed class CountConnectionCreation : DbConnectionInterceptor

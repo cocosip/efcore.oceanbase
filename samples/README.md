@@ -1,6 +1,6 @@
 # OceanBase EF Core samples
 
-Run these console projects manually from the repository root with the .NET 10 SDK. Both projects
+Run these console projects manually from the repository root with the .NET 10 SDK and the .NET 9 runtime. Both projects
 live outside the CI solution and report individual passes and failures in the terminal. They use
 unique `EFT_` tables in the selected test database or schema and verify cleanup through the catalog.
 
@@ -15,7 +15,7 @@ transport settings.
 `OceanBaseProviderFeatureProbe` runs the selected cases independently for MySQL and Oracle. It
 checks generated and composite keys, relationships including explicit and implicit join tables,
 owned and split entities, TPH/TPT/TPC, scalar round trips and defaults, LINQ grouping and pagination,
-named filters and tracking, parameterized raw SQL, bulk DML, optimistic concurrency and savepoints.
+composed global filters and tracking, parameterized raw SQL, bulk DML, optimistic concurrency and savepoints.
 
 ```powershell
 dotnet run --project samples/OceanBaseProviderFeatureProbe -- --list
@@ -28,7 +28,7 @@ operations in the selected scenarios. The default live run uses asynchronous EF 
 
 ## Migration validation
 
-`OceanBaseProviderValidation` uses PowerShell 7 and an EF Core 10 `dotnet-ef` tool. Its runner
+`OceanBaseProviderValidation` uses PowerShell 7 and an EF Core 9 `dotnet-ef` tool. Its runner
 scaffolds `InitialJournal` and `AddJournalNotes` with `dotnet ef migrations add` for each selected
 mode. Each run leaves the generated C# files, snapshot, and forward, idempotent and rollback SQL
 under its own `artifacts/sample-migrations-*/` directory, printed in the terminal.

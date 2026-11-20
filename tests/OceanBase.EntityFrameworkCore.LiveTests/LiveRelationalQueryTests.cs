@@ -3,9 +3,12 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Internal;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Query;
 using Xunit;
+
+#pragma warning disable EF1001 // EF9-only collection options infrastructure.
 
 namespace OceanBase.EntityFrameworkCore.LiveTests
 {
@@ -66,7 +69,7 @@ namespace OceanBase.EntityFrameworkCore.LiveTests
                 var joined = rows.Join(keys, row => row.Id, key => key, (row, key) => new { row.Rank, Key = key })
                     .Where(row => row.Rank == Rank.Mid).OrderBy(row => row.Key).Select(row => row.Key);
                 Assert.Equal(new[] { 4, 4 }, await Read(joined, async));
-            }, ParameterTranslationMode.Parameter);
+            }, ParameterizedCollectionTranslationMode.Parameterize);
 
         [Theory]
         [MemberData(nameof(Cases))]
@@ -310,7 +313,7 @@ namespace OceanBase.EntityFrameworkCore.LiveTests
         [MemberData(nameof(Cases))]
         public async Task Explicit_parameter_membership_requires_and_honors_the_configured_collection_mode(OceanBaseCompatibilityMode mode, bool async, bool relationalNulls)
         {
-            foreach (var translation in new[] { ParameterTranslationMode.Constant, ParameterTranslationMode.MultipleParameters })
+            foreach (var translation in new[] { ParameterizedCollectionTranslationMode.Constantize, ParameterizedCollectionTranslationMode.Parameterize })
                 await WithTable(mode, async, relationalNulls, async (context, stage) =>
                 {
                     int?[] values = [];
@@ -366,7 +369,7 @@ namespace OceanBase.EntityFrameworkCore.LiveTests
                     T[] wanted = [];
                     var root = context.Set<Row>().Where(row => row.Id == 1).SelectMany(row => values.Where(value => row.Id > 0));
                     var matched = context.Set<Row>().Where(row => row.Id == 1).SelectMany(row => values.Where(value => row.Id > 0 && wanted.Contains(value)));
-                    foreach (var input in new[] { sample, Array.Empty<T>(), sample.Reverse().ToArray() })
+                    foreach (var input in new[] { sample, Array.Empty<T>(), Enumerable.Reverse(sample).ToArray() })
                     {
                         values = input;
                         AssertMultiset(input, await Read(root, async));
@@ -402,7 +405,7 @@ namespace OceanBase.EntityFrameworkCore.LiveTests
                     string?[] values = sample;
                     var root = context.Set<Row>().Where(row => row.Id == 3).SelectMany(row => values.Where(value =>
                         value == EF.Property<string?>(row, property) || EF.Property<string?>(row, property) == null));
-                    foreach (var input in new[] { sample, Array.Empty<string?>(), sample.Reverse().ToArray(), [null, null] })
+                    foreach (var input in new[] { sample, Array.Empty<string?>(), Enumerable.Reverse(sample).ToArray(), [null, null] })
                     {
                         values = input;
                         stage("text query carrier property=" + property + ",length=" + input.Length);
@@ -448,7 +451,7 @@ namespace OceanBase.EntityFrameworkCore.LiveTests
                 var root = rows.SelectMany(row => values.Where(value => value == row.Payload || row.Payload == null));
                 var matched = context.Set<Row>().Where(row => values.Contains(row.Payload)).OrderBy(row => row.Id).Select(row => row.Id);
                 byte[]?[] payloads = [sample[0], sample[1], null, null, null, null];
-                foreach (var input in new[] { sample, Array.Empty<byte[]?>(), sample.Reverse().ToArray() })
+                foreach (var input in new[] { sample, Array.Empty<byte[]?>(), Enumerable.Reverse(sample).ToArray() })
                 {
                     values = input;
                     stage("bounded binary root length=" + values.Length);
@@ -556,14 +559,14 @@ namespace OceanBase.EntityFrameworkCore.LiveTests
         }
 
         private static Task WithTable(OceanBaseCompatibilityMode mode, bool async, bool relationalNulls, Func<QueryContext, Action<string>, Task> run,
-            ParameterTranslationMode? translation = null)
+            ParameterizedCollectionTranslationMode? translation = null)
             => LiveStorageTable.WithTable<QueryContext>(mode, async, false,
                 (options, table) =>
                 {
                     var builder = new DbContextOptionsBuilder<QueryContext>(options).UseQueryTrackingBehavior(QueryTrackingBehavior.NoTracking)
                         .ReplaceService<IModelCacheKeyFactory, CacheKey>();
                     var extension = builder.Options.Extensions.OfType<RelationalOptionsExtension>().Single().WithUseRelationalNulls(relationalNulls);
-                    if (translation.HasValue) extension = extension.WithUseParameterizedCollectionMode(translation.Value);
+                    if (translation.HasValue) extension = extension.WithParameterizedCollectionTranslationMode(translation.Value);
                     ((IDbContextOptionsBuilderInfrastructure)builder).AddOrUpdateExtension(extension);
                     return new QueryContext(builder.Options, mode, table);
                 },

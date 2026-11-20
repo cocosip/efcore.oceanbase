@@ -1,8 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
-using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.EntityFrameworkCore.Query;
 using Microsoft.EntityFrameworkCore.Query.SqlExpressions;
 
@@ -10,17 +10,20 @@ namespace OceanBase.EntityFrameworkCore.Query
 {
     internal sealed class OceanBaseDefaultIfEmptyProjection(ShapedQueryExpression source) : ExpressionVisitor
     {
+        internal static readonly MethodInfo DefaultRowsMethod = ((Func<IQueryable<int>, IQueryable<int>>)DefaultRows).Method
+            .GetGenericMethodDefinition();
+
+        // EF9 expands the pending selector before preserving a provider method as a separate query operation.
+        private static IQueryable<T> DefaultRows<T>(IQueryable<T> _)
+            => throw new InvalidOperationException("Default rows must be translated into SQL.");
+
         private readonly SelectExpression _select = (SelectExpression)source.QueryExpression;
-        private readonly Dictionary<ProjectionBindingExpression, Expression> _nullable = [];
         private readonly Dictionary<ProjectionBindingExpression, Expression> _bindings = [];
         private ProjectionBindingExpression? _presence;
         private static readonly MemberInfo PresenceMember = typeof(RowPresence).GetProperty(nameof(RowPresence.Present))!;
         public bool RequiresPushdown { get; private set; }
         public bool HasDefaultReference { get; private set; }
         private bool RequiresPresence { get; set; }
-
-        public static LambdaExpression PreserveDefaultRows(LambdaExpression selector, IModel model)
-            => (LambdaExpression)new LiftingBarrier(model).Visit(selector);
 
         public void Capture()
         {
@@ -57,8 +60,6 @@ namespace OceanBase.EntityFrameworkCore.Query
                 _select.ReplaceProjection(mapping);
                 _presence = new ProjectionBindingExpression(_select, member, typeof(int?));
             }
-            foreach (var (binding, value) in _bindings) _nullable[binding] = value;
-            _nullable[_presence] = marker;
             // The marker must be inside the source so NULL extension can distinguish a missing row.
             RequiresPushdown = true;
         }
@@ -67,6 +68,22 @@ namespace OceanBase.EntityFrameworkCore.Query
             => _presence is null ? shaper : Expression.Condition(
                 Expression.Equal(_presence, Expression.Constant(null, typeof(int?))),
                 Expression.Constant(shaper.Type.IsValueType ? Activator.CreateInstance(shaper.Type) : null, shaper.Type), shaper);
+
+        public void ApplyScalarDefault(ISqlExpressionFactory sql)
+        {
+            if (_presence is not null || !source.ShaperExpression.Type.IsValueType
+                || Nullable.GetUnderlyingType(source.ShaperExpression.Type) is not null
+                || source.ShaperExpression is not UnaryExpression
+                    { NodeType: ExpressionType.Convert, Operand: ProjectionBindingExpression { ProjectionMember: { } member } binding }
+                || _select.GetProjection(binding) is not SqlExpression projection)
+                return;
+
+            var defaultValue = Activator.CreateInstance(source.ShaperExpression.Type);
+            _select.ReplaceProjection(new Dictionary<ProjectionMember, Expression>
+            {
+                [member] = sql.Coalesce(projection, sql.Constant(defaultValue, projection.Type, projection.TypeMapping), projection.TypeMapping)
+            });
+        }
 
         internal static bool TryDefaultReference(Expression? expression, out ConditionalExpression conditional)
         {
@@ -97,33 +114,22 @@ namespace OceanBase.EntityFrameworkCore.Query
             _select.ReplaceProjection(mapping);
         }
 
-        public void Restore()
+        public void MakeClientProjectionsNullable()
         {
-            if (_presence?.Index is { } markerIndex)
+            // EF9's ApplyDefaultIfEmpty makes member mappings nullable and leaves client projections untouched.
+            if (_presence?.Index is not { } markerIndex) return;
+            var projections = new List<Expression>();
+            for (var i = 0; i <= markerIndex; i++)
             {
-                var projections = new List<Expression>();
-                for (var i = 0; i <= markerIndex; i++)
+                var value = _select.GetProjection(new ProjectionBindingExpression(_select, i, typeof(object)));
+                projections.Add(value switch
                 {
-                    var value = _select.GetProjection(new ProjectionBindingExpression(_select, i, typeof(object)));
-                    projections.Add(value switch
-                    {
-                        ColumnExpression column => column.MakeNullable(),
-                        StructuralTypeProjectionExpression structural => structural.MakeNullable(),
-                        _ => value
-                    });
-                }
-                _select.ReplaceProjection(projections);
+                    ColumnExpression column => column.MakeNullable(),
+                    StructuralTypeProjectionExpression structural => structural.MakeNullable(),
+                    _ => value
+                });
             }
-            // SQL types erase Nullable<T>; remove only the compensation added by this operation.
-            var replacements = new Dictionary<Expression, Expression>(ReferenceEqualityComparer.Instance);
-            foreach (var (binding, original) in _nullable)
-            {
-                var current = _select.GetProjection(binding);
-                if (!ReferenceEquals(current, original)
-                    && current is SqlFunctionExpression { Name: "COALESCE", Arguments: [var value, _] })
-                    replacements[current] = value;
-            }
-            if (replacements.Count > 0) new Replacer(replacements).Visit(_select);
+            _select.ReplaceProjection(projections);
         }
 
         protected override Expression VisitUnary(UnaryExpression node)
@@ -159,30 +165,6 @@ namespace OceanBase.EntityFrameworkCore.Query
             if (projection is SqlExpression and not ColumnExpression) RequiresPushdown = true;
             if (resultType.IsValueType && Nullable.GetUnderlyingType(resultType) is null
                 && projection is SqlExpression and not ColumnExpression { IsNullable: false }) RequiresPresence = true;
-            if (Nullable.GetUnderlyingType(resultType) is not null) _nullable[binding] = projection;
-        }
-
-        private sealed class Replacer(Dictionary<Expression, Expression> replacements) : ExpressionVisitor
-        {
-            public override Expression? Visit(Expression? node)
-                => node is not null && replacements.TryGetValue(node, out var replacement) ? replacement : base.Visit(node);
-        }
-
-        private sealed class LiftingBarrier(IModel model) : ExpressionVisitor
-        {
-            protected override Expression VisitMethodCall(MethodCallExpression node)
-            {
-                var visited = (MethodCallExpression)base.VisitMethodCall(node);
-                if (node.Method.IsGenericMethod && node.Method.GetGenericMethodDefinition() == QueryableMethods.DefaultIfEmptyWithoutArgument
-                    && (model.FindEntityType(node.Method.GetGenericArguments()[0]) is null || HasObjectProjection(node.Arguments[0])))
-                {
-                    // Lifting loses the row before scalar COALESCE can run; a true filter keeps EF's real default-row translation.
-                    var type = node.Method.GetGenericArguments()[0];
-                    return Expression.Call(QueryableMethods.Where.MakeGenericMethod(type), visited,
-                        Expression.Lambda(Expression.Constant(true), Expression.Parameter(type, "defaultRow")));
-                }
-                return visited;
-            }
         }
 
         internal static bool HasObjectProjection(Expression source)

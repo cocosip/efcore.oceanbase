@@ -399,7 +399,7 @@ namespace OceanBase.EntityFrameworkCore.Migrations
                 AppendMySqlColumnComment(operation, builder);
                 return;
             }
-            var type = operation.ColumnType ?? GetColumnType(schema, table, name, operation, model);
+            var type = ColumnStoreType(schema, table, name, operation, model);
             var update = operation[OnUpdateSqlAnnotation];
             if (update is not null && (Oracle || IsIdentity(operation) || !IsSupportedOnUpdate(update as string, type, operation.DefaultValueSql)))
                 throw Unsupported("this ON UPDATE clause");
@@ -417,6 +417,10 @@ namespace OceanBase.EntityFrameworkCore.Migrations
             AppendMySqlColumnComment(operation, builder);
         }
 
+        private string ColumnStoreType(string? schema, string table, string name, ColumnOperation operation, IModel? model)
+            => operation.ColumnType ?? GetColumnType(schema, table, name, operation, model)
+                ?? throw Unsupported("a column with no supported store type");
+
         private void AppendMySqlColumnComment(ColumnOperation operation, MigrationCommandListBuilder builder)
         {
             if (!Oracle && (operation.Comment is not null || operation is AlterColumnOperation { OldColumn.Comment: not null }))
@@ -432,7 +436,7 @@ namespace OceanBase.EntityFrameworkCore.Migrations
                 || operation[OnUpdateSqlAnnotation] is not null)
                 throw Unsupported("this computed-column expression or storage combination");
             builder.Append(Q(name));
-            if (!Oracle) builder.Append(" ").Append(operation.ColumnType ?? GetColumnType(schema, table, name, operation, model));
+            if (!Oracle) builder.Append(" ").Append(ColumnStoreType(schema, table, name, operation, model));
             builder.Append(" GENERATED ALWAYS AS (").Append(operation.ComputedColumnSql!).Append(") ")
                 .Append(operation.IsStored == true ? "STORED" : "VIRTUAL");
             if (!operation.IsNullable) builder.Append(" NOT NULL");
