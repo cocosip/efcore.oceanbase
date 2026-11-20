@@ -28,6 +28,15 @@ implementation does not imply support in the other mode, and neither implies liv
 The provider-writing guidance recommends extending the EF Core specification tests published as NuGet packages.
 Each branch must record the selected test classes and any intentional exclusions.
 
+### EF Core 8 and 9 compatibility
+
+- [EF Core release platforms and support dates](https://learn.microsoft.com/ef/core/what-is-new/)
+- [.NET runtime support policy](https://dotnet.microsoft.com/platform/support/policy/dotnet-core)
+- [EF8 relational query pipeline source](https://github.com/dotnet/efcore/tree/v8.0.0/src/EFCore.Relational/Query)
+- [EF9 relational query pipeline source](https://github.com/dotnet/efcore/tree/v9.0.0/src/EFCore.Relational/Query)
+- [EF 8.0.34 relational specification fixtures](https://www.nuget.org/packages/Microsoft.EntityFrameworkCore.Relational.Specification.Tests/8.0.34)
+- [EF 9.0.23 relational specification fixtures](https://www.nuget.org/packages/Microsoft.EntityFrameworkCore.Relational.Specification.Tests/9.0.23)
+
 ## Feature-specific reading map
 
 Read these alongside the target major's source contracts before implementing the corresponding checklist IDs.

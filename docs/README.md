@@ -3,19 +3,18 @@
 Start with the [package guide](../src/OceanBase.EntityFrameworkCore/README.md) for configuration,
 supported behavior and usage examples, or the [samples](../samples/README.md) for runnable scenarios.
 
-EF Core 10 maintains three primary inventories:
+## Version inventories
 
-1. [Feature inventory](efcore/efcore-10-feature-matrix.md): 55 feature groups, implementation status in
-   both modes, supported scope and source entry points.
-2. [Gap inventory](efcore/efcore-10-gap-matrix.md): development status, priority, ownership and closure
-   conditions for each gap; external dependencies, uncertain capabilities and deferrals are separate.
-3. [Release checklist](efcore/efcore-10-release-checklist.md): test, live database, package, platform,
-   review and release gates with their evidence.
+| EF Core | Features and scope by mode | Development gaps and closure conditions | Acceptance and release evidence |
+| --- | --- | --- | --- |
+| 10 | [Feature inventory](efcore/efcore-10-feature-matrix.md) | [Gap inventory](efcore/efcore-10-gap-matrix.md) | [Release checklist](efcore/efcore-10-release-checklist.md) |
+| 9 | [Feature inventory](efcore/efcore-9-feature-matrix.md) | [Gap inventory](efcore/efcore-9-gap-matrix.md) | [Release checklist](efcore/efcore-9-release-checklist.md) |
+| 8 | [Feature inventory](efcore/efcore-8-feature-matrix.md) | [Gap inventory](efcore/efcore-8-gap-matrix.md) | [Release checklist](efcore/efcore-8-release-checklist.md) |
 
 Use the gap inventory to select development work, the feature inventory to assess implemented scope,
 and the release checklist to assess release readiness. Implemented code, accepted runtime profiles and
-published packages are different states. The checklist records the current Windows ordinary-direct
-profile and the documented Linux/TLS/HA exclusions; it does not claim unrestricted deployment support.
+published packages are different states. The EF10 checklist records its scoped Windows ordinary-direct
+profile. EF8 and EF9 start with porting requirements and pending acceptance.
 
 Shared topics have one owner:
 
@@ -26,9 +25,7 @@ Shared topics have one owner:
 | Development, testing, credentials and release rules | [Repository guidelines](repository-guidelines.md) |
 | Official EF documentation used when implementing or porting | [References](efcore/official-references.md) |
 
-EF8/EF9 are planned ports, not accepted package lines in this checkout. Their common porting rules live
-in the version-support document rather than separate speculative designs. Superseded feature plans and
-progress logs are removed; Git retains history and ignored `artifacts/` retains raw local evidence.
+Git retains history and ignored `artifacts/` retains raw local evidence.
 
 Write documentation in English and organize it by lasting topic across all EF Core versions. New
 independent topics are allowed; small features do not get their own documents. See the root

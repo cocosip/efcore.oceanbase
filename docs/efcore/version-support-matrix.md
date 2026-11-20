@@ -6,8 +6,8 @@ availability and publication status on the intended feed before release.
 | EF major | Branch | Provider line / target asset | Current state |
 | --- | --- | --- | --- |
 | 10 | `efcore/10.0` | `OceanBase.EntityFrameworkCore` 10.x / `net10.0` | Active implementation; accepted profiles and remaining publication steps are in the [release checklist](efcore-10-release-checklist.md) |
-| 9 | `efcore/9.0` (planned) | 9.x / proposed `net8.0` | Port from `efcore/10.0` |
-| 8 | `efcore/8.0` (planned) | 8.x / proposed `net8.0` | Port from `efcore/9.0` after the EF Core 9 port is complete |
+| 9 | `efcore/9.0` | 9.x / planned `net8.0` | Port from `efcore/10.0` under the [EF Core 9 inventories](../README.md#version-inventories) |
+| 8 | `efcore/8.0` (planned) | 8.x / planned `net8.0` | Port from `efcore/9.0` after the EF Core 9 port is complete, under the [EF Core 8 inventories](../README.md#version-inventories) |
 | 11 | `dev` when development begins | 11.x / target to be verified | Development has yet to begin |
 
 The EF10 provider asset requires a .NET 10 application target or a compatible later target that receives
@@ -42,4 +42,11 @@ from NuGet asset selection.
   test without compiling another version branch.
 - Before releasing a port, run that major's provider/relational/specification, package-consumer and both-mode
   live checks. Record version differences and exclusions in its owning inventories under the same
-  [documentation rules](../../AGENTS.md), rather than copying EF10 evidence or creating parallel process logs.
+  [documentation rules](../../AGENTS.md). Collect fresh evidence for each major.
+
+## EF Core 8 and 9 runtime scope
+
+EF Core 8 and 9 both target .NET 8. Microsoft ended upstream support for EF Core 8, EF Core 9,
+.NET 8 and .NET 9 on November 10, 2026. These Provider lines target compatibility for existing
+applications. Record supported runtime profiles in each version's release checklist.
+[Lifecycle and upstream API references](official-references.md#version-references)
