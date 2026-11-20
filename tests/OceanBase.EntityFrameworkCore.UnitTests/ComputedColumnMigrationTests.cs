@@ -71,17 +71,50 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             Assert.Throws<NotSupportedException>(() => context.GetService<IMigrationsSqlGenerator>().Generate([operation]));
         }
 
+        [Theory]
+        [InlineData(typeof(string), "VARCHAR(50)")]
+        [InlineData(typeof(byte[]), "VARBINARY(50)")]
+        public void MySql_reference_type_computed_columns_ignore_only_synthetic_backfill_defaults(Type type, string storeType)
+        {
+            using var context = Create(OceanBaseCompatibilityMode.MySql);
+            var nullable = Model(context, required: false, "original", type);
+            var required = Model(context, required: true, "original", type);
+            var differ = context.GetService<IMigrationsModelDiffer>();
+            var generator = context.GetService<IMigrationsSqlGenerator>();
+            var upgrade = differ.GetDifferences(nullable.GetRelationalModel(), required.GetRelationalModel());
+            var alter = Assert.IsType<AlterColumnOperation>(Assert.Single(upgrade));
+            Assert.Null(alter.OldColumn.DefaultValue);
+            if (type == typeof(string)) Assert.Equal(string.Empty, alter.DefaultValue);
+            else Assert.Empty(Assert.IsType<byte[]>(alter.DefaultValue));
+            Assert.Equal($"ALTER TABLE `Rows` MODIFY COLUMN `Computed` {storeType} GENERATED ALWAYS AS (BaseValue) VIRTUAL NOT NULL COMMENT 'original';",
+                Assert.Single(generator.Generate(upgrade, required)).CommandText.Trim());
+            Assert.Equal($"ALTER TABLE `Rows` MODIFY COLUMN `Computed` {storeType} GENERATED ALWAYS AS (BaseValue) VIRTUAL COMMENT 'original';",
+                Assert.Single(generator.Generate(differ.GetDifferences(required.GetRelationalModel(), nullable.GetRelationalModel()), nullable)).CommandText.Trim());
+            Assert.Throws<NotSupportedException>(() => generator.Generate(upgrade));
+            alter.DefaultValue = type == typeof(string) ? "explicit" : new byte[] { 1 };
+            Assert.Throws<NotSupportedException>(() => generator.Generate(upgrade, required));
+        }
+
         private static DbContext Create(OceanBaseCompatibilityMode mode)
             => new(new DbContextOptionsBuilder().UseOceanBase("Server=offline;Database=app", mode).EnableServiceProviderCaching(false).Options);
 
-        private static IModel Model(DbContext context, bool required, string comment)
+        private static IModel Model(DbContext context, bool required, string comment, Type? computedType = null)
         {
             var builder = new ModelBuilder(context.GetService<IConventionSetBuilder>().CreateConventionSet());
             var row = builder.Entity("Rows");
             row.Property<int>("Id");
             row.HasKey("Id");
-            row.Property<int?>("BaseValue");
-            row.Property<int?>("Computed").IsRequired(required).HasComputedColumnSql("BaseValue + 1", stored: false).HasComment(comment);
+            if (computedType is null)
+            {
+                row.Property<int?>("BaseValue");
+                row.Property<int?>("Computed").IsRequired(required).HasComputedColumnSql("BaseValue + 1", stored: false).HasComment(comment);
+            }
+            else
+            {
+                row.Property(computedType, "BaseValue").HasMaxLength(50);
+                row.Property(computedType, "Computed").HasMaxLength(50).IsRequired(required)
+                    .HasComputedColumnSql("BaseValue", stored: false).HasComment(comment);
+            }
             return context.GetService<IModelRuntimeInitializer>().Initialize(builder.FinalizeModel(), designTime: true);
         }
     }

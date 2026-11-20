@@ -516,8 +516,12 @@ namespace OceanBase.EntityFrameworkCore.Migrations
         // EF adds a CLR backfill default when requiring a column, including computed columns.
         private static bool IsComputedBackfillDefault(AlterColumnOperation column, IModel? model)
             => !column.IsNullable && column.OldColumn.IsNullable && column.OldColumn.DefaultValue is null
-                && column.ClrType.IsValueType && column.DefaultValue is not null
-                && Equals(column.DefaultValue, Activator.CreateInstance(column.ClrType))
+                && column.DefaultValue is not null && (column.DefaultValue switch
+                {
+                    string text => column.ClrType == typeof(string) && text.Length == 0,
+                    byte[] bytes => column.ClrType == typeof(byte[]) && bytes.Length == 0,
+                    _ => column.ClrType.IsValueType && Equals(column.DefaultValue, Activator.CreateInstance(column.ClrType))
+                })
                 && model?.GetRelationalModel().FindTable(column.Table, column.Schema)?.FindColumn(column.Name)
                     is { ComputedColumnSql: not null, DefaultValue: null, DefaultValueSql: null } target
                 && target.ComputedColumnSql == column.ComputedColumnSql;

@@ -30,7 +30,7 @@ namespace OceanBase.EntityFrameworkCore.LiveTests
                     var differ = context.GetService<IMigrationsModelDiffer>();
                     var generator = context.GetService<IMigrationsSqlGenerator>();
                     var table = "`" + context.Table + "`";
-                    context.Add(new Row { Id = 1, BaseValue = 10 });
+                    context.Add(new Row { Id = 1, BaseValue = 10, BaseText = "initial text", BaseBytes = [0, 1, 255] });
                     if (async) await context.SaveChangesAsync();
                     else context.SaveChanges();
                     context.ChangeTracker.Clear();
@@ -40,22 +40,24 @@ namespace OceanBase.EntityFrameworkCore.LiveTests
                     Assert.Null(await Computed(2));
                     await Rejected(() => Apply(nullable, required), 1138);
                     Assert.Null(await Computed(2));
-                    Assert.Equal(11, await Computed(1));
+                    Assert.Equal(11, await Computed(1, "initial text", [0, 1, 255]));
                     await Execute("DELETE FROM " + table + " WHERE `Id` = 2");
 
                     stage("require virtual computed value and change comment");
                     await Apply(nullable, required);
                     await Catalog("NO", changeComment ? "changed" : "original");
                     await Rejected(() => Execute("INSERT INTO " + table + " (`Id`, `BaseValue`) VALUES (2, NULL)"), 1048);
-                    Assert.Equal(11, await Computed(1));
+                    await Rejected(() => Execute("INSERT INTO " + table + " (`Id`, `BaseValue`, `BaseText`, `BaseBytes`) VALUES (2, 10, NULL, X'01')"), 1048);
+                    await Rejected(() => Execute("INSERT INTO " + table + " (`Id`, `BaseValue`, `BaseText`, `BaseBytes`) VALUES (2, 10, 'valid', NULL)"), 1048);
+                    Assert.Equal(11, await Computed(1, "initial text", [0, 1, 255]));
 
                     stage("restore nullable virtual value and original comment");
                     await Apply(required, nullable);
                     await Catalog("YES", "original");
                     await Execute("INSERT INTO " + table + " (`Id`, `BaseValue`) VALUES (2, NULL)");
                     Assert.Null(await Computed(2));
-                    await Execute("UPDATE " + table + " SET `BaseValue` = 20 WHERE `Id` = 1");
-                    Assert.Equal(21, await Computed(1));
+                    await Execute("UPDATE " + table + " SET `BaseValue` = 20, `BaseText` = 'updated text', `BaseBytes` = X'7F00FF' WHERE `Id` = 1");
+                    Assert.Equal(21, await Computed(1, "updated text", [127, 0, 255]));
 
                     async Task Apply(IModel from, IModel to)
                     {
@@ -66,19 +68,26 @@ namespace OceanBase.EntityFrameworkCore.LiveTests
                     Task Execute(string sql)
                         => async ? context.Database.ExecuteSqlRawAsync(sql) : Task.FromResult(context.Database.ExecuteSqlRaw(sql));
 
-                    Task<int?> Computed(int id)
+                    async Task<int?> Computed(int id, string? expectedText = null, byte[]? expectedBytes = null)
                     {
-                        var query = context.Set<Row>().Where(row => row.Id == id).Select(row => row.Computed);
-                        return async ? query.SingleAsync() : Task.FromResult(query.Single());
+                        var query = context.Set<Row>().Where(row => row.Id == id)
+                            .Select(row => new { row.Computed, row.ComputedText, row.ComputedBytes });
+                        var values = async ? await query.SingleAsync() : query.Single();
+                        Assert.Equal(expectedText, values.ComputedText);
+                        Assert.Equal(expectedBytes, values.ComputedBytes);
+                        return values.Computed;
                     }
 
                     async Task Catalog(string nullableValue, string comment)
                     {
-                        const string source = " FROM information_schema.COLUMNS WHERE table_schema = DATABASE() AND table_name = {0} AND column_name = 'Computed'";
-                        var nullableQuery = context.Database.SqlQueryRaw<string>("SELECT IS_NULLABLE AS `Value`" + source, context.Table);
-                        var commentQuery = context.Database.SqlQueryRaw<string>("SELECT COLUMN_COMMENT AS `Value`" + source, context.Table);
-                        Assert.Equal(nullableValue, Assert.Single(async ? await nullableQuery.ToArrayAsync() : nullableQuery.ToArray()));
-                        Assert.Equal(comment, Assert.Single(async ? await commentQuery.ToArrayAsync() : commentQuery.ToArray()));
+                        foreach (var column in new[] { "Computed", "ComputedText", "ComputedBytes" })
+                        {
+                            const string source = " FROM information_schema.COLUMNS WHERE table_schema = DATABASE() AND table_name = {0} AND column_name = {1}";
+                            var nullableQuery = context.Database.SqlQueryRaw<string>("SELECT IS_NULLABLE AS `Value`" + source, context.Table, column);
+                            var commentQuery = context.Database.SqlQueryRaw<string>("SELECT COLUMN_COMMENT AS `Value`" + source, context.Table, column);
+                            Assert.Equal(nullableValue, Assert.Single(async ? await nullableQuery.ToArrayAsync() : nullableQuery.ToArray()));
+                            Assert.Equal(comment, Assert.Single(async ? await commentQuery.ToArrayAsync() : commentQuery.ToArray()));
+                        }
                     }
                 });
 
@@ -99,6 +108,10 @@ namespace OceanBase.EntityFrameworkCore.LiveTests
             var row = builder.Entity<Row>();
             row.ToTable(table);
             row.Property(value => value.Id).ValueGeneratedNever();
+            row.Property(value => value.BaseText).HasMaxLength(50);
+            row.Property(value => value.BaseBytes).HasMaxLength(50);
+            row.Property(value => value.ComputedText).HasMaxLength(50).IsRequired(required).HasComputedColumnSql("BaseText", stored: false).HasComment(comment);
+            row.Property(value => value.ComputedBytes).HasMaxLength(50).IsRequired(required).HasComputedColumnSql("BaseBytes", stored: false).HasComment(comment);
             row.Property(value => value.Computed).IsRequired(required).HasComputedColumnSql("BaseValue + 1", stored: false).HasComment(comment);
         }
 
@@ -119,6 +132,10 @@ namespace OceanBase.EntityFrameworkCore.LiveTests
             public int Id { get; set; }
             public int? BaseValue { get; set; }
             public int? Computed { get; set; }
+            public string? BaseText { get; set; }
+            public string? ComputedText { get; set; }
+            public byte[]? BaseBytes { get; set; }
+            public byte[]? ComputedBytes { get; set; }
         }
     }
 }

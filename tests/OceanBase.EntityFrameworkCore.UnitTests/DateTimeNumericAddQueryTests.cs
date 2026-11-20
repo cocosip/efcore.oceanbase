@@ -336,7 +336,18 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             var repeated = Assert.IsType<SqlBinaryExpression>(addition.Right);
             Assert.Equal(Assert.IsType<SqlParameterExpression>(repeated.Left).Name,
                 Assert.IsType<SqlParameterExpression>(repeated.Right).Name);
-            Assert.Same(repeatedMapping, Assert.IsType<SqlParameterExpression>(repeated.Right).TypeMapping);
+            // EF patch versions may canonicalize equivalent repeated-parameter mappings.
+            var actualMapping = Assert.IsAssignableFrom<RelationalTypeMapping>(Assert.IsType<SqlParameterExpression>(repeated.Right).TypeMapping);
+            Assert.Equal(repeatedMapping.GetType(), actualMapping.GetType());
+            Assert.Equal(repeatedMapping.ClrType, actualMapping.ClrType);
+            Assert.Equal(repeatedMapping.StoreType, actualMapping.StoreType);
+            Assert.Equal(repeatedMapping.DbType, actualMapping.DbType);
+            Assert.Equal(repeatedMapping.Size, actualMapping.Size);
+            Assert.Equal(repeatedMapping.Precision, actualMapping.Precision);
+            Assert.Equal(repeatedMapping.Scale, actualMapping.Scale);
+            Assert.Equal(repeatedMapping.IsUnicode, actualMapping.IsUnicode);
+            Assert.Equal(repeatedMapping.IsFixedLength, actualMapping.IsFixedLength);
+            Assert.Equal(repeatedMapping.Converter, actualMapping.Converter);
             Assert.NotEqual(Assert.IsType<SqlParameterExpression>(addition.Left).Name,
                 Assert.IsType<SqlParameterExpression>(repeated.Left).Name);
             var generator = new OceanBaseQuerySqlGenerator(context.GetService<QuerySqlGeneratorDependencies>(), OceanBaseCompatibilityMode.Oracle);
@@ -347,6 +358,7 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             Assert.NotEqual(command.Parameters[0].ParameterName, command.Parameters[1].ParameterName);
             Assert.Equal(reverse ? 22 : 11, command.Parameters[0].Value);
             Assert.Equal(reverse ? 11 : 22, command.Parameters[1].Value);
+            Assert.All(command.Parameters.Cast<OceanBaseParameter>(), parameter => Assert.Equal(mapping.DbType, parameter.DbType));
         }
 
         [Fact]
