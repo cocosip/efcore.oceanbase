@@ -1,16 +1,39 @@
 # EF Core 10 Release Acceptance Checklist
 
-Updated 2026-11-20. This checklist records tests, evidence and release gates.
+Updated 2026-11-23. This checklist records tests, evidence and release gates.
 See the [feature inventory](efcore-10-feature-matrix.md) for code scope and the [gap inventory](efcore-10-gap-matrix.md) for individual development states.
-The implementation candidate is `e25988a`, using published OceanBaseConnector 0.4.0. The current
+The historical implementation candidate is `e25988a`, using published OceanBaseConnector 0.4.0. Its
 evidence below supersedes earlier checkpoints for this bounded release. Implementation status remains
 in the feature/gap inventories; test counts are not feature-completion counts.
 
-The current release target is Windows x64 with the existing OceanBase 4.4.2.2 MySQL/Oracle ordinary-direct
+The initial release target was Windows x64 with the existing OceanBase 4.4.2.2 MySQL/Oracle ordinary-direct
 profile, TLS Disabled. On 2026-11-20 the user explicitly excluded Linux publication, TLS and HA acceptance
 because the required environments are unavailable. Record these as unverified deployment extensions, not
 blocking gates for this bounded release and not successful acceptance. Do not generalize the direct profile
 to proxy routing/failover, certificate verification or distributed ambient transactions.
+
+## Maintenance 10.0.1 checkpoint
+
+Prepared 2026-11-23 against published OceanBaseConnector 0.5.0. The package keeps the EF 10
+dependency range and net10.0 asset. Runtime and design-time configuration use CompatibilityMode;
+the package guide owns migration instructions. No Connector source or CI workflow changes are needed.
+
+Patch verification is pending. Logs, TRX and packages belong under `artifacts/connector-050/`.
+Record the Release solution, package archive and isolated floor/serviced-patch consumer results here.
+The commands are `dotnet test OceanBase.EntityFrameworkCore.slnx -c Release --no-restore -m:1 -nr:false`,
+`dotnet pack src/OceanBase.EntityFrameworkCore -c Release --no-restore -o artifacts/connector-050/ef10-packages`,
+and `tests/OceanBase.EntityFrameworkCore.PackageConsumer/Verify-Package.ps1` with the candidate
+package path and expected version 10.0.1; restore/run the PackageConsumer using that local feed.
+
+The user requires fresh MySQL and Oracle database validation before release decisions. Tests may
+create unique test-owned EFT_ objects only inside the pre-provisioned database/schema selected by
+the existing User Secrets configuration, and must verify cleanup of those objects. Namespace
+creation/deletion and prefix-based cleanup are outside this scope.
+
+All live, tooling and environment evidence below belongs to the initial release and Connector 0.4.0.
+It is historical evidence for this patch. Fresh both-mode live/tooling acceptance and hosted CI remain
+pending; Windows offline tests do not establish Linux, TLS, proxy or HA acceptance. No patch release
+tag, push or publication is authorized by preparing the source and local packages.
 
 ## Acceptance states and completion criteria
 
@@ -25,18 +48,18 @@ to proxy routing/failover, certificate verification or distributed ambient trans
 
 | Gate | State | Current evidence / remaining conditions |
 | --- | --- | --- |
-| R-01 Dependency and source identity | Passed for validation candidate | Tested implementation/Connector identities and the runtime-payload bridge across validation repacks are recorded below. The final stable artifact requires its own source/hash checks |
-| R-02 Local / TST-01 | Passed | Both EF patches pass the recorded Windows Release suite with documented specification skips; this is not the complete upstream runtime specification suite |
-| R-03 Live database / TST-02 | Passed for declared scope | Baseline and added native contracts pass on both patches. Distinct cases, repeated smoke checks and preserved initial failures are separated in the evidence below |
-| R-04 PKG-01..04 | Passed for validation candidate | Validation archive, isolated consumers and synthetic EF11 dependency-bound rejection pass. Final stable package verification and online checks remain below |
-| R-05 Tooling / DEF-01/02/08 | Passed for declared scope | Recorded catalog/model/migration, bundle, lock, selected official runtime and C04 replays pass. NativeAOT remains limited to its Windows generated-query/mapping profile with retained warnings |
-| R-06 Platforms | Passed for declared scope | Current Windows source/package checks pass. Linux final-revision publication/CI is explicitly excluded by the user. Historical cross-platform CI is not evidence for this revision |
-| R-07 Environment / REL-01 | Passed for declared scope | Both OceanBase compatibility modes pass on the ordinary-direct profile recorded below. Proxy/TLS/HA and distributed ambient transactions are excluded |
-| R-08 Review / REL-02 | Passed for declared scope | Independent reviews cover the computed-column fix, equivalent EF-patch mappings, connection probes, added native contracts, README and final evidence/scope. Initial findings were corrected and re-reviewed; no unresolved Critical/Important issue remains |
-| R-09 Sensitive information/cleanup | Passed for candidate-owned scope | Configured sensitive-value scans and candidate-owned cleanup checks pass. Historical or unidentified catalog objects remain as detailed below; no global/prefix deletion or zero-object global result is claimed |
-| R-10 Release operations | Held by user instruction | No tag, push or publication is authorized. Package major/dependency ranges and README scope are aligned. Local acceptance commits do not authorize release operations; a validation package is not a published release |
+| R-01 Dependency and source identity | Pending patch verification | Tested implementation/Connector identities and the runtime-payload bridge across validation repacks are recorded below. The final stable artifact requires its own source/hash checks |
+| R-02 Local / TST-01 | Pending patch verification | Both EF patches pass the recorded Windows Release suite with documented specification skips; this is not the complete upstream runtime specification suite |
+| R-03 Live database / TST-02 | Historical pass; patch rerun pending | Baseline and added native contracts pass on both patches. Distinct cases, repeated smoke checks and preserved initial failures are separated in the evidence below |
+| R-04 PKG-01..04 | Pending patch verification | Validation archive, isolated consumers and synthetic EF11 dependency-bound rejection pass. Final stable package verification and online checks remain below |
+| R-05 Tooling / DEF-01/02/08 | Historical pass; patch tooling rerun pending | Recorded catalog/model/migration, bundle, lock, selected official runtime and C04 replays pass. NativeAOT remains limited to its Windows generated-query/mapping profile with retained warnings |
+| R-06 Platforms | Patch CI pending | Current Windows source/package checks pass. Linux final-revision publication/CI is explicitly excluded by the user. Historical cross-platform CI is not evidence for this revision |
+| R-07 Environment / REL-01 | Historical direct profile only | Both OceanBase compatibility modes pass on the ordinary-direct profile recorded below. Proxy/TLS/HA and distributed ambient transactions are excluded |
+| R-08 Review / REL-02 | Patch review pending | Independent reviews cover the computed-column fix, equivalent EF-patch mappings, connection probes, added native contracts, README and final evidence/scope. Initial findings were corrected and re-reviewed; no unresolved Critical/Important issue remains |
+| R-09 Sensitive information/cleanup | Patch scope review pending | Configured sensitive-value scans and candidate-owned cleanup checks pass. Historical or unidentified catalog objects remain as detailed below; no global/prefix deletion or zero-object global result is claimed |
+| R-10 Release operations | Patch publication pending authorization | No tag, push or publication is authorized. Package major/dependency ranges and README scope are aligned. Local acceptance commits do not authorize release operations; a validation package is not a published release |
 
-## Stable release preparation
+## Historical initial stable release preparation
 
 The Windows package checkpoint `9636bd8` passed the Release solution, package archive and
 source revision checks, and isolated consumers on EF 10.0.0 and 10.0.14. The package-only
@@ -63,7 +86,7 @@ Runtime/tooling evidence for DEF-01/02/03/06/07/08/09 is recorded under R-03/R-0
 | CFG-02 | Database.IsOceanBase() and invariant identify this provider through EF's real service graph. | R-01/R-02/R-03 |
 | CFG-03 | Model/service-provider and compiled-query caches separate compatibility/translation modes and design-time/runtime models; compatible options reuse services. | R-01/R-02/R-03 |
 | CFG-04 | Required relational services resolve with EF10 lifetimes; normal DatabaseFacade APIs have no missing services. | R-01/R-02/R-03 |
-| CON-01 | Create OceanBaseConnection through public OceanBaseConnector APIs and supply ExpectedMode. | R-03/R-09 |
+| CON-01 | Create OceanBaseConnection through public OceanBaseConnector APIs and supply CompatibilityMode. | R-03/R-09 |
 | CON-02 | Reject configured/detected mode conflicts before execution for supplied/created connections; cleanup remains safe after rejection. | R-03/R-09 |
 | CON-03 | Caller-owned connections survive context disposal; provider-owned connections close/dispose in sync/async success/error paths. | R-03/R-09 |
 | CON-04 | Sync/async open, execute, read, close and connection reuse honor mode and connector settings. | R-03/R-09 |
@@ -113,7 +136,7 @@ Runtime/tooling evidence for DEF-01/02/03/06/07/08/09 is recorded under R-03/R-0
 | REL-01 | Support notes record server/connector/runtime/EF versions, tenant mode, ordinary direct endpoint, transport/options without credentials; extended deployments follow Connector support boundaries. | R-07/R-08/R-10 |
 | REL-02 | Tested efcore/10.0 development checkpoint is reviewed; packaging/release checks run on release revision. | R-07/R-08/R-10 |
 
-## Current candidate evidence
+## Historical initial candidate evidence
 
 All paths below are ignored local evidence under `artifacts/release-e25988a/`; they are not published
 release artifacts. Source history and older acceptance evidence remain available through Git and their

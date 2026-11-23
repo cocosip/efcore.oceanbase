@@ -1,7 +1,12 @@
 # EF Core 10 Feature Gap Matrix
 
-Updated 2026-11-20. This matrix corresponds to the [55 feature groups](efcore-10-feature-matrix.md) and tracks only code capability gaps,
+Updated 2026-11-23. This matrix corresponds to the [55 feature groups](efcore-10-feature-matrix.md) and tracks only code capability gaps,
 explicitly unsupported features, dependencies, and capabilities to confirm. Pre-release tests, acceptance coverage, and review evidence belong only in the [release checklist](efcore-10-release-checklist.md).
+
+Maintenance 10.0.1 migrates CON-01 to Connector 0.5.0; see the [feature matrix](efcore-10-feature-matrix.md).
+This dependency migration adds no gap records and changes no existing closure conditions.
+Connector 0.4.0 references below identify the original capability baseline; patch acceptance
+belongs to the [release checklist](efcore-10-release-checklist.md).
 
 ## Statuses and counts
 

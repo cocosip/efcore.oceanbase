@@ -4,7 +4,7 @@
     <TargetFramework>net10.0</TargetFramework>
     <ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally>
     <IsPackable>false</IsPackable>
-    <OceanBaseProviderVersion Condition="'$(OceanBaseProviderVersion)' == ''">10.0.0</OceanBaseProviderVersion>
+    <OceanBaseProviderVersion Condition="'$(OceanBaseProviderVersion)' == ''">10.0.1</OceanBaseProviderVersion>
     <OceanBaseConsumerEfCoreVersion Condition="'$(OceanBaseConsumerEfCoreVersion)' == ''">10.0.0</OceanBaseConsumerEfCoreVersion>
   </PropertyGroup>
   <ItemGroup>

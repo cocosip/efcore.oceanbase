@@ -6,6 +6,7 @@ and implements EF Core relational behavior: modeling, LINQ translation, writes, 
 creation, migrations and reverse engineering.
 
 - [Install](#install)
+- [Upgrade from 8.0.0, 9.0.0 or 10.0.0](#upgrade-from-800-900-or-1000)
 - [Requirements](#requirements)
 - [Quick start](#quick-start)
 - [Choose the compatibility mode](#choose-the-compatibility-mode)
@@ -23,19 +24,34 @@ creation, migrations and reverse engineering.
 ## Install
 
 ```shell
-dotnet add package Sharp.OceanBase.EntityFrameworkCore --version 10.0.0
+dotnet add package Sharp.OceanBase.EntityFrameworkCore --version 10.0.1
 dotnet add package Microsoft.EntityFrameworkCore.Design # migrations, scaffolding, bundles; match the EF Core patch
 ```
 
 | Package version | Target framework | EF Core dependency | Minimum runtime |
 | --- | --- | --- | --- |
-| 10.0.0 | `net10.0` | `[10.0.0,11.0.0)` | .NET 10 |
-| 9.0.0 | `net9.0` | `[9.0.0,10.0.0)` | .NET 9 |
-| 8.0.0 | `net8.0` | `[8.0.0,9.0.0)` | .NET 8 |
+| 10.0.1 | `net10.0` | `[10.0.0,11.0.0)` | .NET 10 |
+| 9.0.1 | `net9.0` | `[9.0.0,10.0.0)` | .NET 9 |
+| 8.0.1 | `net8.0` | `[8.0.0,9.0.0)` | .NET 8 |
 
 `Microsoft.EntityFrameworkCore`, `Microsoft.EntityFrameworkCore.Relational` and `OceanBaseConnector`
-(0.4.0 or later) are package dependencies. Match the package major to the application's EF Core major;
+(0.5.0 or later) are package dependencies. Match the package major to the application's EF Core major;
 the bounded EF range accepts its patch updates without pinning one patch version.
+
+## Upgrade from 8.0.0, 9.0.0 or 10.0.0
+
+The 8.0.1, 9.0.1 and 10.0.1 maintenance releases rebuild against OceanBaseConnector 0.5.0.
+Replace the old `ExpectedMode` connection-string keyword and builder property with
+`CompatibilityMode`; the old keyword is rejected by the Connector. Replace a null builder mode
+with `OceanBaseConnector.OceanBaseCompatibilityMode.Auto` or omit the option. Rebuild applications
+and dependent libraries because the Connector enum values changed to Auto=0, MySql=1 and Oracle=2;
+migrate any persisted numeric Connector enum values by their original meaning. The Provider's own
+`OceanBaseCompatibilityMode` enum and explicit `UseOceanBase` mode selection are unchanged.
+
+For Provider-created connections, an omitted mode or `CompatibilityMode=Auto` is replaced with the
+explicit `UseOceanBase` mode. Supplied connections retain their configuration; configured and
+detected mode conflicts still reject. Reverse engineering requires `CompatibilityMode=MySql` or
+`CompatibilityMode=Oracle`; `Auto` is not accepted for scaffolding.
 
 ## Requirements
 
@@ -164,10 +180,10 @@ optionsBuilder
 ## Reverse engineering
 
 Scaffolding reads the Connector's public schema catalogs. The scaffolding connection string must declare
-`ExpectedMode=MySql` or `ExpectedMode=Oracle`; generated `UseOceanBase` code selects that mode.
+`CompatibilityMode=MySql` or `CompatibilityMode=Oracle`; generated `UseOceanBase` code selects that mode.
 
 ```shell
-dotnet ef dbcontext scaffold "Server=<host>;Port=2881;User ID=<user>;Password=<secret>;Database=<database>;ExpectedMode=MySql" \
+dotnet ef dbcontext scaffold "Server=<host>;Port=2881;User ID=<user>;Password=<secret>;Database=<database>;CompatibilityMode=MySql" \
     OceanBase.EntityFrameworkCore -o Models
 ```
 

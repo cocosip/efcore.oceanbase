@@ -1,8 +1,13 @@
 # EF Core 10 Feature Matrix
 
-Updated 2026-11-20. This document tracks **feature implementation status** only.
+Updated 2026-11-23. This document tracks **feature implementation status** only.
 For gaps and development status, see the [Gap Matrix](efcore-10-gap-matrix.md). For test, live-database, package and release status, see the
 [Release Checklist](efcore-10-release-checklist.md). Module plans and separate progress logs are no longer maintained.
+
+Maintenance 10.0.1 uses published Connector 0.5.0 and its `CompatibilityMode` API. CON-01
+accepts omitted/Auto configuration while retaining explicit EF mode selection and conflict checks.
+Reverse engineering still requires explicit MySql/Oracle. See the
+[upgrade contract](../../src/OceanBase.EntityFrameworkCore/README.md#upgrade-from-800-900-or-1000).
 
 ## Definitions and scope
 
@@ -22,7 +27,7 @@ For gaps and development status, see the [Gap Matrix](efcore-10-gap-matrix.md). 
 | CFG-02 | Provider invariant, Database.IsOceanBase and service identification | Implemented | Implemented | [Options][options] | — |
 | CFG-03 | Model/service/compiled-query caches isolated by compatibility mode, preserving the EF base cache key | Implemented | Implemented | [Cache][cache] | — |
 | CFG-04 | EF10 relational service registration, scopes and DatabaseFacade service graph | Implemented | Implemented | [Services][services] | — |
-| CON-01 | Connection creation through the public Connector API with ExpectedMode | Implemented | Implemented | [Connection][connection] | — |
+| CON-01 | Connection creation through the public Connector API with CompatibilityMode | Implemented | Implemented | [Connection][connection] | — |
 | CON-02 | Mode validation before and after opening, conflict rejection and failure cleanup | Implemented | Implemented | [Connection][connection] | — |
 | CON-03 | Caller/Provider connection ownership, nested leases and preservation of hidden credentials | Implemented | Implemented | [Connection][connection] | — |
 | CON-04 | Sync/async connections, early reader disposal, failure cleanup and connection reuse | Implemented | Implemented | [Reader][reader] | — |

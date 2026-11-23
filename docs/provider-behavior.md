@@ -6,6 +6,10 @@ starts with the package guide; this document keeps the contracts those sections 
 [EF Core 10 inventories](efcore/efcore-10-feature-matrix.md) own implementation status and gaps, and each
 release branch owns its version-specific acceptance evidence.
 
+The maintenance packages consume Connector 0.5.0. References to 0.4.0 below identify the original
+capability baseline; configuration now uses `CompatibilityMode` as described in the
+[upgrade guide](../src/OceanBase.EntityFrameworkCore/README.md#upgrade-from-800-900-or-1000).
+
 ## Command parameters and mapped procedures
 
 MySQL text commands adapt named inputs to positional binds. Repeated caller-owned `OceanBaseParameter`
@@ -410,7 +414,7 @@ unverified. See C-01 in the gap matrix for the bounded scope.
 
 Database reverse engineering uses the driver's public `GetSchema` collections, including its typed column
 declarations and tri-state generation/default/update metadata. Scaffolding connections must specify
-`ExpectedMode=MySql` or `ExpectedMode=Oracle`; generated `UseOceanBase` code selects that mode explicitly.
+`CompatibilityMode=MySql` or `CompatibilityMode=Oracle`; generated `UseOceanBase` code selects that mode explicitly.
 Supported scalar columns, keys, ordinary indexes, relationships and keyless views use EF's model/C# generation.
 Unavailable behavior metadata produces design-time warnings requiring configuration review before writes or
 schema recreation. Known defaults with unavailable SQL use EF's `HasDefaultValue()` marker; unknown identity

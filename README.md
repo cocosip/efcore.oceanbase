@@ -8,19 +8,24 @@ to OceanBase tenants from ordinary .NET applications.
 ## Install
 
 ```shell
-dotnet add package Sharp.OceanBase.EntityFrameworkCore --version 10.0.0
+dotnet add package Sharp.OceanBase.EntityFrameworkCore --version 10.0.1
 ```
 
 | EF Core major | Package version | Target framework | EF Core dependency | Branch |
 | --- | --- | --- | --- | --- |
-| 10 | 10.0.0 | `net10.0` | `[10.0.0,11.0.0)` | `efcore/10.0` |
-| 9 | 9.0.0 | `net9.0` | `[9.0.0,10.0.0)` | `efcore/9.0` |
-| 8 | 8.0.0 | `net8.0` | `[8.0.0,9.0.0)` | `efcore/8.0` |
+| 10 | 10.0.1 | `net10.0` | `[10.0.0,11.0.0)` | `efcore/10.0` |
+| 9 | 9.0.1 | `net9.0` | `[9.0.0,10.0.0)` | `efcore/9.0` |
+| 8 | 8.0.1 | `net8.0` | `[8.0.0,9.0.0)` | `efcore/8.0` |
 
-All three versions are published on NuGet.org. Match the package major to the application's EF Core
-major; `Microsoft.EntityFrameworkCore`, `Microsoft.EntityFrameworkCore.Relational` and
-`OceanBaseConnector` 0.4.0 or later are package dependencies. Each release branch records its own
+The table lists the next maintenance versions; 8.0.0, 9.0.0 and 10.0.0 are already published on NuGet.org.
+Match the package major to the application's EF Core major;
+`Microsoft.EntityFrameworkCore`, `Microsoft.EntityFrameworkCore.Relational` and
+`OceanBaseConnector` 0.5.0 or later are package dependencies. Each release branch records its own
 acceptance evidence — see [version support](docs/efcore/version-support-matrix.md).
+
+The next maintenance releases require the Connector 0.5.0 `CompatibilityMode` configuration API.
+See the [upgrade notes](src/OceanBase.EntityFrameworkCore/README.md#upgrade-from-800-900-or-1000)
+before updating an application or its connection strings.
 
 ## Quick start
 

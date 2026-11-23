@@ -324,7 +324,7 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
             await using var context = CreateContext(mode, commands);
             var native = Assert.IsType<OceanBaseConnection>(context.Database.GetDbConnection());
             var configured = new OceanBaseConnectionStringBuilder(native.ConnectionString);
-            Assert.Equal(mode.ToString(), configured.ExpectedMode.ToString());
+            Assert.Equal(mode.ToString(), configured.CompatibilityMode.ToString());
             Assert.False(configured.UseAffectedRows);
             var query = context.Set<Row>().Select(row => row.Id);
 

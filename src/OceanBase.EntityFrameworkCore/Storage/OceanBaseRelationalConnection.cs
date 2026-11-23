@@ -40,7 +40,7 @@ namespace OceanBase.EntityFrameworkCore.Storage
             }
         }
 
-        private OceanBaseConnector.OceanBaseCompatibilityMode ExpectedMode
+        private OceanBaseConnector.OceanBaseCompatibilityMode CompatibilityMode
             => _compatibilityMode == OceanBaseCompatibilityMode.Oracle
                 ? OceanBaseConnector.OceanBaseCompatibilityMode.Oracle
                 : OceanBaseConnector.OceanBaseCompatibilityMode.MySql;
@@ -334,9 +334,11 @@ namespace OceanBase.EntityFrameworkCore.Storage
         internal string ValidateConnectionString(string connectionString)
         {
             var builder = new OceanBaseConnectionStringBuilder(connectionString);
-            if (builder.ExpectedMode is { } configuredMode && configuredMode != ExpectedMode)
+            var configuredMode = builder.CompatibilityMode;
+            if (configuredMode != OceanBaseConnector.OceanBaseCompatibilityMode.Auto
+                && configuredMode != CompatibilityMode)
             {
-                throw new InvalidOperationException($"The connection mode does not match '{ExpectedMode}'.");
+                throw new InvalidOperationException($"The connection mode does not match '{CompatibilityMode}'.");
             }
 
             if (_compatibilityMode == OceanBaseCompatibilityMode.MySql && builder.UseAffectedRows)
@@ -344,7 +346,7 @@ namespace OceanBase.EntityFrameworkCore.Storage
                 throw new InvalidOperationException("EF Core requires UseAffectedRows=false to detect matched rows for concurrency checks.");
             }
 
-            builder.ExpectedMode = ExpectedMode;
+            builder.CompatibilityMode = CompatibilityMode;
             return builder.ConnectionString;
         }
 
@@ -356,9 +358,9 @@ namespace OceanBase.EntityFrameworkCore.Storage
             }
 
             _ = ValidateConnectionString(connection.ConnectionString);
-            if (oceanBaseConnection.CompatibilityMode is { } actualMode && actualMode != ExpectedMode)
+            if (oceanBaseConnection.CompatibilityMode is { } actualMode && actualMode != CompatibilityMode)
             {
-                throw new InvalidOperationException($"The connection mode does not match '{ExpectedMode}'.");
+                throw new InvalidOperationException($"The connection mode does not match '{CompatibilityMode}'.");
             }
 
             // A supplied connection may hide credentials after opening or have fixed data-source options.

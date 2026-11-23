@@ -5,9 +5,9 @@ EF Core 8 and 9 are released on their own branches and remain in maintenance sco
 
 | EF major | Branch | Package / target asset | EF Core dependency | State |
 | --- | --- | --- | --- | --- |
-| 10 | `efcore/10.0` | `10.x` / `net10.0` | `[10.0.0,11.0.0)` | Current: 10.0.0 published; acceptance scope and remaining gates in the [release checklist](efcore-10-release-checklist.md) |
-| 9 | `efcore/9.0` | `9.x` / `net9.0` | `[9.0.0,10.0.0)` | 9.0.0 published; branch-owned inventories record ports and acceptance |
-| 8 | `efcore/8.0` | `8.x` / `net8.0` | `[8.0.0,9.0.0)` | 8.0.0 published; branch-owned inventories record ports and acceptance |
+| 10 | `efcore/10.0` | `10.x` / `net10.0` | `[10.0.0,11.0.0)` | Current: 10.0.0 published; 10.0.1 in preparation; acceptance scope and remaining gates in the [release checklist](efcore-10-release-checklist.md) |
+| 9 | `efcore/9.0` | `9.x` / `net9.0` | `[9.0.0,10.0.0)` | 9.0.0 published; 9.0.1 in preparation; branch-owned inventories record ports and acceptance |
+| 8 | `efcore/8.0` | `8.x` / `net8.0` | `[8.0.0,9.0.0)` | 8.0.0 published; 8.0.1 in preparation; branch-owned inventories record ports and acceptance |
 | 11 | `dev` when development begins | `11.x` / target to be verified | `[11.0.0,12.0.0)` expected | Development has not started |
 
 Each Provider asset requires an application target that can consume it: the EF10 provider needs a .NET 10

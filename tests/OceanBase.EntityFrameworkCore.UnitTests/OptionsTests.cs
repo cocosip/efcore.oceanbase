@@ -266,8 +266,8 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
         }
 
         [Theory]
-        [InlineData(OceanBaseCompatibilityMode.MySql, "ExpectedMode=MySql")]
-        [InlineData(OceanBaseCompatibilityMode.Oracle, "ExpectedMode=Oracle")]
+        [InlineData(OceanBaseCompatibilityMode.MySql, "CompatibilityMode=MySql")]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, "CompatibilityMode=Oracle")]
         public void Relational_connection_uses_connector_and_mode(
             OceanBaseCompatibilityMode mode,
             string expectedMode)
@@ -286,7 +286,7 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             using var context = new TestContext(
                 new DbContextOptionsBuilder<TestContext>()
                     .UseOceanBase(
-                        "Server=localhost;Database=test;ExpectedMode=Oracle",
+                        "Server=localhost;Database=test;CompatibilityMode=Oracle",
                         OceanBaseCompatibilityMode.MySql)
                     .Options);
 
@@ -299,7 +299,7 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
         [Fact]
         public void Caller_owned_connection_rejects_a_conflicting_connector_mode()
         {
-            using var connection = new OceanBaseConnector.OceanBaseConnection("Server=localhost;ExpectedMode=Oracle");
+            using var connection = new OceanBaseConnector.OceanBaseConnection("Server=localhost;CompatibilityMode=Oracle");
             using var context = new TestContext(new DbContextOptionsBuilder<TestContext>()
                 .UseOceanBase(connection, OceanBaseCompatibilityMode.MySql).Options);
 
@@ -318,6 +318,40 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
 
             Assert.Same(connection, context.GetService<IRelationalConnection>().DbConnection);
             Assert.Equal(original, connection.ConnectionString);
+        }
+
+        [Theory]
+        [InlineData(OceanBaseCompatibilityMode.MySql, false)]
+        [InlineData(OceanBaseCompatibilityMode.MySql, true)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, false)]
+        [InlineData(OceanBaseCompatibilityMode.Oracle, true)]
+        public void Auto_connector_mode_preserves_provider_mode_and_connection_ownership(
+            OceanBaseCompatibilityMode mode, bool supplied)
+        {
+            const string connectionString = "Server=localhost;Database=test;CompatibilityMode=Auto";
+            using var connection = new OceanBaseConnector.OceanBaseConnection(connectionString);
+            var original = connection.ConnectionString;
+            var options = new DbContextOptionsBuilder<TestContext>();
+            if (supplied)
+            {
+                options.UseOceanBase(connection, mode);
+            }
+            else
+            {
+                options.UseOceanBase(connectionString, mode);
+            }
+            using var context = new TestContext(options.Options);
+            var actual = context.GetService<IRelationalConnection>().DbConnection;
+            var configured = new OceanBaseConnector.OceanBaseConnectionStringBuilder(actual.ConnectionString);
+
+            Assert.Equal(supplied ? OceanBaseConnector.OceanBaseCompatibilityMode.Auto
+                : mode == OceanBaseCompatibilityMode.MySql ? OceanBaseConnector.OceanBaseCompatibilityMode.MySql
+                : OceanBaseConnector.OceanBaseCompatibilityMode.Oracle, configured.CompatibilityMode);
+            if (supplied)
+            {
+                Assert.Same(connection, actual);
+                Assert.Equal(original, connection.ConnectionString);
+            }
         }
 
         [Fact]
@@ -348,7 +382,7 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             var relational = context.GetService<IRelationalConnection>();
             var connection = relational.DbConnection;
             var conflictingMode = mode == OceanBaseCompatibilityMode.MySql ? "Oracle" : "MySql";
-            connection.ConnectionString = $"Server=localhost;ExpectedMode={conflictingMode}";
+            connection.ConnectionString = $"Server=localhost;CompatibilityMode={conflictingMode}";
 
             if (async)
             {
@@ -371,7 +405,7 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
             var relational = context.GetService<IRelationalConnection>();
             var original = relational.DbConnection;
             using var invalid = new OceanBaseConnector.OceanBaseConnection(
-                $"Server=localhost;ExpectedMode={(mode == OceanBaseCompatibilityMode.MySql ? "Oracle" : "MySql")}");
+                $"Server=localhost;CompatibilityMode={(mode == OceanBaseCompatibilityMode.MySql ? "Oracle" : "MySql")}");
 
             Assert.Throws<InvalidOperationException>(() => relational.SetDbConnection(invalid, contextOwnsConnection: false));
             Assert.Same(original, relational.DbConnection);

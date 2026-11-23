@@ -10,7 +10,7 @@ namespace OceanBase.EntityFrameworkCore.TestUtilities;
 internal sealed class ScaffoldingCatalogConnection(OceanBaseCompatibilityMode mode) : DbConnection
 {
     private ConnectionState _state;
-    [AllowNull] public override string ConnectionString { get; set; } = "Server=offline;Database=app;ExpectedMode=" + mode;
+    [AllowNull] public override string ConnectionString { get; set; } = "Server=offline;Database=app;CompatibilityMode=" + mode;
     public override string Database => "app";
     public override string DataSource => "offline";
     public override string ServerVersion => "offline";
