@@ -75,7 +75,7 @@ public sealed class LiveScaffoldOnUpdateTests
                 var generation = new ModelCodeGenerationOptions
                 {
                     Language = "C#", ContextName = "OnUpdateContext", ContextNamespace = "Scaffolded", ModelNamespace = "Scaffolded",
-                    SuppressOnConfiguring = true, ConnectionString = "Server=offline;Database=app;ExpectedMode=MySql"
+                    SuppressOnConfiguring = true, ConnectionString = "Server=offline;Database=app;CompatibilityMode=MySql"
                 };
                 var code = services.GetRequiredService<IModelCodeGeneratorSelector>().Select(generation).GenerateModel(model, generation);
                 var generated = Compile(code);

@@ -338,7 +338,7 @@ namespace OceanBase.EntityFrameworkCore.UnitTests
                 => ValueTask.FromResult(InterceptionResult.Suppress());
 
             public override void ConnectionOpened(DbConnection connection, ConnectionEndEventData eventData)
-                => connection.ConnectionString = $"Server=localhost;Database=test;ExpectedMode={_conflict}";
+                => connection.ConnectionString = $"Server=localhost;Database=test;CompatibilityMode={_conflict}";
 
             public override Task ConnectionOpenedAsync(DbConnection connection, ConnectionEndEventData eventData,
                 CancellationToken cancellationToken = default)

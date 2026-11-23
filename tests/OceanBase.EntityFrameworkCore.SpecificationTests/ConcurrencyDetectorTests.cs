@@ -124,7 +124,7 @@ namespace OceanBase.EntityFrameworkCore.SpecificationTests
             var configured = new OceanBaseConnector.OceanBaseConnectionStringBuilder(native.ConnectionString);
             Assert.Equal(Fixture.Mode == OceanBaseCompatibilityMode.MySql
                 ? OceanBaseConnector.OceanBaseCompatibilityMode.MySql
-                : OceanBaseConnector.OceanBaseCompatibilityMode.Oracle, configured.ExpectedMode);
+                : OceanBaseConnector.OceanBaseCompatibilityMode.Oracle, configured.CompatibilityMode);
             Assert.Equal(ValueGenerated.Never, context.Model.FindEntityType(typeof(Product))!
                 .FindProperty(nameof(Product.Id))!.ValueGenerated);
             await Assert.ThrowsAsync<DatabaseAccessBlockedException>(async () =>

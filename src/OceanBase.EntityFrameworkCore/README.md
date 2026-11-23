@@ -1,12 +1,14 @@
 # Sharp.OceanBase.EntityFrameworkCore
 
 Entity Framework Core 8 provider for OceanBase MySQL and Oracle compatibility modes, using the public
-OceanBaseConnector 0.4.0 API. The package targets `net8.0` and accepts EF Core 8 patch versions in
+OceanBaseConnector 0.5.0 API. The package targets `net8.0` and accepts EF Core 8 patch versions in
 `[8.0.0,9.0.0)`. It requires `Microsoft.Extensions.Caching.Memory` 8.0.1 or later.
 
 See the EF Core 8 feature matrix and release checklist in the repository for implementation status,
 known boundaries and tested profiles.
 
+- [Install](#install)
+- [Upgrade from 8.0.0, 9.0.0 or 10.0.0](#upgrade-from-800-900-or-1000)
 - [Configuration](#configuration)
 - [Scalar mappings](#scalar-mappings)
 - [Query translations](#query-translations)
@@ -18,6 +20,28 @@ known boundaries and tested profiles.
 - [Inheritance and split entities](#inheritance-and-split-entities)
 - [Seeding and namespace ownership](#seeding-and-namespace-ownership)
 - [Bulk updates and deletes](#bulk-updates-and-deletes)
+
+## Install
+
+```shell
+dotnet add package Sharp.OceanBase.EntityFrameworkCore --version 8.0.1
+```
+
+## Upgrade from 8.0.0, 9.0.0 or 10.0.0
+
+The 8.0.1, 9.0.1 and 10.0.1 maintenance releases rebuild against OceanBaseConnector 0.5.0.
+Replace the old `ExpectedMode` connection-string keyword and builder property with
+`CompatibilityMode`; the old keyword is rejected by the Connector. Replace a null builder mode
+with `OceanBaseConnector.OceanBaseCompatibilityMode.Auto` or omit the option. Rebuild applications
+and dependent libraries because the Connector enum values changed to Auto=0, MySql=1 and Oracle=2;
+migrate any persisted numeric Connector enum values by their original meaning. The Provider's own
+`OceanBaseCompatibilityMode` enum and explicit `UseOceanBase` mode selection are unchanged.
+
+For Provider-created connections, an omitted mode or `CompatibilityMode=Auto` is replaced with the
+explicit `UseOceanBase` mode. Supplied connections retain their configuration; configured and
+detected mode conflicts still reject. Reverse engineering requires `CompatibilityMode=MySql` or
+`CompatibilityMode=Oracle`; `Auto` is not accepted for scaffolding.
+
 
 ## Configuration
 
@@ -36,7 +60,7 @@ tenant. Driver protocol, authentication, connection pooling and transport settin
 
 For a supplied `OceanBaseConnection`, the provider validates configured and detected tenant modes without
 rewriting its connection string. This preserves credentials hidden after a prior open and fixed data-source
-configuration. Provider-created connections receive the selected `ExpectedMode` before opening.
+configuration. Provider-created connections receive the selected `CompatibilityMode` before opening.
 
 Oracle generated-value writes use `RETURNING INTO`. Explicitly configure the Connector connection string
 with `Use Oracle Prepare Execute=true` for those writes; the Connector default is disabled. The provider
@@ -442,7 +466,7 @@ and NativeAOT profiles are outside the EF8 Provider scope. See C-01 in the EF Co
 
 Database reverse engineering uses the driver's public `GetSchema` collections, including its typed column
 declarations and tri-state generation/default/update metadata. Scaffolding connections must specify
-`ExpectedMode=MySql` or `ExpectedMode=Oracle`; generated `UseOceanBase` code selects that mode explicitly.
+`CompatibilityMode=MySql` or `CompatibilityMode=Oracle`; generated `UseOceanBase` code selects that mode explicitly.
 Supported scalar columns, keys, ordinary indexes, relationships and keyless views use EF's model/C# generation.
 Unavailable behavior metadata produces design-time warnings requiring configuration review before writes or
 schema recreation. Known defaults with unavailable SQL use EF's `HasDefaultValue()` marker; unknown identity

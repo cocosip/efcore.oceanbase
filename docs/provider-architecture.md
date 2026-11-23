@@ -22,9 +22,13 @@ Proposed driver changes require the authorization described in [repository guide
 ## Compatibility mode and lifetime
 
 Configure the mode explicitly with `UseOceanBase(connectionString, OceanBaseCompatibilityMode.MySql)`
-or `OceanBaseCompatibilityMode.Oracle`. Provider-created connections receive `ExpectedMode`; supplied
+or `OceanBaseCompatibilityMode.Oracle`. Provider-created connections receive `CompatibilityMode`; supplied
 connections retain their configuration. The relational connection validates configured and detected
 modes when opening, rejects conflicts and preserves caller ownership.
+
+With Connector 0.5.0, an omitted or `Auto` configured mode is accepted. Provider-created connections
+receive the explicit EF mode; supplied connections are checked without rewriting their configuration.
+Reverse engineering still requires an explicit MySql or Oracle configuration before opening.
 
 Mode participates in EF's service-provider, model and compiled-query cache identity. The model key
 preserves EF's base context/design-time identity. Compiled models must be generated and consumed with

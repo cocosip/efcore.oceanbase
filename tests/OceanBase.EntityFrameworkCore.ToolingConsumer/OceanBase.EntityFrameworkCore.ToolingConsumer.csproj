@@ -4,7 +4,7 @@
     <TargetFramework>net8.0</TargetFramework>
     <ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally>
     <IsPackable>false</IsPackable>
-    <OceanBaseProviderVersion Condition="'$(OceanBaseProviderVersion)' == ''">8.0.0</OceanBaseProviderVersion>
+    <OceanBaseProviderVersion Condition="'$(OceanBaseProviderVersion)' == ''">8.0.1</OceanBaseProviderVersion>
     <OceanBaseConsumerEfCoreVersion Condition="'$(OceanBaseConsumerEfCoreVersion)' == ''">8.0.0</OceanBaseConsumerEfCoreVersion>
   </PropertyGroup>
   <ItemGroup>

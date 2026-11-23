@@ -42,7 +42,7 @@ try {
         'Microsoft.EntityFrameworkCore' = '[8.0.0, 9.0.0)'
         'Microsoft.EntityFrameworkCore.Relational' = '[8.0.0, 9.0.0)'
         'Microsoft.Extensions.Caching.Memory' = '8.0.1'
-        'OceanBaseConnector' = '0.4.0'
+        'OceanBaseConnector' = '0.5.0'
     }
     $dependencies = @($groups[0].dependency)
     if ($dependencies.Count -ne $expectedDependencies.Count) { throw 'Unexpected package dependencies.' }

@@ -5,6 +5,11 @@ The port starts from `efcore/9.0` revision `7ca675f`. The EF10 inventory remains
 Use the [gap matrix](efcore-8-gap-matrix.md) for closure conditions and the
 [release checklist](efcore-8-release-checklist.md) for acceptance evidence.
 
+Maintenance 8.0.1 uses published Connector 0.5.0 and its `CompatibilityMode` API. CON-01
+accepts omitted/Auto configuration while retaining explicit EF mode selection and conflict checks.
+Reverse engineering still requires explicit MySql/Oracle. See the
+[upgrade contract](../../src/OceanBase.EntityFrameworkCore/README.md#upgrade-from-800-900-or-1000).
+
 ## Definitions and scope
 
 - **Inherited** marks shared Provider behavior carried into the EF8 branch.
@@ -22,7 +27,7 @@ Use the [gap matrix](efcore-8-gap-matrix.md) for closure conditions and the
 | CFG-02 | Provider invariant, Database.IsOceanBase and service identification | Inherited | Carry forward | [Options][options] | Preserve the documented Provider contract on this EF branch. |
 | CFG-03 | Model/service/compiled-query caches isolated by compatibility mode, preserving the EF base cache key | Implemented | Port required | [Cache][cache] | The EF8 base key is preserved with a compatibility-mode discriminator. [8P-02](efcore-8-gap-matrix.md#porting-gaps) |
 | CFG-04 | EF8 relational service registration, scopes and DatabaseFacade service graph | Implemented | Port required | [Services][services] | EF8 relational and design-time services use version-specific signatures. [8P-02](efcore-8-gap-matrix.md#porting-gaps) |
-| CON-01 | Connection creation through the public Connector API with ExpectedMode | Inherited | Carry forward | [Connection][connection] | Preserve the documented Provider contract on this EF branch. |
+| CON-01 | Connection creation through the public Connector API with CompatibilityMode | Inherited | Carry forward | [Connection][connection] | Preserve the documented Provider contract on this EF branch. |
 | CON-02 | Mode validation before and after opening, conflict rejection and failure cleanup | Inherited | Carry forward | [Connection][connection] | Preserve the documented Provider contract on this EF branch. |
 | CON-03 | Caller/Provider connection ownership, nested leases and preservation of hidden credentials | Inherited | Carry forward | [Connection][connection] | Preserve the documented Provider contract on this EF branch. |
 | CON-04 | Sync/async connections, early reader disposal, failure cleanup and connection reuse | Inherited | Carry forward | [Reader][reader] | Preserve the documented Provider contract on this EF branch. |

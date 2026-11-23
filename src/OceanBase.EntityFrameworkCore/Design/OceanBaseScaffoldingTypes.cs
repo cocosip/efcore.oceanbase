@@ -10,11 +10,11 @@ namespace OceanBase.EntityFrameworkCore.Design
     internal static class OceanBaseScaffoldingTypes
     {
         internal static OceanBaseCompatibilityMode Mode(string connectionString)
-            => new OceanBaseConnectionStringBuilder(connectionString).ExpectedMode switch
+            => new OceanBaseConnectionStringBuilder(connectionString).CompatibilityMode switch
             {
                 OceanBaseConnector.OceanBaseCompatibilityMode.MySql => OceanBaseCompatibilityMode.MySql,
                 OceanBaseConnector.OceanBaseCompatibilityMode.Oracle => OceanBaseCompatibilityMode.Oracle,
-                _ => throw new ArgumentException("Reverse engineering requires ExpectedMode=MySql or ExpectedMode=Oracle in the connection string.")
+                _ => throw new ArgumentException("Reverse engineering requires CompatibilityMode=MySql or CompatibilityMode=Oracle in the connection string.")
             };
 
         internal static Type ClrType(string storeType, OceanBaseCompatibilityMode mode, bool identity = false)

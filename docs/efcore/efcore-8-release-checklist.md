@@ -5,6 +5,29 @@ and development work in the [gap matrix](efcore-8-gap-matrix.md). The EF10 relea
 the common acceptance scenarios and historical evidence. Run branch-specific checks before claiming
 EF8 acceptance. [Baseline acceptance scenarios](efcore-10-release-checklist.md#acceptance-requirements-by-feature)
 
+## Maintenance 8.0.1 checkpoint
+
+Prepared 2026-11-23 against published OceanBaseConnector 0.5.0. The package keeps the EF 8
+dependency range and net8.0 asset. Runtime and design-time configuration use CompatibilityMode;
+the package guide owns migration instructions. No Connector source or CI workflow changes are needed.
+
+Patch verification is pending. Logs, TRX and packages belong under `artifacts/connector-050/`.
+Record the Release solution, package archive and isolated floor/serviced-patch consumer results here.
+The commands are `dotnet test OceanBase.EntityFrameworkCore.slnx -c Release --no-restore -m:1 -nr:false`,
+`dotnet pack src/OceanBase.EntityFrameworkCore -c Release --no-restore -o artifacts/connector-050/ef8-packages`,
+and `tests/OceanBase.EntityFrameworkCore.PackageConsumer/Verify-Package.ps1` with the candidate
+package path and expected version 8.0.1; restore/run the PackageConsumer using that local feed.
+
+The user requires fresh MySQL and Oracle database validation before release decisions. Tests may
+create unique test-owned EFT_ objects only inside the pre-provisioned database/schema selected by
+the existing User Secrets configuration, and must verify cleanup of those objects. Namespace
+creation/deletion and prefix-based cleanup are outside this scope.
+
+All live, tooling and environment evidence below belongs to the initial release and Connector 0.4.0.
+It is historical evidence for this patch. Fresh both-mode live/tooling acceptance and hosted CI remain
+pending; Windows offline tests do not establish Linux, TLS, proxy or HA acceptance. No patch release
+tag, push or publication is authorized by preparing the source and local packages.
+
 ## Target and branch
 
 - Record the exact fork revision of the completed `efcore/9.0` branch, candidate revision, SDK, runtime, operating system and
@@ -21,16 +44,16 @@ EF8 acceptance. [Baseline acceptance scenarios](efcore-10-release-checklist.md#a
 
 | Gate | State | Required branch evidence |
 | --- | --- | --- |
-| R-01 Dependency and source identity | Passed locally | Verify SDK, target framework, resolved Connector, dependency advisories and candidate source revision. |
-| R-02 Local and relational specifications | Passed locally | Release unit, functional, consumer configuration and EF8 relational model-building tests against 8.0.0 and 8.0.34. |
-| R-03 Live database | Passed for the recorded direct profiles | Run the opt-in live suite and feature sample against both OceanBase modes. |
-| R-04 Package compatibility | Passed locally | Verify the floor package and isolated consumers on both patches. Require strict restore failures on adjacent majors. |
-| R-05 Migrations, scaffolding and code generation | Passed for Windows tooling and direct live migrations | Verify generated C#, reverse engineering, compiled models, migration SQL, history, upgrade, rollback and bundles with EF8 tools. |
-| R-06 Platform and CI | Pending | Run branch CI tests and package validation on the intended Windows and Linux runners. Record separately any platform exclusions or manual acceptance. |
-| R-07 Deployment and compatibility modes | Direct profile only | Use independent evidence for each additional proxy, TLS or HA deployment profile. |
-| R-08 Review | Passed for the local scope | Review EF8 API, query and migration changes and reconcile the version inventories. |
-| R-09 Sensitive data and database cleanup | Passed for the recorded fixtures | Use User Secrets and verify cleanup of fixture-owned objects. |
-| R-10 Publication | Pending | Confirm package availability on the intended feed, verify candidate provenance and get release authorization. Publish only for the matching release tag under the repository policy. |
+| R-01 Dependency and source identity | Pending patch verification | Verify SDK, target framework, resolved Connector, dependency advisories and candidate source revision. |
+| R-02 Local and relational specifications | Pending patch verification | Release unit, functional, consumer configuration and EF8 relational model-building tests against 8.0.0 and 8.0.34. |
+| R-03 Live database | Historical pass; patch rerun pending | Run the opt-in live suite and feature sample against both OceanBase modes. |
+| R-04 Package compatibility | Pending patch verification | Verify the floor package and isolated consumers on both patches. Require strict restore failures on adjacent majors. |
+| R-05 Migrations, scaffolding and code generation | Historical pass; patch tooling rerun pending | Verify generated C#, reverse engineering, compiled models, migration SQL, history, upgrade, rollback and bundles with EF8 tools. |
+| R-06 Platform and CI | Patch CI pending | Run branch CI tests and package validation on the intended Windows and Linux runners. Record separately any platform exclusions or manual acceptance. |
+| R-07 Deployment and compatibility modes | Historical direct profile only | Use independent evidence for each additional proxy, TLS or HA deployment profile. |
+| R-08 Review | Patch review pending | Review EF8 API, query and migration changes and reconcile the version inventories. |
+| R-09 Sensitive data and database cleanup | Patch scope review pending | Use User Secrets and verify cleanup of fixture-owned objects. |
+| R-10 Publication | Patch publication pending authorization | Confirm package availability on the intended feed, verify candidate provenance and get release authorization. Publish only for the matching release tag under the repository policy. |
 
 ## Recording results
 
@@ -39,7 +62,7 @@ gate. Keep detailed logs and TRX in ignored `artifacts/`. Use EF8-generated arti
 checks and reuse the EF10 scenario list only to select cases. The package-content script and isolated
 consumers must verify the candidate independently of project references.
 
-## Stable release preparation
+## Historical initial stable release preparation
 
 The Windows package checkpoint `156c9bc` passed the Release solution, package archive and
 source revision checks, and isolated consumers on EF 8.0.0 and 8.0.34. The package-only
@@ -50,7 +73,7 @@ Evidence is under `artifacts/release-prep/ef8/` and `artifacts/release-prep/audi
 Hosted verification of `ci-cd.yml` and activation of the release repository's NuGet Trusted
 Publishing policy remain pending. See the [release policy](version-support-matrix.md#branches-cicd-and-publishing).
 
-## Local acceptance evidence
+## Historical initial local acceptance evidence
 
 The branch starts from `efcore/9.0` revision `7ca675f`. Windows ran SDK 10.0.403 with the
 .NET 8.0.33 runtime. Local logs, TRX files and packages are under `artifacts/efcore8-port/`.

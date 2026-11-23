@@ -6,15 +6,20 @@ availability and publication status on the intended feed before release.
 
 | EF major | Branch | Provider line / target asset | Current state |
 | --- | --- | --- | --- |
-| 10 | `efcore/10.0` | 10.x / `net10.0` | Active implementation; accepted profiles and remaining publication steps are in the [release checklist](efcore-10-release-checklist.md) |
-| 9 | `efcore/9.0` | 9.x / `net9.0` | Port from `efcore/10.0` under the [EF Core 9 inventories](../README.md#version-inventories) |
-| 8 | `efcore/8.0` | 8.x / `net8.0` | Port implemented. See the [release checklist](efcore-8-release-checklist.md) for verified profiles and open gates. |
+| 10 | `efcore/10.0` | 10.x / `net10.0` | 10.0.0 published; 10.0.1 in preparation; accepted profiles and remaining publication steps are in the [release checklist](efcore-10-release-checklist.md) |
+| 9 | `efcore/9.0` | 9.x / `net9.0` | 9.0.0 published; 9.0.1 in preparation under the [EF Core 9 inventories](../README.md#version-inventories) |
+| 8 | `efcore/8.0` | 8.x / `net8.0` | 8.0.0 published; 8.0.1 in preparation. See the [release checklist](efcore-8-release-checklist.md) for verified profiles and open gates. |
 | 11 | `dev` when development begins | 11.x / target to be verified | Development has yet to begin |
 
 The EF10 provider asset requires a .NET 10 application target or a compatible later target that receives
 its own verification. It cannot be consumed by a .NET 8/9 application merely by changing the EF package.
 Confirm each line's SDK, runtime and version-specific APIs using the [official references](official-references.md).
 Verify any claimed later runtime through its own consumer checks.
+
+Maintenance targets are 8.0.1, 9.0.1 and 10.0.1, consuming published OceanBaseConnector 0.5.0.
+The initial 8.0.0, 9.0.0 and 10.0.0 packages are published; these maintenance versions remain
+unpublished candidates until their own live, package and release gates pass. `dev` follows the
+EF10 maintenance candidate; `master` is outside this change.
 
 ## Branches, CI/CD and publishing
 

@@ -82,7 +82,7 @@ namespace OceanBase.EntityFrameworkCore.FunctionalTests
                 {
                     "null" => null!,
                     "target" => target!,
-                    "mode" => new OceanBaseConnection("Server=offline;ExpectedMode=Oracle"),
+                    "mode" => new OceanBaseConnection("Server=offline;CompatibilityMode=Oracle"),
                     _ => new OceanBaseConnection("Server=offline;Database=owned")
                 }));
             target = (OceanBaseConnection)context.Database.GetDbConnection();

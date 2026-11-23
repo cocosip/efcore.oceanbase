@@ -25,7 +25,7 @@ namespace OceanBase.EntityFrameworkCore.SpecificationTests
             var native = Assert.IsType<OceanBaseConnector.OceanBaseConnection>(context.Database.GetDbConnection());
             var configured = new OceanBaseConnector.OceanBaseConnectionStringBuilder(native.ConnectionString);
             Assert.Equal(mode == OceanBaseCompatibilityMode.MySql ? OceanBaseConnector.OceanBaseCompatibilityMode.MySql
-                : OceanBaseConnector.OceanBaseCompatibilityMode.Oracle, configured.ExpectedMode);
+                : OceanBaseConnector.OceanBaseCompatibilityMode.Oracle, configured.CompatibilityMode);
             var sync = Assert.Throws<InvalidOperationException>(() => context.Database.OpenConnection());
             var async = await Assert.ThrowsAsync<InvalidOperationException>(() => context.Database.OpenConnectionAsync());
             Assert.Equal("Model specification tests cannot access a database.", sync.Message);

@@ -3,6 +3,11 @@
 Use the [feature matrix](efcore-8-feature-matrix.md) for the implemented scope and exclusions.
 Record package, platform, tooling execution and live evidence in the [release checklist](efcore-8-release-checklist.md).
 
+Maintenance 8.0.1 migrates CON-01 to Connector 0.5.0; see the [feature matrix](efcore-8-feature-matrix.md).
+This dependency migration adds no gap records and changes no existing closure conditions.
+Connector 0.4.0 references below identify the original capability baseline; patch acceptance
+belongs to the [release checklist](efcore-8-release-checklist.md).
+
 ## Porting gaps
 
 The `8P` records track version-local development. P0 covers the Provider build and query port,

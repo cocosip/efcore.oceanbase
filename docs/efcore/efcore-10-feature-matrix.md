@@ -22,7 +22,7 @@ For gaps and development status, see the [Gap Matrix](efcore-10-gap-matrix.md). 
 | CFG-02 | Provider invariant, Database.IsOceanBase and service identification | Implemented | Implemented | [Options][options] | — |
 | CFG-03 | Model/service/compiled-query caches isolated by compatibility mode, preserving the EF base cache key | Implemented | Implemented | [Cache][cache] | — |
 | CFG-04 | EF10 relational service registration, scopes and DatabaseFacade service graph | Implemented | Implemented | [Services][services] | — |
-| CON-01 | Connection creation through the public Connector API with ExpectedMode | Implemented | Implemented | [Connection][connection] | — |
+| CON-01 | Connection creation through the public Connector API with CompatibilityMode | Implemented | Implemented | [Connection][connection] | — |
 | CON-02 | Mode validation before and after opening, conflict rejection and failure cleanup | Implemented | Implemented | [Connection][connection] | — |
 | CON-03 | Caller/Provider connection ownership, nested leases and preservation of hidden credentials | Implemented | Implemented | [Connection][connection] | — |
 | CON-04 | Sync/async connections, early reader disposal, failure cleanup and connection reuse | Implemented | Implemented | [Reader][reader] | — |
