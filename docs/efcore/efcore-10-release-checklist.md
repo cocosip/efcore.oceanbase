@@ -65,7 +65,7 @@ Runtime/tooling evidence for DEF-01/02/03/06/07/08/09 is recorded under R-03/R-0
 | CFG-02 | Database.IsOceanBase() and invariant identify this provider through EF's real service graph. | R-01/R-02/R-03 |
 | CFG-03 | Model/service-provider and compiled-query caches separate compatibility/translation modes and design-time/runtime models; compatible options reuse services. | R-01/R-02/R-03 |
 | CFG-04 | Required relational services resolve with EF10 lifetimes; normal DatabaseFacade APIs have no missing services. | R-01/R-02/R-03 |
-| CON-01 | Create OceanBaseConnection through public OceanBaseConnector APIs and supply ExpectedMode. | R-03/R-09 |
+| CON-01 | Create OceanBaseConnection through public OceanBaseConnector APIs and supply CompatibilityMode. | R-03/R-09 |
 | CON-02 | Reject configured/detected mode conflicts before execution for supplied/created connections; cleanup remains safe after rejection. | R-03/R-09 |
 | CON-03 | Caller-owned connections survive context disposal; provider-owned connections close/dispose in sync/async success/error paths. | R-03/R-09 |
 | CON-04 | Sync/async open, execute, read, close and connection reuse honor mode and connector settings. | R-03/R-09 |

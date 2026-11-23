@@ -5,6 +5,11 @@ The port starts from `efcore/10.0` and targets `net9.0`. The mode columns track 
 Use the [gap matrix](efcore-9-gap-matrix.md) for closure conditions and the
 [release checklist](efcore-9-release-checklist.md) for acceptance evidence.
 
+Maintenance 9.0.1 uses published Connector 0.5.0 and its `CompatibilityMode` API. CON-01
+accepts omitted/Auto configuration while retaining explicit EF mode selection and conflict checks.
+Reverse engineering still requires explicit MySql/Oracle. See the
+[upgrade contract](../../src/OceanBase.EntityFrameworkCore/README.md#upgrade-from-800-900-or-1000).
+
 ## Definitions and scope
 
 - **Carry forward** marks existing upstream Provider behavior to preserve in the target branch.
@@ -22,7 +27,7 @@ Use the [gap matrix](efcore-9-gap-matrix.md) for closure conditions and the
 | CFG-02 | Provider invariant, Database.IsOceanBase and service identification | Carry forward | Carry forward | [Options][options] | Preserve the documented Provider contract on this EF branch. |
 | CFG-03 | Model/service/compiled-query caches isolated by compatibility mode, preserving the EF base cache key | Implemented | Implemented | [Cache][cache] | Preserve mode isolation in service, model and compiled query caches. Compare EF cache-key and option cloning signatures. [9P-02](efcore-9-gap-matrix.md#porting-gaps) |
 | CFG-04 | EF9 relational service registration, scopes and DatabaseFacade service graph | Implemented | Implemented | [Services][services] | Rebind EF9 relational services and lifetimes. Check design-time discovery and the DatabaseFacade service graph. [9P-02](efcore-9-gap-matrix.md#porting-gaps) |
-| CON-01 | Connection creation through the public Connector API with ExpectedMode | Carry forward | Carry forward | [Connection][connection] | Preserve the documented Provider contract on this EF branch. |
+| CON-01 | Connection creation through the public Connector API with CompatibilityMode | Carry forward | Carry forward | [Connection][connection] | Preserve the documented Provider contract on this EF branch. |
 | CON-02 | Mode validation before and after opening, conflict rejection and failure cleanup | Carry forward | Carry forward | [Connection][connection] | Preserve the documented Provider contract on this EF branch. |
 | CON-03 | Caller/Provider connection ownership, nested leases and preservation of hidden credentials | Carry forward | Carry forward | [Connection][connection] | Preserve the documented Provider contract on this EF branch. |
 | CON-04 | Sync/async connections, early reader disposal, failure cleanup and connection reuse | Carry forward | Carry forward | [Reader][reader] | Preserve the documented Provider contract on this EF branch. |

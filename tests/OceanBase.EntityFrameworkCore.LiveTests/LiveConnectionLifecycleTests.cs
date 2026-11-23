@@ -28,6 +28,54 @@ namespace OceanBase.EntityFrameworkCore.LiveTests
                     foreach (var fail in new[] { false, true }) yield return [pair[0], pair[1], ownership, fail];
         }
 
+        public static IEnumerable<object[]> ModeConfigurationCases()
+        {
+            foreach (var pair in Cases())
+                foreach (var configuration in new[] { "omitted", "auto", "explicit" })
+                    foreach (var ownership in new[] { "provider", "supplied-closed", "caller-open" })
+                        yield return [pair[0], pair[1], configuration, ownership];
+        }
+
+        [Theory]
+        [MemberData(nameof(ModeConfigurationCases))]
+        public Task Connector_mode_configuration_executes_with_the_selected_provider_mode(
+            OceanBaseCompatibilityMode mode, bool async, string configuration, string ownership)
+            => Run(mode, async (configured, stage) =>
+            {
+                var nativeMode = mode == OceanBaseCompatibilityMode.MySql
+                    ? OceanBaseConnector.OceanBaseCompatibilityMode.MySql : OceanBaseConnector.OceanBaseCompatibilityMode.Oracle;
+                var settings = new OceanBaseConnectionStringBuilder(configured);
+                settings.Remove(OceanBaseConnectionStringBuilder.CompatibilityModeKey);
+                if (configuration != "omitted")
+                    settings.CompatibilityMode = configuration == "auto" ? OceanBaseConnector.OceanBaseCompatibilityMode.Auto : nativeMode;
+                using var supplied = ownership == "provider" ? null : new OceanBaseConnection(settings.ConnectionString);
+                stage("open caller connection for mode configuration");
+                if (ownership == "caller-open")
+                {
+                    if (async) await supplied!.OpenAsync(); else supplied!.Open();
+                }
+                var original = supplied?.ConnectionString;
+                var options = new DbContextOptionsBuilder();
+                if (supplied is null) options.UseOceanBase(settings.ConnectionString, mode);
+                else options.UseOceanBase(supplied, mode);
+                await using var context = new DbContext(options.Options);
+                var native = Assert.IsType<OceanBaseConnection>(context.Database.GetDbConnection());
+                if (supplied is not null)
+                    Assert.True(original == supplied.ConnectionString, "Caller connection configuration changed.");
+                var configuredMode = new OceanBaseConnectionStringBuilder(native.ConnectionString).CompatibilityMode;
+                Assert.Equal(supplied is null || configuration == "explicit" ? nativeMode
+                    : OceanBaseConnector.OceanBaseCompatibilityMode.Auto, configuredMode);
+
+                stage("execute and reopen with selected mode");
+                await Open(context, async);
+                Assert.Equal(nativeMode, native.CompatibilityMode);
+                await One(context, mode, async);
+                await Close(context, async);
+                await One(context, mode, async);
+                Assert.Equal(ownership == "caller-open" ? ConnectionState.Open : ConnectionState.Closed, native.State);
+                Assert.Equal(configuredMode, new OceanBaseConnectionStringBuilder(native.ConnectionString).CompatibilityMode);
+            });
+
         [Theory]
         [MemberData(nameof(Cases))]
         public Task Direct_connector_control_opens_and_executes(OceanBaseCompatibilityMode mode, bool async)
@@ -248,7 +296,7 @@ namespace OceanBase.EntityFrameworkCore.LiveTests
             OceanBaseCompatibilityMode mode, bool async)
             => Run(mode, async (configured, stage) =>
             {
-                var builder = new OceanBaseConnectionStringBuilder(configured) { ExpectedMode = null, PersistSecurityInfo = false };
+                var builder = new OceanBaseConnectionStringBuilder(configured) { CompatibilityMode = OceanBaseConnector.OceanBaseCompatibilityMode.Auto, PersistSecurityInfo = false };
                 using var supplied = new OceanBaseConnection(builder.ConnectionString);
                 stage("caller opens before EF");
                 if (async) await supplied.OpenAsync(); else supplied.Open();

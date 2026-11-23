@@ -168,14 +168,16 @@ public sealed class ReverseEngineeringTests
             .Create(other, new DatabaseModelFactoryOptions()));
     }
 
-    [Fact]
-    public void Missing_explicit_mode_rejects_before_open()
+    [Theory]
+    [InlineData("")]
+    [InlineData(";CompatibilityMode=Auto")]
+    public void Missing_explicit_mode_rejects_before_open(string modeOption)
     {
         using var services = Services();
-        using var connection = new CatalogConnection(OceanBaseCompatibilityMode.MySql) { ConnectionString = "Server=offline;Database=app" };
+        using var connection = new CatalogConnection(OceanBaseCompatibilityMode.MySql) { ConnectionString = "Server=offline;Database=app" + modeOption };
         var error = Assert.Throws<ArgumentException>(() => services.GetRequiredService<IDatabaseModelFactory>()
             .Create(connection, new DatabaseModelFactoryOptions()));
-        Assert.Contains("ExpectedMode", error.Message);
+        Assert.Contains("CompatibilityMode", error.Message);
         Assert.Equal(0, connection.Opens);
     }
 
@@ -532,7 +534,7 @@ public sealed class ReverseEngineeringTests
         public string ResolveConnectionString(string connectionString)
         {
             Assert.Equal("Name=Catalog", connectionString);
-            return "Server=offline;Database=app;ExpectedMode=" + mode;
+            return "Server=offline;Database=app;CompatibilityMode=" + mode;
         }
     }
 

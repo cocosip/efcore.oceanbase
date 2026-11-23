@@ -68,6 +68,10 @@ namespace PackageConsumer
                     .UseOceanBase("Server=localhost;Database=package_smoke", mode).Options;
                 using var context = new ConsumerContext(options, mode);
                 if (!context.Database.IsOceanBase()) throw new Exception("Provider registration failed.");
+                var configured = new OceanBaseConnector.OceanBaseConnectionStringBuilder(context.Database.GetDbConnection().ConnectionString);
+                var nativeMode = mode == OceanBaseCompatibilityMode.MySql
+                    ? OceanBaseConnector.OceanBaseCompatibilityMode.MySql : OceanBaseConnector.OceanBaseCompatibilityMode.Oracle;
+                if (configured.CompatibilityMode != nativeMode) throw new Exception("Packed provider configured the wrong Connector mode.");
                 VerifyJsonAndLocalTimestamp(context, mode);
                 var textMapping = context.GetService<IRelationalTypeMappingSource>().FindMapping(typeof(string))!;
                 var nationalLiteral = textMapping.GenerateSqlLiteral("海🌊\\'\n");

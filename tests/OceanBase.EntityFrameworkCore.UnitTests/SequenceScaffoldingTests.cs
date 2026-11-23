@@ -50,7 +50,7 @@ public sealed class SequenceScaffoldingTests
             .HasAnnotation("OceanBase:SequenceCache", 4L).HasAnnotation("OceanBase:SequenceOrdered", true);
         var generation = new ModelCodeGenerationOptions
         {
-            Language = "C#", ContextName = "CatalogContext", ConnectionString = "Server=offline;ExpectedMode=Oracle",
+            Language = "C#", ContextName = "CatalogContext", ConnectionString = "Server=offline;CompatibilityMode=Oracle",
             ModelNamespace = "Generated", ContextNamespace = "Generated"
         };
         var code = services.GetRequiredService<IModelCodeGeneratorSelector>().Select(generation)

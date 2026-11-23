@@ -3,6 +3,11 @@
 Use the [feature matrix](efcore-9-feature-matrix.md) for planned and implemented surface.
 Record package, platform, tooling execution and live evidence in the [release checklist](efcore-9-release-checklist.md).
 
+Maintenance 9.0.1 migrates CON-01 to Connector 0.5.0; see the [feature matrix](efcore-9-feature-matrix.md).
+This dependency migration adds no gap records and changes no existing closure conditions.
+Connector 0.4.0 references below identify the original capability baseline; patch acceptance
+belongs to the [release checklist](efcore-9-release-checklist.md).
+
 ## Porting gaps
 
 The `9P` records track version-local development. P0 covers the Provider build and service and query

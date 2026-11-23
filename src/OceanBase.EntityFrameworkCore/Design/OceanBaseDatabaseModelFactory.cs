@@ -42,7 +42,7 @@ namespace OceanBase.EntityFrameworkCore.Design
                 if (!opened) connection.Open();
                 if (connection is OceanBaseConnection native && native.CompatibilityMode is { } actual
                     && (actual == OceanBaseConnector.OceanBaseCompatibilityMode.Oracle) != (mode == OceanBaseCompatibilityMode.Oracle))
-                    throw new InvalidOperationException("The detected compatibility mode differs from ExpectedMode.");
+                    throw new InvalidOperationException("The detected compatibility mode differs from CompatibilityMode.");
                 var current = connection.Database;
                 if (mode == OceanBaseCompatibilityMode.Oracle)
                 {
