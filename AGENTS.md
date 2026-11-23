@@ -44,6 +44,13 @@ the relevant existing topic. EF Core 10 currently uses these three primary inven
 | [Gap inventory](docs/efcore/efcore-10-gap-matrix.md) | Individual gaps, development status, scope/priority, owning layer and closure conditions; update the same entry after implementation |
 | [Release checklist](docs/efcore/efcore-10-release-checklist.md) | Test, live database, package, platform, review and release gates, with evidence per mode and pending acceptance |
 
+Each inventory set is owned by its own version branch. The EF Core 8 and EF Core 9 inventories live only
+on `efcore/8.0` and `efcore/9.0`; this repository state keeps the shared policy in
+[version support](docs/efcore/version-support-matrix.md) and the EF Core 10 inventories. Do not copy
+another branch's inventories here — a copy reports another branch's state as this branch's status.
+Shared behavior contracts are documented once in [provider behavior](docs/provider-behavior.md) and the
+[package guide](src/OceanBase.EntityFrameworkCore/README.md).
+
 - Update the relevant inventories for small features in every version. Do not add feature plans,
   duplicate gap lists, progress copies or acceptance reports. A distinct lasting design topic may have
   its own document; reference it from the inventories instead of copying its contents.

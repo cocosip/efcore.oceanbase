@@ -47,6 +47,10 @@ Evidence is under `artifacts/release-prep/ef10/` and `artifacts/release-prep/aud
 Hosted verification of `ci-cd.yml` and activation of the release repository's NuGet Trusted
 Publishing policy remain pending. See the [release policy](version-support-matrix.md#branches-cicd-and-publishing).
 
+The stable 8.0.0, 9.0.0 and 10.0.0 packages are published on NuGet.org (2026-11-20). Publication does not
+change any gate above: this checklist records acceptance at candidate revisions, and each version branch
+records its own acceptance evidence.
+
 ## Acceptance requirements by feature
 
 The 53 Required acceptance IDs below define contracts and map them to evidence gates; they are not a second status inventory.

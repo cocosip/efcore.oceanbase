@@ -130,7 +130,7 @@ the new result uses its own built-in mapping, without applying an inverse conver
 NULL values propagate, and incompatible/null-converting carriers reject. Pure scalar calls may be
 evaluated by EF before translation; EF.Parameter keeps a scalar duration in SQL for range guarding.
 
-For exact numeric/text/temporal storage contracts and usage examples, see the [Package README](../../src/OceanBase.EntityFrameworkCore/README.md).
+For exact numeric/text/temporal storage contracts and usage examples, see [provider behavior](../provider-behavior.md) and the [package guide](../../src/OceanBase.EntityFrameworkCore/README.md).
 Do not duplicate acceptance pass counts, individual fix histories or the full commit history here; update acceptance evidence only in the release checklist.
 
 [options]: ../../src/OceanBase.EntityFrameworkCore/OceanBaseDbContextOptionsBuilderExtensions.cs

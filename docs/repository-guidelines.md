@@ -18,14 +18,15 @@ comparison; they do not establish an OceanBase capability or replace its live ac
 
 ## Repository layout
 
-    docs/                         Design and support contracts
-    src/OceanBase.EntityFrameworkCore.Shared/   EF-independent shared code
-    src/OceanBase.EntityFrameworkCore/          EF-version provider project
-    tests/                        Unit, relational and live integration tests
+    docs/                                       Support contracts, inventories and repository rules
+    src/OceanBase.EntityFrameworkCore/         EF-version provider project
+    tests/                                      Unit, functional, specification, consumer and live tests
+    samples/                                    Runnable feature and migration probes
 
 The [version-support document](efcore/version-support-matrix.md) owns branch, porting and release
 policy. Keep shared source small and dependency-free where practical. Do not introduce a compatibility
-wrapper for an API used in only one EF Core version.
+wrapper for an API used in only one EF Core version. Ignored `artifacts/` holds local build, package and
+acceptance output.
 
 ## C# and project style
 
